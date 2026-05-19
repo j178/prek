@@ -145,6 +145,7 @@ impl workspace::HookInitReporter for HookInitReporter {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct HookInstallReporter {
     reporter: Arc<ProgressReporter>,
     root_message: &'static str,
@@ -160,16 +161,6 @@ impl HookInstallReporter {
         }
     }
 
-    /// Reuse the run reporter so install and run progress can share one root message.
-    pub(crate) fn from_run(reporter: &HookRunReporter) -> Self {
-        Self {
-            reporter: Arc::clone(&reporter.reporter),
-            root_message: reporter.root_message,
-        }
-    }
-}
-
-impl HookInstallReporter {
     pub fn on_install_start(&self, hook: &Hook) -> usize {
         self.reporter
             .root
@@ -200,10 +191,6 @@ pub(crate) struct HookRunReporter {
 impl HookRunReporter {
     pub fn new(printer: Printer, dots: usize) -> Self {
         Self::with_root_message(printer, dots, "Running hooks...")
-    }
-
-    pub fn new_execution(printer: Printer, dots: usize) -> Self {
-        Self::with_root_message(printer, dots, "Installing and running hooks...")
     }
 
     fn with_root_message(printer: Printer, dots: usize, root_message: &'static str) -> Self {

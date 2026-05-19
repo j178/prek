@@ -43,24 +43,15 @@ impl InstallPlan {
     }
 }
 
-/// A hook plus the data that should continue after install resolution.
-///
-/// `payload` carries the next stage's data through install partitioning without making the install
-/// layer know what that stage will do with it.
-pub(super) struct InstallJob<T> {
+struct InstallJob {
     hook: Arc<Hook>,
     install: InstallPlan,
-    payload: T,
 }
 
-impl<T> InstallJob<T> {
-    pub(super) fn new(hook: Arc<Hook>, payload: T) -> Self {
+impl InstallJob {
+    fn new(hook: Arc<Hook>) -> Self {
         let install = InstallPlan::new(&hook);
-        Self {
-            hook,
-            install,
-            payload,
-        }
+        Self { hook, install }
     }
 
     fn hook(&self) -> &Hook {
@@ -71,8 +62,8 @@ impl<T> InstallJob<T> {
         self.install.needs_environment()
     }
 
-    fn into_parts(self) -> (Arc<Hook>, InstallPlan, T) {
-        (self.hook, self.install, self.payload)
+    fn into_parts(self) -> (Arc<Hook>, InstallPlan) {
+        (self.hook, self.install)
     }
 }
 
@@ -81,10 +72,7 @@ pub(crate) async fn install_hooks(
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
-    let hooks = hooks
-        .into_iter()
-        .map(|hook| InstallJob::new(hook, ()))
-        .collect::<Vec<_>>();
+    let hooks = hooks.into_iter().map(InstallJob::new).collect::<Vec<_>>();
     let num_hooks = hooks.len();
     let mut cache = None;
     let installer = Installer::for_jobs(store, reporter, &mut cache, &hooks).await;
@@ -100,23 +88,46 @@ pub(crate) async fn install_hooks(
     Ok(result)
 }
 
+pub(crate) async fn install_hooks_with_cache(
+    hooks: Vec<Arc<Hook>>,
+    store: &Store,
+    reporter: &HookInstallReporter,
+    cache: &mut Option<InstallCache>,
+) -> Result<Vec<InstalledHook>> {
+    let hooks = hooks.into_iter().map(InstallJob::new).collect::<Vec<_>>();
+    let num_hooks = hooks.len();
+    let installer = Installer::for_jobs(store, reporter, cache, &hooks).await;
+    let result = installer.install_all(store, hooks).await?;
+    if let Some(cache) = cache {
+        cache.add_installed(&result);
+    }
+
+    debug_assert_eq!(
+        num_hooks,
+        result.len(),
+        "Number of hooks installed should match the number of hooks provided"
+    );
+
+    Ok(result)
+}
+
 #[derive(Clone)]
-pub(super) struct Installer<'a> {
+pub(super) struct Installer {
     /// Result of the run-level install cache at the time this batch starts.
     store_hooks: Rc<[CachedInstallInfo]>,
     /// Environments installed by earlier batches in this command.
     created_hooks: Rc<[CachedInstallInfo]>,
     /// Shared by all install partitions for this batch.
     semaphore: Rc<Semaphore>,
-    reporter: &'a HookInstallReporter,
+    reporter: HookInstallReporter,
 }
 
-impl<'a> Installer<'a> {
-    pub(super) async fn for_jobs<T>(
+impl Installer {
+    async fn for_jobs(
         store: &Store,
-        reporter: &'a HookInstallReporter,
+        reporter: &HookInstallReporter,
         cache: &mut Option<InstallCache>,
-        hooks: &[InstallJob<T>],
+        hooks: &[InstallJob],
     ) -> Self {
         let needs_environment = hooks.iter().any(InstallJob::needs_environment);
         let (store_hooks, created_hooks) = if needs_environment {
@@ -137,14 +148,14 @@ impl<'a> Installer<'a> {
             store_hooks,
             created_hooks,
             semaphore: Rc::new(Semaphore::new(*CONCURRENCY)),
-            reporter,
+            reporter: reporter.clone(),
         }
     }
 
     async fn install_all(
         &self,
         store: &Store,
-        hooks: Vec<InstallJob<()>>,
+        hooks: Vec<InstallJob>,
     ) -> Result<Vec<InstalledHook>> {
         let mut result = Vec::with_capacity(hooks.len());
         let mut futures = FuturesUnordered::new();
@@ -161,7 +172,7 @@ impl<'a> Installer<'a> {
         Ok(result)
     }
 
-    pub(super) fn partition(&self) -> PartitionInstaller<'a> {
+    pub(super) fn partition(&self) -> PartitionInstaller {
         PartitionInstaller {
             installer: self.clone(),
             newly_installed: Vec::new(),
@@ -173,7 +184,7 @@ impl<'a> Installer<'a> {
 
         let installed_hook = hook
             .language
-            .install(hook.clone(), store, self.reporter)
+            .install(hook.clone(), store, &self.reporter)
             .await
             .with_context(|| format!("Failed to install hook `{hook}`"))?;
 
@@ -205,8 +216,8 @@ impl<'a> Installer<'a> {
     }
 }
 
-pub(super) struct PartitionInstaller<'a> {
-    installer: Installer<'a>,
+pub(super) struct PartitionInstaller {
+    installer: Installer,
     /// Environments installed earlier in this partition.
     ///
     /// Partitions contain hooks with the same install language and dependency set, so later hooks
@@ -214,30 +225,26 @@ pub(super) struct PartitionInstaller<'a> {
     newly_installed: Vec<InstalledHook>,
 }
 
-impl PartitionInstaller<'_> {
+impl PartitionInstaller {
     async fn install_all(
         mut self,
         store: &Store,
-        hooks: Vec<InstallJob<()>>,
+        hooks: Vec<InstallJob>,
     ) -> Result<Vec<InstalledHook>> {
         let mut installed_hooks = Vec::with_capacity(hooks.len());
 
         for hook in hooks {
-            let (installed_hook, ()) = self.install_job(store, hook).await?;
+            let installed_hook = self.install_job(store, hook).await?;
             installed_hooks.push(installed_hook);
         }
 
         Ok(installed_hooks)
     }
 
-    pub(super) async fn install_job<T>(
-        &mut self,
-        store: &Store,
-        job: InstallJob<T>,
-    ) -> Result<(InstalledHook, T)> {
-        let (hook, install, payload) = job.into_parts();
+    async fn install_job(&mut self, store: &Store, job: InstallJob) -> Result<InstalledHook> {
+        let (hook, install) = job.into_parts();
         let installed_hook = self.install(store, hook, install).await?;
-        Ok((installed_hook, payload))
+        Ok(installed_hook)
     }
 
     async fn install(
@@ -277,17 +284,17 @@ impl PartitionInstaller<'_> {
     }
 }
 
-pub(super) struct InstallPartitions<T> {
-    partitions: Vec<Vec<InstallJob<T>>>,
+struct InstallPartitions {
+    partitions: Vec<Vec<InstallJob>>,
 }
 
-impl<T> InstallPartitions<T> {
+impl InstallPartitions {
     /// Group hooks so each partition can install independently.
     ///
     /// Different languages can install concurrently. Hooks with the same language and dependency
     /// set stay in one partition so later hooks can reuse an environment installed by an earlier
     /// hook.
-    pub(super) fn new(hooks: Vec<InstallJob<T>>) -> Self {
+    fn new(hooks: Vec<InstallJob>) -> Self {
         let mut hooks_by_language = FxHashMap::default();
         for hook in hooks {
             hooks_by_language
@@ -304,8 +311,8 @@ impl<T> InstallPartitions<T> {
         Self { partitions }
     }
 
-    fn partition_by_dependencies(hooks: Vec<InstallJob<T>>) -> Vec<Vec<InstallJob<T>>> {
-        let mut groups: Vec<Vec<InstallJob<T>>> = Vec::new();
+    fn partition_by_dependencies(hooks: Vec<InstallJob>) -> Vec<Vec<InstallJob>> {
+        let mut groups: Vec<Vec<InstallJob>> = Vec::new();
 
         for hook in hooks {
             let group_index = groups.iter().position(|group| {
@@ -323,9 +330,9 @@ impl<T> InstallPartitions<T> {
     }
 }
 
-impl<T> IntoIterator for InstallPartitions<T> {
-    type Item = Vec<InstallJob<T>>;
-    type IntoIter = std::vec::IntoIter<Vec<InstallJob<T>>>;
+impl IntoIterator for InstallPartitions {
+    type Item = Vec<InstallJob>;
+    type IntoIter = std::vec::IntoIter<Vec<InstallJob>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.partitions.into_iter()
@@ -401,6 +408,19 @@ impl InstallCache {
 
     pub(crate) fn installed_hooks(&self) -> impl Iterator<Item = &CachedInstallInfo> {
         self.created_hooks.iter().chain(self.store_hooks.iter())
+    }
+
+    pub(crate) async fn installed_hook(&self, hook: Arc<Hook>) -> Option<InstalledHook> {
+        for env in self.installed_hooks() {
+            if env.matches(&hook) && env.ensure_healthy().await {
+                return Some(InstalledHook::Installed {
+                    hook,
+                    info: env.info(),
+                });
+            }
+        }
+
+        None
     }
 
     async fn load_store_installed_hooks(store: &Store) -> Rc<[CachedInstallInfo]> {

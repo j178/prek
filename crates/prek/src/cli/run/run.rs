@@ -1,19 +1,16 @@
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use futures::stream::{FuturesUnordered, StreamExt};
-use mea::semaphore::Semaphore;
+use futures::stream::StreamExt;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use tokio::sync::mpsc;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
@@ -34,7 +31,7 @@ use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 use crate::{fs, git, warn_user};
 
-use super::install::{InstallCache, InstallJob, InstallPartitions, Installer, PartitionInstaller};
+use super::install::{InstallCache, install_hooks_with_cache};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -202,9 +199,12 @@ pub(crate) async fn run(
         )
     })?;
 
+    let installed_hooks =
+        prepare_hooks_for_run(&workspace, &filtered_hooks, &input, store, printer).await?;
+
     run_hooks(
         &workspace,
-        &filtered_hooks,
+        &installed_hooks,
         input,
         store,
         show_diff_on_failure,
@@ -450,19 +450,110 @@ impl<'a> HookRunInput<'a> {
     }
 }
 
-type PlannedHookRun<'a> = InstallJob<HookRunInput<'a>>;
-type ReadyHookRun<'a> = (InstalledHook, HookRunInput<'a>);
+async fn prepare_hooks_for_run(
+    workspace: &Workspace,
+    hooks: &[Arc<Hook>],
+    input: &RunInput,
+    store: &Store,
+    printer: Printer,
+) -> Result<Vec<InstalledHook>> {
+    let env_hooks = hooks
+        .iter()
+        .filter(|hook| hook.needs_install_env())
+        .cloned()
+        .collect::<Vec<_>>();
 
-struct PriorityGroupPlan<'a> {
-    skipped_results: Vec<RunResult>,
-    runnable_hooks: Vec<PlannedHookRun<'a>>,
+    if env_hooks.is_empty() {
+        return Ok(hooks
+            .iter()
+            .map(|hook| InstalledHook::NoNeedInstall(hook.clone()))
+            .collect());
+    }
+
+    let _lock = store.lock_async().await?;
+    let mut install_cache = Some(InstallCache::load(store).await);
+    let cache = install_cache
+        .as_ref()
+        .expect("install cache should be loaded above");
+    let mut installed_by_idx = FxHashMap::default();
+    let mut missing_env_hooks = Vec::new();
+
+    // Resolve the cache before file filtering so already-installed hooks keep their exact
+    // environment, while missing hooks still avoid install when they would not run.
+    for hook in env_hooks {
+        if let Some(installed_hook) = cache.installed_hook(hook.clone()).await {
+            installed_by_idx.insert(hook.idx, installed_hook);
+        } else {
+            missing_env_hooks.push(hook.clone());
+        }
+    }
+
+    let hooks_to_install = hooks_to_install_after_filter(workspace, &missing_env_hooks, input)?;
+    if !hooks_to_install.is_empty() {
+        let reporter = HookInstallReporter::new(printer);
+        let installed_hooks =
+            install_hooks_with_cache(hooks_to_install, store, &reporter, &mut install_cache)
+                .await?;
+        reporter.on_complete();
+
+        for installed_hook in installed_hooks {
+            installed_by_idx.insert(installed_hook.idx, installed_hook);
+        }
+    }
+
+    Ok(hooks
+        .iter()
+        .map(|hook| {
+            installed_by_idx
+                .remove(&hook.idx)
+                .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook.clone()))
+        })
+        .collect())
 }
 
-/// Run all hooks.
+fn hooks_to_install_after_filter(
+    workspace: &Workspace,
+    hooks: &[Arc<Hook>],
+    input: &RunInput,
+) -> Result<Vec<Arc<Hook>>> {
+    #[allow(clippy::mutable_key_type)]
+    let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
+        FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
+    for hook in hooks {
+        project_to_hooks
+            .entry(hook.project())
+            .or_default()
+            .push(hook.clone());
+    }
+
+    let mut hooks_to_install = Vec::new();
+    let mut consumed_files = FxHashSet::default();
+    let mut tag_cache = FileTagCache::default();
+
+    for project in workspace.all_projects() {
+        let project_input = ProjectHookInput::new(input, project, Some(&mut consumed_files))?;
+        let Some(hooks) = project_to_hooks.remove(project) else {
+            continue;
+        };
+
+        for hook in hooks {
+            let hook_input = project_input.for_hook(&hook, &mut tag_cache);
+
+            if (hook_input.has_matching_files || hook.always_run)
+                && Language::supported(hook.language)
+            {
+                hooks_to_install.push(hook);
+            }
+        }
+    }
+
+    Ok(hooks_to_install)
+}
+
 #[allow(clippy::fn_params_excessive_bools)]
 async fn run_hooks(
     workspace: &Workspace,
-    hooks: &[Arc<Hook>],
+    hooks: &[InstalledHook],
     input: RunInput,
     store: &Store,
     show_diff_on_failure: bool,
@@ -474,13 +565,13 @@ async fn run_hooks(
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
     let status_printer = StatusPrinter::for_hooks(hooks, printer);
-    let reporter = HookRunReporter::new_execution(printer, status_printer.bar_len());
+    let reporter = HookRunReporter::new(printer, status_printer.bar_len());
 
     let mut success = true;
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
+    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> =
         FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
     for hook in hooks {
         project_to_hooks
@@ -497,7 +588,6 @@ async fn run_hooks(
     // Track files that have been consumed by orphan projects.
     let mut consumed_files = FxHashSet::default();
     let mut tag_cache = FileTagCache::default();
-    let mut executor = HookRunExecutor::new(dry_run, &reporter);
 
     'outer: for project in workspace.all_projects() {
         let project_input = ProjectHookInput::new(&input, project, Some(&mut consumed_files))?;
@@ -530,51 +620,29 @@ async fn run_hooks(
         let project_fail_fast = fail_fast.or(project.config().fail_fast).unwrap_or(false);
 
         for group_hooks in PriorityGroups::new(hooks) {
-            let PriorityGroupPlan {
-                skipped_results: mut group_results,
-                runnable_hooks,
-            } = plan_priority_group(group_hooks, &project_input, &mut tag_cache);
+            let group_results = run_priority_group(
+                group_hooks,
+                &project_input,
+                &mut tag_cache,
+                store,
+                dry_run,
+                &reporter,
+            )
+            .await?;
 
-            if !runnable_hooks.is_empty() {
-                let mut run_results = executor.run(store, runnable_hooks).await?;
-                group_results.append(&mut run_results);
-            }
-
-            // Print results in a stable order (same order as config within the project).
-            group_results.sort_unstable_by_key(|a| a.hook.idx);
-
-            // Check if any files were modified by this group of hooks.
-            let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
-            let group_modified_files = if !all_skipped {
-                let curr_diff = git::get_diff(project.path()).await?;
-                let group_modified_files = curr_diff != prev_diff;
-                prev_diff = curr_diff;
-                group_modified_files
-            } else {
-                false
-            };
-
-            if group_modified_files {
-                file_modified = true;
-            }
-
-            reporter.clear_completed();
-            reporter.suspend(|| {
-                render_priority_group(
-                    printer,
-                    &status_printer,
-                    &group_results,
-                    verbose,
-                    group_modified_files,
-                )
-            })?;
-
-            let hook_fail_fast = apply_group_outcome(
-                &group_results,
-                group_modified_files,
+            let hook_fail_fast = finish_priority_group(
+                group_results,
+                project,
+                &mut prev_diff,
+                &mut file_modified,
+                &reporter,
+                printer,
+                &status_printer,
+                verbose,
                 &mut success,
                 &mut has_unimplemented,
-            );
+            )
+            .await?;
 
             if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
@@ -634,19 +702,68 @@ async fn run_hooks(
     }
 }
 
+async fn finish_priority_group(
+    mut group_results: Vec<RunResult>,
+    project: &Project,
+    prev_diff: &mut Vec<u8>,
+    file_modified: &mut bool,
+    reporter: &HookRunReporter,
+    printer: Printer,
+    status_printer: &StatusPrinter,
+    verbose: bool,
+    success: &mut bool,
+    has_unimplemented: &mut bool,
+) -> Result<bool> {
+    // Print results in a stable order (same order as config within the project).
+    group_results.sort_unstable_by_key(|a| a.hook.idx);
+
+    // Check if any files were modified by this group of hooks.
+    let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
+    let group_modified_files = if !all_skipped {
+        let curr_diff = git::get_diff(project.path()).await?;
+        let group_modified_files = curr_diff != *prev_diff;
+        *prev_diff = curr_diff;
+        group_modified_files
+    } else {
+        false
+    };
+
+    if group_modified_files {
+        *file_modified = true;
+    }
+
+    reporter.clear_completed();
+    reporter.suspend(|| {
+        render_priority_group(
+            printer,
+            status_printer,
+            &group_results,
+            verbose,
+            group_modified_files,
+        )
+    })?;
+
+    Ok(apply_group_outcome(
+        &group_results,
+        group_modified_files,
+        success,
+        has_unimplemented,
+    ))
+}
+
 struct PriorityGroups {
-    hooks: Vec<Arc<Hook>>,
+    hooks: Vec<InstalledHook>,
     idx: usize,
 }
 
 impl PriorityGroups {
-    fn new(hooks: Vec<Arc<Hook>>) -> Self {
+    fn new(hooks: Vec<InstalledHook>) -> Self {
         Self { hooks, idx: 0 }
     }
 }
 
 impl Iterator for PriorityGroups {
-    type Item = Vec<Arc<Hook>>;
+    type Item = Vec<InstalledHook>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let first = self.hooks.get(self.idx)?;
@@ -665,11 +782,14 @@ impl Iterator for PriorityGroups {
     }
 }
 
-fn plan_priority_group<'input, 'paths>(
-    group_hooks: Vec<Arc<Hook>>,
+async fn run_priority_group<'input, 'paths>(
+    group_hooks: Vec<InstalledHook>,
     input: &'input ProjectHookInput<'paths>,
     tag_cache: &mut FileTagCache<'paths>,
-) -> PriorityGroupPlan<'input>
+    store: &Store,
+    dry_run: bool,
+    reporter: &HookRunReporter,
+) -> Result<Vec<RunResult>>
 where
     'paths: 'input,
 {
@@ -680,196 +800,24 @@ where
         group_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
 
-    let mut skipped_results = Vec::new();
-    let mut runnable_hooks = Vec::new();
+    let mut runs = futures::stream::iter(group_hooks)
+        .map(|hook| {
+            let hook_input = input.for_hook(&hook, tag_cache);
+            trace!(
+                matched = hook_input.has_matching_files,
+                filenames = hook_input.filenames.len(),
+                "Files for hook `{}` after filtering",
+                hook.id,
+            );
+            run_hook(hook, hook_input, store, dry_run, reporter)
+        })
+        .buffer_unordered(*CONCURRENCY);
 
-    for hook in group_hooks {
-        let hook_input = input.for_hook(&hook, tag_cache);
-        trace!(
-            matched = hook_input.has_matching_files,
-            filenames = hook_input.filenames.len(),
-            "Files for hook `{}` after filtering",
-            hook.id,
-        );
-
-        if !hook_input.has_matching_files && !hook.always_run {
-            skipped_results.push(RunResult::from_status(
-                InstalledHook::NoNeedInstall(hook),
-                RunStatus::NoFiles,
-            ));
-            continue;
-        }
-
-        if !Language::supported(hook.language) {
-            skipped_results.push(RunResult::from_status(
-                InstalledHook::NoNeedInstall(hook),
-                RunStatus::Unimplemented,
-            ));
-            continue;
-        }
-
-        runnable_hooks.push(InstallJob::new(hook, hook_input));
+    let mut group_results = Vec::new();
+    while let Some(result) = runs.next().await {
+        group_results.push(result?);
     }
-
-    PriorityGroupPlan {
-        skipped_results,
-        runnable_hooks,
-    }
-}
-
-struct HookRunExecutor<'a> {
-    install_cache: Option<InstallCache>,
-    dry_run: bool,
-    reporter: &'a HookRunReporter,
-}
-
-impl<'a> HookRunExecutor<'a> {
-    fn new(dry_run: bool, reporter: &'a HookRunReporter) -> Self {
-        Self {
-            install_cache: None,
-            dry_run,
-            reporter,
-        }
-    }
-
-    async fn run(
-        &mut self,
-        store: &Store,
-        hooks: Vec<PlannedHookRun<'_>>,
-    ) -> Result<Vec<RunResult>> {
-        if hooks.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let install_reporter = HookInstallReporter::from_run(self.reporter);
-        let pipeline = HookRunPipeline::new(self.reporter, self.dry_run);
-        // Install holds the store lock. The ready queue must not block on run concurrency, or a
-        // hook that recursively invokes prek could wait on the same lock while install is stalled.
-        let (ready_tx, ready_rx) = mpsc::unbounded_channel();
-
-        let install_future = async {
-            let _lock = store.lock_async().await?;
-            let installer =
-                Installer::for_jobs(store, &install_reporter, &mut self.install_cache, &hooks)
-                    .await;
-            pipeline
-                .install_ready_hooks(store, installer, hooks, ready_tx)
-                .await
-        };
-        let run_future = pipeline.run_ready_hooks(store, ready_rx);
-
-        let (install_result, run_result) = futures::future::join(install_future, run_future).await;
-        let installed_hooks = install_result?;
-        let results = run_result?;
-
-        if let Some(cache) = &mut self.install_cache {
-            cache.add_installed(&installed_hooks);
-        }
-
-        Ok(results)
-    }
-}
-
-#[derive(Clone)]
-struct HookRunPipeline<'a> {
-    /// Run concurrency is independent from install concurrency.
-    run_semaphore: Rc<Semaphore>,
-    reporter: &'a HookRunReporter,
-    dry_run: bool,
-}
-
-impl<'a> HookRunPipeline<'a> {
-    fn new(reporter: &'a HookRunReporter, dry_run: bool) -> Self {
-        Self {
-            run_semaphore: Rc::new(Semaphore::new(*CONCURRENCY)),
-            reporter,
-            dry_run,
-        }
-    }
-
-    async fn install_ready_hooks<'input>(
-        &self,
-        store: &Store,
-        installer: Installer<'a>,
-        hooks: Vec<PlannedHookRun<'input>>,
-        ready_tx: mpsc::UnboundedSender<ReadyHookRun<'input>>,
-    ) -> Result<Vec<InstalledHook>> {
-        let mut installed_hooks = Vec::new();
-        let mut futures = FuturesUnordered::new();
-
-        for partition in InstallPartitions::new(hooks) {
-            let mut partition_installer = installer.partition();
-            let ready_tx = ready_tx.clone();
-            futures.push(async move {
-                Self::install_partition(store, &mut partition_installer, partition, ready_tx).await
-            });
-        }
-
-        while let Some(result) = futures.next().await {
-            let mut partition_installed_hooks = result?;
-            installed_hooks.append(&mut partition_installed_hooks);
-        }
-
-        Ok(installed_hooks)
-    }
-
-    async fn install_partition<'input>(
-        store: &Store,
-        installer: &mut PartitionInstaller<'a>,
-        hooks: Vec<PlannedHookRun<'input>>,
-        ready_tx: mpsc::UnboundedSender<ReadyHookRun<'input>>,
-    ) -> Result<Vec<InstalledHook>> {
-        let mut installed_hooks = Vec::with_capacity(hooks.len());
-
-        for hook in hooks {
-            let (installed_hook, input) = installer.install_job(store, hook).await?;
-            installed_hooks.push(installed_hook.clone());
-
-            if ready_tx.send((installed_hook, input)).is_err() {
-                break;
-            }
-        }
-
-        Ok(installed_hooks)
-    }
-
-    async fn run_ready_hooks(
-        &self,
-        store: &Store,
-        mut ready_rx: mpsc::UnboundedReceiver<ReadyHookRun<'_>>,
-    ) -> Result<Vec<RunResult>> {
-        let mut results = Vec::new();
-        let mut runs = FuturesUnordered::new();
-        let mut ready_open = true;
-
-        loop {
-            tokio::select! {
-                ready = ready_rx.recv(), if ready_open => {
-                    match ready {
-                        Some((installed_hook, input)) => {
-                            let run_semaphore = Rc::clone(&self.run_semaphore);
-                            let reporter = self.reporter;
-                            let dry_run = self.dry_run;
-
-                            runs.push(async move {
-                                let _permit = run_semaphore.acquire(1).await;
-                                run_hook(installed_hook, input, store, dry_run, reporter).await
-                            });
-                        }
-                        None => ready_open = false,
-                    }
-                }
-                result = runs.next(), if !runs.is_empty() => {
-                    if let Some(result) = result {
-                        results.push(result?);
-                    }
-                }
-                else => break,
-            }
-        }
-
-        Ok(results)
-    }
+    Ok(group_results)
 }
 
 fn render_priority_group(

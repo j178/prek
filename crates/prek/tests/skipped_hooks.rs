@@ -294,53 +294,6 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
     Ok(())
 }
 
-/// Hooks in later priority groups should not install when fail-fast stops before them.
-#[test]
-fn fail_fast_skips_installing_later_priority_groups() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: fail-now
-                name: fail-now
-                language: fail
-                entry: fail
-                always_run: true
-                pass_filenames: false
-                priority: 0
-                fail_fast: true
-              - id: later-python
-                name: later-python
-                language: python
-                entry: python -c "print('later')"
-                always_run: true
-                pass_filenames: false
-                priority: 10
-    "#});
-
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    fail-now.................................................................Failed
-    - hook id: fail-now
-    - exit code: 1
-
-      fail
-
-    ----- stderr -----
-    "#);
-
-    assert_eq!(hook_env_count(&context)?, 0);
-
-    Ok(())
-}
-
 /// Skipped hooks across multiple priority groups
 ///
 /// Hooks with different `priority` values form separate priority groups. Each
