@@ -13,6 +13,7 @@ use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
+use crate::cli::run::install::InstallCache;
 use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
 use crate::hook::{HOOK_MARKER, HookEnvKey, HookSpec, InstallInfo, Repo as HookRepo};
 use crate::printer::Printer;
@@ -164,7 +165,7 @@ pub(crate) async fn cache_gc(
     // Always keep Prek's own cache.
     used_cache.insert(CacheBucket::Prek);
 
-    let installed = store.installed_hooks().await;
+    let install_cache = InstallCache::new();
 
     for config_path in &tracked_configs {
         let config = match load_config(config_path) {
@@ -213,7 +214,8 @@ pub(crate) async fn cache_gc(
     // Mark hook environments by matching already-installed env metadata.
     // While doing this, try to derive the specific tool *version* directories in use from
     // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
-    for info in &installed {
+    for installed in install_cache.installed_hooks(store).await {
+        let info = installed.info_ref();
         if used_env_keys.iter().any(|k| k.matches_install_info(info)) {
             if let Some(dir) = info
                 .env_path

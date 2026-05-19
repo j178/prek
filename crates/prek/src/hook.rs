@@ -508,6 +508,11 @@ impl Hook {
         matches!(&*self.repo, Repo::Remote { .. })
     }
 
+    pub(crate) fn needs_install_env(&self) -> bool {
+        !matches!(self.repo(), Repo::Meta { .. } | Repo::Builtin { .. })
+            && self.language.supports_install_env()
+    }
+
     /// Dependencies used to identify whether an existing hook environment can be reused.
     ///
     /// For remote hooks, the repo URL is included to avoid reusing an environment created
@@ -523,9 +528,9 @@ impl Hook {
 
     /// Returns a lightweight view of the hook environment identity used for reusing installs.
     ///
-    /// Returns `None` for languages that do not install an environment.
+    /// Returns `None` for hooks that do not install an environment.
     pub(crate) fn env_key(&self) -> Option<HookEnvKeyRef<'_>> {
-        if !self.language.supports_install_env() {
+        if !self.needs_install_env() {
             return None;
         }
 

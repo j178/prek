@@ -145,23 +145,26 @@ impl workspace::HookInitReporter for HookInitReporter {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct HookInstallReporter {
     reporter: Arc<ProgressReporter>,
+    root_message: &'static str,
 }
 
 impl HookInstallReporter {
     pub(crate) fn new(printer: Printer) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         set_current_reporter(Some(&reporter));
-        Self { reporter }
+        Self {
+            reporter,
+            root_message: "Installing hooks...",
+        }
     }
-}
 
-impl HookInstallReporter {
     pub fn on_install_start(&self, hook: &Hook) -> usize {
         self.reporter
             .root
-            .set_message(format!("{}", "Installing hooks...".bold().cyan()));
+            .set_message(format!("{}", self.root_message.bold().cyan()));
 
         self.reporter.on_start(format!(
             "{} {}",
@@ -182,20 +185,29 @@ impl HookInstallReporter {
 pub(crate) struct HookRunReporter {
     reporter: Arc<ProgressReporter>,
     dots: usize,
+    root_message: &'static str,
 }
 
 impl HookRunReporter {
     pub fn new(printer: Printer, dots: usize) -> Self {
+        Self::with_root_message(printer, dots, "Running hooks...")
+    }
+
+    fn with_root_message(printer: Printer, dots: usize, root_message: &'static str) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         set_current_reporter(Some(&reporter));
 
-        Self { reporter, dots }
+        Self {
+            reporter,
+            dots,
+            root_message,
+        }
     }
 
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
         self.reporter
             .root
-            .set_message(format!("{}", "Running hooks...".bold().cyan()));
+            .set_message(format!("{}", self.root_message.bold().cyan()));
 
         let mut state = self.reporter.state.lock().unwrap();
         let id = state.id();

@@ -14,6 +14,14 @@ use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 
+fn hook_env_count(context: &TestContext) -> Result<usize> {
+    let hooks_dir = context.home_dir().child("hooks");
+    if !hooks_dir.exists() {
+        return Ok(0);
+    }
+    Ok(hooks_dir.read_dir()?.count())
+}
+
 /// All hooks skip when no staged files match their file patterns.
 #[test]
 fn all_hooks_skipped_no_matching_files() -> Result<()> {
@@ -59,6 +67,80 @@ fn all_hooks_skipped_no_matching_files() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+/// Installable hooks with no matching files should not create environments.
+#[test]
+fn skipped_installable_hook_does_not_install_env() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: python-check
+                name: python-check
+                language: python
+                entry: python -c "print('checking python')"
+                files: \.py$
+    "#});
+
+    cwd.child("README.md").write_str("Hello")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    python-check.........................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(hook_env_count(&context)?, 0);
+
+    Ok(())
+}
+
+/// `always_run` installable hooks still install and run without matching files.
+#[test]
+fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: always-python
+                name: always-python
+                language: python
+                entry: python -c "print('ran')"
+                files: \.py$
+                always_run: true
+                pass_filenames: false
+    "#});
+
+    cwd.child("README.md").write_str("Hello")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    always-python............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(hook_env_count(&context)?, 1);
 
     Ok(())
 }
@@ -147,6 +229,67 @@ fn mixed_skipped_and_executed_hooks() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+/// Skipped hooks in untouched workspace projects should not install environments.
+#[test]
+fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    let proj_a = cwd.child("proj-a");
+    let proj_b = cwd.child("proj-b");
+    proj_a.create_dir_all()?;
+    proj_b.create_dir_all()?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: root-skip
+                name: root-skip
+                language: system
+                entry: echo root
+                files: \.root$
+    "});
+    proj_a
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: proj-a-check
+                name: proj-a-check
+                language: system
+                entry: echo proj-a
+                files: \.txt$
+    "})?;
+    proj_b
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: proj-b-python
+                name: proj-b-python
+                language: python
+                entry: python -c "print('proj-b')"
+                files: \.py$
+    "#})?;
+
+    proj_a.child("README.txt").write_str("Hello")?;
+    context.git_add(".");
+
+    let output = context.run().output()?;
+    assert!(output.status.success(), "prek should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("proj-a-check") && stdout.contains("Passed"));
+    assert!(stdout.contains("proj-b-python") && stdout.contains("Skipped"));
+    assert_eq!(hook_env_count(&context)?, 0);
 
     Ok(())
 }

@@ -1,7 +1,6 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::Result;
 use etcetera::BaseStrategy;
@@ -15,7 +14,6 @@ use tracing::{debug, warn};
 use crate::config::{RemoteRepo, RemoteRepoKey};
 use crate::fs::{LockedFile, expand_tilde};
 use crate::git::{self, TerminalPrompt};
-use crate::hook::InstallInfo;
 use crate::run::CONCURRENCY;
 use crate::warn_user;
 use crate::workspace::{HookInitReporter, WorkspaceCache};
@@ -275,42 +273,6 @@ impl Store {
                 repo: repo.repo.clone(),
                 error: git::Error::Io(std::io::Error::other("repo was not cloned")),
             })
-    }
-
-    /// Returns installed hooks in the store.
-    pub(crate) async fn installed_hooks(&self) -> Vec<Arc<InstallInfo>> {
-        let Ok(dirs) = fs_err::read_dir(self.hooks_dir()) else {
-            return vec![];
-        };
-
-        let mut tasks = futures::stream::iter(dirs)
-            .map(async |entry| {
-                let path = match entry {
-                    Ok(entry) => entry.path(),
-                    Err(err) => {
-                        warn!(%err, "Failed to read hook dir");
-                        return None;
-                    }
-                };
-                let info = match InstallInfo::from_env_path(&path).await {
-                    Ok(info) => info,
-                    Err(err) => {
-                        warn!(%err, path = %path.display(), "Skipping invalid installed hook");
-                        return None;
-                    }
-                };
-                Some(info)
-            })
-            .buffer_unordered(*CONCURRENCY);
-
-        let mut hooks = Vec::new();
-        while let Some(hook) = tasks.next().await {
-            if let Some(hook) = hook {
-                hooks.push(Arc::new(hook));
-            }
-        }
-
-        hooks
     }
 
     pub(crate) async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {
