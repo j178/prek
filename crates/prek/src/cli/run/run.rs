@@ -300,7 +300,7 @@ impl<'a> InstalledHookResolver<'a> {
 
         let _lock = self.store.lock_async().await?;
         let mut install_cache = InstallCache::new();
-        let mut installed_by_idx = FxHashMap::default();
+        let mut installed_by_hook = FxHashMap::default();
         let mut missing_env_hooks = Vec::new();
 
         // Resolve the cache before file filtering so already-installed hooks keep their exact
@@ -309,7 +309,7 @@ impl<'a> InstalledHookResolver<'a> {
             if let Some(installed_hook) =
                 install_cache.installed_hook(self.store, hook.clone()).await
             {
-                installed_by_idx.insert(hook.idx, installed_hook);
+                installed_by_hook.insert(hook_key(&hook), installed_hook);
             } else {
                 missing_env_hooks.push(hook.clone());
             }
@@ -324,15 +324,15 @@ impl<'a> InstalledHookResolver<'a> {
             reporter.on_complete();
 
             for installed_hook in installed_hooks {
-                installed_by_idx.insert(installed_hook.idx, installed_hook);
+                installed_by_hook.insert(hook_key(&installed_hook), installed_hook);
             }
         }
 
         Ok(hooks
             .iter()
             .map(|hook| {
-                installed_by_idx
-                    .remove(&hook.idx)
+                installed_by_hook
+                    .remove(&hook_key(hook))
                     .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook.clone()))
             })
             .collect())
@@ -384,6 +384,11 @@ impl<'a> InstalledHookResolver<'a> {
 
         hook.always_run || project_input.has_match_for_hook(hook, tag_cache)
     }
+}
+
+fn hook_key(hook: &Hook) -> (usize, usize) {
+    // Hook indexes are scoped to a project config, so workspace runs need the project index too.
+    (hook.project().idx(), hook.idx)
 }
 
 #[allow(clippy::fn_params_excessive_bools)]

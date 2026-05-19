@@ -21,24 +21,6 @@ pub(crate) async fn install_hooks(
     cache: &mut InstallCache,
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
-    let result = resolve_and_install_hooks(hooks, store, reporter, cache).await?;
-    cache.add_installed(&result);
-
-    debug_assert_eq!(
-        num_hooks,
-        result.len(),
-        "Number of hooks installed should match the number of hooks provided"
-    );
-
-    Ok(result)
-}
-
-async fn resolve_and_install_hooks(
-    hooks: Vec<Arc<Hook>>,
-    store: &Store,
-    reporter: &HookInstallReporter,
-    cache: &mut InstallCache,
-) -> Result<Vec<InstalledHook>> {
     let mut installed_hooks = Vec::with_capacity(hooks.len());
     let mut hooks_to_install = Vec::new();
 
@@ -55,21 +37,10 @@ async fn resolve_and_install_hooks(
         }
     }
 
-    installed_hooks.extend(install_missing_hooks(hooks_to_install, store, reporter).await?);
-
-    Ok(installed_hooks)
-}
-
-async fn install_missing_hooks(
-    hooks: Vec<Arc<Hook>>,
-    store: &Store,
-    reporter: &HookInstallReporter,
-) -> Result<Vec<InstalledHook>> {
     let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
-    let mut installed_hooks = Vec::with_capacity(hooks.len());
     let mut futures = FuturesUnordered::new();
 
-    for partition in partition_hooks(hooks) {
+    for partition in partition_hooks(hooks_to_install) {
         let semaphore = Rc::clone(&semaphore);
         let reporter = reporter.clone();
         futures
@@ -79,6 +50,14 @@ async fn install_missing_hooks(
     while let Some(partition_hooks) = futures.next().await {
         installed_hooks.extend(partition_hooks?);
     }
+
+    cache.add_installed(&installed_hooks);
+
+    debug_assert_eq!(
+        num_hooks,
+        installed_hooks.len(),
+        "Number of hooks installed should match the number of hooks provided"
+    );
 
     Ok(installed_hooks)
 }
@@ -93,65 +72,47 @@ async fn install_partition(
 
     for hook in hooks {
         debug_assert!(hook.needs_install_env());
-        let installed_hook = if let Some(info) = installed_info_for_hook(&installed_hooks, &hook) {
+
+        let installed_hook = if let Some(info) = installed_hooks.iter().find_map(|installed| {
+            let InstalledHook::Installed { info, .. } = installed else {
+                return None;
+            };
+            info.matches(&hook).then(|| info.clone())
+        }) {
             debug!(
                 "Found installed environment for hook `{hook}` at `{}`",
                 info.env_path.display()
             );
             InstalledHook::Installed { hook, info }
         } else {
-            install_new(hook, store, reporter, &semaphore).await?
+            let _permit = semaphore.acquire(1).await;
+
+            let installed_hook = hook
+                .language
+                .install(hook.clone(), store, reporter)
+                .await
+                .with_context(|| format!("Failed to install hook `{hook}`"))?;
+
+            installed_hook
+                .mark_as_installed(store)
+                .await
+                .with_context(|| format!("Failed to mark hook `{hook}` as installed"))?;
+
+            match &installed_hook {
+                InstalledHook::Installed { info, .. } => {
+                    debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+                }
+                InstalledHook::NoNeedInstall { .. } => {
+                    debug!("Hook `{hook}` does not need installation");
+                }
+            }
+
+            installed_hook
         };
         installed_hooks.push(installed_hook);
     }
 
     Ok(installed_hooks)
-}
-
-async fn install_new(
-    hook: Arc<Hook>,
-    store: &Store,
-    reporter: &HookInstallReporter,
-    semaphore: &Semaphore,
-) -> Result<InstalledHook> {
-    let _permit = semaphore.acquire(1).await;
-
-    let installed_hook = hook
-        .language
-        .install(hook.clone(), store, reporter)
-        .await
-        .with_context(|| format!("Failed to install hook `{hook}`"))?;
-
-    installed_hook
-        .mark_as_installed(store)
-        .await
-        .with_context(|| format!("Failed to mark hook `{hook}` as installed"))?;
-
-    match &installed_hook {
-        InstalledHook::Installed { info, .. } => {
-            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
-        }
-        InstalledHook::NoNeedInstall { .. } => {
-            debug!("Hook `{hook}` does not need installation");
-        }
-    }
-
-    Ok(installed_hook)
-}
-
-fn installed_info_for_hook(
-    installed_hooks: &[InstalledHook],
-    hook: &Hook,
-) -> Option<Arc<InstallInfo>> {
-    for installed_hook in installed_hooks {
-        if let InstalledHook::Installed { info, .. } = installed_hook
-            && info.matches(hook)
-        {
-            return Some(info.clone());
-        }
-    }
-
-    None
 }
 
 /// Group hooks so each partition can install independently.
@@ -161,46 +122,36 @@ fn installed_info_for_hook(
 fn partition_hooks(hooks: Vec<Arc<Hook>>) -> Vec<Vec<Arc<Hook>>> {
     let mut hooks_by_language = FxHashMap::default();
     for hook in hooks {
+        // `pygrep` hooks use Python installation and can share Python environments.
+        let language = if hook.language == Language::Pygrep {
+            Language::Python
+        } else {
+            hook.language
+        };
         hooks_by_language
-            .entry(install_language(&hook))
+            .entry(language)
             .or_insert_with(Vec::new)
             .push(hook);
     }
 
     let mut partitions = Vec::new();
     for (_, hooks) in hooks_by_language {
-        partitions.extend(partition_hooks_by_dependencies(hooks));
+        let mut groups: Vec<Vec<Arc<Hook>>> = Vec::new();
+        for hook in hooks {
+            let group_index = groups
+                .iter()
+                .position(|group| group[0].env_key_dependencies() == hook.env_key_dependencies());
+
+            if let Some(index) = group_index {
+                groups[index].push(hook);
+            } else {
+                groups.push(vec![hook]);
+            }
+        }
+        partitions.extend(groups);
     }
 
     partitions
-}
-
-fn install_language(hook: &Hook) -> Language {
-    if hook.language == Language::Pygrep {
-        // Treat `pygrep` hooks as `python` hooks for installation purposes.
-        // They share the same installation logic.
-        Language::Python
-    } else {
-        hook.language
-    }
-}
-
-fn partition_hooks_by_dependencies(hooks: Vec<Arc<Hook>>) -> Vec<Vec<Arc<Hook>>> {
-    let mut groups: Vec<Vec<Arc<Hook>>> = Vec::new();
-
-    for hook in hooks {
-        let group_index = groups
-            .iter()
-            .position(|group| group[0].env_key_dependencies() == hook.env_key_dependencies());
-
-        if let Some(index) = group_index {
-            groups[index].push(hook);
-        } else {
-            groups.push(vec![hook]);
-        }
-    }
-
-    groups
 }
 
 #[derive(Debug, Clone)]
