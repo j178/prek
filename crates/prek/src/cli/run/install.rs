@@ -14,6 +14,10 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::run::CONCURRENCY;
 use crate::store::Store;
 
+/// Resolve already-installed hook environments and install the missing ones.
+///
+/// The cache is only used for environments already present in the store. Environments created
+/// by this call are returned directly and reused within each install partition.
 pub(crate) async fn install_hooks(
     hooks: Vec<Arc<Hook>>,
     store: &Store,
@@ -48,8 +52,6 @@ pub(crate) async fn install_hooks(
     while let Some(partition_hooks) = futures.next().await {
         installed_hooks.extend(partition_hooks?);
     }
-
-    cache.add_installed(&installed_hooks);
 
     debug_assert_eq!(
         num_hooks,
@@ -152,6 +154,10 @@ fn partition_hooks(hooks: Vec<Arc<Hook>>) -> Vec<Vec<Arc<Hook>>> {
     partitions
 }
 
+/// Cached metadata for one environment found in the store hooks directory.
+///
+/// Health is checked lazily because scanning the store can find many environments that will not
+/// match the hooks selected for the current command.
 #[derive(Debug, Clone)]
 pub(crate) struct CachedInstallInfo {
     info: Arc<InstallInfo>,
@@ -166,13 +172,6 @@ impl CachedInstallInfo {
         }
     }
 
-    fn healthy(info: Arc<InstallInfo>) -> Self {
-        Self {
-            info,
-            health: OnceCell::from_value(true),
-        }
-    }
-
     fn matches(&self, hook: &Hook) -> bool {
         self.info.matches(hook)
     }
@@ -181,6 +180,10 @@ impl CachedInstallInfo {
         self.info.clone()
     }
 
+    /// Return the cached install metadata without checking environment health.
+    ///
+    /// This is used by cache GC, where invalid/unhealthy metadata still describes a directory
+    /// that may need to be considered for retention or cleanup.
     pub(crate) fn info_ref(&self) -> &InstallInfo {
         &self.info
     }
@@ -204,29 +207,39 @@ impl CachedInstallInfo {
     }
 }
 
+/// Lazy cache of hook environments already present in the store.
+///
+/// This cache does not track environments created during the current command. New environments
+/// are returned by `install_hooks` directly, and same-call reuse happens inside `install_partition`.
 pub(crate) struct InstallCache {
-    /// Result of the expensive hooks-dir scan. Loaded at most once per command.
     store_hooks: OnceCell<Vec<CachedInstallInfo>>,
-    /// Environments installed after the scan and therefore absent from `store_hooks`.
-    created_hooks: Vec<CachedInstallInfo>,
 }
 
 impl InstallCache {
+    /// Create an empty cache; the store is scanned on first access.
     pub(crate) fn new() -> Self {
         Self {
             store_hooks: OnceCell::new(),
-            created_hooks: Vec::new(),
         }
     }
 
+    /// Return environments loaded from the store hooks directory.
+    ///
+    /// Loading is lazy and happens at most once per `InstallCache`. Callers should hold the store
+    /// lock while using this in command paths that can race with install or cache cleanup.
     pub(crate) async fn installed_hooks<'a>(
         &'a self,
         store: &Store,
     ) -> impl Iterator<Item = &'a CachedInstallInfo> + 'a {
         let store_hooks = self.store_hooks(store).await;
-        self.created_hooks.iter().chain(store_hooks.iter())
+        store_hooks.iter()
     }
 
+    /// Return a healthy installed environment from the store cache for this hook.
+    ///
+    /// This only looks at environments loaded from `store.hooks_dir()`. Environments created
+    /// during the current install call are reused inside `install_partition`, where hooks with
+    /// the same install key are installed sequentially.
     pub(crate) async fn installed_hook(
         &self,
         store: &Store,
@@ -283,29 +296,5 @@ impl InstallCache {
             }
             Err(_) => Vec::new(),
         }
-    }
-
-    pub(crate) fn add_installed(&mut self, installed_hooks: &[InstalledHook]) {
-        for hook in installed_hooks {
-            let InstalledHook::Installed { info, .. } = hook else {
-                continue;
-            };
-            if self.has_info(info) {
-                continue;
-            }
-            self.created_hooks
-                .push(CachedInstallInfo::healthy(info.clone()));
-        }
-    }
-
-    fn has_info(&self, info: &InstallInfo) -> bool {
-        self.created_hooks
-            .iter()
-            .any(|existing| existing.info.env_path == info.env_path)
-            || self.store_hooks.get().is_some_and(|store_hooks| {
-                store_hooks
-                    .iter()
-                    .any(|existing| existing.info.env_path == info.env_path)
-            })
     }
 }

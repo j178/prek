@@ -200,9 +200,15 @@ pub(crate) async fn run(
     })?;
 
     let mut tag_cache = FileTagCache::default();
-    let installed_hooks = InstalledHookResolver::new(store, printer)
-        .resolve(&workspace, &input, &mut tag_cache, &filtered_hooks)
-        .await?;
+    let installed_hooks = resolve_installed_hooks(
+        store,
+        printer,
+        &workspace,
+        &input,
+        &mut tag_cache,
+        &filtered_hooks,
+    )
+    .await?;
 
     run_hooks(
         &workspace,
@@ -268,161 +274,159 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
     }
 }
 
-struct InstalledHookResolver<'a> {
-    store: &'a Store,
+/// Resolve hooks into the installed form expected by the runner.
+///
+/// Hooks that do not need an environment are returned as-is. Hooks that need an
+/// environment first try the install cache; only cache misses are filtered
+/// against the run input before installation.
+async fn resolve_installed_hooks<'paths>(
+    store: &Store,
     printer: Printer,
+    workspace: &Workspace,
+    input: &'paths RunInput,
+    tag_cache: &mut FileTagCache<'paths>,
+    hooks: &[Arc<Hook>],
+) -> Result<Vec<InstalledHook>> {
+    let env_hooks = hooks
+        .iter()
+        .filter(|hook| hook.needs_install_env())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if env_hooks.is_empty() {
+        return Ok(hooks
+            .iter()
+            .map(|hook| InstalledHook::NoNeedInstall(hook.clone()))
+            .collect());
+    }
+
+    let _lock = store.lock_async().await?;
+    let mut install_cache = InstallCache::new();
+    let mut installed_by_hook = FxHashMap::default();
+    let mut missing_env_hooks = Vec::new();
+
+    // Resolve the cache before file filtering so already-installed hooks keep their exact
+    // environment, while missing hooks still avoid install when they would not run.
+    for hook in env_hooks {
+        if let Some(installed_hook) = install_cache.installed_hook(store, hook.clone()).await {
+            installed_by_hook.insert(hook_key(&hook), installed_hook);
+        } else {
+            missing_env_hooks.push(hook.clone());
+        }
+    }
+
+    let hooks_to_install =
+        filter_missing_hooks_to_install(workspace, input, tag_cache, &missing_env_hooks)?;
+    if !hooks_to_install.is_empty() {
+        let reporter = HookInstallReporter::new(printer);
+        let installed_hooks =
+            install_hooks(hooks_to_install, store, &reporter, &mut install_cache).await?;
+        reporter.on_complete();
+
+        for installed_hook in installed_hooks {
+            installed_by_hook.insert(hook_key(&installed_hook), installed_hook);
+        }
+    }
+
+    Ok(hooks
+        .iter()
+        .map(|hook| {
+            installed_by_hook
+                .remove(&hook_key(hook))
+                .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook.clone()))
+        })
+        .collect())
 }
 
-impl<'a> InstalledHookResolver<'a> {
-    fn new(store: &'a Store, printer: Printer) -> Self {
-        Self { store, printer }
+/// Return the missing environment hooks that should actually be installed.
+///
+/// The input hooks are already known to need an environment and be missing from
+/// the install cache. This applies language support and run-input filtering so
+/// hooks that would not run do not get installed.
+fn filter_missing_hooks_to_install<'paths>(
+    workspace: &Workspace,
+    input: &'paths RunInput,
+    tag_cache: &mut FileTagCache<'paths>,
+    hooks: &[Arc<Hook>],
+) -> Result<Vec<Arc<Hook>>> {
+    #[allow(clippy::mutable_key_type)]
+    let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
+        FxHashMap::with_capacity_and_hasher(workspace.all_projects().len(), FxBuildHasher);
+    for hook in hooks {
+        project_to_hooks
+            .entry(hook.project())
+            .or_default()
+            .push(hook.clone());
     }
 
-    async fn resolve<'paths>(
-        &self,
-        workspace: &Workspace,
-        input: &'paths RunInput,
-        tag_cache: &mut FileTagCache<'paths>,
-        hooks: &[Arc<Hook>],
-    ) -> Result<Vec<InstalledHook>> {
-        let env_hooks = hooks
-            .iter()
-            .filter(|hook| hook.needs_install_env())
-            .cloned()
-            .collect::<Vec<_>>();
+    let mut hooks_to_install = Vec::new();
+    let mut consumed_files = FxHashSet::default();
 
-        if env_hooks.is_empty() {
-            return Ok(hooks
-                .iter()
-                .map(|hook| InstalledHook::NoNeedInstall(hook.clone()))
-                .collect());
-        }
-
-        let _lock = self.store.lock_async().await?;
-        let mut install_cache = InstallCache::new();
-        let mut installed_by_hook = FxHashMap::default();
-        let mut missing_env_hooks = Vec::new();
-
-        // Resolve the cache before file filtering so already-installed hooks keep their exact
-        // environment, while missing hooks still avoid install when they would not run.
-        for hook in env_hooks {
-            if let Some(installed_hook) =
-                install_cache.installed_hook(self.store, hook.clone()).await
-            {
-                installed_by_hook.insert(hook_key(&hook), installed_hook);
-            } else {
-                missing_env_hooks.push(hook.clone());
-            }
-        }
-
-        let hooks_to_install =
-            Self::hooks_to_install_after_filter(workspace, input, tag_cache, &missing_env_hooks)?;
-        if !hooks_to_install.is_empty() {
-            let reporter = HookInstallReporter::new(self.printer);
-            let installed_hooks =
-                install_hooks(hooks_to_install, self.store, &reporter, &mut install_cache).await?;
-            reporter.on_complete();
-
-            for installed_hook in installed_hooks {
-                installed_by_hook.insert(hook_key(&installed_hook), installed_hook);
-            }
-        }
-
-        Ok(hooks
-            .iter()
-            .map(|hook| {
-                installed_by_hook
-                    .remove(&hook_key(hook))
-                    .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook.clone()))
-            })
-            .collect())
-    }
-
-    fn hooks_to_install_after_filter<'paths>(
-        workspace: &Workspace,
-        input: &'paths RunInput,
-        tag_cache: &mut FileTagCache<'paths>,
-        hooks: &[Arc<Hook>],
-    ) -> Result<Vec<Arc<Hook>>> {
-        #[allow(clippy::mutable_key_type)]
-        let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
-            FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
-        for hook in hooks {
-            project_to_hooks
-                .entry(hook.project())
-                .or_default()
-                .push(hook.clone());
-        }
-
-        let mut hooks_to_install = Vec::new();
-        let mut consumed_files = FxHashSet::default();
-
-        for project in workspace.all_projects() {
-            match input {
-                RunInput::Files(files) => {
-                    let Some(hooks) = project_to_hooks.remove(project) else {
-                        ProjectFiles::visit_project_files(
-                            files.iter(),
-                            project,
-                            Some(&mut consumed_files),
-                            |_| {},
-                        );
-                        continue;
-                    };
-
-                    let mut candidates = hooks
-                        .into_iter()
-                        .filter(|hook| Language::supported(hook.language))
-                        .map(|hook| {
-                            let matches = hook.always_run;
-                            (hook, matches)
-                        })
-                        .collect::<Vec<_>>();
-
+    for project in workspace.all_projects() {
+        match input {
+            RunInput::Files(files) => {
+                let Some(hooks) = project_to_hooks.remove(project) else {
                     ProjectFiles::visit_project_files(
                         files.iter(),
                         project,
                         Some(&mut consumed_files),
-                        |project_file| {
-                            for (hook, matches) in &mut candidates {
-                                if *matches {
-                                    continue;
-                                }
-
-                                let hook_filter = HookFileFilter::new(hook);
-                                if hook_filter.matches_project_file(&project_file, tag_cache) {
-                                    *matches = true;
-                                }
-                            }
-                        },
+                        |_| {},
                     );
+                    continue;
+                };
 
-                    for (hook, matches) in candidates {
-                        if matches {
-                            hooks_to_install.push(hook);
+                let mut candidates = hooks
+                    .into_iter()
+                    .filter(|hook| Language::supported(hook.language))
+                    .map(|hook| {
+                        let matches = hook.always_run;
+                        (hook, matches)
+                    })
+                    .collect::<Vec<_>>();
+
+                ProjectFiles::visit_project_files(
+                    files.iter(),
+                    project,
+                    Some(&mut consumed_files),
+                    |project_file| {
+                        for (hook, matches) in &mut candidates {
+                            if *matches {
+                                continue;
+                            }
+
+                            let hook_filter = HookFileFilter::new(hook);
+                            if hook_filter.matches_project_file(&project_file, tag_cache) {
+                                *matches = true;
+                            }
                         }
+                    },
+                );
+
+                for (hook, matches) in candidates {
+                    if matches {
+                        hooks_to_install.push(hook);
                     }
                 }
-                RunInput::MessageFile(_) => {
-                    let Some(hooks) = project_to_hooks.remove(project) else {
-                        continue;
-                    };
+            }
+            RunInput::MessageFile(_) => {
+                let Some(hooks) = project_to_hooks.remove(project) else {
+                    continue;
+                };
 
-                    let project_input = ProjectHookInput::new(input, project, None)?;
-                    for hook in hooks
-                        .into_iter()
-                        .filter(|hook| Language::supported(hook.language))
-                    {
-                        if hook.always_run || project_input.has_match_for_hook(&hook, tag_cache) {
-                            hooks_to_install.push(hook);
-                        }
+                let project_input = ProjectHookInput::new(input, project, None)?;
+                for hook in hooks
+                    .into_iter()
+                    .filter(|hook| Language::supported(hook.language))
+                {
+                    if hook.always_run || project_input.has_match_for_hook(&hook, tag_cache) {
+                        hooks_to_install.push(hook);
                     }
                 }
             }
         }
-
-        Ok(hooks_to_install)
     }
+
+    Ok(hooks_to_install)
 }
 
 fn hook_key(hook: &Hook) -> (usize, usize) {
@@ -896,7 +900,7 @@ impl<'a> ProjectHookInput<'a> {
     {
         match self {
             Self::Files(project_files) => match hook.pass_filenames {
-                PassFilenames::None => HookRunInput::matched_without_filenames(
+                PassFilenames::None => HookRunInput::without_filenames(
                     project_files.has_match_for_hook(hook, tag_cache),
                 ),
                 PassFilenames::All | PassFilenames::Limited(_) => {
@@ -906,13 +910,13 @@ impl<'a> ProjectHookInput<'a> {
             Self::MessageFile { hook_arg, .. } => {
                 if self.has_match_for_hook(hook, tag_cache) {
                     match hook.pass_filenames {
-                        PassFilenames::None => HookRunInput::matched_without_filenames(true),
+                        PassFilenames::None => HookRunInput::without_filenames(true),
                         PassFilenames::All | PassFilenames::Limited(_) => {
                             HookRunInput::with_filenames(vec![hook_arg.as_path()])
                         }
                     }
                 } else {
-                    HookRunInput::matched_without_filenames(false)
+                    HookRunInput::without_filenames(false)
                 }
             }
         }
@@ -950,11 +954,20 @@ impl<'a> HookRunInput<'a> {
         }
     }
 
-    fn matched_without_filenames(has_matching_files: bool) -> Self {
+    fn without_filenames(has_matching_files: bool) -> Self {
         Self {
             has_matching_files,
             filenames: Vec::new(),
         }
+    }
+
+    fn into_filenames(mut self) -> Vec<&'a Path> {
+        // Shuffle the files so that they more evenly fill out the xargs
+        // partitions, but do it deterministically in case a hook cares about ordering.
+        const SEED: u64 = 1_542_676_187;
+        let mut rng = StdRng::seed_from_u64(SEED);
+        self.filenames.shuffle(&mut rng);
+        self.filenames
     }
 }
 
@@ -1093,7 +1106,7 @@ impl RunResult {
 
 async fn run_hook(
     hook: InstalledHook,
-    mut input: HookRunInput<'_>,
+    input: HookRunInput<'_>,
     store: &Store,
     dry_run: bool,
     reporter: &HookRunReporter,
@@ -1106,13 +1119,7 @@ async fn run_hook(
     }
     let start = std::time::Instant::now();
 
-    let filenames = match hook.pass_filenames {
-        PassFilenames::All | PassFilenames::Limited(_) => {
-            shuffle(&mut input.filenames);
-            input.filenames
-        }
-        PassFilenames::None => vec![],
-    };
+    let filenames = input.into_filenames();
 
     let (exit_status, hook_output) = if dry_run {
         let mut output = Vec::new();
@@ -1152,14 +1159,6 @@ async fn run_hook(
         exit_status,
         output: hook_output,
     })
-}
-
-/// Shuffle the files so that they more evenly fill out the xargs
-/// partitions, but do it deterministically in case a hook cares about ordering.
-fn shuffle<T>(filenames: &mut [T]) {
-    const SEED: u64 = 1_542_676_187;
-    let mut rng = StdRng::seed_from_u64(SEED);
-    filenames.shuffle(&mut rng);
 }
 
 #[cfg(test)]
