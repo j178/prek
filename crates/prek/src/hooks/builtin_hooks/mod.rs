@@ -54,6 +54,35 @@ pub(crate) enum BuiltinHooks {
 }
 
 impl BuiltinHooks {
+    pub(crate) fn may_modify_files(self) -> bool {
+        match self {
+            Self::EndOfFileFixer
+            | Self::FileContentsSorter
+            | Self::FixByteOrderMarker
+            | Self::MixedLineEnding
+            | Self::PrettyFormatJson
+            | Self::TrailingWhitespace => true,
+
+            Self::CheckAddedLargeFiles
+            | Self::CheckCaseConflict
+            | Self::CheckExecutablesHaveShebangs
+            | Self::CheckIllegalWindowsNames
+            | Self::CheckJson
+            | Self::CheckJson5
+            | Self::CheckMergeConflict
+            | Self::CheckShebangScriptsAreExecutable
+            | Self::CheckSymlinks
+            | Self::CheckToml
+            | Self::CheckVcsPermalinks
+            | Self::CheckXml
+            | Self::CheckYaml
+            | Self::DestroyedSymlinks
+            | Self::DetectPrivateKey
+            | Self::ForbidNewSubmodules
+            | Self::NoCommitToBranch => false,
+        }
+    }
+
     pub(crate) async fn run(
         self,
         _store: &Store,

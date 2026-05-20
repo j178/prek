@@ -30,7 +30,7 @@ use crate::printer::Printer;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
-use crate::{fs, git, warn_user};
+use crate::{fs, git, hooks, warn_user};
 
 use super::install::{InstallCache, install_hooks};
 
@@ -481,17 +481,28 @@ async fn run_hooks<'paths>(
         hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
         session.render_project_header(project, projects_len)?;
-        let mut prev_diff = git::get_diff(project.path()).await?;
+        let mut prev_diff = None;
 
         let project_fail_fast = fail_fast.or(project.config().fail_fast).unwrap_or(false);
 
         for group_hooks in PriorityGroups::new(hooks) {
+            let group_may_modify_files =
+                !session.dry_run && group_hooks.iter().any(|hook| hooks::may_modify_files(hook));
+            if group_may_modify_files && prev_diff.is_none() {
+                prev_diff = Some(git::get_diff(project.path()).await?);
+            }
+
             let group_results = session
                 .run_priority_group(group_hooks, &project_input, tag_cache)
                 .await?;
 
             let hook_fail_fast = session
-                .finish_priority_group(group_results, project, &mut prev_diff)
+                .finish_priority_group(
+                    group_results,
+                    project,
+                    group_may_modify_files,
+                    &mut prev_diff,
+                )
                 .await?;
 
             if !session.success && (project_fail_fast || hook_fail_fast) {
@@ -604,14 +615,18 @@ impl<'a> HookRunSession<'a> {
         &mut self,
         mut group_results: Vec<RunResult>,
         project: &Project,
-        prev_diff: &mut Vec<u8>,
+        group_may_modify_files: bool,
+        prev_diff: &mut Option<Vec<u8>>,
     ) -> Result<bool> {
         // Print results in a stable order (same order as config within the project).
         group_results.sort_unstable_by_key(|a| a.hook.idx);
 
         // Check if any files were modified by this group of hooks.
         let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
-        let group_modified_files = if !all_skipped {
+        let group_modified_files = if group_may_modify_files && !all_skipped {
+            let prev_diff = prev_diff
+                .as_mut()
+                .expect("previous diff must be captured before file-modifying hooks run");
             let curr_diff = git::get_diff(project.path()).await?;
             let group_modified_files = curr_diff != *prev_diff;
             *prev_diff = curr_diff;

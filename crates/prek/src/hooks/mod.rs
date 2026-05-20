@@ -20,18 +20,38 @@ static NO_FAST_PATH: LazyLock<bool> = LazyLock::new(|| EnvVars::is_set(EnvVars::
 
 /// Returns true if the hook has a builtin Rust implementation.
 pub fn check_fast_path(hook: &Hook) -> bool {
+    fast_path_hook(hook).is_some()
+}
+
+fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
     if *NO_FAST_PATH {
-        return false;
+        return None;
     }
 
+    let Repo::Remote { url, .. } = hook.repo() else {
+        return None;
+    };
+    if !is_pre_commit_hooks(url) {
+        return None;
+    }
+
+    let implemented = PreCommitHooks::from_str(hook.id.as_str()).ok()?;
+    if implemented.check_supported(hook) {
+        Some(implemented)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn may_modify_files(hook: &Hook) -> bool {
     match hook.repo() {
-        Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
-            let Ok(implemented) = PreCommitHooks::from_str(hook.id.as_str()) else {
-                return false;
-            };
-            implemented.check_supported(hook)
+        Repo::Builtin { .. } => {
+            BuiltinHooks::from_str(hook.id.as_str()).map_or(true, BuiltinHooks::may_modify_files)
         }
-        _ => false,
+        Repo::Remote { .. } => {
+            fast_path_hook(hook).is_none_or(|implemented| implemented.may_modify_files())
+        }
+        _ => true,
     }
 }
 
@@ -43,15 +63,10 @@ pub async fn run_fast_path(
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     let progress = reporter.on_run_start(hook, filenames.len());
 
-    let result = match hook.repo() {
-        Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
-            PreCommitHooks::from_str(hook.id.as_str())
-                .unwrap()
-                .run(hook, filenames)
-                .await
-        }
-        _ => unreachable!(),
+    let Some(implemented) = fast_path_hook(hook) else {
+        unreachable!("run_fast_path requires a supported pre-commit hook");
     };
+    let result = implemented.run(hook, filenames).await;
 
     reporter.on_run_complete(progress);
 
