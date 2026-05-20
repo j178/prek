@@ -102,6 +102,8 @@ Projects are executed from **deepest to shallowest**:
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
 
+Projects at the same depth may run concurrently because their file trees do not overlap.
+
 ### File Processing Behavior
 
 **By default**, files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.

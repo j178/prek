@@ -2,7 +2,7 @@ mod common;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 use prek_consts::env_vars::EnvVars;
 
@@ -198,6 +198,138 @@ fn basic_discovery() -> Result<()> {
 
       [TEMP_DIR]/project3
       ['.prekignore', '.pre-commit-config.yaml', 'project5/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn same_depth_projects_run_concurrently_with_stable_output() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []");
+
+    let config = indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: slow-hook
+          name: Slow Hook
+          language: system
+          entry: python3 -c "from pathlib import Path; import time; name = Path.cwd().name; log = Path('..') / 'events.log'; log.open('a').write('start ' + name + '\n'); time.sleep(0.5); log.open('a').write('end ' + name + '\n')"
+          always_run: true
+          pass_filenames: false
+    "#};
+
+    for project in ["a", "b"] {
+        let project_dir = context.work_dir().child(project);
+        project_dir.create_dir_all()?;
+        project_dir
+            .child(".pre-commit-config.yaml")
+            .write_str(config)?;
+        project_dir.child("file.txt").write_str("")?;
+    }
+    context.git_add(".");
+
+    let mut run = context.run();
+    run.arg("--all-files")
+        .env(EnvVars::PREK_MAX_CONCURRENCY, "2");
+    cmd_snapshot!(context.filters(), run, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `a`:
+    Slow Hook................................................................Passed
+
+    Running hooks for `b`:
+    Slow Hook................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let events = context.read("events.log");
+    let start_a = events.find("start a").expect("a should start");
+    let end_a = events.find("end a").expect("a should end");
+    let start_b = events.find("start b").expect("b should start");
+    let end_b = events.find("end b").expect("b should end");
+
+    assert!(start_a < end_a);
+    assert!(start_b < end_b);
+    assert!(start_a < end_b);
+    assert!(start_b < end_a);
+
+    Ok(())
+}
+
+#[test]
+fn fail_fast_stops_after_current_project_level() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: root-hook
+          name: Root Hook
+          language: system
+          entry: python3 -c "print('root ran')"
+          always_run: true
+    "#});
+
+    let failing_config = indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: failing-hook
+          name: Failing Hook
+          language: system
+          entry: python3 -c "import sys; sys.exit(1)"
+          always_run: true
+          fail_fast: true
+    "#};
+    let passing_config = indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: passing-hook
+          name: Passing Hook
+          language: system
+          entry: python3 -c "print('sibling ran')"
+          always_run: true
+    "#};
+
+    let project_a = context.work_dir().child("a");
+    project_a.create_dir_all()?;
+    project_a
+        .child(".pre-commit-config.yaml")
+        .write_str(failing_config)?;
+
+    let project_b = context.work_dir().child("b");
+    project_b.create_dir_all()?;
+    project_b
+        .child(".pre-commit-config.yaml")
+        .write_str(passing_config)?;
+
+    context.git_add(".");
+
+    let mut run = context.run();
+    run.arg("--all-files")
+        .env(EnvVars::PREK_MAX_CONCURRENCY, "2");
+    cmd_snapshot!(context.filters(), run, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `a`:
+    Failing Hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+
+    Running hooks for `b`:
+    Passing Hook.............................................................Passed
 
     ----- stderr -----
     ");

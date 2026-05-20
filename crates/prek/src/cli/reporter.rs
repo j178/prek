@@ -36,6 +36,8 @@ pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
 struct BarState {
     /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
+    /// Active project header bars, by project index.
+    project_bars: FxHashMap<usize, ProjectBar>,
     /// Completed run bars that should stay visible until the current group is rendered.
     completed: Vec<ProgressBar>,
     /// A monotonic counter for bar IDs.
@@ -48,6 +50,12 @@ impl BarState {
         self.id += 1;
         self.id
     }
+}
+
+#[derive(Debug, Clone)]
+struct ProjectBar {
+    header: ProgressBar,
+    tail: ProgressBar,
 }
 
 struct ProgressReporter {
@@ -190,6 +198,40 @@ impl HookRunReporter {
         Self { reporter, dots }
     }
 
+    pub fn on_project_start(&self, project: &workspace::Project) {
+        let mut state = self.reporter.state.lock().unwrap();
+        let progress = self.reporter.children.insert_before(
+            &self.reporter.root,
+            ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+        );
+        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        progress.set_message(format!(
+            "{}",
+            format!("Running hooks for `{project}`:").cyan().bold()
+        ));
+
+        state.project_bars.insert(
+            project.idx(),
+            ProjectBar {
+                header: progress.clone(),
+                tail: progress,
+            },
+        );
+    }
+
+    pub fn on_project_complete(&self, project: &workspace::Project) {
+        let header = {
+            let mut state = self.reporter.state.lock().unwrap();
+            let Some(project_bar) = state.project_bars.remove(&project.idx()) else {
+                return;
+            };
+            state.completed.push(project_bar.header.clone());
+            project_bar.header
+        };
+
+        header.finish();
+    }
+
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
         self.reporter
             .root
@@ -200,19 +242,31 @@ impl HookRunReporter {
 
         // len == 0 indicates an unknown length; use 1 to show an indeterminate bar.
         let len = if len == 0 { 1 } else { len };
-        let progress = self.reporter.children.insert_before(
-            &self.reporter.root,
-            ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
-        );
 
-        let dots = self.dots.saturating_sub(hook.name.width());
+        let (progress, label) =
+            if let Some(project_bar) = state.project_bars.get_mut(&hook.project().idx()) {
+                let progress = self.reporter.children.insert_after(
+                    &project_bar.tail,
+                    ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
+                );
+                project_bar.tail = progress.clone();
+                (progress, format!("  {}", hook.name))
+            } else {
+                let progress = self.reporter.children.insert_before(
+                    &self.reporter.root,
+                    ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
+                );
+                (progress, hook.name.clone())
+            };
+
+        let dots = self.dots.saturating_sub(label.width());
         progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
             ProgressStyle::with_template(&format!("{{msg}}{{bar:{dots}.green/dim}}"))
                 .unwrap()
                 .progress_chars(".."),
         );
-        progress.set_message(hook.name.clone());
+        progress.set_message(label);
         state.bars.insert(id, progress);
         id
     }
@@ -258,6 +312,13 @@ impl HookRunReporter {
 
     pub fn on_complete(&self) {
         self.clear_completed();
+        let project_bars = {
+            let mut state = self.reporter.state.lock().unwrap();
+            std::mem::take(&mut state.project_bars)
+        };
+        for project_bar in project_bars.into_values() {
+            self.reporter.children.remove(&project_bar.header);
+        }
         self.reporter.on_complete();
     }
 }
