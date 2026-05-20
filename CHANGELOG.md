@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.1
+
+Released on 2026-05-20.
+
+### Enhancements
+
+- Fix pre-push range after rebase ([#2089](https://github.com/j178/prek/pull/2089))
+- Prefer extensions over loose filename tags ([#2092](https://github.com/j178/prek/pull/2092))
+- Skip installs for hooks that will not run ([#2103](https://github.com/j178/prek/pull/2103))
+
+### Performance
+
+- Optimize meta hook file scans ([#2106](https://github.com/j178/prek/pull/2106))
+- Reduce run filtering allocations ([#2090](https://github.com/j178/prek/pull/2090))
+
+### Contributors
+
+- @j178
+
 ## 0.4.0
 
 Released on 2026-05-14.
