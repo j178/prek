@@ -89,6 +89,32 @@ impl PreCommitHooks {
         }
     }
 
+    pub(crate) fn may_modify_files(&self) -> bool {
+        match self {
+            Self::EndOfFileFixer
+            | Self::FileContentsSorter
+            | Self::FixByteOrderMarker
+            | Self::MixedLineEnding
+            | Self::TrailingWhitespace => true,
+
+            Self::CheckAddedLargeFiles
+            | Self::CheckCaseConflict
+            | Self::CheckExecutablesHaveShebangs
+            | Self::CheckShebangScriptsAreExecutable
+            | Self::CheckVcsPermalinks
+            | Self::ForbidNewSubmodules
+            | Self::CheckJson
+            | Self::CheckSymlinks
+            | Self::CheckMergeConflict
+            | Self::CheckToml
+            | Self::CheckXml
+            | Self::CheckYaml
+            | Self::DestroyedSymlinks
+            | Self::DetectPrivateKey
+            | Self::NoCommitToBranch => false,
+        }
+    }
+
     pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
         debug!("Running hook `{}` in fast path", hook.id);
         match self {

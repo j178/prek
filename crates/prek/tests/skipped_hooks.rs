@@ -415,3 +415,39 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-toml
+    "});
+
+    cwd.child("pyproject.toml")
+        .write_str("[project]\nname = \"demo\"\n")?;
+    context.git_add(".");
+
+    let output = context
+        .run()
+        .arg("--all-files")
+        .env("RUST_LOG", "prek::git=trace")
+        .output()?;
+
+    assert!(output.status.success(), "prek should succeed");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let get_diff_calls = stderr.matches("get_diff").count();
+    assert_eq!(
+        get_diff_calls, 0,
+        "Expected no get_diff calls for read-only builtin hooks, found {get_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
