@@ -133,7 +133,7 @@ impl LanguageImpl for Haskell {
                 .args(batch)
                 .check(false)
                 .stdin(Stdio::null())
-                .pty_output()
+                .pty_output_with_sink(reporter.output_sink(progress))
                 .await?;
 
             reporter.on_run_progress(progress, batch.len() as u64);

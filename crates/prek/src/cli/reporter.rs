@@ -4,14 +4,15 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use console::Term;
+use console::{Term, strip_ansi_codes};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::hook::Hook;
 use crate::printer::Printer;
+use crate::process::OutputSink;
 use crate::workspace;
 
 /// Current progress reporter used to suspend rendering while printing normal output.
@@ -56,7 +57,15 @@ impl BarState {
 struct HookBar {
     hook_key: HookKey,
     progress: ProgressBar,
+    output_bars: Vec<ProgressBar>,
+    output_preview: OutputPreview,
     passed: Option<bool>,
+}
+
+impl HookBar {
+    fn line_count(&self) -> usize {
+        1 + self.output_bars.len()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +171,7 @@ struct HookGroup {
     order: usize,
     header: Option<ProgressBar>,
     last_line: Option<ProgressBar>,
+    active_tail: Option<usize>,
     hidden_summary: Option<ProgressBar>,
     completed: CompletedBars,
 }
@@ -173,6 +183,7 @@ impl HookGroup {
             order,
             header,
             last_line,
+            active_tail: None,
             hidden_summary: None,
             completed: CompletedBars::default(),
         }
@@ -193,6 +204,105 @@ pub(crate) fn project_status_marker(failed: bool) -> String {
     } else {
         "✓".green().to_string()
     }
+}
+
+#[derive(Debug, Default)]
+struct OutputPreview {
+    current: String,
+    completed: Vec<String>,
+    /// A pending `\r` either joins the following `\n` as CRLF or replaces the current line.
+    pending_cr: bool,
+}
+
+impl OutputPreview {
+    fn push_chunk(&mut self, chunk: &[u8]) {
+        // Preview text is lossy by design: the full bytes are still collected by `process`.
+        let text = String::from_utf8_lossy(chunk);
+        let text = strip_ansi_codes(&text);
+        for ch in text.chars().filter(|ch| is_preview_char(*ch)) {
+            if self.pending_cr {
+                if ch == '\n' {
+                    self.finish_line();
+                    self.pending_cr = false;
+                    continue;
+                }
+                self.current.clear();
+                self.pending_cr = false;
+            }
+            match ch {
+                '\n' => self.finish_line(),
+                '\r' => self.pending_cr = true,
+                '\t' => self.current.push(' '),
+                ch => self.current.push(ch),
+            }
+        }
+    }
+
+    fn visible_len(&self) -> usize {
+        (self.completed.len() + usize::from(!self.current.is_empty()))
+            .min(HOOK_OUTPUT_PREVIEW_LINES)
+    }
+
+    fn visible_lines(&self) -> impl Iterator<Item = &str> {
+        let has_current = !self.current.is_empty();
+        let current = if has_current {
+            Some(self.current.as_str())
+        } else {
+            None
+        };
+        let completed_start = self
+            .completed
+            .len()
+            .saturating_sub(HOOK_OUTPUT_PREVIEW_LINES - usize::from(has_current));
+
+        self.completed
+            .iter()
+            .skip(completed_start)
+            .map(String::as_str)
+            .chain(current)
+    }
+
+    fn finish_line(&mut self) {
+        self.completed.push(std::mem::take(&mut self.current));
+        let overflow = self
+            .completed
+            .len()
+            .saturating_sub(HOOK_OUTPUT_PREVIEW_LINES);
+        if overflow > 0 {
+            self.completed.drain(..overflow);
+        }
+    }
+}
+
+fn is_preview_char(ch: char) -> bool {
+    matches!(ch, '\n' | '\r' | '\t') || !ch.is_control()
+}
+
+const HOOK_OUTPUT_PREVIEW_LINES: usize = 3;
+const HOOK_OUTPUT_PREVIEW_PREFIX: &str = "    => ";
+
+fn truncate_to_width(input: &str, width: usize) -> Cow<'_, str> {
+    if input.width() <= width {
+        return Cow::Borrowed(input);
+    }
+
+    if width <= 3 {
+        return Cow::Owned(".".repeat(width));
+    }
+
+    let mut output = String::new();
+    let mut used = 0;
+    let target = width - 3;
+    for ch in input.chars() {
+        let ch_width = ch.width().unwrap_or(0);
+        if used + ch_width > target {
+            break;
+        }
+        output.push(ch);
+        used += ch_width;
+    }
+    output.push_str("...");
+    Cow::Owned(output)
 }
 
 struct ProgressReporter {
@@ -376,8 +486,10 @@ impl HookRunReporter {
             };
             entry.insert(HookGroup::new(order, header));
         }
-        for completed in self.collapse_to_fit_new_progress(&mut groups, running.len()) {
-            self.reporter.children.remove(&completed.progress);
+        for completed in
+            self.collapse_to_fit_new_progress(&mut groups, Self::running_lines(&running), 1)
+        {
+            self.remove_hook_bar(completed);
         }
         let group = groups.get_mut(&project_idx).unwrap();
         let progress = if let Some(last_line) = &group.last_line {
@@ -392,6 +504,7 @@ impl HookRunReporter {
             )
         };
         group.last_line = Some(progress.clone());
+        group.active_tail = Some(id);
         let label = if self.show_project_headers {
             format!("  {}", hook.name)
         } else {
@@ -410,6 +523,8 @@ impl HookRunReporter {
             HookBar {
                 hook_key: HookKey::from_hook(hook),
                 progress,
+                output_bars: Vec::new(),
+                output_preview: OutputPreview::default(),
                 passed: None,
             },
         );
@@ -422,18 +537,117 @@ impl HookRunReporter {
         progress.inc(completed);
     }
 
+    pub(crate) fn output_sink(&self, id: usize) -> HookOutputSink<'_> {
+        HookOutputSink {
+            reporter: self,
+            progress: id,
+        }
+    }
+
+    fn on_run_output(&self, id: usize, chunk: &[u8]) {
+        let width = self.dots.saturating_sub(HOOK_OUTPUT_PREVIEW_PREFIX.width());
+        let (project_idx, tail, running_lines, added_lines) = {
+            let mut running = self.running.lock().unwrap();
+            let (project_idx, tail, added_lines) = {
+                let Some(run_bar) = running.get_mut(&id) else {
+                    return;
+                };
+
+                let old_line_count = run_bar.output_bars.len();
+                run_bar.output_preview.push_chunk(chunk);
+                let line_count = run_bar.output_preview.visible_len();
+
+                // Create preview rows only as output needs them, so short output does not
+                // reserve the full rolling window height.
+                while run_bar.output_bars.len() < line_count {
+                    let tail = run_bar
+                        .output_bars
+                        .last()
+                        .unwrap_or(&run_bar.progress)
+                        .clone();
+                    let output = self.reporter.children.insert_after(
+                        &tail,
+                        ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+                    );
+                    output.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+                    output.set_message(HOOK_OUTPUT_PREVIEW_PREFIX.dimmed().to_string());
+                    run_bar.output_bars.push(output);
+                }
+
+                // Keep the newest output visually anchored to the bottom of the preview window.
+                let first_line = run_bar.output_bars.len().saturating_sub(line_count);
+                let mut lines = run_bar.output_preview.visible_lines();
+                for (idx, output_bar) in run_bar.output_bars.iter().enumerate() {
+                    let line = if idx < first_line {
+                        ""
+                    } else {
+                        lines.next().unwrap_or_default().trim_end()
+                    };
+                    let message = if width == 0 {
+                        String::new()
+                    } else {
+                        format!(
+                            "{HOOK_OUTPUT_PREVIEW_PREFIX}{}",
+                            truncate_to_width(line, width)
+                        )
+                        .dimmed()
+                        .to_string()
+                    };
+                    output_bar.set_message(message);
+                }
+
+                (
+                    run_bar.hook_key.project_idx,
+                    run_bar.output_bars.last().cloned(),
+                    run_bar.output_bars.len() - old_line_count,
+                )
+            };
+
+            // `run_bar`'s mutable borrow must end before counting all running lines.
+            (
+                project_idx,
+                tail,
+                Self::running_lines(&running),
+                added_lines,
+            )
+        };
+
+        if let Some(tail) = tail {
+            let mut groups = self.groups.lock().unwrap();
+            if let Some(group) = groups.get_mut(&project_idx)
+                && group.active_tail == Some(id)
+            {
+                // New hooks in this project should be inserted after the active hook's preview.
+                group.last_line = Some(tail);
+            }
+            if added_lines > 0 {
+                // Growing preview rows may exceed the terminal height; hide old completed rows.
+                let removed = self.collapse_to_fit_new_progress(&mut groups, running_lines, 0);
+                drop(groups);
+                for completed in removed {
+                    self.remove_hook_bar(completed);
+                }
+            }
+        }
+    }
+
     pub fn on_run_complete(&self, id: usize) {
-        let running = {
+        let mut completed = {
             let mut running = self.running.lock().unwrap();
             running.remove(&id).unwrap()
         };
         self.reporter.root.inc(1);
 
+        for output_bar in &completed.output_bars {
+            self.reporter.children.remove(output_bar);
+        }
+        completed.output_bars.clear();
+
         // Keep the completed line visible until the group result is rendered.
-        let progress = &running.progress;
+        let progress = &completed.progress;
         progress.set_position(progress.length().unwrap_or(1));
         progress.finish();
-        self.remember_completed(running);
+        self.remember_completed(id, completed);
     }
 
     pub fn on_run_result(&self, hook: &Hook, passed: bool) {
@@ -507,13 +721,17 @@ impl HookRunReporter {
         self.reporter.on_complete();
     }
 
-    fn remember_completed(&self, completed: HookBar) {
+    fn remember_completed(&self, id: usize, completed: HookBar) {
         let mut groups = self.groups.lock().unwrap();
         let Some(group) = groups.get_mut(&completed.hook_key.project_idx) else {
             drop(groups);
-            self.reporter.children.remove(&completed.progress);
+            self.remove_hook_bar(completed);
             return;
         };
+        if group.active_tail == Some(id) {
+            group.last_line = Some(completed.progress.clone());
+            group.active_tail = None;
+        }
         group.completed.push(completed);
     }
 
@@ -525,8 +743,19 @@ impl HookRunReporter {
             self.reporter.children.remove(&summary);
         }
         for completed in group.completed.clear() {
-            self.reporter.children.remove(&completed.progress);
+            self.remove_hook_bar(completed);
         }
+    }
+
+    fn remove_hook_bar(&self, hook_bar: HookBar) {
+        self.reporter.children.remove(&hook_bar.progress);
+        for output_bar in hook_bar.output_bars {
+            self.reporter.children.remove(&output_bar);
+        }
+    }
+
+    fn running_lines(running: &FxHashMap<usize, HookBar>) -> usize {
+        running.values().map(HookBar::line_count).sum()
     }
 
     fn update_group_summary(&self, group: &mut HookGroup, anchor: &ProgressBar) {
@@ -590,13 +819,14 @@ impl HookRunReporter {
         &self,
         groups: &mut HookGroups,
         running: usize,
+        new_lines: usize,
     ) -> Vec<HookBar> {
         let Some(limit) = self.progress_line_limit() else {
             return Vec::new();
         };
 
         let mut removed = Vec::new();
-        while Self::active_lines(groups, running).saturating_add(1) > limit {
+        while Self::active_lines(groups, running).saturating_add(new_lines) > limit {
             let Some(project_idx) = Self::collapse_candidate(groups) else {
                 break;
             };
@@ -609,6 +839,17 @@ impl HookRunReporter {
         }
 
         removed
+    }
+}
+
+pub(crate) struct HookOutputSink<'a> {
+    reporter: &'a HookRunReporter,
+    progress: usize,
+}
+
+impl OutputSink for HookOutputSink<'_> {
+    fn write_chunk(&mut self, chunk: &[u8]) {
+        self.reporter.on_run_output(self.progress, chunk);
     }
 }
 
@@ -685,12 +926,19 @@ mod tests {
                 hook_idx,
             },
             progress: ProgressBar::hidden(),
+            output_bars: Vec::new(),
+            output_preview: OutputPreview::default(),
             passed,
         }
     }
 
     fn hook_group(order: usize, has_header: bool) -> HookGroup {
-        HookGroup::new(order, has_header.then(ProgressBar::hidden))
+        let header = if has_header {
+            Some(ProgressBar::hidden())
+        } else {
+            None
+        };
+        HookGroup::new(order, header)
     }
 
     fn progress_bar(reporter: &HookRunReporter) -> ProgressBar {
@@ -698,6 +946,10 @@ mod tests {
             &reporter.reporter.root,
             ProgressBar::with_draw_target(None, reporter.reporter.printer.target()),
         )
+    }
+
+    fn preview_lines(preview: &OutputPreview) -> Vec<&str> {
+        preview.visible_lines().collect()
     }
 
     #[test]
@@ -729,6 +981,52 @@ mod tests {
             completed.hidden_summary().as_deref(),
             Some("⋮ 8 hooks hidden: 6 passed, 2 failed")
         );
+    }
+
+    #[test]
+    fn output_preview_keeps_crlf_line() {
+        let mut preview = OutputPreview::default();
+
+        preview.push_chunk(b"processing file\r\n");
+
+        assert_eq!(preview_lines(&preview), vec!["processing file"]);
+    }
+
+    #[test]
+    fn output_preview_handles_split_crlf() {
+        let mut preview = OutputPreview::default();
+
+        preview.push_chunk(b"processing file\r");
+        preview.push_chunk(b"\n");
+
+        assert_eq!(preview_lines(&preview), vec!["processing file"]);
+    }
+
+    #[test]
+    fn output_preview_replaces_carriage_return_line() {
+        let mut preview = OutputPreview::default();
+
+        preview.push_chunk(b"first\rsecond");
+
+        assert_eq!(preview_lines(&preview), vec!["second"]);
+    }
+
+    #[test]
+    fn output_preview_strips_ansi_codes() {
+        let mut preview = OutputPreview::default();
+
+        preview.push_chunk(b"\x1b[31mred\x1b[0m\n");
+
+        assert_eq!(preview_lines(&preview), vec!["red"]);
+    }
+
+    #[test]
+    fn output_preview_keeps_last_preview_window() {
+        let mut preview = OutputPreview::default();
+
+        preview.push_chunk(b"one\ntwo\nthree\nfour\n");
+
+        assert_eq!(preview_lines(&preview), vec!["two", "three", "four"]);
     }
 
     #[test]
