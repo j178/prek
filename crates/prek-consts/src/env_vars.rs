@@ -95,6 +95,7 @@ impl EnvVars {
     pub const BUNDLE_GEMFILE: &'static str = "BUNDLE_GEMFILE";
 
     // Rust related
+    pub const PREK_RUST_PROFILE: &'static str = "PREK_RUST_PROFILE";
     pub const RUSTUP_TOOLCHAIN: &'static str = "RUSTUP_TOOLCHAIN";
     pub const RUSTUP_AUTO_INSTALL: &'static str = "RUSTUP_AUTO_INSTALL";
     pub const CARGO_HOME: &'static str = "CARGO_HOME";

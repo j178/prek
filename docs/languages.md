@@ -422,6 +422,10 @@ Supported formats:
 - `1`, `1.70`, `1.70.0`
 - Semver ranges like `>=1.70, <1.72`
 
+#### Toolchain profile
+
+When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](reference/environment-variables.md#prek_rust_profile) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
+
 !!! note "prek-only"
 
     - prek supports installing packages from virtual workspaces. See [#1180](https://github.com/j178/prek/pull/1180).

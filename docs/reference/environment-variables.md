@@ -84,6 +84,11 @@ Defaults to `120` characters of arguments; set a larger value to reduce truncati
 Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments).
 See [Ruby language support](../languages.md#ruby) for details.
 
+### `PREK_RUST_PROFILE`
+
+Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`.
+See [Rust language support](../languages.md#rust) for details.
+
 ## Compatibility fallbacks
 
 ### `PRE_COMMIT_ALLOW_NO_CONFIG`

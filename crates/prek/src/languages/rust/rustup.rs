@@ -32,6 +32,10 @@ static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
         .unwrap_or_else(|_| "rustup".to_string())
 });
 
+static RUSTUP_PROFILE: LazyLock<String> = LazyLock::new(|| {
+    EnvVars::var(EnvVars::PREK_RUST_PROFILE).unwrap_or_else(|_| "minimal".to_string())
+});
+
 impl Rustup {
     pub(crate) fn rustup_home(&self) -> &Path {
         &self.rustup_home
@@ -131,7 +135,7 @@ impl Rustup {
             .arg("install")
             .arg("--no-self-update")
             .arg("--profile")
-            .arg("minimal")
+            .arg(&*RUSTUP_PROFILE)
             .arg(toolchain)
             .check(true)
             .output()
