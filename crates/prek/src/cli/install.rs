@@ -12,7 +12,7 @@ use same_file::is_same_file;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
-use crate::cli::run::install::InstallCache;
+use crate::cli::run::InstallCache;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;

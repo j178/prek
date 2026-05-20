@@ -13,7 +13,7 @@ use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
-use crate::cli::run::install::InstallCache;
+use crate::cli::run::InstallCache;
 use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
 use crate::hook::{HOOK_MARKER, HookEnvKey, HookSpec, InstallInfo, Repo as HookRepo};
 use crate::printer::Printer;

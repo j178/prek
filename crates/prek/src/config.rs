@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::error::Error as _;
 use std::fmt::Display;
-use std::ops::RangeInclusive;
 use std::path::Path;
 
 use anyhow::Result;
@@ -290,24 +289,6 @@ pub(crate) enum HookType {
     PrePush,
     PreRebase,
     PrepareCommitMsg,
-}
-
-impl HookType {
-    /// Return the number of arguments this hook type expects.
-    pub fn num_args(self) -> RangeInclusive<usize> {
-        match self {
-            Self::CommitMsg => 1..=1,
-            Self::PostCheckout => 3..=3,
-            Self::PreCommit => 0..=0,
-            Self::PostCommit => 0..=0,
-            Self::PreMergeCommit => 0..=0,
-            Self::PostMerge => 1..=1,
-            Self::PostRewrite => 1..=1,
-            Self::PrePush => 2..=2,
-            Self::PreRebase => 1..=2,
-            Self::PrepareCommitMsg => 1..=3,
-        }
-    }
 }
 
 #[derive(

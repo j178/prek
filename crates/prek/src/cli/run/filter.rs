@@ -1,3 +1,4 @@
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -48,7 +49,8 @@ pub(crate) struct FileTagFilter<'a> {
 }
 
 impl<'a> FileTagFilter<'a> {
-    fn new(
+    /// Create a tag filter from a hook's type selectors.
+    pub(crate) fn new(
         types: Option<&'a TagSet>,
         types_or: Option<&'a TagSet>,
         exclude_types: Option<&'a TagSet>,
@@ -126,6 +128,11 @@ impl<'a> ProjectFile<'a> {
         }
     }
 
+    /// Return the path relative to the owning project, which is what hook patterns match.
+    pub(crate) fn hook_path(&self) -> &Path {
+        self.hook_path
+    }
+
     /// Return cached tags for the workspace-relative path.
     pub(crate) fn tags<'cache>(
         &self,
@@ -178,24 +185,41 @@ impl<'a> ProjectFiles<'a> {
             0
         };
         let mut files = Vec::with_capacity(files_capacity);
-        Self::visit_project_files(filenames, project, consumed_files, |file| files.push(file));
+        Self::visit_for_project(filenames, project, consumed_files, |file| {
+            files.push(file);
+            ControlFlow::Continue(())
+        });
 
         Self { files }
+    }
+
+    /// Mark files owned by this project without collecting or visiting them.
+    pub(crate) fn consume_for_project<I>(
+        filenames: I,
+        project: &Project,
+        consumed_files: &mut FxHashSet<&'a Path>,
+    ) where
+        I: Iterator<Item = &'a PathBuf> + Send,
+    {
+        Self::visit_for_project(filenames, project, Some(consumed_files), |_| {
+            ControlFlow::Continue(())
+        });
     }
 
     /// Visit project-owned files without collecting them.
     ///
     /// This shares the same ownership, orphan-project, and project-level filtering rules as
     /// `for_project`, but lets callers that only need a boolean result avoid allocating a
-    /// `Vec<ProjectFile>`.
-    pub(crate) fn visit_project_files<I, F>(
+    /// `Vec<ProjectFile>`. Return [`ControlFlow::Break`] from `visit` to stop calling the visitor.
+    /// Orphan projects still finish marking owned files as consumed before returning.
+    pub(crate) fn visit_for_project<I, F>(
         filenames: I,
         project: &Project,
         mut consumed_files: Option<&mut FxHashSet<&'a Path>>,
         mut visit: F,
     ) where
         I: Iterator<Item = &'a PathBuf> + Send,
-        F: FnMut(ProjectFile<'a>),
+        F: FnMut(ProjectFile<'a>) -> ControlFlow<()>,
     {
         let filename_filter = FilenameFilter::new(
             project.config().files.as_ref(),
@@ -203,6 +227,8 @@ impl<'a> ProjectFiles<'a> {
         );
         let relative_path = project.relative_path();
         let orphan = project.config().orphan.unwrap_or(false);
+        let must_finish_consuming = orphan && consumed_files.is_some();
+        let mut visiting = true;
 
         // The order of below filters matters.
         // If this is an orphan project, we must mark all files in its directory as consumed
@@ -226,12 +252,22 @@ impl<'a> ProjectFiles<'a> {
                 }
             }
 
+            if !visiting {
+                continue;
+            }
+
             // Strip the project-relative prefix before applying project-level include/exclude patterns.
             let relative = filename
                 .strip_prefix(relative_path)
                 .expect("Filename should start with project relative path");
-            if filename_filter.matches(relative) {
-                visit(ProjectFile::new(filename, relative));
+            if filename_filter.matches(relative)
+                && visit(ProjectFile::new(filename, relative)).is_break()
+            {
+                if must_finish_consuming {
+                    visiting = false;
+                } else {
+                    break;
+                }
             }
         }
     }
@@ -240,29 +276,13 @@ impl<'a> ProjectFiles<'a> {
         self.files.len()
     }
 
-    /// Filter filenames by type tags for a specific hook.
-    pub(crate) fn by_type(
-        &self,
-        types: Option<&TagSet>,
-        types_or: Option<&TagSet>,
-        exclude_types: Option<&TagSet>,
-        tag_cache: &mut FileTagCache<'a>,
-    ) -> Vec<&Path> {
-        let tag_filter = FileTagFilter::new(types, types_or, exclude_types);
-        let mut filenames = Vec::new();
-        for file in &self.files {
-            if let Some(tags) = file.tags(tag_cache) {
-                if tag_filter.matches(tags) {
-                    filenames.push(file.workspace_path);
-                }
-            }
-        }
-        filenames
-    }
-
     /// Filter filenames by file patterns and tags for a specific hook.
     #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
-    pub(crate) fn for_hook(&self, hook: &Hook, tag_cache: &mut FileTagCache<'a>) -> Vec<&Path> {
+    pub(crate) fn matching_filenames(
+        &self,
+        hook: &Hook,
+        tag_cache: &mut FileTagCache<'a>,
+    ) -> Vec<&Path> {
         let hook_filter = HookFileFilter::new(hook);
         let mut filenames = Vec::new();
         for file in &self.files {
@@ -274,7 +294,7 @@ impl<'a> ProjectFiles<'a> {
     }
 
     /// Return whether at least one file matches a hook without collecting every filename.
-    pub(crate) fn has_match_for_hook(&self, hook: &Hook, tag_cache: &mut FileTagCache<'a>) -> bool {
+    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &mut FileTagCache<'a>) -> bool {
         let hook_filter = HookFileFilter::new(hook);
         for file in &self.files {
             if hook_filter.matches_project_file(file, tag_cache) {
@@ -392,7 +412,6 @@ fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::
 
 /// Collect files to run hooks on.
 /// Returns a list of file paths relative to the git root.
-#[allow(clippy::too_many_arguments)]
 async fn collect_files_from_args(
     git_root: &Path,
     workspace_root: &Path,

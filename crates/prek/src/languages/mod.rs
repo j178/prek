@@ -137,8 +137,8 @@ impl LanguageImpl for Unimplemented {
 // system: only system version, no env, no additional deps
 
 impl Language {
-    pub(crate) fn supported(lang: Language) -> bool {
-        match lang {
+    pub(crate) fn supported(self) -> bool {
+        match self {
             Self::Bun
             | Self::Dart
             | Self::Deno

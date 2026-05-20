@@ -105,11 +105,12 @@ pub(crate) async fn hook_impl(
         }
     }
 
-    if !hook_type.num_args().contains(&args.len()) {
+    let expected_args = hook_num_args(hook_type);
+    if !expected_args.contains(&args.len()) {
         anyhow::bail!(
             "hook `{}` expects {} but received {}{}",
             hook_type.to_string().cyan(),
-            format_expected_args(hook_type.num_args()),
+            format_expected_args(expected_args),
             format_received_args(args.len()),
             format_argument_dump(&args)
         );
@@ -146,6 +147,21 @@ pub(crate) async fn hook_impl(
     } else {
         legacy_code.into()
     })
+}
+
+fn hook_num_args(hook_type: HookType) -> RangeInclusive<usize> {
+    match hook_type {
+        HookType::CommitMsg => 1..=1,
+        HookType::PostCheckout => 3..=3,
+        HookType::PreCommit => 0..=0,
+        HookType::PostCommit => 0..=0,
+        HookType::PreMergeCommit => 0..=0,
+        HookType::PostMerge => 1..=1,
+        HookType::PostRewrite => 1..=1,
+        HookType::PrePush => 2..=2,
+        HookType::PreRebase => 1..=2,
+        HookType::PrepareCommitMsg => 1..=3,
+    }
 }
 
 async fn read_hook_stdin(hook_type: HookType) -> Result<Vec<u8>> {
