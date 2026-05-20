@@ -294,6 +294,60 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
     Ok(())
 }
 
+#[test]
+fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    let child = cwd.child("child");
+    child.create_dir_all()?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: root-pygrep
+                name: root-pygrep
+                language: pygrep
+                entry: ROOT_SHOULD_NOT_RUN
+                files: \.py$
+    "});
+    child
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r#"
+        orphan: true
+        repos:
+          - repo: local
+            hooks:
+              - id: child-python
+                name: child-python
+                language: python
+                entry: python -c "print('child')"
+                always_run: true
+                pass_filenames: false
+    "#})?;
+
+    child.child("child.py").write_str("print('child')\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `child`:
+    child-python.............................................................Passed
+
+    Running hooks for `.`:
+    root-pygrep..........................................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+    assert_eq!(hook_env_count(&context)?, 1);
+
+    Ok(())
+}
+
 /// Skipped hooks across multiple priority groups
 ///
 /// Hooks with different `priority` values form separate priority groups. Each

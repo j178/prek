@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -7,7 +8,9 @@ use itertools::Itertools;
 use prek_consts::CONFIG_FILENAMES;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::cli::run::{CollectOptions, FileTagCache, ProjectFiles, collect_run_input};
+use crate::cli::run::{
+    CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, collect_run_input,
+};
 use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
@@ -93,6 +96,11 @@ pub(crate) async fn check_hooks_apply(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
+    let projects = load_meta_projects(hook, filenames)?;
+    if projects.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+
     let relative_path = hook.project().relative_path();
     // Collect all files in the project
     let input = collect_run_input(hook.work_dir(), CollectOptions::all_files())
@@ -105,25 +113,47 @@ pub(crate) async fn check_hooks_apply(
     let mut output = Vec::new();
     let mut tag_cache = FileTagCache::default();
 
-    for filename in filenames {
-        let path = relative_path.join(filename);
-        let mut project = Project::from_config_file(path.into(), None)?;
-        project.with_relative_path(relative_path.to_path_buf());
-        let project_files = ProjectFiles::for_project(input.iter(), &project, None);
-
+    for project in projects {
         let project_hooks = project
             .init_hooks(store, None)
             .await
             .context("Failed to init hooks")?;
+        let hooks = project_hooks
+            .iter()
+            .filter(|hook| !hook.always_run && hook.language != Language::Fail)
+            .collect::<Vec<_>>();
+        if hooks.is_empty() {
+            continue;
+        }
 
-        for project_hook in project_hooks {
-            if project_hook.always_run || matches!(project_hook.language, Language::Fail) {
-                continue;
+        let filters = hooks
+            .iter()
+            .map(|hook| HookFileFilter::new(hook))
+            .collect::<Vec<_>>();
+        let mut matches = vec![false; hooks.len()];
+        let mut remaining = matches.len();
+
+        ProjectFiles::visit_for_project(input.iter(), hooks[0].project(), None, |file| {
+            let tags = file.tags(&mut tag_cache);
+            for (matched, filter) in matches.iter_mut().zip(&filters) {
+                if *matched {
+                    continue;
+                }
+                if filter.matches_filename(file.hook_path()) && filter.matches_tags(tags) {
+                    *matched = true;
+                    remaining -= 1;
+                }
             }
 
-            let filenames = project_files.for_hook(&project_hook, &mut tag_cache);
+            if remaining == 0 {
+                return ControlFlow::Break(());
+            }
 
-            if filenames.is_empty() {
+            ControlFlow::Continue(())
+        });
+
+        for (project_hook, matches) in hooks.iter().zip(matches) {
+            if !matches {
                 code = 1;
                 writeln!(
                     &mut output,
@@ -137,6 +167,57 @@ pub(crate) async fn check_hooks_apply(
     Ok((code, output))
 }
 
+fn load_meta_projects(hook: &Hook, filenames: &[&Path]) -> Result<Vec<Project>> {
+    let relative_path = hook.project().relative_path();
+    filenames
+        .iter()
+        .map(|filename| {
+            let path = relative_path.join(filename);
+            let mut project = Project::from_config_file(path.into(), None)?;
+            project.with_relative_path(relative_path.to_path_buf());
+            Ok(project)
+        })
+        .collect()
+}
+
+fn extend_hook_options<'a>(
+    repo: &'a config::Repo,
+    hook_options: &mut Vec<(&'a String, &'a HookOptions)>,
+) {
+    match repo {
+        config::Repo::Remote(repo) => {
+            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
+        }
+        config::Repo::Local(repo) => {
+            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
+        }
+        config::Repo::Meta(repo) => {
+            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
+        }
+        config::Repo::Builtin(repo) => {
+            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
+        }
+    }
+}
+
+fn matches_patterns(
+    filename: &Path,
+    include: Option<&FilePattern>,
+    exclude: Option<&FilePattern>,
+) -> bool {
+    if let Some(pattern) = include {
+        if !pattern.is_match(filename) {
+            return false;
+        }
+    }
+    if let Some(pattern) = exclude {
+        if !pattern.is_match(filename) {
+            return false;
+        }
+    }
+    true
+}
+
 // Returns true if the exclude pattern matches any files matching the include pattern.
 fn excludes_any(
     files: &[impl AsRef<Path>],
@@ -147,19 +228,9 @@ fn excludes_any(
         return true;
     }
 
-    files.iter().any(|f| {
-        if let Some(pattern) = &include {
-            if !pattern.is_match(f.as_ref()) {
-                return false;
-            }
-        }
-        if let Some(pattern) = &exclude {
-            if !pattern.is_match(f.as_ref()) {
-                return false;
-            }
-        }
-        true
-    })
+    files
+        .iter()
+        .any(|f| matches_patterns(f.as_ref(), include, exclude))
 }
 
 /// Ensures that exclude directives apply to any file in the repository.
@@ -167,11 +238,16 @@ pub(crate) async fn check_useless_excludes(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
+    let projects = load_meta_projects(hook, filenames)?;
+    if projects.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+
     let relative_path = hook.project().relative_path();
     // `collect_run_input` returns paths relative to the hook's project root.
     // The meta hook itself runs from the workspace root, so we build both:
     // - `input_project`: for matching `files`/`exclude` patterns (project-relative)
-    // - `input_workspace`: for `ProjectFiles` (workspace-relative)
+    // - `input_workspace`: for project ownership and type matching (workspace-relative)
     let input_project = collect_run_input(hook.work_dir(), CollectOptions::all_files())
         .await?
         .into_files();
@@ -184,11 +260,7 @@ pub(crate) async fn check_useless_excludes(
     let mut output = Vec::new();
     let mut tag_cache = FileTagCache::default();
 
-    for filename in filenames {
-        let path = relative_path.join(filename);
-        let mut project = Project::from_config_file(path.into(), None)?;
-        project.with_relative_path(relative_path.to_path_buf());
-
+    for project in projects {
         let config = project.config();
         if !excludes_any(&input_project, None, config.exclude.as_ref()) {
             code = 1;
@@ -203,51 +275,66 @@ pub(crate) async fn check_useless_excludes(
             )?;
         }
 
-        let project_files = ProjectFiles::for_project(input_workspace.iter(), &project, None);
-
+        let mut hook_options = Vec::new();
         for repo in &config.repos {
-            let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
-                config::Repo::Remote(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
-                config::Repo::Local(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
-                config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
-                config::Repo::Builtin(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
-            };
+            extend_hook_options(repo, &mut hook_options);
+        }
+        if hook_options.iter().all(|(_, opts)| opts.exclude.is_none()) {
+            continue;
+        }
 
-            for (hook_id, opts) in hooks_iter {
-                let filtered_files = project_files.by_type(
+        let tag_filters = hook_options
+            .iter()
+            .map(|(_, opts)| {
+                FileTagFilter::new(
                     opts.types.as_ref(),
                     opts.types_or.as_ref(),
                     opts.exclude_types.as_ref(),
-                    &mut tag_cache,
-                );
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut exclude_matches = hook_options
+            .iter()
+            .map(|(_, opts)| opts.exclude.is_none())
+            .collect::<Vec<_>>();
+        let mut remaining = exclude_matches.iter().filter(|matched| !**matched).count();
 
-                // `filtered_files` is workspace-relative (it includes the project prefix).
-                // Match patterns against paths relative to the project root.
-                let filtered_files_relative: Vec<&Path> = if relative_path.as_os_str().is_empty() {
-                    filtered_files
-                } else {
-                    filtered_files
-                        .into_iter()
-                        .filter_map(|f| f.strip_prefix(relative_path).ok())
-                        .collect()
-                };
-
-                if !excludes_any(
-                    &filtered_files_relative,
-                    opts.files.as_ref(),
-                    opts.exclude.as_ref(),
-                ) {
-                    code = 1;
-                    let display = opts
-                        .exclude
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_default();
-                    writeln!(
-                        &mut output,
-                        "The exclude pattern `{display}` for `{hook_id}` does not match any files"
-                    )?;
+        ProjectFiles::visit_for_project(input_workspace.iter(), &project, None, |file| {
+            let tags = file.tags(&mut tag_cache);
+            for ((matched, (_, opts)), tag_filter) in exclude_matches
+                .iter_mut()
+                .zip(&hook_options)
+                .zip(&tag_filters)
+            {
+                if *matched || tags.is_none_or(|tags| !tag_filter.matches(tags)) {
+                    continue;
                 }
+
+                if matches_patterns(file.hook_path(), opts.files.as_ref(), opts.exclude.as_ref()) {
+                    *matched = true;
+                    remaining -= 1;
+                }
+            }
+
+            if remaining == 0 {
+                return ControlFlow::Break(());
+            }
+
+            ControlFlow::Continue(())
+        });
+
+        for ((hook_id, opts), exclude_matches) in hook_options.iter().zip(exclude_matches) {
+            if !exclude_matches {
+                code = 1;
+                let display = opts
+                    .exclude
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                writeln!(
+                    &mut output,
+                    "The exclude pattern `{display}` for `{hook_id}` does not match any files"
+                )?;
             }
         }
     }

@@ -1,5 +1,6 @@
 use std::fmt::Write as _;
 use std::io::Write as _;
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
@@ -15,13 +16,13 @@ use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
-use crate::cli::run::filter::HookFileFilter;
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
-    CollectOptions, FileTagCache, ProjectFiles, RunInput, Selectors, collect_run_input,
+    CollectOptions, FileTagCache, HookFileFilter, ProjectFiles, RunInput, Selectors,
+    collect_run_input,
 };
 use crate::cli::{ExitStatus, RunExtraArgs};
-use crate::config::{Language, PassFilenames, Stage};
+use crate::config::{PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
@@ -366,25 +367,21 @@ fn filter_missing_hooks_to_install<'paths>(
         match input {
             RunInput::Files(files) => {
                 let Some(hooks) = project_to_hooks.remove(project) else {
-                    ProjectFiles::visit_project_files(
-                        files.iter(),
-                        project,
-                        Some(&mut consumed_files),
-                        |_| {},
-                    );
+                    ProjectFiles::consume_for_project(files.iter(), project, &mut consumed_files);
                     continue;
                 };
 
                 let mut candidates = hooks
                     .into_iter()
-                    .filter(|hook| Language::supported(hook.language))
+                    .filter(|hook| hook.language.supported())
                     .map(|hook| {
                         let matches = hook.always_run;
                         (hook, matches)
                     })
                     .collect::<Vec<_>>();
+                let mut remaining = candidates.iter().filter(|(_, matches)| !*matches).count();
 
-                ProjectFiles::visit_project_files(
+                ProjectFiles::visit_for_project(
                     files.iter(),
                     project,
                     Some(&mut consumed_files),
@@ -397,8 +394,15 @@ fn filter_missing_hooks_to_install<'paths>(
                             let hook_filter = HookFileFilter::new(hook);
                             if hook_filter.matches_project_file(&project_file, tag_cache) {
                                 *matches = true;
+                                remaining -= 1;
                             }
                         }
+
+                        if remaining == 0 {
+                            return ControlFlow::Break(());
+                        }
+
+                        ControlFlow::Continue(())
                     },
                 );
 
@@ -414,11 +418,8 @@ fn filter_missing_hooks_to_install<'paths>(
                 };
 
                 let project_input = ProjectHookInput::new(input, project, None)?;
-                for hook in hooks
-                    .into_iter()
-                    .filter(|hook| Language::supported(hook.language))
-                {
-                    if hook.always_run || project_input.has_match_for_hook(&hook, tag_cache) {
+                for hook in hooks.into_iter().filter(|hook| hook.language.supported()) {
+                    if hook.always_run || project_input.matches_hook(&hook, tag_cache) {
                         hooks_to_install.push(hook);
                     }
                 }
@@ -581,7 +582,7 @@ impl<'a> HookRunSession<'a> {
 
         let mut runs = futures::stream::iter(group_hooks)
             .map(|hook| {
-                let hook_input = input.for_hook(&hook, tag_cache);
+                let hook_input = input.run_input_for_hook(&hook, tag_cache);
                 trace!(
                     matched = hook_input.has_matching_files,
                     filenames = hook_input.filenames.len(),
@@ -890,7 +891,7 @@ impl<'a> ProjectHookInput<'a> {
         }
     }
 
-    fn for_hook<'input>(
+    fn run_input_for_hook<'input>(
         &'input self,
         hook: &Hook,
         tag_cache: &mut FileTagCache<'a>,
@@ -901,14 +902,14 @@ impl<'a> ProjectHookInput<'a> {
         match self {
             Self::Files(project_files) => match hook.pass_filenames {
                 PassFilenames::None => HookRunInput::without_filenames(
-                    project_files.has_match_for_hook(hook, tag_cache),
+                    project_files.has_matching_file(hook, tag_cache),
                 ),
                 PassFilenames::All | PassFilenames::Limited(_) => {
-                    HookRunInput::with_filenames(project_files.for_hook(hook, tag_cache))
+                    HookRunInput::with_filenames(project_files.matching_filenames(hook, tag_cache))
                 }
             },
             Self::MessageFile { hook_arg, .. } => {
-                if self.has_match_for_hook(hook, tag_cache) {
+                if self.matches_hook(hook, tag_cache) {
                     match hook.pass_filenames {
                         PassFilenames::None => HookRunInput::without_filenames(true),
                         PassFilenames::All | PassFilenames::Limited(_) => {
@@ -922,9 +923,9 @@ impl<'a> ProjectHookInput<'a> {
         }
     }
 
-    fn has_match_for_hook(&self, hook: &Hook, tag_cache: &mut FileTagCache<'a>) -> bool {
+    fn matches_hook(&self, hook: &Hook, tag_cache: &mut FileTagCache<'a>) -> bool {
         match self {
-            Self::Files(project_files) => project_files.has_match_for_hook(hook, tag_cache),
+            Self::Files(project_files) => project_files.has_matching_file(hook, tag_cache),
             Self::MessageFile {
                 absolute_path,
                 hook_arg,
@@ -1114,7 +1115,7 @@ async fn run_hook(
     if !input.has_matching_files && !hook.always_run {
         return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
-    if !Language::supported(hook.language) {
+    if !hook.language.supported() {
         return Ok(RunResult::from_status(hook, RunStatus::Unimplemented));
     }
     let start = std::time::Instant::now();
