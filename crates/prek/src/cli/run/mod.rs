@@ -6,6 +6,7 @@ pub(crate) use install::{InstallCache, install_hooks};
 pub(crate) use run::run;
 pub(crate) use selector::{SelectorSource, Selectors};
 
+mod diff;
 mod filter;
 mod install;
 mod keeper;

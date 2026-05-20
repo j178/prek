@@ -356,6 +356,32 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
 }
 
 #[instrument(level = "trace")]
+pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
+    let mut cmd = git_cmd("check worktree diff")?;
+    let status = cmd
+        .arg("diff-files")
+        .arg("--quiet")
+        .arg("--no-ext-diff")
+        .arg("--no-textconv")
+        .arg("--ignore-submodules")
+        .arg("--")
+        .arg(path)
+        .check(false)
+        .status()
+        .await?;
+
+    if status.success() {
+        return Ok(false);
+    }
+    if status.code() == Some(1) {
+        return Ok(true);
+    }
+
+    cmd.check_status(status)?;
+    Ok(true)
+}
+
+#[instrument(level = "trace")]
 pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd("git diff")?
         .arg("diff")
