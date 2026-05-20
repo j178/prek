@@ -353,7 +353,7 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
 /// Hooks with different `priority` values form separate priority groups. Each
 /// group is processed sequentially. This test verifies:
 /// 1. Skip behavior works correctly across group boundaries
-/// 2. `git diff` is only called once (initial baseline), not per-group
+/// 2. `git diff` is not called when every hook is skipped
 ///
 /// Note: This test uses manual output capture instead of `cmd_snapshot!` because
 /// we need to count `get_diff` occurrences in trace-level stderr. Trace output
@@ -403,13 +403,219 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
     assert!(stdout.contains("priority-20") && stdout.contains("Skipped"));
     assert!(stdout.contains("priority-30") && stdout.contains("Skipped"));
 
-    // Regression test for #1335: only 1 get_diff call (initial baseline)
-    // Without fix: 4 calls (1 initial + 3 per priority group)
+    // Regression test for #1335: skipped hooks do not need modification checks.
     let stderr = String::from_utf8_lossy(&output.stderr);
     let get_diff_calls = stderr.matches("get_diff").count();
     assert_eq!(
+        get_diff_calls, 0,
+        "Expected no get_diff calls when all hooks skip, found {get_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn may_modify_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: noop
+                language: system
+                entry: python3 -c "pass"
+                pass_filenames: false
+    "#});
+
+    cwd.child("file.txt").write_str("original\n")?;
+    context.git_add(".");
+
+    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+
+    assert!(output.status.success(), "noop hook should pass");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
+    assert_eq!(
+        has_worktree_diff_calls, 1,
+        "Expected one cheap worktree diff check, found {has_worktree_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    let get_diff_calls = stderr.matches("get_diff").count();
+    assert_eq!(
+        get_diff_calls, 0,
+        "Expected no full get_diff calls when the hook leaves files unchanged, found {get_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify
+                name: modify
+                language: system
+                entry: python3 -c "from pathlib import Path; Path('file.txt').write_text('changed\n')"
+                pass_filenames: false
+    "#});
+
+    cwd.child("file.txt").write_str("original\n")?;
+    context.git_add(".");
+
+    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+
+    assert!(
+        !output.status.success(),
+        "prek should fail when hooks modify files"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("files were modified by this hook"));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
+    assert_eq!(
+        has_worktree_diff_calls, 1,
+        "Expected one cheap worktree diff check, found {has_worktree_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    let get_diff_calls = stderr.matches("get_diff").count();
+    assert_eq!(
         get_diff_calls, 1,
-        "Expected 1 get_diff call (initial baseline) when all hooks skip, found {get_diff_calls}.\n\
+        "Expected one full get_diff call after detecting modifications, found {get_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify
+                name: modify
+                language: system
+                entry: python3 -c "from pathlib import Path; Path('hook.txt').write_text('changed\n')"
+                pass_filenames: false
+    "#});
+
+    cwd.child("file.txt").write_str("original\n")?;
+    cwd.child("hook.txt").write_str("original\n")?;
+    context.git_add(".");
+    cwd.child("file.txt").write_str("unstaged\n")?;
+
+    let output = context
+        .run()
+        .arg("--all-files")
+        .env("RUST_LOG", "prek::git=trace")
+        .output()?;
+
+    assert!(
+        !output.status.success(),
+        "--all-files should still detect hook modifications when the worktree starts dirty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("files were modified by this hook"));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
+    assert_eq!(
+        has_worktree_diff_calls, 0,
+        "`--all-files` should not use the clean-baseline diff check.\n\
+         Trace output:\n{stderr}"
+    );
+
+    let get_diff_calls = stderr.matches("get_diff").count();
+    assert_eq!(
+        get_diff_calls, 2,
+        "Expected a full before/after diff comparison for dirty `--all-files`, found {get_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    let child = cwd.child("child");
+    child.create_dir_all()?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: root-noop
+                name: root-noop
+                language: system
+                entry: python3 -c "pass"
+                always_run: true
+                pass_filenames: false
+    "#});
+    child
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: child-modify
+                name: child-modify
+                language: system
+                entry: python3 -c "from pathlib import Path; Path('child.txt').write_text('changed\n')"
+                always_run: true
+                pass_filenames: false
+    "#})?;
+
+    child.child("child.txt").write_str("original\n")?;
+    context.git_add(".");
+
+    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+
+    assert!(
+        !output.status.success(),
+        "prek should fail because the child hook modified files"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("child-modify") && stdout.contains("files were modified by this hook"));
+    assert!(
+        stdout.contains("root-noop") && stdout.contains("Passed"),
+        "root hook should not be blamed for the child project's diff.\n\
+         stdout:\n{stdout}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
+    assert_eq!(
+        has_worktree_diff_calls, 1,
+        "Only the first project should use the clean-baseline check.\n\
          Trace output:\n{stderr}"
     );
 

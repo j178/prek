@@ -16,6 +16,7 @@ use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
+use crate::cli::run::diff::DiffTracker;
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
     CollectOptions, FileTagCache, HookFileFilter, ProjectFiles, RunInput, Selectors,
@@ -220,6 +221,7 @@ pub(crate) async fn run(
         show_diff_on_failure,
         fail_fast,
         dry_run,
+        should_stash,
         verbose,
         printer,
     )
@@ -445,6 +447,7 @@ async fn run_hooks<'paths>(
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
+    worktree_cleaned: bool,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -481,28 +484,30 @@ async fn run_hooks<'paths>(
         hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
         session.render_project_header(project, projects_len)?;
-        let mut prev_diff = None;
+        // The worktree is only known clean at the start of the whole run. Once
+        // an earlier project leaves a diff behind, later projects need a fresh
+        // per-project snapshot to avoid attributing that diff to their hooks.
+        let mut diff_tracker = if worktree_cleaned && !session.file_modified {
+            DiffTracker::clean_baseline(project.path())
+        } else {
+            DiffTracker::unknown_baseline(project.path())
+        };
 
         let project_fail_fast = fail_fast.or(project.config().fail_fast).unwrap_or(false);
 
         for group_hooks in PriorityGroups::new(hooks) {
             let group_may_modify_files =
                 !session.dry_run && group_hooks.iter().any(|hook| hooks::may_modify_files(hook));
-            if group_may_modify_files && prev_diff.is_none() {
-                prev_diff = Some(git::get_diff(project.path()).await?);
-            }
+            diff_tracker
+                .prepare_for_group(group_may_modify_files)
+                .await?;
 
             let group_results = session
                 .run_priority_group(group_hooks, &project_input, tag_cache)
                 .await?;
 
             let hook_fail_fast = session
-                .finish_priority_group(
-                    group_results,
-                    project,
-                    group_may_modify_files,
-                    &mut prev_diff,
-                )
+                .finish_priority_group(group_results, group_may_modify_files, &mut diff_tracker)
                 .await?;
 
             if !session.success && (project_fail_fast || hook_fail_fast) {
@@ -614,26 +619,17 @@ impl<'a> HookRunSession<'a> {
     async fn finish_priority_group(
         &mut self,
         mut group_results: Vec<RunResult>,
-        project: &Project,
         group_may_modify_files: bool,
-        prev_diff: &mut Option<Vec<u8>>,
+        diff_tracker: &mut DiffTracker<'_>,
     ) -> Result<bool> {
         // Print results in a stable order (same order as config within the project).
         group_results.sort_unstable_by_key(|a| a.hook.idx);
 
         // Check if any files were modified by this group of hooks.
         let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
-        let group_modified_files = if group_may_modify_files && !all_skipped {
-            let prev_diff = prev_diff
-                .as_mut()
-                .expect("previous diff must be captured before file-modifying hooks run");
-            let curr_diff = git::get_diff(project.path()).await?;
-            let group_modified_files = curr_diff != *prev_diff;
-            *prev_diff = curr_diff;
-            group_modified_files
-        } else {
-            false
-        };
+        let group_modified_files = diff_tracker
+            .changed_after_group(group_may_modify_files, all_skipped)
+            .await?;
 
         self.file_modified |= group_modified_files;
 
