@@ -33,7 +33,20 @@ static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 static RUSTUP_PROFILE: LazyLock<String> = LazyLock::new(|| {
-    EnvVars::var(EnvVars::PREK_RUST_PROFILE).unwrap_or_else(|_| "minimal".to_string())
+    let Ok(val) = EnvVars::var(EnvVars::PREK_RUST_PROFILE) else {
+        return "minimal".to_string();
+    };
+    match val.as_str() {
+        "minimal" | "default" | "complete" => val,
+        _ => {
+            warn!(
+                "Invalid value for {}: {}, falling back to `minimal`",
+                EnvVars::PREK_RUST_PROFILE,
+                val
+            );
+            "minimal".to_string()
+        }
+    }
 });
 
 impl Rustup {
