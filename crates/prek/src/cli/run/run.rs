@@ -475,8 +475,8 @@ async fn run_hooks<'paths>(
             .push(hook.clone());
     }
 
-    let projects_len = project_to_hooks.len();
-    let show_project_headers = projects_len > 1;
+    let show_project_headers =
+        project_to_hooks.len() > 1 || project_to_hooks.keys().any(|project| !project.is_root());
     let mut session = HookRunSession::new(
         hooks,
         store,
@@ -525,7 +525,7 @@ async fn run_hooks<'paths>(
         let mut stop_after_level = false;
 
         for project_result in project_results {
-            stop_after_level |= session.finish_project_run(project_result, projects_len)?;
+            stop_after_level |= session.finish_project_run(project_result, show_project_headers)?;
         }
 
         if stop_after_level {
@@ -695,8 +695,12 @@ impl<'a> HookRunSession<'a> {
         }
     }
 
-    fn render_project_header(&mut self, project: &Project, projects_len: usize) -> Result<()> {
-        if projects_len == 1 {
+    fn render_project_header(
+        &mut self,
+        project: &Project,
+        show_project_headers: bool,
+    ) -> Result<()> {
+        if !show_project_headers {
             return Ok(());
         }
 
@@ -835,10 +839,10 @@ impl<'a> HookRunSession<'a> {
     fn finish_project_run(
         &mut self,
         project_result: ProjectRunResult<'_>,
-        projects_len: usize,
+        show_project_headers: bool,
     ) -> Result<bool> {
-        self.render_project_header(project_result.project, projects_len)?;
-        let hook_prefix = if projects_len == 1 { "" } else { "  " };
+        self.render_project_header(project_result.project, show_project_headers)?;
+        let hook_prefix = if show_project_headers { "  " } else { "" };
 
         for group in project_result.groups {
             self.finish_priority_group(group, hook_prefix)?;

@@ -331,18 +331,17 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
     child.child("child.py").write_str("print('child')\n")?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for `child`:
-    child-python.............................................................Passed
-
-    Running hooks for `.`:
-    root-pygrep..........................................(no files to check)Skipped
+    ✓ child
+      child-python...........................................................Passed
+    ✓ <workspace>
+      root-pygrep........................................(no files to check)Skipped
 
     ----- stderr -----
-    ");
+    "#);
     assert_eq!(hook_env_count(&context)?, 1);
 
     Ok(())

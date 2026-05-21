@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
@@ -14,6 +15,7 @@ use crate::workspace;
 /// Current progress reporter used to suspend rendering while printing normal output.
 static CURRENT_REPORTER: Mutex<Option<Weak<ProgressReporter>>> = Mutex::new(None);
 const SPINNER_TICKS: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const MAX_VISIBLE_COMPLETED_BARS: usize = 8;
 
 /// Set the current reporter for lock acquisition warnings.
 fn set_current_reporter(reporter: Option<&Arc<ProgressReporter>>) {
@@ -36,9 +38,7 @@ pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
 #[derive(Default, Debug)]
 struct BarState {
     /// A map of progress bars, by ID.
-    bars: FxHashMap<usize, ProgressBar>,
-    /// Completed run bars that should stay visible until the current group is rendered.
-    completed: Vec<ProgressBar>,
+    bars: FxHashMap<usize, RunningBar>,
     /// A monotonic counter for bar IDs.
     id: usize,
 }
@@ -51,10 +51,40 @@ impl BarState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+struct RunningBar {
+    project_idx: Option<usize>,
+    progress: ProgressBar,
+}
+
+#[derive(Debug, Default)]
+struct CompletedBars {
+    visible: VecDeque<ProgressBar>,
+    hidden: usize,
+}
+
+impl CompletedBars {
+    fn push(&mut self, progress: ProgressBar) -> Option<ProgressBar> {
+        self.visible.push_back(progress);
+        if self.visible.len() > MAX_VISIBLE_COMPLETED_BARS {
+            self.hidden += 1;
+            self.visible.pop_front()
+        } else {
+            None
+        }
+    }
+
+    fn clear(&mut self) -> VecDeque<ProgressBar> {
+        self.hidden = 0;
+        std::mem::take(&mut self.visible)
+    }
+}
+
+#[derive(Debug)]
 struct ProjectBar {
     header: ProgressBar,
-    tail: ProgressBar,
+    hidden_summary: Option<ProgressBar>,
+    completed: CompletedBars,
 }
 
 struct ProgressReporter {
@@ -86,22 +116,37 @@ impl ProgressReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(msg);
 
-        state.bars.insert(id, progress);
+        state.bars.insert(
+            id,
+            RunningBar {
+                project_idx: None,
+                progress,
+            },
+        );
         id
     }
 
     fn on_progress(&self, id: usize) {
         let progress = {
             let mut state = self.state.lock().unwrap();
-            state.bars.remove(&id).unwrap()
+            state.bars.remove(&id).unwrap().progress
         };
 
         self.root.inc(1);
         progress.finish_and_clear();
     }
 
+    fn set_root_line(
+        &self,
+        prefix: impl Into<Cow<'static, str>>,
+        message: impl Into<Cow<'static, str>>,
+    ) {
+        self.root.set_prefix(prefix);
+        self.root.set_message(message);
+    }
+
     fn on_complete(&self) {
-        self.root.set_message("");
+        self.set_root_line("", "");
         self.root.finish_and_clear();
     }
 }
@@ -112,9 +157,11 @@ impl From<Printer> for ProgressReporter {
         let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
         root.enable_steady_tick(Duration::from_millis(200));
         root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(SPINNER_TICKS),
+            ProgressStyle::with_template(
+                "{spinner:.cyan.bold.dim} {prefix:.cyan.bold.dim}{msg:.dim}",
+            )
+            .unwrap()
+            .tick_strings(SPINNER_TICKS),
         );
 
         Self::new(root, multi, printer)
@@ -135,9 +182,7 @@ impl HookInitReporter {
 
 impl workspace::HookInitReporter for HookInitReporter {
     fn on_clone_start(&self, repo: &str) -> usize {
-        self.reporter
-            .root
-            .set_message(format!("{}", "Cloning repos...".bold().cyan()));
+        self.reporter.set_root_line("Cloning repos...", "");
 
         self.reporter
             .on_start(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed()))
@@ -164,9 +209,7 @@ impl HookInstallReporter {
     }
 
     pub fn on_install_start(&self, hook: &Hook) -> usize {
-        self.reporter
-            .root
-            .set_message(format!("{}", "Installing hooks...".bold().cyan()));
+        self.reporter.set_root_line("Installing hooks...", "");
 
         self.reporter.on_start(format!(
             "{} {}",
@@ -188,6 +231,7 @@ pub(crate) struct HookRunReporter {
     reporter: Arc<ProgressReporter>,
     dots: usize,
     show_project_headers: bool,
+    completed: Mutex<CompletedBars>,
     projects: Mutex<FxHashMap<usize, ProjectBar>>,
 }
 
@@ -200,15 +244,88 @@ impl HookRunReporter {
             reporter,
             dots,
             show_project_headers,
+            completed: Mutex::default(),
             projects: Mutex::default(),
         }
     }
 
+    fn run_message_suffix(hidden_completed: usize) -> String {
+        if hidden_completed == 0 {
+            String::new()
+        } else {
+            format!(" ({hidden_completed} completed hooks hidden)")
+        }
+    }
+
+    fn set_run_message(&self) {
+        let hidden_completed = if self.show_project_headers {
+            0
+        } else {
+            self.completed.lock().unwrap().hidden
+        };
+        self.reporter.set_root_line(
+            "Running hooks...",
+            Self::run_message_suffix(hidden_completed),
+        );
+    }
+
+    fn completed_summary_message(hidden_completed: usize) -> String {
+        format!(
+            "  {}",
+            format!("⋮ {hidden_completed} completed hooks hidden").dimmed()
+        )
+    }
+
+    fn update_project_summary(&self, project: &mut ProjectBar) {
+        if project.completed.hidden == 0 {
+            return;
+        }
+
+        let summary = if let Some(summary) = &project.hidden_summary {
+            summary.clone()
+        } else {
+            let summary = self.reporter.children.insert_after(
+                &project.header,
+                ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+            );
+            summary.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+            project.hidden_summary = Some(summary.clone());
+            summary
+        };
+        summary.set_message(Self::completed_summary_message(project.completed.hidden));
+    }
+
+    fn remember_completed(&self, project_idx: Option<usize>, progress: ProgressBar) {
+        let trimmed = if let Some(project_idx) = project_idx {
+            let mut projects = self.projects.lock().unwrap();
+            if let Some(project) = projects.get_mut(&project_idx) {
+                let trimmed = project.completed.push(progress);
+                self.update_project_summary(project);
+                trimmed
+            } else {
+                Some(progress)
+            }
+        } else {
+            let trimmed = {
+                let mut completed = self.completed.lock().unwrap();
+                completed.push(progress)
+            };
+            self.set_run_message();
+            trimmed
+        };
+
+        if let Some(progress) = trimmed {
+            self.reporter.children.remove(&progress);
+        }
+        self.set_run_message();
+    }
+
     pub fn on_project_complete(&self, project: &workspace::Project) {
-        let Some(project_bar) = self.projects.lock().unwrap().remove(&project.idx()) else {
+        let mut projects = self.projects.lock().unwrap();
+        let Some(project_bar) = projects.get_mut(&project.idx()) else {
             return;
         };
-        let header = project_bar.header;
+        let header = &project_bar.header;
         header.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         header.set_message(format!(
             "{} {}",
@@ -216,19 +333,11 @@ impl HookRunReporter {
             project.display_name().cyan().bold()
         ));
 
-        self.reporter
-            .state
-            .lock()
-            .unwrap()
-            .completed
-            .push(header.clone());
         header.finish();
     }
 
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
-        self.reporter
-            .root
-            .set_message(format!("{}", "Running hooks...".bold().cyan()));
+        self.set_run_message();
 
         let id = self.reporter.state.lock().unwrap().id();
 
@@ -249,15 +358,19 @@ impl HookRunReporter {
                 );
                 header.set_message(format!("{}", hook.project().display_name().cyan().bold()));
                 ProjectBar {
-                    header: header.clone(),
-                    tail: header,
+                    header,
+                    hidden_summary: None,
+                    completed: CompletedBars::default(),
                 }
             });
+            let anchor = project_bar
+                .hidden_summary
+                .as_ref()
+                .unwrap_or(&project_bar.header);
             let progress = self.reporter.children.insert_after(
-                &project_bar.tail,
+                anchor,
                 ProgressBar::with_draw_target(Some(progress_len), self.reporter.printer.target()),
             );
-            project_bar.tail = progress.clone();
             (progress, format!("  {}", hook.name))
         } else {
             let progress = self.reporter.children.insert_before(
@@ -275,28 +388,28 @@ impl HookRunReporter {
                 .progress_chars(".."),
         );
         progress.set_message(label);
-        self.reporter
-            .state
-            .lock()
-            .unwrap()
-            .bars
-            .insert(id, progress);
+        self.reporter.state.lock().unwrap().bars.insert(
+            id,
+            RunningBar {
+                project_idx: self.show_project_headers.then(|| hook.project().idx()),
+                progress,
+            },
+        );
         id
     }
 
     pub fn on_run_progress(&self, id: usize, completed: u64) {
         let state = self.reporter.state.lock().unwrap();
-        let progress = &state.bars[&id];
+        let progress = &state.bars[&id].progress;
         progress.inc(completed);
     }
 
     pub fn on_run_complete(&self, id: usize, passed: bool) {
-        let progress = {
+        let running = {
             let mut state = self.reporter.state.lock().unwrap();
-            let progress = state.bars.remove(&id).unwrap();
-            state.completed.push(progress.clone());
-            progress
+            state.bars.remove(&id).unwrap()
         };
+        let progress = running.progress;
         let label = progress.message();
         self.reporter.root.inc(1);
 
@@ -315,17 +428,36 @@ impl HookRunReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!("{label}{dots}{status}"));
         progress.finish();
+        self.remember_completed(running.project_idx, progress);
     }
 
     pub fn clear_completed(&self) {
-        let completed = {
-            let mut state = self.reporter.state.lock().unwrap();
-            std::mem::take(&mut state.completed)
+        let standalone_completed = {
+            let mut completed = self.completed.lock().unwrap();
+            completed.clear()
+        };
+        let projects = {
+            let mut projects = self.projects.lock().unwrap();
+            projects
+                .drain()
+                .map(|(_, project)| project)
+                .collect::<Vec<_>>()
         };
 
-        for progress in completed {
+        for progress in standalone_completed {
             self.reporter.children.remove(&progress);
         }
+
+        for mut project in projects {
+            self.reporter.children.remove(&project.header);
+            if let Some(summary) = project.hidden_summary {
+                self.reporter.children.remove(&summary);
+            }
+            for progress in project.completed.clear() {
+                self.reporter.children.remove(&progress);
+            }
+        }
+        self.set_run_message();
     }
 
     /// Temporarily suspend progress rendering while emitting normal output.
@@ -337,13 +469,6 @@ impl HookRunReporter {
 
     pub fn on_complete(&self) {
         self.clear_completed();
-        let project_bars = {
-            let mut projects = self.projects.lock().unwrap();
-            std::mem::take(&mut *projects)
-        };
-        for project_bar in project_bars.into_values() {
-            self.reporter.children.remove(&project_bar.header);
-        }
         self.reporter.on_complete();
     }
 }
@@ -363,9 +488,7 @@ impl AutoUpdateReporter {
 
 impl AutoUpdateReporter {
     pub fn on_update_start(&self, repo: &str) -> usize {
-        self.reporter
-            .root
-            .set_message(format!("{}", "Updating repos...".bold().cyan()));
+        self.reporter.set_root_line("Updating repos...", "");
 
         self.reporter
             .on_start(format!("{} {}", "Updating".bold().cyan(), repo.dimmed()))
