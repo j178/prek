@@ -184,7 +184,7 @@ impl GoInstaller {
             .await?
             .stdout;
         let output_str = str::from_utf8(&output)?;
-        let versions: Vec<GoVersion> = output_str
+        let version = output_str
             .lines()
             .filter_map(|line| {
                 let tag = line.split('\t').nth(1)?;
@@ -192,10 +192,6 @@ impl GoInstaller {
                 GoVersion::from_str(tag).ok()
             })
             .sorted_unstable_by(|a, b| b.cmp(a))
-            .collect();
-
-        let version = versions
-            .into_iter()
             .find(|version| req.matches(version))
             .with_context(|| format!("Version `{req}` not found on remote"))?;
         Ok(version)

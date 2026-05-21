@@ -128,7 +128,7 @@ async fn prepare_repo_and_rev<'a>(
         warn_user!("Creating temporary repo with uncommitted changes...");
         let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
         let head_rev = get_head_rev(&shadow).await?;
-        Ok((Cow::Owned(shadow.to_string_lossy().to_string()), head_rev))
+        Ok((Cow::Owned(shadow.to_string_lossy().into_owned()), head_rev))
     } else {
         Ok((Cow::Borrowed(repo), head_rev))
     }

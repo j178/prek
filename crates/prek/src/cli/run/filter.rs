@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
@@ -5,7 +6,7 @@ use anyhow::{Context, Result};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
 use prek_identify::{TagSet, tags_from_path};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, Stage};
@@ -108,7 +109,7 @@ impl<'a> HookFileFilter<'a> {
     pub(crate) fn matches_project_file<'p>(
         &self,
         file: &ProjectFile<'p>,
-        tag_cache: &mut FileTagCache<'p>,
+        tag_cache: &FileTagCache<'p>,
     ) -> bool {
         self.matches_filename(file.hook_path) && self.matches_tags(file.tags(tag_cache))
     }
@@ -116,14 +117,14 @@ impl<'a> HookFileFilter<'a> {
 
 /// A workspace file after project ownership and project-level filters have been applied.
 pub(crate) struct ProjectFile<'a> {
-    workspace_path: &'a Path,
+    file_idx: usize,
     hook_path: &'a Path,
 }
 
 impl<'a> ProjectFile<'a> {
-    fn new(workspace_path: &'a Path, hook_path: &'a Path) -> Self {
+    fn new(file_idx: usize, hook_path: &'a Path) -> Self {
         Self {
-            workspace_path,
+            file_idx,
             hook_path,
         }
     }
@@ -136,30 +137,45 @@ impl<'a> ProjectFile<'a> {
     /// Return cached tags for the workspace-relative path.
     pub(crate) fn tags<'cache>(
         &self,
-        tag_cache: &'cache mut FileTagCache<'a>,
+        tag_cache: &'cache FileTagCache<'a>,
     ) -> Option<&'cache TagSet> {
-        tag_cache.tags(self.workspace_path)
+        tag_cache.tags(self.file_idx)
     }
 }
 
 #[derive(Default)]
 pub(crate) struct FileTagCache<'a> {
-    tags_by_path: FxHashMap<&'a Path, Option<TagSet>>,
+    paths: Vec<&'a Path>,
+    tags_by_file: Vec<OnceCell<Option<TagSet>>>,
 }
 
 impl<'a> FileTagCache<'a> {
-    pub(crate) fn tags(&mut self, path: &'a Path) -> Option<&TagSet> {
-        if !self.tags_by_path.contains_key(path) {
-            let tags = match tags_from_path(path) {
-                Ok(tags) => Some(tags),
-                Err(err) => {
-                    error!(filename = ?path.display(), error = %err, "Failed to get tags");
-                    None
-                }
-            };
-            self.tags_by_path.insert(path, tags);
+    pub(crate) fn from_paths<I>(paths: I) -> Self
+    where
+        I: IntoIterator<Item = &'a Path>,
+    {
+        let paths = paths.into_iter().collect::<Vec<_>>();
+        let tags_by_file = (0..paths.len()).map(|_| OnceCell::new()).collect();
+        Self {
+            paths,
+            tags_by_file,
         }
-        self.tags_by_path.get(path).and_then(Option::as_ref)
+    }
+
+    pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
+        self.tags_by_file[file_idx]
+            .get_or_init(|| identify_tags(self.paths[file_idx]))
+            .as_ref()
+    }
+}
+
+fn identify_tags(path: &Path) -> Option<TagSet> {
+    match tags_from_path(path) {
+        Ok(tags) => Some(tags),
+        Err(err) => {
+            error!(filename = ?path.display(), error = %err, "Failed to get tags");
+            None
+        }
     }
 }
 
@@ -248,7 +264,7 @@ impl<'a> ProjectFiles<'a> {
         // *before* applying the project's include/exclude patterns. This ensures that even
         // files excluded by this project are still considered "owned" by it and hidden
         // from parent projects.
-        for filename in filenames {
+        for (file_idx, filename) in filenames.enumerate() {
             // Collect files that are inside the hook project directory.
             if !filename.starts_with(relative_path) {
                 continue;
@@ -278,7 +294,7 @@ impl<'a> ProjectFiles<'a> {
                 .strip_prefix(relative_path)
                 .expect("Filename should start with project relative path");
             if filename_filter.matches(relative)
-                && visit(ProjectFile::new(filename, relative)).is_break()
+                && visit(ProjectFile::new(file_idx, relative)).is_break()
             {
                 if must_finish_consuming {
                     visiting = false;
@@ -298,8 +314,8 @@ impl<'a> ProjectFiles<'a> {
     pub(crate) fn matching_filenames(
         &self,
         hook: &Hook,
-        tag_cache: &mut FileTagCache<'a>,
-    ) -> Vec<&Path> {
+        tag_cache: &FileTagCache<'a>,
+    ) -> Vec<&'a Path> {
         let hook_filter = HookFileFilter::new(hook);
         let mut filenames = Vec::new();
         for file in &self.files {
@@ -311,7 +327,7 @@ impl<'a> ProjectFiles<'a> {
     }
 
     /// Return whether at least one file matches a hook without collecting every filename.
-    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &mut FileTagCache<'a>) -> bool {
+    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &FileTagCache<'a>) -> bool {
         let hook_filter = HookFileFilter::new(hook);
         for file in &self.files {
             if hook_filter.matches_project_file(file, tag_cache) {

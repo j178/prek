@@ -201,7 +201,7 @@ fn list_subdirs(
                 continue;
             }
             if let Some(first) = rel.components().next() {
-                let name = first.as_os_str().to_string_lossy().to_string();
+                let name = first.as_os_str().to_string_lossy().into_owned();
                 first_components.insert(name);
             }
         }
@@ -249,7 +249,7 @@ fn list_direct_project_colons(
                 continue;
             }
             if let Some(first) = rel.components().next() {
-                let name = first.as_os_str().to_string_lossy().to_string();
+                let name = first.as_os_str().to_string_lossy().into_owned();
                 // Only keep if this immediate child is a project root
                 let child_abs = base.join(&name);
                 if proj_paths.contains(&child_abs) {

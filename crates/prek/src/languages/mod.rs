@@ -518,14 +518,14 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> V
         }
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
         if let Ok(p) = which::which_in(interpreter, paths, &*CWD) {
-            shebang_argv[0] = p.to_string_lossy().to_string();
+            shebang_argv[0] = p.to_string_lossy().into_owned();
             trace!("Resolved interpreter: {}", shebang_argv[0]);
         }
-        shebang_argv.push(resolved_binary.to_string_lossy().to_string());
+        shebang_argv.push(resolved_binary.to_string_lossy().into_owned());
         shebang_argv.extend_from_slice(&cmds[1..]);
         shebang_argv
     } else {
-        cmds[0] = resolved_binary.to_string_lossy().to_string();
+        cmds[0] = resolved_binary.to_string_lossy().into_owned();
         cmds
     }
 }

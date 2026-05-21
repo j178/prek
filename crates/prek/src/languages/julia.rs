@@ -112,7 +112,7 @@ impl LanguageImpl for Julia {
         if let Some(repo_path) = hook.repo_path() {
             let jl_path = repo_path.join(&entry[0]);
             if jl_path.exists() {
-                entry[0] = jl_path.to_string_lossy().to_string();
+                entry[0] = jl_path.to_string_lossy().into_owned();
             }
         }
 

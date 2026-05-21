@@ -175,7 +175,7 @@ impl RustInstaller {
                     .output()
                     .await?
                     .stdout;
-                let versions: Vec<RustVersion> = str::from_utf8(&output)?
+                let version = str::from_utf8(&output)?
                     .lines()
                     .filter_map(|line| {
                         let tag = line.split('\t').nth(1)?;
@@ -185,10 +185,6 @@ impl RustInstaller {
                             .map(|v| RustVersion::from_version(&v))
                     })
                     .sorted_unstable_by(|a, b| b.cmp(a))
-                    .collect();
-
-                let version = versions
-                    .into_iter()
                     .find(|version| req.matches(version))
                     .with_context(|| format!("Version `{req}` not found on remote"))?;
                 Ok(version)

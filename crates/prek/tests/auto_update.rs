@@ -140,7 +140,7 @@ fn create_local_git_repo_with_tag_timestamps(
         .assert()
         .success();
 
-    Ok(repo_dir.to_string_lossy().to_string())
+    Ok(repo_dir.to_string_lossy().into_owned())
 }
 
 #[test]

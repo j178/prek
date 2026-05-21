@@ -507,7 +507,7 @@ fn sweep_tool_bucket_versions(
         let item = if collect_names {
             Some(RemovalItem::new(
                 format!("{bucket}/{version_name}"),
-                path.to_string_lossy().to_string(),
+                path.to_string_lossy().into_owned(),
             ))
         } else {
             None
@@ -584,7 +584,7 @@ fn sweep_dir_by_name(
                 .then(|| read_hook_marker(&path))
                 .flatten();
 
-            let mut item = RemovalItem::new(name.to_string(), path.to_string_lossy().to_string());
+            let mut item = RemovalItem::new(name.to_string(), path.to_string_lossy().into_owned());
 
             if let Some(label) = label_for_entry(kind, repo_marker.as_ref(), hook_marker.as_ref()) {
                 item.label = label;
@@ -673,7 +673,7 @@ fn sweep_stale_patch_files(root: &Path, dry_run: bool, collect_names: bool) -> R
 
         let entry_bytes = metadata.len();
         let item = collect_names
-            .then(|| RemovalItem::new(name.to_string(), path.to_string_lossy().to_string()));
+            .then(|| RemovalItem::new(name.to_string(), path.to_string_lossy().into_owned()));
 
         if dry_run {
             removal.count += 1;
