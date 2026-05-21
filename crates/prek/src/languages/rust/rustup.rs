@@ -14,6 +14,7 @@ use crate::http::REQWEST_CLIENT;
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
 use crate::store::Store;
+use crate::warn_user;
 
 #[derive(Clone)]
 pub(crate) struct Rustup {
@@ -31,6 +32,32 @@ static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
     EnvVars::var(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME)
         .unwrap_or_else(|_| "rustup".to_string())
 });
+
+#[derive(Clone, Copy, Default, strum::AsRefStr, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
+enum RustupProfile {
+    #[default]
+    Minimal,
+    Default,
+    Complete,
+}
+
+fn rustup_profile() -> RustupProfile {
+    let Ok(value) = EnvVars::var(EnvVars::PREK_RUST_PROFILE) else {
+        return RustupProfile::default();
+    };
+
+    value.parse().unwrap_or_else(|_| {
+        let default = RustupProfile::default();
+        warn_user!(
+            "Invalid value for {}: {:?}. Expected one of `minimal`, `default`, or `complete`; falling back to `{}`",
+            EnvVars::PREK_RUST_PROFILE,
+            value,
+            default.as_ref(),
+        );
+        default
+    })
+}
 
 impl Rustup {
     pub(crate) fn rustup_home(&self) -> &Path {
@@ -131,7 +158,7 @@ impl Rustup {
             .arg("install")
             .arg("--no-self-update")
             .arg("--profile")
-            .arg("minimal")
+            .arg(rustup_profile().as_ref())
             .arg(toolchain)
             .check(true)
             .output()
