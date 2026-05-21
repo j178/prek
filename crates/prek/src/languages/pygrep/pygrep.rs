@@ -249,10 +249,10 @@ impl LanguageImpl for Pygrep {
                 .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0);
             let code = i32::try_from(code).unwrap_or(0);
-            reporter.on_run_complete(progress, code == 0);
+            reporter.on_run_complete(progress);
             Ok((code, output.stdout))
         } else {
-            reporter.on_run_complete(progress, false);
+            reporter.on_run_complete(progress);
             // When there's an error, try to parse error JSON from stderr
             let stderr_str = String::from_utf8_lossy(&output.stderr);
 

@@ -776,6 +776,7 @@ impl<'a> HookRunSession<'a> {
                 results: group_results,
                 modified_files: group_modified_files,
             };
+            self.update_live_priority_group(&group);
             stop_after_level = group.should_stop_project(project_run.project_fail_fast);
             groups.push(group);
 
@@ -823,6 +824,22 @@ impl<'a> HookRunSession<'a> {
             group_results.push(result?);
         }
         Ok(group_results)
+    }
+
+    fn update_live_priority_group(&self, group: &ProjectGroupRunResult) {
+        let single_hook_modified_files = group.results.len() == 1 && group.modified_files;
+
+        for result in &group.results {
+            let status = if single_hook_modified_files && result.status == RunStatus::Success {
+                RunStatus::Failed
+            } else {
+                result.status
+            };
+
+            if !status.is_skipped() {
+                self.reporter.on_run_result(&result.hook, status.as_bool());
+            }
+        }
     }
 
     fn finish_project_run(

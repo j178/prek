@@ -47,7 +47,7 @@ impl MetaHooks {
             Self::CheckUselessExcludes => check_useless_excludes(hook, filenames).await,
             Self::Identity => Ok(identity(hook, filenames)),
         };
-        reporter.on_run_complete(progress, matches!(&result, Ok((0, _))));
+        reporter.on_run_complete(progress);
         result
     }
 }

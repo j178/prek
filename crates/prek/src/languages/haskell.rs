@@ -153,7 +153,7 @@ impl LanguageImpl for Haskell {
             combined_output.extend(output);
         }
 
-        reporter.on_run_complete(progress, combined_status == 0);
+        reporter.on_run_complete(progress);
 
         Ok((combined_status, combined_output))
     }
