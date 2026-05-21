@@ -36,7 +36,7 @@ while also providing some additional long-requested features.
 - A single binary with no dependencies, does not require Python or any other runtime.
 - [Faster](https://prek.j178.dev/benchmark/) than `pre-commit` and more efficient in disk space usage.
 - Fully compatible with the original pre-commit configurations and hooks.
-- Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace/)).
+- Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace/)), including concurrent execution for independent same-depth projects.
 - Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - Improved toolchain installations for Python, Node.js, Bun, Go, Rust and Ruby, shared between hooks.
 - [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
@@ -355,7 +355,7 @@ prek self update
 
 - It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` while also using less disk space.
 - Hook environments and toolchains are shared across hooks instead of being duplicated per repository, which reduces both install time and cache size.
-- Repositories are fetched in parallel, hook environments are prepared in parallel when their dependencies do not overlap, and hooks can run concurrently by [`priority`](https://prek.j178.dev/reference/configuration/#priority).
+- Repositories are fetched in parallel, hook environments are prepared in parallel when their dependencies do not overlap, hooks can run concurrently by [`priority`](https://prek.j178.dev/reference/configuration/#priority), and independent workspace projects at the same directory depth can run concurrently.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
 - It implements some common hooks in Rust as [builtins](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
 - It supports `repo: builtin` for offline, zero-setup hooks, which is not available in `pre-commit`.
@@ -366,6 +366,7 @@ prek self update
 - `prek` automatically installs the toolchains it needs for supported languages, so you spend less time managing Python versions, Node runtimes, Ruby installs, and similar setup.
 - It supports native [`prek.toml`](https://prek.j178.dev/configuration/) in addition to pre-commit YAML, and [`prek util yaml-to-toml`](https://prek.j178.dev/reference/cli/#prek-util-yaml-to-toml) helps migrate existing configs.
 - Built-in support for [workspaces](https://prek.j178.dev/workspace/) means monorepos can keep separate configs per project and still run everything from one command.
+- Workspace mode schedules independent same-depth projects concurrently while preserving parent/child ordering, which helps large monorepos finish faster without mixing project file scopes.
 - [`prek install`](https://prek.j178.dev/reference/cli/#prek-install) and [`prek uninstall`](https://prek.j178.dev/reference/cli/#prek-uninstall) honor repo-local and worktree-local `core.hooksPath`.
 - [`prek run`](https://prek.j178.dev/reference/cli/#prek-run) supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id, and adds quality-of-life improvements such as `--dry-run`, `--directory`, `--last-commit`, and `--no-fail-fast`.
 - [`prek list`](https://prek.j178.dev/reference/cli/#prek-list), [`prek util identify`](https://prek.j178.dev/reference/cli/#prek-util-identify), and [`prek util list-builtins`](https://prek.j178.dev/reference/cli/#prek-util-list-builtins) make it easier to inspect configured hooks, debug file matching, and discover builtins.

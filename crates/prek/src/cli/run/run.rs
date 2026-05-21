@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use futures::stream::StreamExt;
+use futures::stream::{FuturesUnordered, StreamExt};
 use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
@@ -204,7 +204,7 @@ pub(crate) async fn run(
     })?;
 
     let mut tag_cache = FileTagCache::default();
-    let installed_hooks = resolve_installed_hooks(
+    let installed_hooks = ensure_hooks_installed(
         store,
         printer,
         &workspace,
@@ -279,12 +279,12 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
     }
 }
 
-/// Resolve hooks into the installed form expected by the runner.
+/// Ensure installable hooks have environments and return the form expected by the runner.
 ///
 /// Hooks that do not need an environment are returned as-is. Hooks that need an
 /// environment first try the install cache; only cache misses are filtered
 /// against the run input before installation.
-async fn resolve_installed_hooks<'paths>(
+async fn ensure_hooks_installed<'paths>(
     store: &Store,
     printer: Printer,
     workspace: &Workspace,
@@ -321,7 +321,7 @@ async fn resolve_installed_hooks<'paths>(
     }
 
     let hooks_to_install =
-        filter_missing_hooks_to_install(workspace, input, tag_cache, &missing_env_hooks)?;
+        select_hooks_to_install(workspace, input, tag_cache, &missing_env_hooks)?;
     if !hooks_to_install.is_empty() {
         let reporter = HookInstallReporter::new(printer);
         let installed_hooks =
@@ -348,7 +348,7 @@ async fn resolve_installed_hooks<'paths>(
 /// The input hooks are already known to need an environment and be missing from
 /// the install cache. This applies language support and run-input filtering so
 /// hooks that would not run do not get installed.
-fn filter_missing_hooks_to_install<'paths>(
+fn select_hooks_to_install<'paths>(
     workspace: &Workspace,
     input: &'paths RunInput,
     tag_cache: &mut FileTagCache<'paths>,
@@ -549,24 +549,8 @@ fn prepare_project_run<'project, 'paths>(
 
     let mut groups = Vec::new();
     for group_hooks in PriorityGroups::new(hooks) {
-        groups.push(prepare_priority_group(group_hooks, input, tag_cache));
-    }
-
-    ProjectRun {
-        project,
-        project_fail_fast: fail_fast.or(project.config().fail_fast).unwrap_or(false),
-        groups,
-    }
-}
-
-fn prepare_priority_group<'paths>(
-    group_hooks: Vec<InstalledHook>,
-    input: &ProjectHookInput<'paths>,
-    tag_cache: &mut FileTagCache<'paths>,
-) -> Vec<PreparedHookRun> {
-    group_hooks
-        .into_iter()
-        .map(|hook| {
+        let mut group = Vec::new();
+        for hook in group_hooks {
             let hook_input = input.run_input_for_hook(&hook, tag_cache);
             trace!(
                 matched = hook_input.has_matching_files,
@@ -574,12 +558,19 @@ fn prepare_priority_group<'paths>(
                 "Files for hook `{}` after filtering",
                 hook.id,
             );
-            PreparedHookRun {
+            group.push(PreparedHookRun {
                 hook,
                 input: hook_input,
-            }
-        })
-        .collect()
+            });
+        }
+        groups.push(group);
+    }
+
+    ProjectRun {
+        project,
+        project_fail_fast: fail_fast.or(project.config().fail_fast).unwrap_or(false),
+        groups,
+    }
 }
 
 struct ProjectDepthGroups<'a> {
@@ -722,19 +713,18 @@ impl<'a> HookRunSession<'a> {
         clean_baseline: bool,
     ) -> Result<Vec<ProjectRunResult<'project>>> {
         let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
-        let mut runs = futures::stream::iter(project_runs.into_iter().enumerate())
-            .map(|(idx, project_run)| {
-                let semaphore = Rc::clone(&semaphore);
-                async move {
-                    let project = project_run.project;
-                    let result = self
-                        .run_project(project_run, clean_baseline, semaphore)
-                        .await;
-                    self.reporter.on_project_complete(project);
-                    result.map(|result| (idx, result))
-                }
-            })
-            .buffer_unordered(*CONCURRENCY);
+        let mut runs = FuturesUnordered::new();
+        for (idx, project_run) in project_runs.into_iter().enumerate() {
+            let semaphore = Rc::clone(&semaphore);
+            runs.push(async move {
+                let project = project_run.project;
+                let result = self
+                    .run_project(project_run, clean_baseline, semaphore)
+                    .await;
+                self.reporter.on_project_complete(project);
+                result.map(|result| (idx, result))
+            });
+        }
 
         let mut results = Vec::new();
         while let Some(result) = runs.next().await {
@@ -816,18 +806,17 @@ impl<'a> HookRunSession<'a> {
                 .collect::<Vec<_>>()
         );
 
-        let mut runs = futures::stream::iter(group_hooks)
-            .map(|hook_run| {
-                run_hook(
-                    hook_run.hook,
-                    hook_run.input,
-                    self.store,
-                    self.dry_run,
-                    &self.reporter,
-                    Rc::clone(&semaphore),
-                )
-            })
-            .buffer_unordered(*CONCURRENCY);
+        let mut runs = FuturesUnordered::new();
+        for hook_run in group_hooks {
+            runs.push(run_hook(
+                hook_run.hook,
+                hook_run.input,
+                self.store,
+                self.dry_run,
+                &self.reporter,
+                Rc::clone(&semaphore),
+            ));
+        }
 
         let mut group_results = Vec::new();
         while let Some(result) = runs.next().await {
@@ -1074,12 +1063,11 @@ impl<'a> HookRunSession<'a> {
 
 struct PriorityGroups {
     hooks: Vec<InstalledHook>,
-    idx: usize,
 }
 
 impl PriorityGroups {
     fn new(hooks: Vec<InstalledHook>) -> Self {
-        Self { hooks, idx: 0 }
+        Self { hooks }
     }
 }
 
@@ -1087,19 +1075,15 @@ impl Iterator for PriorityGroups {
     type Item = Vec<InstalledHook>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let first = self.hooks.get(self.idx)?;
+        let first = self.hooks.first()?;
         let priority = first.priority;
-        let start = self.idx;
-
-        while self
+        let next_priority = self
             .hooks
-            .get(self.idx)
-            .is_some_and(|hook| hook.priority == priority)
-        {
-            self.idx += 1;
-        }
+            .iter()
+            .position(|hook| hook.priority != priority)
+            .unwrap_or(self.hooks.len());
 
-        Some(self.hooks[start..self.idx].to_vec())
+        Some(self.hooks.drain(..next_priority).collect())
     }
 }
 
