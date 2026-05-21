@@ -68,7 +68,7 @@ pub async fn run_fast_path(
     };
     let result = implemented.run(hook, filenames).await;
 
-    reporter.on_run_complete(progress);
+    reporter.on_run_complete(progress, matches!(&result, Ok((0, _))));
 
     result
 }

@@ -173,7 +173,8 @@ impl<'a> ProjectFiles<'a> {
     pub(crate) fn for_project<I>(
         filenames: I,
         project: &Project,
-        consumed_files: Option<&mut FxHashSet<&'a Path>>,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        newly_consumed_files: Option<&mut FxHashSet<&'a Path>>,
     ) -> Self
     where
         I: Iterator<Item = &'a PathBuf> + Send,
@@ -185,10 +186,16 @@ impl<'a> ProjectFiles<'a> {
             0
         };
         let mut files = Vec::with_capacity(files_capacity);
-        Self::visit_for_project(filenames, project, consumed_files, |file| {
-            files.push(file);
-            ControlFlow::Continue(())
-        });
+        Self::visit_for_project(
+            filenames,
+            project,
+            consumed_files,
+            newly_consumed_files,
+            |file| {
+                files.push(file);
+                ControlFlow::Continue(())
+            },
+        );
 
         Self { files }
     }
@@ -197,13 +204,18 @@ impl<'a> ProjectFiles<'a> {
     pub(crate) fn consume_for_project<I>(
         filenames: I,
         project: &Project,
-        consumed_files: &mut FxHashSet<&'a Path>,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        newly_consumed_files: &mut FxHashSet<&'a Path>,
     ) where
         I: Iterator<Item = &'a PathBuf> + Send,
     {
-        Self::visit_for_project(filenames, project, Some(consumed_files), |_| {
-            ControlFlow::Continue(())
-        });
+        Self::visit_for_project(
+            filenames,
+            project,
+            consumed_files,
+            Some(newly_consumed_files),
+            |_| ControlFlow::Continue(()),
+        );
     }
 
     /// Visit project-owned files without collecting them.
@@ -215,7 +227,8 @@ impl<'a> ProjectFiles<'a> {
     pub(crate) fn visit_for_project<I, F>(
         filenames: I,
         project: &Project,
-        mut consumed_files: Option<&mut FxHashSet<&'a Path>>,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        mut newly_consumed_files: Option<&mut FxHashSet<&'a Path>>,
         mut visit: F,
     ) where
         I: Iterator<Item = &'a PathBuf> + Send,
@@ -227,7 +240,7 @@ impl<'a> ProjectFiles<'a> {
         );
         let relative_path = project.relative_path();
         let orphan = project.config().orphan.unwrap_or(false);
-        let must_finish_consuming = orphan && consumed_files.is_some();
+        let must_finish_consuming = orphan && newly_consumed_files.is_some();
         let mut visiting = true;
 
         // The order of below filters matters.
@@ -242,13 +255,17 @@ impl<'a> ProjectFiles<'a> {
             }
 
             // Skip files that have already been consumed by subprojects.
-            if let Some(consumed_files) = consumed_files.as_mut() {
-                if orphan {
-                    if !consumed_files.insert(filename) {
+            if consumed_files
+                .is_some_and(|consumed_files| consumed_files.contains(filename.as_path()))
+            {
+                continue;
+            }
+
+            if orphan {
+                if let Some(newly_consumed_files) = newly_consumed_files.as_mut() {
+                    if !newly_consumed_files.insert(filename) {
                         continue;
                     }
-                } else if consumed_files.contains(filename.as_path()) {
-                    continue;
                 }
             }
 

@@ -514,8 +514,6 @@ impl LanguageImpl for Docker {
 
         let results = run_by_batch(hook, filenames, &entry, run).await?;
 
-        reporter.on_run_complete(progress);
-
         // Collect results
         let mut combined_status = 0;
         let mut combined_output = Vec::new();
@@ -524,6 +522,8 @@ impl LanguageImpl for Docker {
             combined_status |= code;
             combined_output.extend(output);
         }
+
+        reporter.on_run_complete(progress, combined_status == 0);
 
         Ok((combined_status, combined_output))
     }

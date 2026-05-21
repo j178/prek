@@ -13,6 +13,7 @@ use crate::workspace;
 
 /// Current progress reporter used to suspend rendering while printing normal output.
 static CURRENT_REPORTER: Mutex<Option<Weak<ProgressReporter>>> = Mutex::new(None);
+const SPINNER_TICKS: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /// Set the current reporter for lock acquisition warnings.
 fn set_current_reporter(reporter: Option<&Arc<ProgressReporter>>) {
@@ -36,8 +37,6 @@ pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
 struct BarState {
     /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
-    /// Active project header bars, by project index.
-    project_bars: FxHashMap<usize, ProjectBar>,
     /// Completed run bars that should stay visible until the current group is rendered.
     completed: Vec<ProgressBar>,
     /// A monotonic counter for bar IDs.
@@ -115,7 +114,7 @@ impl From<Printer> for ProgressReporter {
         root.set_style(
             ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
                 .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+                .tick_strings(SPINNER_TICKS),
         );
 
         Self::new(root, multi, printer)
@@ -188,47 +187,41 @@ impl HookInstallReporter {
 pub(crate) struct HookRunReporter {
     reporter: Arc<ProgressReporter>,
     dots: usize,
+    show_project_headers: bool,
+    projects: Mutex<FxHashMap<usize, ProjectBar>>,
 }
 
 impl HookRunReporter {
-    pub fn new(printer: Printer, dots: usize) -> Self {
+    pub fn new(printer: Printer, dots: usize, show_project_headers: bool) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         set_current_reporter(Some(&reporter));
 
-        Self { reporter, dots }
-    }
-
-    pub fn on_project_start(&self, project: &workspace::Project) {
-        let mut state = self.reporter.state.lock().unwrap();
-        let progress = self.reporter.children.insert_before(
-            &self.reporter.root,
-            ProgressBar::with_draw_target(None, self.reporter.printer.target()),
-        );
-        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{}",
-            format!("Running hooks for `{project}`:").cyan().bold()
-        ));
-
-        state.project_bars.insert(
-            project.idx(),
-            ProjectBar {
-                header: progress.clone(),
-                tail: progress,
-            },
-        );
+        Self {
+            reporter,
+            dots,
+            show_project_headers,
+            projects: Mutex::default(),
+        }
     }
 
     pub fn on_project_complete(&self, project: &workspace::Project) {
-        let header = {
-            let mut state = self.reporter.state.lock().unwrap();
-            let Some(project_bar) = state.project_bars.remove(&project.idx()) else {
-                return;
-            };
-            state.completed.push(project_bar.header.clone());
-            project_bar.header
+        let Some(project_bar) = self.projects.lock().unwrap().remove(&project.idx()) else {
+            return;
         };
+        let header = project_bar.header;
+        header.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        header.set_message(format!(
+            "{} {}",
+            "✓".green(),
+            project.display_name().cyan().bold()
+        ));
 
+        self.reporter
+            .state
+            .lock()
+            .unwrap()
+            .completed
+            .push(header.clone());
         header.finish();
     }
 
@@ -237,27 +230,42 @@ impl HookRunReporter {
             .root
             .set_message(format!("{}", "Running hooks...".bold().cyan()));
 
-        let mut state = self.reporter.state.lock().unwrap();
-        let id = state.id();
+        let id = self.reporter.state.lock().unwrap().id();
 
-        // len == 0 indicates an unknown length; use 1 to show an indeterminate bar.
-        let len = if len == 0 { 1 } else { len };
+        let progress_len = if len == 0 { 1 } else { len as u64 };
 
-        let (progress, label) =
-            if let Some(project_bar) = state.project_bars.get_mut(&hook.project().idx()) {
-                let progress = self.reporter.children.insert_after(
-                    &project_bar.tail,
-                    ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
-                );
-                project_bar.tail = progress.clone();
-                (progress, format!("  {}", hook.name))
-            } else {
-                let progress = self.reporter.children.insert_before(
+        let (progress, label) = if self.show_project_headers {
+            let mut projects = self.projects.lock().unwrap();
+            let project_bar = projects.entry(hook.project().idx()).or_insert_with(|| {
+                let header = self.reporter.children.insert_before(
                     &self.reporter.root,
-                    ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
+                    ProgressBar::with_draw_target(None, self.reporter.printer.target()),
                 );
-                (progress, hook.name.clone())
-            };
+                header.enable_steady_tick(Duration::from_millis(200));
+                header.set_style(
+                    ProgressStyle::with_template("{spinner:.cyan} {wide_msg}")
+                        .unwrap()
+                        .tick_strings(SPINNER_TICKS),
+                );
+                header.set_message(format!("{}", hook.project().display_name().cyan().bold()));
+                ProjectBar {
+                    header: header.clone(),
+                    tail: header,
+                }
+            });
+            let progress = self.reporter.children.insert_after(
+                &project_bar.tail,
+                ProgressBar::with_draw_target(Some(progress_len), self.reporter.printer.target()),
+            );
+            project_bar.tail = progress.clone();
+            (progress, format!("  {}", hook.name))
+        } else {
+            let progress = self.reporter.children.insert_before(
+                &self.reporter.root,
+                ProgressBar::with_draw_target(Some(progress_len), self.reporter.printer.target()),
+            );
+            (progress, hook.name.clone())
+        };
 
         let dots = self.dots.saturating_sub(label.width());
         progress.enable_steady_tick(Duration::from_millis(200));
@@ -267,7 +275,12 @@ impl HookRunReporter {
                 .progress_chars(".."),
         );
         progress.set_message(label);
-        state.bars.insert(id, progress);
+        self.reporter
+            .state
+            .lock()
+            .unwrap()
+            .bars
+            .insert(id, progress);
         id
     }
 
@@ -277,18 +290,30 @@ impl HookRunReporter {
         progress.inc(completed);
     }
 
-    pub fn on_run_complete(&self, id: usize) {
+    pub fn on_run_complete(&self, id: usize, passed: bool) {
         let progress = {
             let mut state = self.reporter.state.lock().unwrap();
             let progress = state.bars.remove(&id).unwrap();
             state.completed.push(progress.clone());
             progress
         };
-
+        let label = progress.message();
         self.reporter.root.inc(1);
 
+        let (status, status_width) = if passed {
+            ("Passed".on_green().to_string(), "Passed".width())
+        } else {
+            ("Failed".on_red().to_string(), "Failed".width())
+        };
+        let dots = self
+            .dots
+            .saturating_add("Passed".width())
+            .saturating_sub(label.width() + status_width);
+        let dots = ".".repeat(dots).green().to_string();
+
         // Keep the finished line visible until the group result is rendered.
-        progress.set_position(progress.length().unwrap_or(1));
+        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        progress.set_message(format!("{label}{dots}{status}"));
         progress.finish();
     }
 
@@ -313,8 +338,8 @@ impl HookRunReporter {
     pub fn on_complete(&self) {
         self.clear_completed();
         let project_bars = {
-            let mut state = self.reporter.state.lock().unwrap();
-            std::mem::take(&mut state.project_bars)
+            let mut projects = self.projects.lock().unwrap();
+            std::mem::take(&mut *projects)
         };
         for project_bar in project_bars.into_values() {
             self.reporter.children.remove(&project_bar.header);

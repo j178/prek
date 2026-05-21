@@ -47,7 +47,7 @@ impl MetaHooks {
             Self::CheckUselessExcludes => check_useless_excludes(hook, filenames).await,
             Self::Identity => Ok(identity(hook, filenames)),
         };
-        reporter.on_run_complete(progress);
+        reporter.on_run_complete(progress, matches!(&result, Ok((0, _))));
         result
     }
 }
@@ -133,7 +133,7 @@ pub(crate) async fn check_hooks_apply(
         let mut matches = vec![false; hooks.len()];
         let mut remaining = matches.len();
 
-        ProjectFiles::visit_for_project(input.iter(), hooks[0].project(), None, |file| {
+        ProjectFiles::visit_for_project(input.iter(), hooks[0].project(), None, None, |file| {
             let tags = file.tags(&mut tag_cache);
             for (matched, filter) in matches.iter_mut().zip(&filters) {
                 if *matched {
@@ -299,7 +299,7 @@ pub(crate) async fn check_useless_excludes(
             .collect::<Vec<_>>();
         let mut remaining = exclude_matches.iter().filter(|matched| !**matched).count();
 
-        ProjectFiles::visit_for_project(input_workspace.iter(), &project, None, |file| {
+        ProjectFiles::visit_for_project(input_workspace.iter(), &project, None, None, |file| {
             let tags = file.tags(&mut tag_cache);
             for ((matched, (_, opts)), tag_filter) in exclude_matches
                 .iter_mut()

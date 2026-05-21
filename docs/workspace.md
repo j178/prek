@@ -135,30 +135,26 @@ When running `prek run` on the example structure above, you might see output lik
 
 ```console
 $ prek run
-Running hooks for `src/backend`:
-check python ast.........................................................Passed
-check for merge conflicts................................................Passed
-black....................................................................Passed
-isort....................................................................Passed
-
-Running hooks for `docs`:
-Markdownlint.........................................(unimplemented yet)Skipped
-
-Running hooks for `frontend`:
-prettier.................................................................Passed
-
-Running hooks for `src`:
-isort....................................................................Passed
-mypy.....................................................................Passed
-check python ast.........................................................Passed
-check docstring is first.................................................Passed
-
-Running hooks for `.`:
-fix end of files.........................................................Passed
-check yaml...............................................................Passed
-check for added large files..............................................Passed
-trim trailing whitespace.................................................Passed
-check for merge conflicts................................................Passed
+src/backend
+  check python ast.......................................................Passed
+  check for merge conflicts..............................................Passed
+  black..................................................................Passed
+  isort..................................................................Passed
+docs
+  Markdownlint.......................................(unimplemented yet)Skipped
+frontend
+  prettier...............................................................Passed
+src
+  isort..................................................................Passed
+  mypy...................................................................Passed
+  check python ast.......................................................Passed
+  check docstring is first...............................................Passed
+<workspace>
+  fix end of files.......................................................Passed
+  check yaml.............................................................Passed
+  check for added large files............................................Passed
+  trim trailing whitespace...............................................Passed
+  check for merge conflicts..............................................Passed
 ```
 
 Notice how:

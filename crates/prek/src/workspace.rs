@@ -246,6 +246,14 @@ impl Project {
         self.relative_path.as_os_str().is_empty()
     }
 
+    pub(crate) fn display_name(&self) -> String {
+        if self.is_root() {
+            "<workspace>".to_string()
+        } else {
+            self.to_string()
+        }
+    }
+
     pub(crate) fn depth(&self) -> usize {
         self.relative_path.components().count()
     }

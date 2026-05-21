@@ -136,7 +136,7 @@ impl BuiltinHooks {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
         };
-        reporter.on_run_complete(progress);
+        reporter.on_run_complete(progress, matches!(&result, Ok((0, _))));
         result
     }
 }

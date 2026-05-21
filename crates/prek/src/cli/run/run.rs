@@ -370,8 +370,15 @@ fn filter_missing_hooks_to_install<'paths>(
     for project in workspace.all_projects() {
         match input {
             RunInput::Files(files) => {
+                let mut project_consumed_files = FxHashSet::default();
                 let Some(hooks) = project_to_hooks.remove(project) else {
-                    ProjectFiles::consume_for_project(files.iter(), project, &mut consumed_files);
+                    ProjectFiles::consume_for_project(
+                        files.iter(),
+                        project,
+                        Some(&consumed_files),
+                        &mut project_consumed_files,
+                    );
+                    consumed_files.extend(project_consumed_files);
                     continue;
                 };
 
@@ -388,7 +395,8 @@ fn filter_missing_hooks_to_install<'paths>(
                 ProjectFiles::visit_for_project(
                     files.iter(),
                     project,
-                    Some(&mut consumed_files),
+                    Some(&consumed_files),
+                    Some(&mut project_consumed_files),
                     |project_file| {
                         for (hook, matches) in &mut candidates {
                             if *matches {
@@ -409,6 +417,7 @@ fn filter_missing_hooks_to_install<'paths>(
                         ControlFlow::Continue(())
                     },
                 );
+                consumed_files.extend(project_consumed_files);
 
                 for (hook, matches) in candidates {
                     if matches {
@@ -421,7 +430,7 @@ fn filter_missing_hooks_to_install<'paths>(
                     continue;
                 };
 
-                let project_input = ProjectHookInput::new(input, project, None)?;
+                let project_input = ProjectHookInput::new(input, project, None, None)?;
                 for hook in hooks.into_iter().filter(|hook| hook.language.supported()) {
                     if hook.always_run || project_input.matches_hook(&hook, tag_cache) {
                         hooks_to_install.push(hook);
@@ -455,8 +464,6 @@ async fn run_hooks<'paths>(
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
-    let mut session = HookRunSession::new(hooks, store, dry_run, verbose, printer);
-
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
     let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> =
@@ -469,6 +476,15 @@ async fn run_hooks<'paths>(
     }
 
     let projects_len = project_to_hooks.len();
+    let show_project_headers = projects_len > 1;
+    let mut session = HookRunSession::new(
+        hooks,
+        store,
+        dry_run,
+        verbose,
+        show_project_headers,
+        printer,
+    );
     let mut consumed_files = FxHashSet::default();
 
     for projects in ProjectDepthGroups::new(workspace.all_projects()) {
@@ -477,12 +493,12 @@ async fn run_hooks<'paths>(
         let mut project_runs = Vec::new();
 
         for project in projects {
-            let mut project_consumed_files = consumed_files.clone();
-            let project_input =
-                ProjectHookInput::new(input, project, Some(&mut project_consumed_files))?;
-            for consumed_file in project_consumed_files.difference(&consumed_files) {
-                level_consumed_files.insert(*consumed_file);
-            }
+            let project_input = ProjectHookInput::new(
+                input,
+                project,
+                Some(&consumed_files),
+                Some(&mut level_consumed_files),
+            )?;
 
             let Some(hooks) = project_to_hooks.remove(project) else {
                 continue;
@@ -648,7 +664,6 @@ struct HookRunSession<'a> {
     printer: Printer,
     dry_run: bool,
     verbose: bool,
-    rendered_projects: usize,
     success: bool,
     file_modified: bool,
     has_unimplemented: bool,
@@ -660,10 +675,12 @@ impl<'a> HookRunSession<'a> {
         store: &'a Store,
         dry_run: bool,
         verbose: bool,
+        show_project_headers: bool,
         printer: Printer,
     ) -> Self {
         let status_printer = StatusPrinter::for_hooks(hooks, printer);
-        let reporter = HookRunReporter::new(printer, status_printer.bar_len());
+        let reporter =
+            HookRunReporter::new(printer, status_printer.bar_len(), show_project_headers);
 
         Self {
             store,
@@ -672,7 +689,6 @@ impl<'a> HookRunSession<'a> {
             printer,
             dry_run,
             verbose,
-            rendered_projects: 0,
             success: true,
             file_modified: false,
             has_unimplemented: false,
@@ -680,23 +696,18 @@ impl<'a> HookRunSession<'a> {
     }
 
     fn render_project_header(&mut self, project: &Project, projects_len: usize) -> Result<()> {
-        if projects_len == 1 && project.is_root() {
+        if projects_len == 1 {
             return Ok(());
         }
 
         self.reporter.suspend(|| {
             writeln!(
                 self.status_printer.printer().stdout(),
-                "{}{}",
-                if self.rendered_projects == 0 {
-                    ""
-                } else {
-                    "\n"
-                },
-                format!("Running hooks for `{}`:", project.to_string().cyan()).bold()
+                "{} {}",
+                "✓".green(),
+                project.display_name().cyan().bold()
             )
         })?;
-        self.rendered_projects += 1;
 
         Ok(())
     }
@@ -706,13 +717,6 @@ impl<'a> HookRunSession<'a> {
         project_runs: Vec<ProjectRun<'project>>,
         clean_baseline: bool,
     ) -> Result<Vec<ProjectRunResult<'project>>> {
-        let show_project_progress = project_runs.len() > 1;
-        if show_project_progress {
-            for project_run in &project_runs {
-                self.reporter.on_project_start(project_run.project);
-            }
-        }
-
         let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
         let mut runs = futures::stream::iter(project_runs.into_iter().enumerate())
             .map(|(idx, project_run)| {
@@ -722,9 +726,7 @@ impl<'a> HookRunSession<'a> {
                     let result = self
                         .run_project(project_run, clean_baseline, semaphore)
                         .await;
-                    if show_project_progress {
-                        self.reporter.on_project_complete(project);
-                    }
+                    self.reporter.on_project_complete(project);
                     result.map(|result| (idx, result))
                 }
             })
@@ -836,15 +838,20 @@ impl<'a> HookRunSession<'a> {
         projects_len: usize,
     ) -> Result<bool> {
         self.render_project_header(project_result.project, projects_len)?;
+        let hook_prefix = if projects_len == 1 { "" } else { "  " };
 
         for group in project_result.groups {
-            self.finish_priority_group(group)?;
+            self.finish_priority_group(group, hook_prefix)?;
         }
 
         Ok(project_result.stop_after_level)
     }
 
-    fn finish_priority_group(&mut self, group: ProjectGroupRunResult) -> Result<()> {
+    fn finish_priority_group(
+        &mut self,
+        group: ProjectGroupRunResult,
+        hook_prefix: &str,
+    ) -> Result<()> {
         let ProjectGroupRunResult {
             mut results,
             modified_files,
@@ -856,7 +863,7 @@ impl<'a> HookRunSession<'a> {
 
         self.reporter.clear_completed();
         self.reporter
-            .suspend(|| self.render_priority_group(&results, modified_files))?;
+            .suspend(|| self.render_priority_group(&results, modified_files, hook_prefix))?;
 
         for RunResult { status, .. } in &results {
             self.has_unimplemented |= status.is_unimplemented();
@@ -876,21 +883,28 @@ impl<'a> HookRunSession<'a> {
         &self,
         group_results: &[RunResult],
         group_modified_files: bool,
+        hook_prefix: &str,
     ) -> Result<()> {
         // Only show a special group UI when the group failed due to file modifications.
         // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
         let show_group_ui = group_modified_files && group_results.len() > 1;
         let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
-        let group_prefix = if show_group_ui {
-            format!("{}", "  │ ".dimmed())
+        let group_output_prefix = if show_group_ui {
+            format!("{hook_prefix}{}", "  │ ".dimmed())
         } else {
             String::new()
         };
+        let detail_prefix = if show_group_ui {
+            group_output_prefix.as_str()
+        } else {
+            hook_prefix
+        };
+        let group_separator = format!("{hook_prefix}{}", "  │".dimmed());
 
         if show_group_ui {
             self.status_printer.write(
                 "Files were modified by following hooks",
-                "",
+                hook_prefix,
                 RunStatus::Failed,
             )?;
         }
@@ -907,6 +921,7 @@ impl<'a> HookRunSession<'a> {
             } else {
                 ""
             };
+            let prefix = format!("{hook_prefix}{prefix}");
 
             // If a single hook modified files, treat it as failed.
             let status = if single_hook_modified_files && result.status == RunStatus::Success {
@@ -916,7 +931,7 @@ impl<'a> HookRunSession<'a> {
             };
 
             self.status_printer
-                .write(&result.hook.name, prefix, status)?;
+                .write(&result.hook.name, &prefix, status)?;
 
             if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
                 continue;
@@ -930,27 +945,27 @@ impl<'a> HookRunSession<'a> {
             if self.verbose || result.hook.verbose || status == RunStatus::Failed {
                 writeln!(
                     stdout,
-                    "{group_prefix}{}",
+                    "{detail_prefix}{}",
                     format!("- hook id: {}", result.hook.id).dimmed()
                 )?;
                 if self.verbose || result.hook.verbose {
                     writeln!(
                         stdout,
-                        "{group_prefix}{}",
+                        "{detail_prefix}{}",
                         format!("- duration: {:.2?}s", result.duration.as_secs_f64()).dimmed()
                     )?;
                 }
                 if result.exit_status != 0 {
                     writeln!(
                         stdout,
-                        "{group_prefix}{}",
+                        "{detail_prefix}{}",
                         format!("- exit code: {}", result.exit_status).dimmed()
                     )?;
                 }
                 if single_hook_modified_files {
                     writeln!(
                         stdout,
-                        "{group_prefix}{}",
+                        "{detail_prefix}{}",
                         "- files were modified by this hook".dimmed()
                     )?;
                 }
@@ -966,7 +981,7 @@ impl<'a> HookRunSession<'a> {
                         file.flush()?;
                     } else {
                         if show_group_ui {
-                            writeln!(stdout, "{}", "  │".dimmed())?;
+                            writeln!(stdout, "{group_separator}")?;
                         } else {
                             writeln!(stdout)?;
                         }
@@ -974,14 +989,14 @@ impl<'a> HookRunSession<'a> {
                         for line in text.lines() {
                             if line.is_empty() {
                                 if show_group_ui {
-                                    writeln!(stdout, "{}", "  │".dimmed())?;
+                                    writeln!(stdout, "{group_separator}")?;
                                 } else {
                                     writeln!(stdout)?;
                                 }
                             } else if show_group_ui {
-                                writeln!(stdout, "{group_prefix}{line}")?;
+                                writeln!(stdout, "{group_output_prefix}{line}")?;
                             } else {
-                                writeln!(stdout, "  {line}")?;
+                                writeln!(stdout, "{hook_prefix}  {line}")?;
                             }
                         }
                     }
@@ -1096,13 +1111,15 @@ impl<'a> ProjectHookInput<'a> {
     fn new(
         input: &'a RunInput,
         project: &Project,
-        consumed_files: Option<&mut FxHashSet<&'a Path>>,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        newly_consumed_files: Option<&mut FxHashSet<&'a Path>>,
     ) -> Result<Self> {
         match input {
             RunInput::Files(files) => Ok(Self::Files(ProjectFiles::for_project(
                 files.iter(),
                 project,
                 consumed_files,
+                newly_consumed_files,
             ))),
             RunInput::MessageFile(path) => Ok(Self::MessageFile {
                 absolute_path: path,
@@ -1299,10 +1316,8 @@ impl StatusPrinter {
         };
         let used_width = prefix_width + hook_name.width() + suffix.width() + status_width;
         let dots = self.columns.saturating_sub(used_width);
-        let line = format!(
-            "{prefix}{hook_name}{}{suffix}{status_line}",
-            ".".repeat(dots),
-        );
+        let dots = ".".repeat(dots).green().to_string();
+        let line = format!("{prefix}{hook_name}{dots}{suffix}{status_line}");
         match status {
             RunStatus::Failed => {
                 writeln!(self.printer.stdout_important(), "{line}")
