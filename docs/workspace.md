@@ -137,21 +137,21 @@ When running `prek run` on the example structure above, you might see output lik
 
 ```console
 $ prek run
-src/backend
+✓ src/backend
   check python ast.......................................................Passed
   check for merge conflicts..............................................Passed
   black..................................................................Passed
   isort..................................................................Passed
-docs
+✓ docs
   Markdownlint.......................................(unimplemented yet)Skipped
-frontend
+✓ frontend
   prettier...............................................................Passed
-src
+✓ src
   isort..................................................................Passed
   mypy...................................................................Passed
   check python ast.......................................................Passed
   check docstring is first...............................................Passed
-<workspace>
+✓ <workspace>
   fix end of files.......................................................Passed
   check yaml.............................................................Passed
   check for added large files............................................Passed
