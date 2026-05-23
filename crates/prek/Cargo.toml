@@ -46,6 +46,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
+idna_adapter = { workspace = true }
 ignore = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
@@ -124,7 +125,7 @@ pkg-fmt = "zip"
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
 
 [package.metadata.cargo-shear]
-ignored = ["liblzma"]
+ignored = ["idna_adapter", "liblzma"]
 
 [lints]
 workspace = true
