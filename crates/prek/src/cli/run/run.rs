@@ -18,7 +18,9 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::{debug, error, trace};
 use unicode_width::UnicodeWidthStr;
 
-use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::{
+    HookInitReporter, HookInstallReporter, HookRunReporter, project_status_marker,
+};
 use crate::cli::run::diff::DiffTracker;
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
@@ -594,6 +596,12 @@ struct ProjectRunResult<'project, 'paths> {
     stop_after_level: bool,
 }
 
+impl ProjectRunResult<'_, '_> {
+    fn failed(&self) -> bool {
+        self.groups.iter().any(ProjectGroupRunResult::failed)
+    }
+}
+
 struct ProjectGroupRunResult {
     results: Vec<RunResult>,
     modified_files: bool,
@@ -662,6 +670,7 @@ impl<'a> HookRunSession<'a> {
     fn render_project_header(
         &mut self,
         project: &Project,
+        failed: bool,
         show_project_headers: bool,
     ) -> Result<()> {
         if !show_project_headers {
@@ -672,7 +681,7 @@ impl<'a> HookRunSession<'a> {
             writeln!(
                 self.status_printer.printer().stdout(),
                 "{} {}",
-                "✓".green(),
+                project_status_marker(failed),
                 project.display_name().cyan().bold()
             )
         })?;
@@ -704,7 +713,9 @@ impl<'a> HookRunSession<'a> {
                         semaphore,
                     )
                     .await;
-                self.reporter.on_project_complete(project);
+                if let Ok(result) = &result {
+                    self.reporter.on_project_complete(project, result.failed());
+                }
                 result.map(|result| (idx, result))
             });
         }
@@ -850,7 +861,11 @@ impl<'a> HookRunSession<'a> {
         project_result: ProjectRunResult<'_, '_>,
         show_project_headers: bool,
     ) -> Result<bool> {
-        self.render_project_header(project_result.project, show_project_headers)?;
+        self.render_project_header(
+            project_result.project,
+            project_result.failed(),
+            show_project_headers,
+        )?;
         let hook_prefix = if show_project_headers { "  " } else { "" };
 
         for group in project_result.groups {

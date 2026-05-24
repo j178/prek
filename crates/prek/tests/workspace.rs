@@ -316,7 +316,7 @@ fn fail_fast_stops_after_current_project_level() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ a
+    × a
       Failing Hook...........................................................Failed
       - hook id: failing-hook
       - exit code: 1

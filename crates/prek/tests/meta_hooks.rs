@@ -193,7 +193,7 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ app
+    × app
       Check hooks apply......................................................Failed
       - hook id: check-hooks-apply
       - exit code: 1

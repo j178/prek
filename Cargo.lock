@@ -2070,6 +2070,7 @@ dependencies = [
  "cargo_metadata",
  "clap",
  "clap_complete",
+ "console",
  "ctrlc",
  "dunce",
  "etcetera",

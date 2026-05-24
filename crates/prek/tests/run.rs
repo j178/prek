@@ -2910,11 +2910,11 @@ fn show_diff_on_failure() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ app
+    × app
       modify.................................................................Failed
       - hook id: modify
       - files were modified by this hook
-    ✓ <workspace>
+    × <workspace>
       modify.................................................................Failed
       - hook id: modify
       - files were modified by this hook

@@ -262,7 +262,7 @@ fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ project2
+    × project2
       forbid new submodules..................................................Failed
       - hook id: forbid-new-submodules
       - exit code: 1
@@ -824,7 +824,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_added_files(
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ app
+    × app
       check for added large files............................................Failed
       - hook id: check-added-large-files
       - exit code: 1
@@ -933,7 +933,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ app
+    × app
       identity...............................................................Passed
       - hook id: identity
       - duration: [TIME]
@@ -3092,7 +3092,7 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    ✓ app
+    × app
       check for case conflicts...............................................Failed
       - hook id: check-case-conflict
       - exit code: 1
