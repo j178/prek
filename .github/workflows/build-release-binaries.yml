@@ -1,0 +1,453 @@
+# Build prek on all platforms.
+#
+# Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
+# Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
+# artifacts job within `cargo-dist`.
+#
+# Adapted from https://github.com/astral-sh/uv/blob/main/.github/workflows/build-release-binaries.yml
+
+name: "Build release binaries"
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+  # renovate: datasource=github-releases depName=PyO3/maturin versioning=semver
+  MATURIN_VERSION: "v1.13.3"
+
+jobs:
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build sdist
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          command: sdist
+          args: --out dist
+      - name: "Upload sdist"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-sdist
+          path: dist
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+          - target: i686-pc-windows-msvc
+            arch: x86
+          - target: aarch64-pc-windows-msvc
+            arch: x64 # not relevant here
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Install NASM"
+        # NASM is required for x86/x86-64 Windows targets by aws-lc-sys.
+        # On aarch64-pc-windows-msvc, it uses clang-cl instead.
+        # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
+        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
+        run: |
+          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          args: --profile dist --locked --out dist --features self-update
+          sccache: 'true'
+        env:
+          # Disable prebuilt NASM objects so we always compile assembly from source.
+          AWS_LC_SYS_PREBUILT_NASM: "0"
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-windows-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          ARCHIVE_FILE=prek-${{ matrix.platform.target }}.zip
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/dist/prek.exe
+          sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.zip
+            *.sha256
+
+  macos:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: macos-15
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          args: --profile dist --locked --out dist --features self-update
+          sccache: 'true'
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        run: |
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
+          - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.target }}
+          # Generally, we try to build in a target docker container. In this case however, a
+          # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
+          # from 64-bit version of the container, breaking the pattern from other builds.
+          container: quay.io/pypa/manylinux2014
+          args: --profile dist --locked --out dist --features self-update
+          # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
+          before-script-linux: |
+            # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
+            rustup target add ${{ matrix.target }}
+            # If we're running on rhel centos, install needed packages.
+            if command -v yum &> /dev/null; then
+                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
+
+                # If we're running on i686 we need to symlink libatomic
+                # in order to build openssl with -latomic flag.
+                if [[ ! -d "/usr/lib64" ]]; then
+                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
+                else
+                    # Support cross-compiling from 64-bit to 32-bit
+                    yum install -y glibc-devel.i686 libstdc++-devel.i686
+                fi
+            else
+                # If we're running on debian-based system.
+                apt update -y && apt-get install -y libssl-dev openssl pkg-config
+            fi
+          sccache: 'true'
+          manylinux: auto
+        env:
+          CC: ${{ matrix.cc }}
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  linux-arm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        platform:
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            # see https://github.com/astral-sh/ruff/issues/3791
+            # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armv7
+          - target: arm-unknown-linux-musleabihf
+            arch: arm
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
+          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --profile dist --locked --out dist --features self-update
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  linux-s390x:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        platform:
+          - target: s390x-unknown-linux-gnu
+            arch: s390x
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          args: --profile dist --locked --out dist --features self-update
+          rust-toolchain: ${{ matrix.platform.toolchain || null }}
+        env:
+          CFLAGS_s390x_unknown_linux_gnu: -march=z10
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  linux-riscv64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        platform:
+          - target: riscv64gc-unknown-linux-gnu
+            arch: riscv64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          args: --profile dist --locked --out dist --features self-update
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+
+  musllinux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - i686-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.target }}
+          manylinux: musllinux_1_1
+          args: --profile dist --locked --out dist --features self-update
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  musllinux-cross:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: aarch64-unknown-linux-musl
+            arch: aarch64
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+          - target: armv7-unknown-linux-musleabihf
+            arch: armv7
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          manylinux: musllinux_1_1
+          args: --profile dist --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          rust-toolchain: ${{ matrix.platform.toolchain || null }}
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256

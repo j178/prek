@@ -1,0 +1,100 @@
+# FAQ
+
+## How is `prek` pronounced?
+
+Like "wreck", but with a "p" sound instead of the "w" at the beginning.
+The name comes from saying "pre-commit" and stopping right after the hard "k" sound;
+it can also be read as short for "pre-check".
+
+## I updated `.prekignore`, why didn't discovery change?
+
+Workspace discovery is cached. If you edited `.prekignore`, run the command with `--refresh` to force a fresh project discovery so the changes are picked up. For example:
+
+```bash
+prek run --refresh
+```
+
+## What does `prek install --prepare-hooks` do?
+
+In short, it installs the Git shims **and** prepares the environments for the hooks managed by prek. It is inherited from the original Python-based `pre-commit` tool (I'll abbreviate it as **ppc** in this document) to maintain compatibility with existing workflows.
+
+It's a little confusing because it refers to two different kinds of hooks:
+
+1. **Git shims** – Scripts placed in Git's effective hooks directory, usually `.git/hooks/` unless `core.hooksPath` points elsewhere. Both prek and ppc drop a small shim here so Git automatically runs them on `git commit`.
+2. **prek-managed hooks** – The tools listed in `.pre-commit-config.yaml`. When prek runs, it executes these hooks and prepares whatever runtime they need (for example, creating a Python virtual environment and installing the hook's dependencies before execution).
+
+Running `prek install` installs the first type: it writes the Git shim so that Git knows to call prek. Which Git shims get installed is determined by `--hook-type` or `default_install_hook_types` in the config file, and defaults to `pre-commit` if neither is set. This is not affected by a hook's `stages` field in the config: `stages` controls when a configured hook may run, not which Git shims `prek install` writes.
+
+Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time Git invokes prek through the shim, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
+
+## How does `prek install` interact with `core.hooksPath` and worktrees?
+
+If `core.hooksPath` is set in repo-local (`git config --local`) or worktree-local (`git config --worktree`) config, `prek install` and `prek uninstall` will honor it and operate on Git's effective hooks directory.
+
+If `core.hooksPath` is only configured globally or system-wide, prek refuses to install or uninstall by default. That setting may be shared across repositories, so prek avoids mutating a hook location it does not own. In that case, remove or change the global/system `core.hooksPath`.
+
+## How do I use hooks from private repositories?
+
+prek supports cloning hooks from private repositories that require authentication.
+prek first clones with interactive terminal prompts disabled so non-interactive runs do
+not hang. If a clone fails with an authentication error and prek is not running in CI,
+it retries with terminal prompts enabled so Git can ask for credentials. In CI,
+interactive prompts remain disabled, so you still need to configure credentials via
+credential helpers, environment variables, or SSH.
+
+### Option 1: Credential helpers (recommended)
+
+If you use GitHub CLI, Git Credential Manager, macOS Keychain, or similar tools,
+authentication often works automatically with no extra configuration:
+
+```shell
+# GitHub CLI users: configure git to use gh for credentials
+gh auth setup-git
+
+# Now HTTPS URLs work automatically
+prek install
+```
+
+Other credential helpers that work out of the box:
+
+- **macOS**: Keychain (`credential.helper=osxkeychain`)
+- **Windows**: Git Credential Manager (`credential.helper=manager`)
+- **Linux**: GNOME Keyring, KWallet, or `credential.helper=store`
+
+You can also use `GIT_ASKPASS` to point to a custom credential program:
+
+```shell
+export GIT_ASKPASS=/path/to/credential-script
+```
+
+### Option 2: SSH URLs
+
+Use SSH URLs in your `.pre-commit-config.yaml` instead of HTTPS:
+
+```yaml
+repos:
+  - repo: git@github.com:myorg/private-hooks.git
+    rev: v1.0.0
+    hooks:
+      - id: my-hook
+```
+
+This works automatically if you have SSH keys configured with an agent.
+
+### Option 3: URL rewriting with tokens (for CI)
+
+In CI environments without credential helpers, use environment variables to
+rewrite HTTPS URLs to include credentials:
+
+```shell
+# GitHub Actions example
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0="url.https://oauth2:${GITHUB_TOKEN}@github.com/.insteadOf"
+export GIT_CONFIG_VALUE_0="https://github.com/"
+
+# Or using GIT_CONFIG_PARAMETERS (more compact)
+export GIT_CONFIG_PARAMETERS="'url.https://oauth2:${GITHUB_TOKEN}@github.com/.insteadOf=https://github.com/'"
+```
+
+> **Security note:** Be careful with tokens in environment variables. Ensure your
+> CI system masks secrets in logs.

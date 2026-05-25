@@ -1,55 +1,48 @@
 [workspace]
-members = ["lib/*"]
+members = ["crates/*"]
+resolver = "3"
 
 [workspace.package]
+version = "0.4.1"
 edition = "2024"
+rust-version = "1.93.1"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-constants = { path = "lib/constants" }
-tracing = { version = "0.1.40" }
+prek-consts = { path = "crates/prek-consts", version = "0.4.1" }
+prek-identify = { path = "crates/prek-identify", version = "0.4.1" }
+prek-pty = { path = "crates/prek-pty", version = "0.4.1" }
 
-[package]
-name = "prek"
-version = "0.2.10"
-authors = ["j178 <hi@j178.dev>"]
-description = "Better `pre-commit`, re-engineered in Rust"
-repository = { workspace = true }
-homepage = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
-
-default-run = "prek"
-
-[features]
-default = ["docker"]
-# Adds self-update functionality. This feature is only enabled for prek built binarys
-# and should be left unselected when building prek for package managers.
-self-update = ["axoupdater"]
-# Enable the profiler for benchmarking
-profiler = ["dep:pprof", "profiler-flamegraph"]
-profiler-flamegraph = ["pprof/flamegraph"]
-# Enable docker related tests in integration tests
-docker = []
-
-[dependencies]
-anstream = { version = "0.6.15" }
+aho-corasick = { version = "1.1.4" }
+annotate-snippets = { version = "0.12.13" }
+anstream = { version = "1.0.0" }
+anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
-astral-tokio-tar = { version = "0.5.1" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
-async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.9.0", default-features = false, features = [ "github_releases"], optional = true }
+async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
+  "deflate",
+  "tokio",
+] }
+axoupdater = { version = "0.10.0", default-features = false, features = [
+  "github_releases",
+] }
 bstr = { version = "1.11.0" }
-clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
-clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
-constants = { workspace = true }
+cargo_metadata = { version = "0.23.1" }
+clap = { version = "4.6.0", features = [
+  "derive",
+  "env",
+  "string",
+  "wrap_help",
+] }
+clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
+console = { version = "0.16", default-features = false, features = ["std"] }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
-etcetera = { version = "0.10.0" }
-fancy-regex = { version = "0.16.0" }
-fs-err = { version = "3.1.0", features = ["tokio"] }
+etcetera = { version = "0.11.0" }
+fancy-regex = { version = "0.18.0" }
+fs-err = { version = "3.3.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
@@ -57,76 +50,84 @@ ignore = { version = "0.4.23" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
-levenshtein = { version = "1.0.5" }
+json5 = { version = "1.3.0" }
+libc = { version = "0.2.182" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
-liblzma = { version = "*", features = ["static"] }
+liblzma = { version = "0.4.5", features = ["static"] }
+mea = { version = "0.6.3" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
-path-clean = { version = "1.0.1" }
-quick-xml = { version = "0.38" }
-rand = { version = "0.9.0" }
-rayon = { version = "1.10.0" }
-reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }
+phf = { version = "0.13.1", default-features = false, features = ["macros"] }
+pprof = { version = "0.15.0" }
+quick-xml = { version = "0.40" }
+rand = { version = "0.10.0" }
+reqwest = { version = "0.13.2", default-features = false, features = [
+  "http2",
+  "stream",
+  "json",
+  "rustls",
+  "system-proxy",
+  "socks",
+] }
 rustc-hash = { version = "2.1.1" }
+rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }
+seahash = { version = "4.1.0" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
-serde_ignored = { version = "0.1.12" }
-serde_json = { version = "1.0.132", features = ["unbounded_depth"] }
+serde_json = { version = "1.0.132", features = [
+  "preserve_order",
+  "unbounded_depth",
+] }
 serde_stacker = { version = "0.1.12" }
-serde_yaml = { version = "0.9.34" }
+serde-saphyr = { version = "0.0.26", default-features = false, features = [
+  "deserialize",
+  "serialize",
+] }
 shlex = { version = "1.3.0" }
+globset = { version = "0.4.18" }
+similar = { version = "3.0.0" }
+strum = { version = "0.28.0", features = ["derive"] }
 target-lexicon = { version = "0.13.0" }
-tempfile = { version = "3.13.0" }
-textwrap = { version = "0.16.1" }
+tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
-tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros"] }
+tokio = { version = "1.47.1", features = [
+  "fs",
+  "io-std",
+  "process",
+  "rt",
+  "sync",
+  "macros",
+  "net",
+] }
+tokio-tar = { version = "0.6.0", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
-toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
-tracing = { workspace = true }
+toml = { version = "1.0.1", default-features = false, features = [
+  "fast_hash",
+  "parse",
+  "preserve_order",
+  "serde",
+] }
+toml_edit = { version = "0.25.1" }
+tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
-unicode-width = { version = "0.2.0" }
-url = { version = "2.5.2", features = ["serde"] }
+unicode-width = { version = "0.2.0", default-features = false }
+walkdir = { version = "2.5.0" }
+webpki-root-certs = { version = "1.0.6" }
 which = { version = "8.0.0" }
 
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2.164" }
-pprof = { version = "0.15.0", optional = true }
-pty = { path = "lib/pty" }
-
-[build-dependencies]
-fs-err = { version = "3.1.0" }
-
-[dev-dependencies]
-assert_cmd = { version = "2.0.16", features = ["color"] }
+# dev-dependencies
+assert_cmd = { version = "2.2.0" }
 assert_fs = { version = "1.1.2" }
-etcetera = { version = "0.10.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 markdown = { version = "1.0.0" }
 predicates = { version = "3.1.2" }
 pretty_assertions = { version = "1.4.1" }
 regex = { version = "1.11.0" }
-tempfile = { version = "3.13.0" }
-
-[package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
-pkg-fmt = "tgz"
-
-[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
-pkg-fmt = "zip"
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
-
-[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
-pkg-fmt = "zip"
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
-
-[package.metadata.cargo-shear]
-ignored = ["liblzma"]
-
-[lints]
-workspace = true
+schemars = { version = "1.1.0" }
+textwrap = { version = "0.16.0" }
 
 [workspace.lints.rust]
 dead_code = "allow"
@@ -134,9 +135,9 @@ dead_code = "allow"
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }
 # Allowed pedantic lints
-char_lit_as_u8 = "allow"
 collapsible_else_if = "allow"
 collapsible_if = "allow"
+if_not_else = "allow"
 implicit_hasher = "allow"
 map_unwrap_or = "allow"
 match_same_arms = "allow"
@@ -148,6 +149,8 @@ similar_names = "allow"
 too_many_arguments = "allow"
 too_many_lines = "allow"
 used_underscore_binding = "allow"
+items_after_statements = "allow"
+iter-without-into-iter = "allow"
 # Disallowed restriction lints
 print_stdout = "warn"
 print_stderr = "warn"
@@ -160,23 +163,58 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 
+[workspace.metadata.typos.default]
+extend-ignore-re = [
+  '(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----',
+]
+
 [workspace.metadata.typos.default.extend-words]
 edn = "edn"
 styl = "styl"
 jod = "jod"
 
-[profile.bench]
-opt-level = 3
-debug = true # used by the profiler
-strip = false # keep symbols for the profiler
+[workspace.metadata.typos.files]
+extend-exclude = ["scripts/macports"]
 
-[profile.release]
+[workspace.metadata.cargo-shear]
+ignored = ["liblzma"]
+
+[profile.dev.package]
+# Insta suggests compiling these packages in opt mode for faster testing.
+# See https://docs.rs/insta/latest/insta/#optional-faster-runs.
+insta.opt-level = 3
+similar.opt-level = 3
+
+# Profile for fast test execution: Skip debug info generation, and
+# apply basic optimization, which speed up build and running tests.
+[profile.fast-build]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
+
+# Profile for faster builds: Skip debug info generation, for faster
+# builds of smaller binaries.
+[profile.no-debug]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
+
+[profile.profiling]
+inherits = "release"
+strip = false
+debug = "full"
+lto = false
+codegen-units = 16
+
+[profile.minimal-size]
+inherits = "release"
 # Enable Full LTO for the best optimizations
 lto = "fat"
 # Reduce codegen units to 1 for better optimizations
 codegen-units = 1
 strip = true
+panic = "abort"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
-inherits = "release"
+inherits = "minimal-size"

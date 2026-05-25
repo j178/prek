@@ -1,0 +1,360 @@
+use assert_fs::assert::PathAssert;
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use prek_consts::env_vars::EnvVars;
+
+use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
+
+/// Test `language_version` parsing and auto downloading works correctly.
+/// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
+#[test]
+fn language_version() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI, as we may have other node versions installed locally.
+        return Ok(());
+    }
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: '20'
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: node20
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: '19' # will auto download
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: node19
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: '<20'
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: 'lts/iron' # node 20
+                always_run: true
+    "});
+    context.git_add(".");
+
+    let node_dir = context.home_dir().child("tools").child("node");
+    node_dir.assert(predicates::path::missing());
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"v(\d+)\.\d+.\d+", "v$1.X.X")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      v20.X.X
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      v20.X.X
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      v19.X.X
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      v19.X.X
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      v19.X.X
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      v20.X.X
+
+    ----- stderr -----
+    "#);
+
+    // Check that only node 19 is installed.
+    let installed_versions = node_dir
+        .read_dir()?
+        .flatten()
+        .filter_map(|d| {
+            let filename = d.file_name().to_string_lossy().into_owned();
+            if filename.starts_with('.') {
+                None
+            } else {
+                Some(filename)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        installed_versions.len(),
+        1,
+        "Expected only one node version to be installed, but found: {installed_versions:?}"
+    );
+    assert!(
+        installed_versions.iter().any(|v| v.starts_with("19")),
+        "Expected node v19 to be installed, but found: {installed_versions:?}"
+    );
+
+    Ok(())
+}
+
+/// Test that `additional_dependencies` are installed correctly.
+#[test]
+fn additional_dependencies() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: cowsay Hello World!
+                additional_dependencies: ["cowsay"]
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      ______________
+      < Hello World! >
+       --------------
+              \   ^__^
+               \  (oo)/_______
+                  (__)\       )\/\
+                      ||----w |
+                      ||     ||
+
+    ----- stderr -----
+    ");
+
+    // Run again to check `health_check` works correctly.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      ______________
+      < Hello World! >
+       --------------
+              \   ^__^
+               \  (oo)/_______
+                  (__)\       )\/\
+                      ||----w |
+                      ||     ||
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that lowercase npm config inherited from `npm exec` cannot redirect installs.
+#[test]
+fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let package_dir = context.work_dir().child("prefix-fixture");
+    package_dir.create_dir_all()?;
+    package_dir
+        .child("package.json")
+        .write_str(indoc::indoc! {r#"
+        {
+          "name": "prek-prefix-fixture",
+          "version": "1.0.0",
+          "bin": {
+            "prek-prefix-fixture": "cli.js"
+          }
+        }
+    "#})?;
+    let cli = package_dir.child("cli.js");
+    cli.write_str(indoc::indoc! {r#"
+        #!/usr/bin/env node
+        console.log("prefix fixture ok")
+    "#})?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs_err::metadata(cli.path())?.permissions();
+        permissions.set_mode(0o755);
+        fs_err::set_permissions(cli.path(), permissions)?;
+    }
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: prek-prefix-fixture
+                additional_dependencies: ["./prefix-fixture"]
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    let fake_prefix = context.home_dir().child("fake-prefix");
+    fake_prefix.create_dir_all()?;
+    let global_npmrc = fake_prefix.child("global-npmrc");
+    let user_npmrc = fake_prefix.child("user-npmrc");
+    global_npmrc.write_str("prefix=${HOME}/global-npmrc-prefix\n")?;
+    user_npmrc.write_str("//registry.example.test/:_authToken=fake-token\n")?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .env("npm_config_prefix", fake_prefix.path())
+            .env("npm_config_global_prefix", fake_prefix.path())
+            .env("npm_config_local_prefix", fake_prefix.path())
+            .env("npm_config_globalconfig", global_npmrc.path())
+            .env("npm_config_userconfig", user_npmrc.path())
+            .env("npm_config_cache", fake_prefix.child("cache").path()),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      prefix fixture ok
+
+    ----- stderr -----
+    "#
+    );
+
+    fake_prefix
+        .child("lib")
+        .child("node_modules")
+        .assert(predicates::path::missing());
+
+    Ok(())
+}
+
+/// Test that npm install works without system node in PATH.
+/// Regression test for #1492: `install()` must use the provisioned toolchain.
+#[test]
+fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: cowsay Hello
+                additional_dependencies: ["cowsay"]
+                always_run: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    let new_path = remove_bin_from_path("node", None)?;
+
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that `npm.cmd` can be found on Windows.
+#[test]
+fn npm_version() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: npm-version
+                name: npm-version
+                language: system
+                entry: npm --version
+                always_run: true
+                pass_filenames: false
+                verbose: true
+    "});
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\d+\.\d+\.\d+", "[NPM_VERSION]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    npm-version..............................................................Passed
+    - hook id: npm-version
+    - duration: [TIME]
+
+      [NPM_VERSION]
+
+    ----- stderr -----
+    ");
+}

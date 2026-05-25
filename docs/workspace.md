@@ -21,15 +21,26 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
 
-**Note**:
+!!! note
 
-- The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+    **Workspace root**
 
-- The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
+    - The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+    - The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
 
-- Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
+    **Discovery exclusions**
 
-- `prek` supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
+    - Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
+    - Cookiecutter template directories (names like `{{cookiecutter.project_slug}}`) are ignored during project discovery.
+
+    **Ignore rules**
+
+    - By default, `prek` respects `.gitignore` files during workspace discovery. This means any directories or files excluded by `.gitignore`, `.git/info/exclude`, or your global gitignore configuration will automatically be excluded from project discovery. This prevents `prek` from discovering workspaces in ignored directories like `node_modules`, `target`, or `.venv`.
+    - For additional control, `prek` also supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery beyond what's in `.gitignore`. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
+
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
 
 ## Project Organization
 
@@ -65,6 +76,12 @@ When running in workspace mode:
 2. **Apply global filters**: Files are filtered based on include/exclude patterns from the workspace root config
 3. **Distribute to projects**: Each project receives a subset of files based on its location
 
+#### File Visibility Constraints
+
+**Important**: Each project can only see and process files within its own directory tree. This is a fundamental design principle of workspace mode that ensures proper isolation between projects.
+
+A hook defined in `frontend/.pre-commit-config.yaml` can only match files under the `frontend/` directory—it cannot reference files from sibling directories like `backend/`. If hooks need to reference files across multiple projects, move the hook configuration to a common ancestor directory (e.g., the workspace root).
+
 ### Hook Execution
 
 For each project:
@@ -81,11 +98,38 @@ Projects are executed from **deepest to shallowest**:
 2. `src/`
 3. `docs/`
 4. `frontend/`
-5. `my-monorepo/` (root, last)
+5. `./` (root, last)
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
 
-**Note**: Files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
+Projects at the same depth can run concurrently because the file sets passed to their hooks do not overlap. Concurrency is still bounded by prek's global concurrency limit.
+
+This concurrency assumes hooks only operate on their own project state and the files passed to them. Hooks that read from or write to shared resources outside their project directory (for example, sibling project files, shared caches, lockfiles, or other global state) may still contend and should be designed to avoid that.
+
+### File Processing Behavior
+
+**By default**, files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
+
+**To isolate a project**, you can set `orphan: true` in its configuration. When enabled, files in this project are "consumed" by it and will not be processed by parent projects:
+
+```yaml
+# src/backend/.pre-commit-config.yaml
+orphan: true
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+```
+
+With this option:
+
+- Files in `src/backend/` are processed **only** by hooks in `src/backend/`
+- Files in `src/` (but not in `src/backend/`) are processed by hooks in `src/` and the workspace root
+- Files in the root (but not in subdirectories with configs) are processed by hooks in the root
+
+This can be useful to avoid redundant processing in monorepos with nested project structures or to completely isolate a subproject from parent configurations.
 
 ### Example Output
 
@@ -93,30 +137,26 @@ When running `prek run` on the example structure above, you might see output lik
 
 ```console
 $ prek run
-Running hooks for `src/backend`:
-check python ast.........................................................Passed
-check for merge conflicts................................................Passed
-black....................................................................Passed
-isort....................................................................Passed
-
-Running hooks for `docs`:
-Markdownlint.........................................(unimplemented yet)Skipped
-
-Running hooks for `frontend`:
-prettier.................................................................Passed
-
-Running hooks for `src`:
-isort....................................................................Passed
-mypy.....................................................................Passed
-check python ast.........................................................Passed
-check docstring is first.................................................Passed
-
-Running hooks for `.`:
-fix end of files.........................................................Passed
-check yaml...............................................................Passed
-check for added large files..............................................Passed
-trim trailing whitespace.................................................Passed
-check for merge conflicts................................................Passed
+✓ src/backend
+  check python ast.......................................................Passed
+  check for merge conflicts..............................................Passed
+  black..................................................................Passed
+  isort..................................................................Passed
+✓ docs
+  Markdownlint.......................................(unimplemented yet)Skipped
+✓ frontend
+  prettier...............................................................Passed
+✓ src
+  isort..................................................................Passed
+  mypy...................................................................Passed
+  check python ast.......................................................Passed
+  check docstring is first...............................................Passed
+✓ <workspace>
+  fix end of files.......................................................Passed
+  check yaml.............................................................Passed
+  check for added large files............................................Passed
+  trim trailing whitespace...............................................Passed
+  check for merge conflicts..............................................Passed
 ```
 
 Notice how:
@@ -125,6 +165,10 @@ Notice how:
 - Each project runs in its own working directory
 - The workspace root processes all files in the entire workspace
 - Projects are executed from deepest to shallowest as described in the execution order
+
+#### Orphan Projects and Selectors
+
+When you combine `orphan: true` with selectors such as `--skip`, remember that orphans keep the files they cover. Even if you skip an orphan project (for example via `--skip src/backend/`), that project still claims ownership of the files under its directory. Those files will not fall back to parent projects, so you can disable or precisely target orphaned projects without reintroducing duplicate processing upstream.
 
 ## Command Line Usage
 
@@ -144,7 +188,9 @@ prek run -C src/backend
 
 The `-C <dir>` or `--cd <dir>` option automatically changes to the specified directory before running, allowing you to target specific projects from any location in the workspace.
 
-**Note**: When using `prek install`, only the workspace root configuration's `default_install_hook_types` will be honored. Nested project configurations are not considered during installation.
+!!! note
+
+    When using `prek install`, only the workspace root configuration's `default_install_hook_types` will be honored. Nested project configurations are not considered during installation.
 
 ## Project and Hook Selection
 
@@ -160,8 +206,18 @@ The selector syntax has three different forms:
 
 Selectors can be used to select specific hooks or projects, and combined with `--skip` to exclude certain hooks or projects.
 
-**Note**: `<project-path>` can be a relative path, which is then resolved relative to the current working directory.
-Note that the trailing slash `/` in a `<project-path>` is important, if a selector does not contain a slash, it is interpreted as a hook ID.
+!!! note
+
+    `<project-path>` can be a relative path, which is then resolved relative to the current working directory.
+    The trailing slash `/` in a `<project-path>` is important: if a selector does not contain a slash, it is interpreted as a hook ID.
+
+!!! note "Hook ids containing `:`"
+
+    If your hook id contains `:` (for example `id: lint:ruff`), `prek run lint:ruff`
+    will not select that hook. `prek` interprets `lint:ruff` as the selector
+    `<project-path>:<hook-id>`, with project `lint` and hook `ruff`.
+    To select the hook id `lint:ruff`, add a leading `:` and run
+    `prek run :lint:ruff`.
 
 ### Running Specific Hooks or Projects
 
@@ -196,7 +252,11 @@ prek run frontend:lint src/backend:black
 
 You can skip specific projects or hooks using the `--skip` option, with the same syntax as for selecting projects or hooks.
 
-**Alternative**: You can also create `.prekignore` files (using `.gitignore` syntax) anywhere in the workspace to permanently exclude directories from project discovery during workspace setup.
+**Alternative**: You can also create `.prekignore` files (using `.gitignore` syntax) anywhere in the workspace to permanently exclude directories from project discovery during workspace setup. Note that `.gitignore` files are already respected by default, so `.prekignore` is only needed for excluding additional directories beyond what's in `.gitignore`.
+
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
 
 ```bash
 # Skip all hooks from a specific project
@@ -225,9 +285,13 @@ prek run frontend/ --skip frontend/docs --skip frontend:lint
 prek run --skip black --skip markdownlint
 ```
 
-**Note**: Selecting a project includes all its subprojects unless explicitly skipped. Skipping a project also skips all its subprojects.
+!!! note
 
-**Note**: The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
+    Selecting a project includes all its subprojects unless explicitly skipped. Skipping a project also skips all its subprojects.
+
+!!! note
+
+    The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
 
 ```bash
 # Skip 'frontend' and 'tests' projects
@@ -279,7 +343,7 @@ prek run -c docs/.pre-commit-config.yaml
 ### Key Differences: Workspace vs Single Config
 
 | Feature | Workspace Mode | Single Config Mode |
-|---------|----------------|-------------------|
+| -- | -- | -- |
 | **Discovery** | Auto-discovers all `.pre-commit-config.yaml` files | Uses single specified config file |
 | **Working Directory** | Uses workspace root | Uses git repository root |
 | **File Scope** | All files in workspace | All files in git repo |

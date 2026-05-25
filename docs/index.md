@@ -1,37 +1,57 @@
 # prek
 
 <div align="center">
-  <img width="220" alt="prek" src="/assets/logo.webp" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="/assets/logo-dark.png">
+    <img alt="prek" src="/assets/logo.png" />
+  </picture>
 </div>
 
-{%
-  include-markdown "../README.md"
-  start="<!-- description:start -->"
-  end="<!-- description:end -->"
-%}
+--8<-- "README.md:description"
 
-!!! warning "Not production-ready yet"
-    prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity on the [TODO page](./todo.md).
+!!! note
 
-    But it's already being adopted by [some projects](#who-is-using-prek) like Airflow, please give it a try - we'd love your feedback!
+    Although prek is pretty new, it's already powering real‑world projects like [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you're looking for an alternative to `pre-commit`, please give it a try—we'd love your feedback!
 
-{%
-  include-markdown "../README.md"
-  start="<!-- features:start -->"
-  end="<!-- features:end -->"
-%}
+    Please note that some languages are not yet supported for full drop‑in parity with `pre-commit`. See [Language Support](https://prek.j178.dev/languages/) for current status.
 
-{%
-  include-markdown "../README.md"
-  start="<!-- why:start -->"
-  end="<!-- why:end -->"
-%}
+--8<-- "README.md:features"
 
-## Getting Started
+## Where to Start
 
-- [Installation](./installation.md) - How to install prek
-- [Quickstart](./quickstart.md) - Getting started with prek
-- [Configuration](./configuration.md) - Configuring prek
-- [Workspace Mode](./workspace.md) - Monorepo support
-- [Differences](./diff.md) - What's different from pre-commit
-- [Debugging](./debugging.md) - Troubleshooting tips
+- New to `prek`: start with [Installation](installation.md), then follow the [Quickstart](quickstart.md).
+- Already set up: use [Common Workflows](usage.md) for the commands you run day to day.
+- Writing config: read [Configuration](configuration.md), then use the [Configuration Reference](reference/configuration.md) for exact keys.
+- Looking for setup patterns: browse the [Cookbook](cookbook.md).
+- Working in a monorepo: see [Workspace Mode](workspace.md).
+- Looking for flags or environment variables: use the [CLI Reference](reference/cli.md) and [Environment Variable Reference](reference/environment-variables.md).
+
+--8<-- "README.md:why"
+
+## Badges
+
+Show that your project uses prek with a badge in your README:
+
+[![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
+
+=== "Markdown"
+
+    ```markdown
+    [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
+    ```
+
+=== "HTML"
+
+    ```html
+    <a href="https://github.com/j178/prek">
+      <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json" alt="prek">
+    </a>
+    ```
+
+=== "reStructuredText (RST)"
+
+    ```rst
+    .. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json
+       :target: https://github.com/j178/prek
+       :alt: prek
+    ```

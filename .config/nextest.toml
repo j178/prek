@@ -1,5 +1,15 @@
-[[profile.default.overrides]]
-# Retry flaky node tests due to npm 403 errors
-filter = 'binary_id(prek::languages) and test(node::)'
-retries = 2
-slow-timeout = { period = "30s", terminate-after = 3 }
+[profile.ci-core]
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate"
+fail-fast = false
+test-threads = 8
+
+[profile.ci-language]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages)"
+
+[[profile.ci-language.overrides]]
+# LuaRocks can hit a race condition when multiple processes are installing the same package.
+filter = "test(lua::)"
+threads-required = "num-test-threads"

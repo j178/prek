@@ -1,0 +1,14 @@
+[package]
+name = "prek-consts"
+description = "constant values for prek"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+tracing = { workspace = true }
+
+[lints]
+workspace = true

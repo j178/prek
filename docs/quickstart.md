@@ -23,7 +23,7 @@ Great news - prek is designed as a drop-in replacement, you only need two tweaks
     cargo clippy.............................................................Passed
     ```
 
-2. Reinstall the git hooks once via `prek install -f` (run this if you previously executed `pre-commit install`).
+2. Reinstall the Git shims once via `prek install -f` (run this if you previously executed `pre-commit install`).
 
 From here you can explore what prek adds on top of pre-commit:
 
@@ -37,18 +37,25 @@ Follow this short example to experience how prek automates linting and formattin
 
 ### 1. Create a configuration
 
-In the root of your repository, add a `.pre-commit-config.yaml`:
+In the root of your repository, add a `prek.toml`:
 
-```yaml
-repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: check-yaml
-      - id: end-of-file-fixer
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "check-yaml" },
+  { id = "end-of-file-fixer" },
+]
 ```
 
-This config downloads a couple of community-maintained hooks that validate YAML files and ensure files end with a newline.
+This configuration uses the `pre-commit-hooks` repository and enables two hooks: `check-yaml` validates YAML files, and `end-of-file-fixer` ensures every file ends with a newline.
+
+!!! note
+
+    `prek.toml` is the native configuration file for **prek**. If you already have a `.pre-commit-config.yaml`, prek can still read it today.
+
+Once you’re happy with your setup, you can stage the config file with `git add prek.toml`.
 
 ### 2. Run hooks on demand
 
@@ -62,7 +69,7 @@ Need to run a single hook? Pass its ID, for example `prek run check-yaml`. You c
 
 ### 3. Wire hooks into git automatically
 
-To run the hooks every time you commit, install prek’s git hook integration:
+To run the hooks every time you commit, install prek’s Git shim integration:
 
 ```bash
 prek install
@@ -73,7 +80,8 @@ Now every `git commit` will invoke `prek run` for the files included in the comm
 ### 4. Go further
 
 - Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/). Every example there works with prek.
-- Check the [configuration reference](./configuration.md) for prek-specific settings.
+- See [Common Workflows](./usage.md) for the commands you will use after setup.
+- Check the [configuration reference](./reference/configuration.md) for prek-specific settings.
 - Browse the [built-in hooks](./builtin.md) and the [difference guide](./diff.md) to see what else you can leverage.
 
 That’s it! You now have automated checks running locally with minimal setup. When you’re ready to dive deeper, the rest of the docs cover advanced workflows, language-specific installers, and more.

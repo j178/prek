@@ -2,22 +2,19 @@
 cargo.binstall = true
 
 [tools]
+# We need cargo-binstall so that Mise would download "cargo:" tools instead of building them.
+cargo-binstall = "latest"
 # For snapshot testing
 cargo-insta = "latest"
 "cargo:cargo-nextest" = "latest"
-# For pre-commit hooks
 prek = "latest"
-
-# Toolchains used in the integration tests.
-python = ["3.12"]
-node = ["20"]
-go = ["1.24"]
+uv = "latest"
 
 [tasks.lint]
 description = "Run formatting and linting"
 run = [
-    "cargo fmt",
-    "cargo clippy --all-targets --all-features --workspace -- -D warnings"
+  "cargo fmt",
+  "cargo clippy --all-targets --all-features --workspace -- -D warnings",
 ]
 
 [tasks.test-unit]
@@ -40,15 +37,40 @@ run = "cargo insta test --review --test '*'"
 description = "Run all tests"
 run = "cargo test --all-targets --all-features --workspace"
 
-[tasks.generate]
+[tasks.generate-cli-reference]
 description = "Generate CLI reference"
-run = "cargo test --bin prek cli::tests::generate_cli_reference -- --exact"
+run = "cargo test --bin prek cli::_gen::generate_cli_reference -- --exact"
 env = { PREK_GENERATE = "1" }
+
+[tasks.generate-json-schema]
+description = "Generate JSON schema"
+run = "cargo test --bin prek --features schemars schema::_gen::generate_json_schema -- --exact"
+env = { PREK_GENERATE = "1" }
+
+[tasks.generate]
+description = "Generate CLI reference and JSON schema"
+run = [{ task = "generate-cli-reference" }, { task = "generate-json-schema" }]
+
+[tasks.preview-docs]
+description = "Serve documentation locally"
+run = "uv run --group docs zensical serve"
+
+[tasks.build-docs]
+description = "Build documentation"
+run = [
+  "uv run --group docs zensical build",
+  "uv run --group docs llmstxt-standalone build",
+]
+
+[tasks.update-macports]
+description = "Update MacPorts portfile"
+run = "uv run scripts/update-macports-portfile.py"
 
 [tasks.release]
 description = "Prepare for a release"
 run = """
 git checkout -b bump
-uvx --from 'rooster @ git+https://github.com/j178/rooster@1b5716e' --python 3.12 -- rooster release
-cargo update
+uv run --group dev rooster release
+prek run mdformat --files CHANGELOG.md || true
+uv lock
 """

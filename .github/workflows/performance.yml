@@ -1,0 +1,171 @@
+name: Performance
+
+on:
+  workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+
+permissions: {}
+
+env:
+  # Cargo env vars
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bloat-check:
+    runs-on: ubuntu-latest
+    name: "bloat check"
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - uses: taiki-e/install-action@7be9fd86bd1707236395105d6e9329dd1511a7e1 # v2.79.0
+        with:
+          tool: cargo-bloat
+
+      - name: Build head branch
+        id: bloat_head
+        run: |
+          # Build head branch
+          cargo bloat --release | tee bloat_head.txt >&1
+
+      - name: Checkout base
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+
+      - name: Build base branch
+        id: bloat_base
+        run: |
+          # Build base branch
+          cargo bloat --release | tee bloat_base.txt >&1
+
+      - name: Compare bloat results
+        shell: python
+        run: |
+          import re
+          from pathlib import Path
+
+          def parse_size(text):
+              match = re.search(r'\.text section size.*?([\d.]+)\s*([KMGT]i?B)', text)
+              if not match:
+                  raise ValueError("Could not find .text section size")
+              value, unit = float(match.group(1)), match.group(2)
+              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
+              size = value * multipliers.get(unit, 1)
+              return size, f"{value} {unit}"
+
+          head_text = Path('bloat_head.txt').read_text()
+          base_text = Path('bloat_base.txt').read_text()
+
+          head_bytes, head_size = parse_size(head_text)
+          base_bytes, base_size = parse_size(base_text)
+
+          pct_change = ((head_bytes - base_bytes) / base_bytes) * 100
+          pct_display = f"{pct_change:+.2f}%"
+          comparison = f"""\
+          ### 📦 Cargo Bloat Comparison
+          **Binary size change:** {pct_display} ({base_size} → {head_size})
+
+          <details>
+            <summary>Expand for cargo-bloat output</summary>
+
+          #### Head Branch Results
+          ```
+          {head_text}
+          ```
+
+          #### Base Branch Results
+          ```
+          {base_text}
+          ```
+          </details>
+          """
+
+          Path("bloat-comparison.txt").write_text(comparison)
+
+      - name: Upload bloat results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
+          # Make sure to update the bot if you rename the artifact.
+          name: bloat-check-results
+          path: bloat-comparison.txt
+
+  hyperfine-benchmark:
+    runs-on: ubuntu-latest
+    name: "hyperfine benchmark"
+    timeout-minutes: 10
+    env:
+      HYPERFINE_BENCHMARK_WORKSPACE: /tmp/prek-bench
+      HYPERFINE_BIN_DIR: ${{ github.workspace }}/.hyperfine-bin
+      HYPERFINE_RESULTS_FILE: ${{ github.workspace }}/hyperfine-benchmark.md
+      HYPERFINE_HEAD_BINARY: prek-head
+      HYPERFINE_BASE_BINARY: prek-base
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Add hyperfine bin dir to PATH
+        run: |
+          mkdir -p "$HYPERFINE_BIN_DIR"
+          echo "$HYPERFINE_BIN_DIR" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - id: base-binary-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ env.HYPERFINE_BIN_DIR }}/${{ env.HYPERFINE_BASE_BINARY }}
+          key: prek-hyperfine-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build base version
+        if: ${{ steps.base-binary-cache.outputs.cache-hit != 'true' }}
+        env:
+          BASE_VERSION: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_BASE_BINARY"
+          git checkout ${{ github.sha }}
+
+      - name: Build head version
+        run: |
+          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
+
+      - name: Install hyperfine
+        uses: taiki-e/install-action@7be9fd86bd1707236395105d6e9329dd1511a7e1 # v2.79.0
+        with:
+          tool: hyperfine
+
+      - name: Setup test environment for builtin hooks
+        run: scripts/hyperfine-setup-test-env.sh
+
+      - name: Run benchmarks
+        run: scripts/hyperfine-run-benchmarks.sh
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
+          # Make sure to update the bot if you rename the artifact.
+          name: hyperfine-benchmark-results
+          path: ${{ env.HYPERFINE_RESULTS_FILE }}

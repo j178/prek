@@ -1,0 +1,526 @@
+use std::fmt::Write as _;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
+use bstr::ByteSlice;
+use clap::ValueEnum;
+use owo_colors::OwoColorize;
+use prek_consts::CONFIG_FILENAMES;
+use same_file::is_same_file;
+
+use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
+use crate::cli::run;
+use crate::cli::run::InstallCache;
+use crate::cli::run::{SelectorSource, Selectors};
+use crate::cli::{ExitStatus, HookType};
+use crate::config::load_config;
+use crate::fs::{CWD, Simplified};
+use crate::git::{GIT_ROOT, git_cmd};
+use crate::printer::Printer;
+use crate::store::Store;
+use crate::workspace::{Error as WorkspaceError, Project, Workspace};
+use crate::{git, warn_user};
+
+#[allow(clippy::fn_params_excessive_bools)]
+pub(crate) async fn install(
+    store: &Store,
+    config: Option<PathBuf>,
+    includes: Vec<String>,
+    skips: Vec<String>,
+    hook_types: Vec<HookType>,
+    prepare_hooks: bool,
+    overwrite: bool,
+    allow_missing_config: bool,
+    refresh: bool,
+    printer: Printer,
+    git_dir: Option<&Path>,
+) -> Result<ExitStatus> {
+    // Upstream `pre-commit` deliberately refuses to install whenever
+    // `git config core.hooksPath` resolves to a non-empty value. It does not
+    // distinguish whether that effective value comes from local, worktree,
+    // global, or system config. Once Git sees any effective `core.hooksPath`,
+    // it stops consulting `.git/hooks` and runs hooks only from that configured
+    // directory. If the value is external to this repository, "installing
+    // anyway" would mean either writing into a user-managed shared hooks
+    // directory or mutating the user's Git config to point back at this repo.
+    // Both cross the repository's ownership boundary.
+    //
+    // In prek, we keep that safety boundary but narrow the refusal to the
+    // actual unsafe case. Repo-owned `core.hooksPath` values are safe to honor
+    // implicitly when they come from local/worktree scope, including repo
+    // config reached through `include.path` / `includeIf`, because those values
+    // are part of the repository's own Git setup. Only hooksPath values that
+    // resolve entirely from external config still require the explicit
+    // `--git-dir` escape hatch.
+    if git_dir.is_none()
+        && git::has_hooks_path_set().await?
+        && !git::has_repo_hooks_path_set().await?
+    {
+        anyhow::bail!(
+            concat!(
+                "Refusing to install hooks because `core.hooksPath` is configured outside this repository.\n",
+                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
+                "  {}\n",
+                "  {}\n",
+                "  {}\n",
+            ),
+            "note:".yellow().bold(),
+            "hint:".yellow().bold(),
+            "git config --unset-all --global core.hooksPath".cyan(),
+            "git config --unset-all --system core.hooksPath".cyan(),
+            "git config --local core.hooksPath <path>".cyan(),
+        );
+    }
+
+    let hook_mode = git::get_shared_repository_file_mode(0o755)
+        .await
+        .unwrap_or(0o755);
+
+    let project = match Project::discover(config.as_deref(), &CWD) {
+        Ok(project) => Some(project),
+        Err(err) => {
+            if let WorkspaceError::Config(err) = &err {
+                err.warn_parse_error();
+            }
+            None
+        }
+    };
+    let hook_types = get_hook_types(hook_types, project.as_ref(), config.as_deref());
+
+    let hooks_path = if let Some(dir) = git_dir {
+        dir.join("hooks")
+    } else {
+        git::get_git_hooks_dir().await?
+    };
+    fs_err::create_dir_all(&hooks_path)?;
+
+    let selectors = if let Some(project) = &project {
+        Some(Selectors::load(&includes, &skips, project.path())?)
+    } else if !includes.is_empty() || !skips.is_empty() {
+        anyhow::bail!("Cannot use `--include` or `--skip` outside of a git repository");
+    } else {
+        None
+    };
+
+    for hook_type in hook_types {
+        install_hook_script(
+            project.as_ref(),
+            config.clone(),
+            selectors.as_ref(),
+            hook_type,
+            &hooks_path,
+            overwrite,
+            allow_missing_config,
+            hook_mode,
+            printer,
+        )?;
+    }
+
+    if prepare_hooks {
+        self::prepare_hooks(store, config, includes, skips, refresh, printer).await?;
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+pub(crate) async fn prepare_hooks(
+    store: &Store,
+    config: Option<PathBuf>,
+    includes: Vec<String>,
+    skips: Vec<String>,
+    refresh: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
+    let mut workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+
+    let reporter = HookInitReporter::new(printer);
+    let _lock = store.lock_async().await?;
+
+    let hooks = workspace
+        .init_hooks(store, Some(&reporter))
+        .await
+        .context("Failed to init hooks")?;
+    let filtered_hooks: Vec<_> = hooks
+        .into_iter()
+        .filter(|h| selectors.matches_hook(h))
+        .map(Arc::new)
+        .collect();
+
+    let reporter = HookInstallReporter::new(printer);
+    let mut install_cache = InstallCache::new();
+    run::install_hooks(filtered_hooks, store, &reporter, &mut install_cache).await?;
+    reporter.on_complete();
+
+    Ok(ExitStatus::Success)
+}
+
+fn get_hook_types(
+    mut hook_types: Vec<HookType>,
+    project: Option<&Project>,
+    config: Option<&Path>,
+) -> Vec<HookType> {
+    if !hook_types.is_empty() {
+        return hook_types;
+    }
+
+    hook_types = if let Some(project) = project {
+        project
+            .config()
+            .default_install_hook_types
+            .clone()
+            .unwrap_or_default()
+    } else {
+        let fallbacks = CONFIG_FILENAMES
+            .iter()
+            .map(Path::new)
+            .filter(|p| p.exists());
+        if let Some(path) = config.into_iter().chain(fallbacks).next() {
+            match load_config(path) {
+                Ok(cfg) => cfg.default_install_hook_types.unwrap_or_default(),
+                Err(err) => {
+                    err.warn_parse_error();
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        }
+    };
+    if hook_types.is_empty() {
+        hook_types = vec![HookType::PreCommit];
+    }
+
+    hook_types
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+fn install_hook_script(
+    project: Option<&Project>,
+    config: Option<PathBuf>,
+    selectors: Option<&Selectors>,
+    hook_type: HookType,
+    hooks_path: &Path,
+    overwrite: bool,
+    skip_on_missing_config: bool,
+    hook_mode: u32,
+    printer: Printer,
+) -> Result<()> {
+    let hook_path = hooks_path.join(hook_type.as_ref());
+    let legacy_path = hook_path.with_added_extension("legacy");
+
+    if hook_path.try_exists()? {
+        if overwrite {
+            writeln!(
+                printer.stdout(),
+                "Overwriting existing hook at `{}`",
+                hook_path.user_display().cyan()
+            )?;
+        } else {
+            if !is_our_script(&hook_path)? {
+                fs_err::rename(&hook_path, &legacy_path)?;
+                writeln!(
+                    printer.stdout(),
+                    "Hook already exists at `{}`, moved it to `{}`",
+                    hook_path.user_display().cyan(),
+                    legacy_path.user_display().yellow()
+                )?;
+            }
+        }
+    }
+
+    if legacy_path.try_exists()? {
+        if overwrite {
+            // Remove existing legacy script too if we're overwriting.
+            fs_err::remove_file(&legacy_path)?;
+        } else {
+            writeln!(
+                printer.stdout(),
+                "Migration mode: prek will also run legacy hook `{}`. Use `--overwrite` to remove legacy hooks.",
+                legacy_path.user_display().yellow()
+            )?;
+        }
+    }
+
+    let mut args = vec![];
+
+    // Add include/skip selectors.
+    if let Some(selectors) = selectors {
+        for include in selectors.includes() {
+            args.push(include.as_normalized_flag());
+        }
+
+        // Find any skip selectors from environment variables.
+        if let Some(env_var) = selectors.skips().iter().find_map(|skip| {
+            if let SelectorSource::EnvVar(var) = skip.source() {
+                Some(var)
+            } else {
+                None
+            }
+        }) {
+            warn_user!(
+                "Skip selectors from environment variables `{}` are ignored during installing hooks.",
+                env_var.cyan()
+            );
+        }
+
+        for skip in selectors.skips() {
+            if matches!(skip.source(), SelectorSource::CliFlag(_)) {
+                args.push(skip.as_normalized_flag());
+            }
+        }
+    }
+
+    args.push(format!("--hook-type={hook_type}"));
+
+    let mut hint = format!("prek installed at `{}`", hook_path.user_display().cyan());
+
+    // Prefer explicit config path if given (non-workspace mode).
+    // Otherwise, use the config path from the discovered project (workspace mode).
+    // If neither is available, don't pass a config path (let prek find it). In this case,
+    // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
+    if let Some(config) = config {
+        args.push(format!(r#"--config="{}""#, config.display()));
+
+        write!(hint, " with specified config `{}`", config.display().cyan())?;
+    } else if let Some(project) = project {
+        let git_root = GIT_ROOT.as_ref()?;
+        let project_path = project.path();
+        let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
+        if !relative_path.as_os_str().is_empty() {
+            args.push(format!(r#"--cd="{}""#, relative_path.display()));
+        }
+
+        // Show workspace path if it's not the root project.
+        if project_path != git_root {
+            writeln!(hint, " for workspace `{}`", project_path.display().cyan())?;
+            write!(
+                hint,
+                "\n{} this hook installed for `{}` only; run `prek install` from `{}` to install for the entire repo.",
+                "hint:".bold().yellow(),
+                project_path.display().cyan(),
+                git_root.display().cyan()
+            )?;
+        }
+    }
+
+    if skip_on_missing_config {
+        args.push("--skip-on-missing-config".to_string());
+    }
+
+    let prek = std::env::current_exe()?;
+    let prek = prek.simplified_display().to_string();
+    let hook_script = HOOK_TMPL
+        .replace("[CUR_SCRIPT_VERSION]", &CUR_SCRIPT_VERSION.to_string())
+        .replace("[PREK_PATH]", &format!(r#""{prek}""#))
+        .replace("[PREK_ARGS]", &args.join(" "));
+
+    fs_err::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&hook_path)?
+        .write_all(hook_script.as_bytes())?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut perms = hook_path.metadata()?.permissions();
+        perms.set_mode(hook_mode);
+        fs_err::set_permissions(&hook_path, perms)?;
+    }
+
+    // Unused on non-Unix platforms
+    #[cfg(not(unix))]
+    let _ = hook_mode;
+
+    writeln!(printer.stdout(), "{hint}")?;
+
+    Ok(())
+}
+
+/// The version of the hook script. Increment this when the script changes in a way that
+/// requires re-installation.
+pub(crate) static CUR_SCRIPT_VERSION: usize = 4;
+
+static HOOK_TMPL: &str = r#"#!/bin/sh
+# File generated by prek: https://github.com/j178/prek
+# ID: 182c10f181da4464a3eec51b83331688
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PREK=[PREK_PATH]
+
+# Check if the full path to prek is executable, otherwise fallback to PATH
+if [ ! -x "$PREK" ]; then
+    PREK="prek"
+fi
+
+exec "$PREK" hook-impl --hook-dir "$HERE" --script-version [CUR_SCRIPT_VERSION] [PREK_ARGS] -- "$@"
+
+"#;
+
+static PRIOR_HASHES: &[&str] = &[];
+
+// Use a different hash for each change to the script.
+// Use a different hash from `pre-commit` since our script is different.
+static CURRENT_HASH: &str = "182c10f181da4464a3eec51b83331688";
+
+/// Checks if the script contains any of the hashes that `prek` has used in the past.
+fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
+    let content = fs_err::read_to_string(hook_path)?;
+    Ok(std::iter::once(CURRENT_HASH)
+        .chain(PRIOR_HASHES.iter().copied())
+        .any(|hash| content.contains(hash)))
+}
+
+pub(crate) async fn uninstall(
+    config: Option<PathBuf>,
+    hook_types: Vec<HookType>,
+    all: bool,
+    printer: Printer,
+    git_dir: Option<&Path>,
+) -> Result<ExitStatus> {
+    if git_dir.is_none()
+        && git::has_hooks_path_set().await?
+        && !git::has_repo_hooks_path_set().await?
+    {
+        anyhow::bail!(
+            concat!(
+                "Refusing to uninstall hooks because `core.hooksPath` is configured outside this repository.\n",
+                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
+                "  {}\n",
+                "  {}\n",
+                "  {}\n",
+            ),
+            "note:".yellow().bold(),
+            "hint:".yellow().bold(),
+            "git config --unset-all --global core.hooksPath".cyan(),
+            "git config --unset-all --system core.hooksPath".cyan(),
+            "git config --local core.hooksPath <path>".cyan(),
+        );
+    }
+
+    let project = Project::discover(config.as_deref(), &CWD).ok();
+    let hooks_path = if let Some(dir) = git_dir {
+        dir.join("hooks")
+    } else {
+        git::get_git_hooks_dir().await?
+    };
+
+    let types: Vec<HookType> = if all {
+        HookType::value_variants().to_vec()
+    } else {
+        get_hook_types(hook_types, project.as_ref(), config.as_deref())
+    };
+
+    for hook_type in types {
+        let hook_path = hooks_path.join(hook_type.as_ref());
+        let legacy_path = hook_path.with_added_extension("legacy");
+
+        if is_our_script(&legacy_path).unwrap_or(false) {
+            fs_err::remove_file(&legacy_path)?;
+            writeln!(
+                printer.stderr(),
+                "Found legacy hook at `{}`, removing it.",
+                legacy_path.user_display().cyan()
+            )?;
+        }
+
+        match is_our_script(&hook_path) {
+            Ok(true) => {}
+            Ok(false) => {
+                if !all {
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` is not managed by prek, skipping.",
+                        hook_path.user_display().cyan()
+                    )?;
+                }
+                continue;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                if !all {
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` does not exist, skipping.",
+                        hook_path.user_display().cyan()
+                    )?;
+                }
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        }
+
+        fs_err::remove_file(&hook_path)?;
+        writeln!(
+            printer.stdout(),
+            "Uninstalled `{}`",
+            hook_type.as_ref().cyan()
+        )?;
+
+        if legacy_path.try_exists()? {
+            fs_err::rename(&legacy_path, &hook_path)?;
+            writeln!(
+                printer.stdout(),
+                "Restored `{}` to `{}`",
+                legacy_path.user_display().cyan(),
+                hook_path.user_display().cyan()
+            )?;
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+pub(crate) async fn init_template_dir(
+    store: &Store,
+    directory: PathBuf,
+    config: Option<PathBuf>,
+    hook_types: Vec<HookType>,
+    requires_config: bool,
+    refresh: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    install(
+        store,
+        config,
+        vec![],
+        vec![],
+        hook_types,
+        false,
+        true,
+        !requires_config,
+        refresh,
+        printer,
+        Some(&directory),
+    )
+    .await?;
+
+    let output = git_cmd("git config")?
+        .arg("config")
+        .arg("init.templateDir")
+        .check(false)
+        .output()
+        .await?;
+    let template_dir = String::from_utf8_lossy(output.stdout.trim()).to_string();
+
+    if template_dir.is_empty() || !is_same_file(&directory, &template_dir)? {
+        warn_user!(
+            "git config `init.templateDir` not set to the target directory, try `{}`",
+            format!(
+                "git config --global init.templateDir '{}'",
+                directory.display()
+            )
+            .cyan()
+        );
+    }
+
+    Ok(ExitStatus::Success)
+}

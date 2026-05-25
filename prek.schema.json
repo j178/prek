@@ -1,0 +1,966 @@
+{
+  "$id": "https://www.schemastore.org/prek.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "prek.toml",
+  "description": "The configuration file for prek, a git hook manager written in Rust.",
+  "type": "object",
+  "properties": {
+    "auto_update": {
+      "description": "Default settings for `prek auto-update` in this project.",
+      "$ref": "#/definitions/AutoUpdateOptions"
+    },
+    "repos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Repo"
+      }
+    },
+    "default_install_hook_types": {
+      "description": "A list of `--hook-types` which will be used by default when running `prek install`.\nDefault is `[pre-commit]`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/HookType"
+      }
+    },
+    "default_language_version": {
+      "description": "A mapping from language to the default `language_version`.",
+      "type": "object",
+      "properties": {
+        "bun": {
+          "type": "string"
+        },
+        "conda": {
+          "type": "string"
+        },
+        "coursier": {
+          "type": "string"
+        },
+        "dart": {
+          "type": "string"
+        },
+        "deno": {
+          "type": "string"
+        },
+        "docker": {
+          "type": "string"
+        },
+        "docker_image": {
+          "type": "string"
+        },
+        "dotnet": {
+          "type": "string"
+        },
+        "fail": {
+          "type": "string"
+        },
+        "golang": {
+          "type": "string"
+        },
+        "haskell": {
+          "type": "string"
+        },
+        "julia": {
+          "type": "string"
+        },
+        "lua": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "perl": {
+          "type": "string"
+        },
+        "pygrep": {
+          "type": "string"
+        },
+        "python": {
+          "type": "string"
+        },
+        "r": {
+          "type": "string"
+        },
+        "ruby": {
+          "type": "string"
+        },
+        "rust": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "swift": {
+          "type": "string"
+        },
+        "system": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "default_stages": {
+      "description": "A configuration-wide default for the stages property of hooks.\nDefault to all stages.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Stage"
+      },
+      "uniqueItems": true
+    },
+    "files": {
+      "description": "Global file include pattern.",
+      "$ref": "#/definitions/FilePattern"
+    },
+    "exclude": {
+      "description": "Global file exclude pattern.",
+      "$ref": "#/definitions/FilePattern"
+    },
+    "fail_fast": {
+      "description": "Set to true to have prek stop running hooks after the first failure.\nDefault is false.",
+      "type": "boolean"
+    },
+    "minimum_prek_version": {
+      "description": "The minimum version of prek required to run this configuration.",
+      "type": "string"
+    },
+    "orphan": {
+      "description": "Set to true to isolate this project from parent configurations in workspace mode.\nWhen true, files in this project are \"consumed\" by this project and will not be processed\nby parent projects.\nWhen false (default), files in subprojects are processed by both the subproject and\nany parent projects that contain them.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "repos"
+  ],
+  "additionalProperties": true,
+  "x-tombi-toml-version": "v1.1.0",
+  "definitions": {
+    "AutoUpdateOptions": {
+      "description": "Controls how `prek auto-update` selects eligible releases.",
+      "type": "object",
+      "properties": {
+        "cooldown_days": {
+          "type": "integer",
+          "maximum": 255,
+          "minimum": 0
+        }
+      }
+    },
+    "Repo": {
+      "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
+      "type": "object",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/RemoteRepo"
+        },
+        {
+          "$ref": "#/definitions/LocalRepo"
+        },
+        {
+          "$ref": "#/definitions/MetaRepo"
+        },
+        {
+          "$ref": "#/definitions/BuiltinRepo"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "RemoteRepo": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
+          "type": "string",
+          "not": {
+            "enum": [
+              "local",
+              "meta",
+              "builtin"
+            ]
+          }
+        },
+        "rev": {
+          "type": "string"
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RemoteHook"
+          },
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "repo",
+        "rev",
+        "hooks"
+      ],
+      "additionalProperties": true
+    },
+    "RemoteHook": {
+      "description": "A remote hook in the configuration file.\n\nAll keys in manifest hook dict are valid in a config hook dict, but are optional.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The id of the hook.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Override the name of the hook.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "Override the entrypoint. Not documented in the official docs but works.",
+          "type": "string"
+        },
+        "language": {
+          "description": "Override the language. Not documented in the official docs but works.",
+          "$ref": "#/definitions/Language"
+        },
+        "priority": {
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "alias": {
+          "description": "Not documented in the official docs.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The pattern of files to run on.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "exclude": {
+          "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "types": {
+          "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "types_or": {
+          "description": "List of file types to run on (OR).\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exclude_types": {
+          "description": "List of file types to exclude.\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "additional_dependencies": {
+          "description": "Not documented in the official docs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "description": "Additional arguments to pass to the hook.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "description": "Environment variables to set for the hook.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "always_run": {
+          "description": "This hook will run even if there are no matching files.\nDefault is false.",
+          "type": "boolean"
+        },
+        "fail_fast": {
+          "description": "If this hook fails, don't run any more hooks.\nDefault is false.",
+          "type": "boolean"
+        },
+        "pass_filenames": {
+          "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
+          "$ref": "#/definitions/PassFilenames"
+        },
+        "description": {
+          "description": "A description of the hook. For metadata only.",
+          "type": "string"
+        },
+        "language_version": {
+          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "type": "string"
+        },
+        "log_file": {
+          "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
+          "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
+        },
+        "require_serial": {
+          "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
+          "type": "boolean"
+        },
+        "stages": {
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Stage"
+          },
+          "uniqueItems": true
+        },
+        "verbose": {
+          "description": "Print the output of the hook even if it passes.\nDefault is false.",
+          "type": "boolean"
+        },
+        "minimum_prek_version": {
+          "description": "The minimum version of prek required to run this hook.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "Language": {
+      "type": "string",
+      "enum": [
+        "bun",
+        "conda",
+        "coursier",
+        "dart",
+        "deno",
+        "docker",
+        "docker_image",
+        "dotnet",
+        "fail",
+        "golang",
+        "haskell",
+        "julia",
+        "lua",
+        "node",
+        "perl",
+        "pygrep",
+        "python",
+        "r",
+        "ruby",
+        "rust",
+        "script",
+        "swift",
+        "system"
+      ]
+    },
+    "FilePattern": {
+      "description": "A file pattern, either a regex or glob pattern(s).",
+      "oneOf": [
+        {
+          "description": "A regular expression pattern.",
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "glob": {
+              "oneOf": [
+                {
+                  "description": "A glob pattern.",
+                  "type": "string"
+                },
+                {
+                  "description": "A list of glob patterns.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "glob"
+          ]
+        }
+      ]
+    },
+    "PassFilenames": {
+      "description": "Whether to pass filenames to the hook. `true` passes all matching filenames (default), `false` passes none, and a positive integer limits each invocation to at most that many filenames.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      ]
+    },
+    "Shell": {
+      "description": "A predefined shell adapter used to run hook entries as shell source.",
+      "type": "string",
+      "enum": [
+        "sh",
+        "bash",
+        "pwsh",
+        "powershell",
+        "cmd"
+      ]
+    },
+    "Stage": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "commit-msg",
+        "post-checkout",
+        "post-commit",
+        "post-merge",
+        "post-rewrite",
+        "pre-commit",
+        "pre-merge-commit",
+        "pre-push",
+        "pre-rebase",
+        "prepare-commit-msg"
+      ]
+    },
+    "LocalRepo": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "description": "Must be `local`.",
+          "type": "string",
+          "const": "local"
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LocalHook"
+          }
+        },
+        "rev": false
+      },
+      "required": [
+        "repo",
+        "hooks"
+      ],
+      "additionalProperties": true
+    },
+    "LocalHook": {
+      "description": "A local hook in the configuration file.\n\nThis is similar to `ManifestHook`, but includes config-only fields (like `priority`).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The id of the hook.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the hook.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "The command to run. It can contain arguments that will not be overridden.",
+          "type": "string"
+        },
+        "language": {
+          "description": "The language of the hook. Tells prek how to install and run the hook.",
+          "$ref": "#/definitions/Language"
+        },
+        "priority": {
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "alias": {
+          "description": "Not documented in the official docs.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The pattern of files to run on.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "exclude": {
+          "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "types": {
+          "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "types_or": {
+          "description": "List of file types to run on (OR).\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exclude_types": {
+          "description": "List of file types to exclude.\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "additional_dependencies": {
+          "description": "Not documented in the official docs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "description": "Additional arguments to pass to the hook.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "description": "Environment variables to set for the hook.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "always_run": {
+          "description": "This hook will run even if there are no matching files.\nDefault is false.",
+          "type": "boolean"
+        },
+        "fail_fast": {
+          "description": "If this hook fails, don't run any more hooks.\nDefault is false.",
+          "type": "boolean"
+        },
+        "pass_filenames": {
+          "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
+          "$ref": "#/definitions/PassFilenames"
+        },
+        "description": {
+          "description": "A description of the hook. For metadata only.",
+          "type": "string"
+        },
+        "language_version": {
+          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "type": "string"
+        },
+        "log_file": {
+          "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
+          "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
+        },
+        "require_serial": {
+          "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
+          "type": "boolean"
+        },
+        "stages": {
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Stage"
+          },
+          "uniqueItems": true
+        },
+        "verbose": {
+          "description": "Print the output of the hook even if it passes.\nDefault is false.",
+          "type": "boolean"
+        },
+        "minimum_prek_version": {
+          "description": "The minimum version of prek required to run this hook.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "entry",
+        "language"
+      ],
+      "additionalProperties": true
+    },
+    "MetaRepo": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "description": "Must be `meta`.",
+          "type": "string",
+          "const": "meta"
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MetaHook"
+          }
+        },
+        "rev": false
+      },
+      "required": [
+        "repo",
+        "hooks"
+      ],
+      "additionalProperties": true
+    },
+    "MetaHook": {
+      "description": "A meta hook predefined in prek.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/MetaHooks"
+        },
+        "name": {
+          "description": "Override the name of the hook.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "Entry is not allowed for predefined hooks.",
+          "const": false
+        },
+        "language": {
+          "description": "Language must be `system` for predefined hooks (or omitted).",
+          "type": "string",
+          "enum": [
+            "system"
+          ]
+        },
+        "priority": {
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "alias": {
+          "description": "Not documented in the official docs.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The pattern of files to run on.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "exclude": {
+          "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "types": {
+          "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "types_or": {
+          "description": "List of file types to run on (OR).\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exclude_types": {
+          "description": "List of file types to exclude.\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "additional_dependencies": {
+          "description": "Not documented in the official docs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "description": "Additional arguments to pass to the hook.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "description": "Environment variables to set for the hook.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "always_run": {
+          "description": "This hook will run even if there are no matching files.\nDefault is false.",
+          "type": "boolean"
+        },
+        "fail_fast": {
+          "description": "If this hook fails, don't run any more hooks.\nDefault is false.",
+          "type": "boolean"
+        },
+        "pass_filenames": {
+          "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
+          "$ref": "#/definitions/PassFilenames"
+        },
+        "description": {
+          "description": "A description of the hook. For metadata only.",
+          "type": "string"
+        },
+        "language_version": {
+          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "type": "string"
+        },
+        "log_file": {
+          "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
+          "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
+        },
+        "require_serial": {
+          "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
+          "type": "boolean"
+        },
+        "stages": {
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Stage"
+          },
+          "uniqueItems": true
+        },
+        "verbose": {
+          "description": "Print the output of the hook even if it passes.\nDefault is false.",
+          "type": "boolean"
+        },
+        "minimum_prek_version": {
+          "description": "The minimum version of prek required to run this hook.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "MetaHooks": {
+      "type": "string",
+      "enum": [
+        "check-hooks-apply",
+        "check-useless-excludes",
+        "identity"
+      ]
+    },
+    "BuiltinRepo": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "description": "Must be `builtin`.",
+          "type": "string",
+          "const": "builtin"
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BuiltinHook"
+          }
+        },
+        "rev": false
+      },
+      "required": [
+        "repo",
+        "hooks"
+      ],
+      "additionalProperties": true
+    },
+    "BuiltinHook": {
+      "description": "A builtin hook predefined in prek.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/BuiltinHooks"
+        },
+        "name": {
+          "description": "Override the name of the hook.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "Entry is not allowed for predefined hooks.",
+          "const": false
+        },
+        "language": {
+          "description": "Language must be `system` for predefined hooks (or omitted).",
+          "type": "string",
+          "enum": [
+            "system"
+          ]
+        },
+        "priority": {
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "alias": {
+          "description": "Not documented in the official docs.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The pattern of files to run on.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "exclude": {
+          "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "types": {
+          "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "types_or": {
+          "description": "List of file types to run on (OR).\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exclude_types": {
+          "description": "List of file types to exclude.\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "additional_dependencies": {
+          "description": "Not documented in the official docs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "description": "Additional arguments to pass to the hook.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "description": "Environment variables to set for the hook.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "always_run": {
+          "description": "This hook will run even if there are no matching files.\nDefault is false.",
+          "type": "boolean"
+        },
+        "fail_fast": {
+          "description": "If this hook fails, don't run any more hooks.\nDefault is false.",
+          "type": "boolean"
+        },
+        "pass_filenames": {
+          "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
+          "$ref": "#/definitions/PassFilenames"
+        },
+        "description": {
+          "description": "A description of the hook. For metadata only.",
+          "type": "string"
+        },
+        "language_version": {
+          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "type": "string"
+        },
+        "log_file": {
+          "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
+          "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
+        },
+        "require_serial": {
+          "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
+          "type": "boolean"
+        },
+        "stages": {
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Stage"
+          },
+          "uniqueItems": true
+        },
+        "verbose": {
+          "description": "Print the output of the hook even if it passes.\nDefault is false.",
+          "type": "boolean"
+        },
+        "minimum_prek_version": {
+          "description": "The minimum version of prek required to run this hook.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "BuiltinHooks": {
+      "type": "string",
+      "enum": [
+        "check-added-large-files",
+        "check-case-conflict",
+        "check-executables-have-shebangs",
+        "check-illegal-windows-names",
+        "check-json",
+        "check-json5",
+        "check-merge-conflict",
+        "check-shebang-scripts-are-executable",
+        "check-symlinks",
+        "check-toml",
+        "check-vcs-permalinks",
+        "check-xml",
+        "check-yaml",
+        "destroyed-symlinks",
+        "detect-private-key",
+        "end-of-file-fixer",
+        "file-contents-sorter",
+        "fix-byte-order-marker",
+        "forbid-new-submodules",
+        "mixed-line-ending",
+        "no-commit-to-branch",
+        "pretty-format-json",
+        "trailing-whitespace"
+      ]
+    },
+    "HookType": {
+      "type": "string",
+      "enum": [
+        "commit-msg",
+        "post-checkout",
+        "post-commit",
+        "post-merge",
+        "post-rewrite",
+        "pre-commit",
+        "pre-merge-commit",
+        "pre-push",
+        "pre-rebase",
+        "prepare-commit-msg"
+      ]
+    }
+  }
+}

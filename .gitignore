@@ -18,3 +18,7 @@ site/
 
 # profiling flamegraphs
 *.flamegraph.svg
+
+# NPM packages
+npm-artifacts/
+npm/.output/

@@ -1,16 +1,17 @@
 site_name: prek
-site_description: Better `pre-commit` alternative, re-engineered in Rust
+site_description: A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.
 site_author: j178
 site_url: https://prek.j178.dev/
 
 repo_name: j178/prek
 repo_url: https://github.com/j178/prek
 
-copyright: Copyright &copy; 2025 j178
+copyright: Copyright &copy; 2026 j178
 
 theme:
   name: material
-  logo: assets/logo.webp
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
@@ -54,19 +55,76 @@ plugins:
   - minify:
       minify_html: true
   - include-markdown
+  - llmstxt:
+      markdown_description: |
+        prek is a drop-in replacement for pre-commit, fully compatible with existing
+        `.pre-commit-config.yaml` files. It runs the same hooks faster, with better
+        toolchain management.
+
+        Key differences from pre-commit:
+        - Single binary, no Python runtime required
+        - Parallel hook execution by priority
+        - Built-in workspace/monorepo support
+        - Automatic toolchain installation (Python, Node, Go, Rust, Ruby)
+        - Integration with uv for Python environments
+
+        When fetching documentation, use explicit `index.md` paths for directories, e.g.,
+        `https://prek.j178.dev/configuration/index.md`. This returns clean markdown
+        instead of rendered HTML.
+      full_output: llms-full.txt
+      sections:
+        Getting Started:
+          - index.md
+          - installation.md
+          - quickstart.md
+        Usage:
+          - usage.md
+          - configuration.md
+          - workspace.md
+          - languages.md
+          - builtin.md
+          - integrations.md
+          - cookbook.md
+          - authoring-hooks.md
+        Reference:
+          - reference/cli.md
+          - reference/configuration.md
+          - reference/environment-variables.md
+        Help:
+          - debugging.md
+          - faq.md
+        About:
+          - compatibility.md
+          - diff.md
+          - benchmark.md
+          - changelog.md
 
 nav:
-  - Introduction: index.md
-  - Quickstart: quickstart.md
-  - Installation: installation.md
-  - Workspace Mode: workspace.md
-  - Configuration: configuration.md
-  - Commands: cli.md
-  - Differences: diff.md
-  - Benchmark: benchmark.md
-  - Built-in Hooks: builtin.md
-  - TODO: todo.md
-  - Debugging: debugging.md
+  - Getting Started:
+    - Introduction: index.md
+    - Installation: installation.md
+    - Quickstart: quickstart.md
+  - Usage:
+    - Common Workflows: usage.md
+    - Configuration: configuration.md
+    - Workspace Mode: workspace.md
+    - Language Support: languages.md
+    - Built-in Hooks: builtin.md
+    - Integrations: integrations.md
+    - Cookbook: cookbook.md
+    - Authoring Hooks: authoring-hooks.md
+  - Reference:
+    - CLI Reference: reference/cli.md
+    - Configuration Reference: reference/configuration.md
+    - Environment Variables: reference/environment-variables.md
+  - Help:
+    - Debugging: debugging.md
+    - FAQ: faq.md
+  - About:
+    - Compatibility: compatibility.md
+    - Differences: diff.md
+    - Benchmark: benchmark.md
+    - Changelog: changelog.md
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -94,6 +152,3 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
-
-hooks:
-  - docs/hooks.py

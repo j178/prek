@@ -1,0 +1,140 @@
+---
+source: crates/prek/src/config.rs
+expression: manifest
+---
+Manifest {
+    hooks: [
+        ManifestHook {
+            id: "pip-compile",
+            name: "pip-compile",
+            entry: "uv pip compile",
+            language: Python,
+            options: HookOptions {
+                alias: None,
+                files: Some(
+                    Regex(
+                        ^requirements\.(in|txt)$,
+                    ),
+                ),
+                exclude: None,
+                types: None,
+                types_or: None,
+                exclude_types: None,
+                additional_dependencies: Some(
+                    [],
+                ),
+                args: Some(
+                    [],
+                ),
+                env: None,
+                always_run: None,
+                fail_fast: None,
+                pass_filenames: Some(
+                    None,
+                ),
+                description: Some(
+                    "Automatically run 'uv pip compile' on your requirements",
+                ),
+                language_version: None,
+                log_file: None,
+                shell: None,
+                require_serial: None,
+                stages: None,
+                verbose: None,
+                minimum_prek_version: None,
+                _unused_keys: {
+                    "minimum_pre_commit_version": String("2.9.2"),
+                },
+            },
+        },
+        ManifestHook {
+            id: "uv-lock",
+            name: "uv-lock",
+            entry: "uv lock",
+            language: Python,
+            options: HookOptions {
+                alias: None,
+                files: Some(
+                    Regex(
+                        ^(uv\.lock|pyproject\.toml|uv\.toml)$,
+                    ),
+                ),
+                exclude: None,
+                types: None,
+                types_or: None,
+                exclude_types: None,
+                additional_dependencies: Some(
+                    [],
+                ),
+                args: Some(
+                    [],
+                ),
+                env: None,
+                always_run: None,
+                fail_fast: None,
+                pass_filenames: Some(
+                    None,
+                ),
+                description: Some(
+                    "Automatically run 'uv lock' on your project dependencies",
+                ),
+                language_version: None,
+                log_file: None,
+                shell: None,
+                require_serial: None,
+                stages: None,
+                verbose: None,
+                minimum_prek_version: None,
+                _unused_keys: {
+                    "minimum_pre_commit_version": String("2.9.2"),
+                },
+            },
+        },
+        ManifestHook {
+            id: "uv-export",
+            name: "uv-export",
+            entry: "uv export",
+            language: Python,
+            options: HookOptions {
+                alias: None,
+                files: Some(
+                    Regex(
+                        ^uv\.lock$,
+                    ),
+                ),
+                exclude: None,
+                types: None,
+                types_or: None,
+                exclude_types: None,
+                additional_dependencies: Some(
+                    [],
+                ),
+                args: Some(
+                    [
+                        "--frozen",
+                        "--output-file=requirements.txt",
+                    ],
+                ),
+                env: None,
+                always_run: None,
+                fail_fast: None,
+                pass_filenames: Some(
+                    None,
+                ),
+                description: Some(
+                    "Automatically run 'uv export' on your project dependencies",
+                ),
+                language_version: None,
+                log_file: None,
+                shell: None,
+                require_serial: None,
+                stages: None,
+                verbose: None,
+                minimum_prek_version: None,
+                _unused_keys: {
+                    "minimum_pre_commit_version": String("2.9.2"),
+                },
+            },
+        },
+    ],
+}

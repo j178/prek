@@ -1,8 +1,0 @@
-repos:
-  - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.6.2
-    hooks:
-      - id: prettier
-        types_or: [javascript, css, html]
-
-files: \.(js|jsx|html|css)$

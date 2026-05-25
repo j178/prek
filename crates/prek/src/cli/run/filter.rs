@@ -1,0 +1,602 @@
+use std::cell::OnceCell;
+use std::ops::ControlFlow;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use itertools::{Either, Itertools};
+use prek_consts::env_vars::EnvVars;
+use prek_identify::{TagSet, tags_from_path};
+use rustc_hash::FxHashSet;
+use tracing::{debug, error, instrument};
+
+use crate::config::{FilePattern, Stage};
+use crate::fs::PathClean;
+use crate::git::GIT_ROOT;
+use crate::hook::Hook;
+use crate::workspace::Project;
+use crate::{fs, git, warn_user};
+
+/// Filter filenames by include/exclude patterns.
+pub(crate) struct FilenameFilter<'a> {
+    include: Option<&'a FilePattern>,
+    exclude: Option<&'a FilePattern>,
+}
+
+impl<'a> FilenameFilter<'a> {
+    pub(crate) fn new(include: Option<&'a FilePattern>, exclude: Option<&'a FilePattern>) -> Self {
+        Self { include, exclude }
+    }
+
+    pub(crate) fn matches(&self, filename: &Path) -> bool {
+        if let Some(pattern) = &self.include {
+            if !pattern.is_match(filename) {
+                return false;
+            }
+        }
+        if let Some(pattern) = &self.exclude {
+            if pattern.is_match(filename) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// Filter files by tags.
+pub(crate) struct FileTagFilter<'a> {
+    all: Option<&'a TagSet>,
+    any: Option<&'a TagSet>,
+    exclude: Option<&'a TagSet>,
+}
+
+impl<'a> FileTagFilter<'a> {
+    /// Create a tag filter from a hook's type selectors.
+    pub(crate) fn new(
+        types: Option<&'a TagSet>,
+        types_or: Option<&'a TagSet>,
+        exclude_types: Option<&'a TagSet>,
+    ) -> Self {
+        Self {
+            all: types,
+            any: types_or,
+            exclude: exclude_types,
+        }
+    }
+
+    pub(crate) fn matches(&self, file_types: &TagSet) -> bool {
+        if self.all.is_some_and(|s| !s.is_subset(file_types)) {
+            return false;
+        }
+        if self
+            .any
+            .is_some_and(|s| !s.is_empty() && s.is_disjoint(file_types))
+        {
+            return false;
+        }
+        if self.exclude.is_some_and(|s| !s.is_disjoint(file_types)) {
+            return false;
+        }
+        true
+    }
+}
+
+pub(crate) struct HookFileFilter<'a> {
+    filename: FilenameFilter<'a>,
+    tags: FileTagFilter<'a>,
+}
+
+impl<'a> HookFileFilter<'a> {
+    pub(crate) fn new(hook: &'a Hook) -> Self {
+        Self {
+            filename: FilenameFilter::new(hook.files.as_ref(), hook.exclude.as_ref()),
+            tags: FileTagFilter::new(
+                Some(&hook.types),
+                Some(&hook.types_or),
+                Some(&hook.exclude_types),
+            ),
+        }
+    }
+
+    pub(crate) fn matches_filename(&self, filename: &Path) -> bool {
+        self.filename.matches(filename)
+    }
+
+    pub(crate) fn matches_tags(&self, tags: Option<&TagSet>) -> bool {
+        tags.is_some_and(|tags| self.tags.matches(tags))
+    }
+
+    /// Return whether a project-owned file passes this hook's file and tag filters.
+    pub(crate) fn matches_project_file<'p>(
+        &self,
+        file: &ProjectFile<'p>,
+        tag_cache: &FileTagCache<'p>,
+    ) -> bool {
+        self.matches_filename(file.hook_path) && self.matches_tags(file.tags(tag_cache))
+    }
+}
+
+/// A workspace file after project ownership and project-level filters have been applied.
+pub(crate) struct ProjectFile<'a> {
+    file_idx: usize,
+    hook_path: &'a Path,
+}
+
+impl<'a> ProjectFile<'a> {
+    fn new(file_idx: usize, hook_path: &'a Path) -> Self {
+        Self {
+            file_idx,
+            hook_path,
+        }
+    }
+
+    /// Return the path relative to the owning project, which is what hook patterns match.
+    pub(crate) fn hook_path(&self) -> &Path {
+        self.hook_path
+    }
+
+    /// Return cached tags for the workspace-relative path.
+    pub(crate) fn tags<'cache>(
+        &self,
+        tag_cache: &'cache FileTagCache<'a>,
+    ) -> Option<&'cache TagSet> {
+        tag_cache.tags(self.file_idx)
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct FileTagCache<'a> {
+    paths: Vec<&'a Path>,
+    tags_by_file: Vec<OnceCell<Option<TagSet>>>,
+}
+
+impl<'a> FileTagCache<'a> {
+    pub(crate) fn from_paths<I>(paths: I) -> Self
+    where
+        I: IntoIterator<Item = &'a Path>,
+    {
+        let paths = paths.into_iter().collect::<Vec<_>>();
+        let tags_by_file = (0..paths.len()).map(|_| OnceCell::new()).collect();
+        Self {
+            paths,
+            tags_by_file,
+        }
+    }
+
+    pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
+        self.tags_by_file[file_idx]
+            .get_or_init(|| {
+                let path = self.paths[file_idx];
+                match tags_from_path(path) {
+                    Ok(tags) => Some(tags),
+                    Err(err) => {
+                        error!(filename = ?path.display(), error = %err, "Failed to get tags");
+                        None
+                    }
+                }
+            })
+            .as_ref()
+    }
+}
+
+pub(crate) struct ProjectFiles<'a> {
+    files: Vec<ProjectFile<'a>>,
+}
+
+impl<'a> ProjectFiles<'a> {
+    /// Create project-owned files after applying the project's relative path and include/exclude patterns.
+    /// `filenames` are paths relative to the workspace root.
+    pub(crate) fn for_project<I>(
+        filenames: I,
+        project: &Project,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        newly_consumed_files: Option<&mut FxHashSet<&'a Path>>,
+    ) -> Self
+    where
+        I: Iterator<Item = &'a PathBuf> + Send,
+    {
+        let relative_path = project.relative_path();
+        let files_capacity = if relative_path.as_os_str().is_empty() {
+            filenames.size_hint().0
+        } else {
+            0
+        };
+        let mut files = Vec::with_capacity(files_capacity);
+        Self::visit_for_project(
+            filenames,
+            project,
+            consumed_files,
+            newly_consumed_files,
+            |file| {
+                files.push(file);
+                ControlFlow::Continue(())
+            },
+        );
+
+        Self { files }
+    }
+
+    /// Mark files owned by this project without collecting or visiting them.
+    pub(crate) fn consume_for_project<I>(
+        filenames: I,
+        project: &Project,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        newly_consumed_files: &mut FxHashSet<&'a Path>,
+    ) where
+        I: Iterator<Item = &'a PathBuf> + Send,
+    {
+        Self::visit_for_project(
+            filenames,
+            project,
+            consumed_files,
+            Some(newly_consumed_files),
+            |_| ControlFlow::Continue(()),
+        );
+    }
+
+    /// Visit project-owned files without collecting them.
+    ///
+    /// This shares the same ownership, orphan-project, and project-level filtering rules as
+    /// `for_project`, but lets callers that only need a boolean result avoid allocating a
+    /// `Vec<ProjectFile>`. Return [`ControlFlow::Break`] from `visit` to stop calling the visitor.
+    /// Orphan projects still finish marking owned files as consumed before returning.
+    pub(crate) fn visit_for_project<I, F>(
+        filenames: I,
+        project: &Project,
+        consumed_files: Option<&FxHashSet<&'a Path>>,
+        mut newly_consumed_files: Option<&mut FxHashSet<&'a Path>>,
+        mut visit: F,
+    ) where
+        I: Iterator<Item = &'a PathBuf> + Send,
+        F: FnMut(ProjectFile<'a>) -> ControlFlow<()>,
+    {
+        let filename_filter = FilenameFilter::new(
+            project.config().files.as_ref(),
+            project.config().exclude.as_ref(),
+        );
+        let relative_path = project.relative_path();
+        let orphan = project.config().orphan.unwrap_or(false);
+        let must_finish_consuming = orphan && newly_consumed_files.is_some();
+        let mut visiting = true;
+
+        // The order of below filters matters.
+        // If this is an orphan project, we must mark all files in its directory as consumed
+        // *before* applying the project's include/exclude patterns. This ensures that even
+        // files excluded by this project are still considered "owned" by it and hidden
+        // from parent projects.
+        for (file_idx, filename) in filenames.enumerate() {
+            // Collect files that are inside the hook project directory.
+            if !filename.starts_with(relative_path) {
+                continue;
+            }
+
+            // Skip files that have already been consumed by subprojects.
+            if consumed_files
+                .is_some_and(|consumed_files| consumed_files.contains(filename.as_path()))
+            {
+                continue;
+            }
+
+            // Consume this file in current orphan project, so it won't be visited by parent projects.
+            if orphan {
+                if let Some(newly_consumed_files) = newly_consumed_files.as_mut() {
+                    if !newly_consumed_files.insert(filename) {
+                        continue;
+                    }
+                }
+            }
+
+            if !visiting {
+                continue;
+            }
+
+            // Strip the project-relative prefix before applying project-level include/exclude patterns.
+            let relative = filename
+                .strip_prefix(relative_path)
+                .expect("Filename should start with project relative path");
+            if filename_filter.matches(relative)
+                && visit(ProjectFile::new(file_idx, relative)).is_break()
+            {
+                if must_finish_consuming {
+                    visiting = false;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.files.len()
+    }
+
+    /// Filter filenames by file patterns and tags for a specific hook.
+    #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
+    pub(crate) fn matching_filenames(
+        &self,
+        hook: &Hook,
+        tag_cache: &FileTagCache<'a>,
+    ) -> Vec<&'a Path> {
+        let hook_filter = HookFileFilter::new(hook);
+        let mut filenames = Vec::new();
+        for file in &self.files {
+            if hook_filter.matches_project_file(file, tag_cache) {
+                filenames.push(file.hook_path);
+            }
+        }
+        filenames
+    }
+
+    /// Return whether at least one file matches a hook without collecting every filename.
+    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &FileTagCache<'a>) -> bool {
+        let hook_filter = HookFileFilter::new(hook);
+        for file in &self.files {
+            if hook_filter.matches_project_file(file, tag_cache) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct CollectOptions {
+    pub(crate) hook_stage: Stage,
+    pub(crate) from_ref: Option<String>,
+    pub(crate) to_ref: Option<String>,
+    pub(crate) all_files: bool,
+    pub(crate) files: Vec<String>,
+    pub(crate) directories: Vec<String>,
+    pub(crate) commit_msg_filename: Option<String>,
+}
+
+impl CollectOptions {
+    pub(crate) fn all_files() -> Self {
+        Self {
+            all_files: true,
+            ..Default::default()
+        }
+    }
+}
+
+pub(crate) enum RunInput {
+    /// File paths relative to the workspace root.
+    Files(Vec<PathBuf>),
+    /// Absolute path to the Git message file passed by `commit-msg` and `prepare-commit-msg`.
+    MessageFile(PathBuf),
+}
+
+impl RunInput {
+    /// Return workspace-relative file paths.
+    ///
+    /// `MessageFile` inputs are hook arguments, not workspace files, so this
+    /// compatibility helper discards them and returns an empty list.
+    pub(crate) fn into_files(self) -> Vec<PathBuf> {
+        match self {
+            Self::Files(files) => files,
+            Self::MessageFile(_) => vec![],
+        }
+    }
+}
+
+/// Get hook input for the selected stage.
+pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Result<RunInput> {
+    let CollectOptions {
+        hook_stage,
+        from_ref,
+        to_ref,
+        all_files,
+        files,
+        directories,
+        commit_msg_filename,
+    } = opts;
+
+    if matches!(hook_stage, Stage::PrepareCommitMsg | Stage::CommitMsg) {
+        let path = commit_msg_filename.expect("commit_msg_filename should be set");
+        return Ok(RunInput::MessageFile(GIT_ROOT.as_ref()?.join(path)));
+    }
+
+    let git_root = GIT_ROOT.as_ref()?;
+
+    // The workspace root relative to the git root.
+    let relative_root = root.strip_prefix(git_root).with_context(|| {
+        format!(
+            "Workspace root `{}` is not under git root `{}`",
+            root.display(),
+            git_root.display()
+        )
+    })?;
+
+    let filenames = collect_files_from_args(
+        git_root,
+        root,
+        hook_stage,
+        from_ref,
+        to_ref,
+        all_files,
+        files,
+        directories,
+    )
+    .await?;
+
+    // Convert filenames to be relative to the workspace root.
+    let mut filenames = filenames
+        .into_iter()
+        .filter_map(|filename| {
+            // Only keep files under the workspace root.
+            filename
+                .strip_prefix(relative_root)
+                .map(|p| fs::normalize_path(p.to_path_buf()))
+                .ok()
+        })
+        .collect::<Vec<_>>();
+
+    // Sort filenames if in tests to make the order consistent.
+    if EnvVars::is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
+        filenames.sort_unstable();
+    }
+
+    Ok(RunInput::Files(filenames))
+}
+
+fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
+    let absolute = std::path::absolute(path)?.clean();
+    fs::relative_to(absolute, new_cwd)
+}
+
+/// Collect files to run hooks on.
+/// Returns a list of file paths relative to the git root.
+async fn collect_files_from_args(
+    git_root: &Path,
+    workspace_root: &Path,
+    hook_stage: Stage,
+    from_ref: Option<String>,
+    to_ref: Option<String>,
+    all_files: bool,
+    files: Vec<String>,
+    directories: Vec<String>,
+) -> Result<Vec<PathBuf>> {
+    if !hook_stage.operate_on_files() {
+        return Ok(vec![]);
+    }
+
+    if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
+        let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
+        debug!(
+            "Files changed between {} and {}: {}",
+            from_ref,
+            to_ref,
+            files.len()
+        );
+        return Ok(files);
+    }
+
+    if !files.is_empty() || !directories.is_empty() {
+        // By default, `pre-commit` add `types: [file]` for all hooks,
+        // so `pre-commit` will ignore user provided directories.
+        // We do the same here for compatibility.
+        // For `types: [directory]`, `pre-commit` passes the directory names to the hook directly.
+        let (exists, non_exists): (FxHashSet<_>, Vec<_>) =
+            files.into_iter().partition_map(|filename| {
+                if fs_err::exists(&filename).unwrap_or(false) {
+                    Either::Left(filename)
+                } else {
+                    Either::Right(filename)
+                }
+            });
+        if !non_exists.is_empty() {
+            if non_exists.len() == 1 {
+                warn_user!(
+                    "This file does not exist and will be ignored: `{}`",
+                    non_exists[0]
+                );
+            } else {
+                warn_user!(
+                    "These files do not exist and will be ignored: `{}`",
+                    non_exists.join(", ")
+                );
+            }
+        }
+
+        let mut exists = exists
+            .into_iter()
+            .map(|filename| adjust_relative_path(&filename, git_root).map(fs::normalize_path))
+            .collect::<Result<FxHashSet<_>, _>>()?;
+
+        for dir in directories {
+            let dir = adjust_relative_path(&dir, git_root)?;
+            let dir_files = git::ls_files(git_root, &dir).await?;
+            for file in dir_files {
+                let file = fs::normalize_path(file);
+                exists.insert(file);
+            }
+        }
+
+        debug!("Files passed as arguments: {}", exists.len());
+        return Ok(exists.into_iter().collect());
+    }
+
+    if all_files {
+        let files = git::ls_files(git_root, workspace_root).await?;
+        debug!("All files in the workspace: {}", files.len());
+        return Ok(files);
+    }
+
+    if git::is_in_merge_conflict().await? {
+        let files = git::get_conflicted_files(workspace_root).await?;
+        debug!("Conflicted files: {}", files.len());
+        return Ok(files);
+    }
+
+    let files = git::get_staged_files(workspace_root).await?;
+    debug!("Staged files: {}", files.len());
+
+    Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::GlobPatterns;
+
+    fn glob_pattern(pattern: &str) -> FilePattern {
+        FilePattern::Glob(GlobPatterns::new(vec![pattern.to_string()]).unwrap())
+    }
+
+    fn regex_pattern(pattern: &str) -> FilePattern {
+        FilePattern::regex(pattern).unwrap()
+    }
+
+    #[test]
+    fn filename_filter_supports_glob_include_and_exclude() {
+        let include = glob_pattern("src/**/*.rs");
+        let exclude = glob_pattern("src/**/ignored.rs");
+        let filter = FilenameFilter::new(Some(&include), Some(&exclude));
+
+        assert!(filter.matches(Path::new("src/lib/main.rs")));
+        assert!(!filter.matches(Path::new("src/lib/ignored.rs")));
+        assert!(!filter.matches(Path::new("tests/main.rs")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filename_filter_allows_non_utf8_paths_without_patterns() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
+        let filter = FilenameFilter::new(None, None);
+
+        assert!(filter.matches(path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filename_filter_matches_non_utf8_paths_with_glob_patterns() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let include = glob_pattern("**/*.py");
+        let exclude = glob_pattern("**/*.py");
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
+        let filter = FilenameFilter::new(Some(&include), None);
+
+        assert!(filter.matches(path));
+
+        let filter = FilenameFilter::new(None, Some(&exclude));
+
+        assert!(!filter.matches(path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filename_filter_skips_non_utf8_paths_with_regex_include() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let include = regex_pattern(r".*\.py$");
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
+        let filter = FilenameFilter::new(Some(&include), None);
+
+        assert!(!filter.matches(path));
+    }
+}

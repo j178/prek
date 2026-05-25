@@ -1,0 +1,214 @@
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
+use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
+use tracing::debug;
+
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::hook::InstalledHook;
+use crate::hook::{Hook, InstallInfo};
+use crate::languages::LanguageImpl;
+use crate::languages::node::NodeRequest;
+use crate::languages::node::installer::{NodeInstaller, NodeResult, bin_dir, lib_dir};
+use crate::languages::node::version::EXTRA_KEY_LTS;
+use crate::languages::version::LanguageRequest;
+use crate::process::Cmd;
+use crate::run::run_by_batch;
+use crate::store::{CacheBucket, Store, ToolBucket};
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct Node;
+
+const NPM_CONFIG_PREFIX_ENV: &str = "npm_config_prefix";
+const NPM_CONFIG_CACHE_ENV: &str = "npm_config_cache";
+// npm exports `global_prefix` and `local_prefix` as lowercase child-process
+// state, not npmrc config sources. It accepts either case when reading env, so
+// clear both forms to keep parent npm/npx context out of the hook env while
+// preserving user/global npmrc paths for auth.
+const NPM_CONFIG_ENVS_TO_REMOVE: &[&str] = &[
+    "NPM_CONFIG_PREFIX",
+    "npm_config_prefix",
+    "NPM_CONFIG_GLOBAL_PREFIX",
+    "npm_config_global_prefix",
+    "NPM_CONFIG_LOCAL_PREFIX",
+    "npm_config_local_prefix",
+    "NPM_CONFIG_CACHE",
+    "npm_config_cache",
+];
+
+impl LanguageImpl for Node {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
+        // 1. Install node
+        //   1) Find from `$PREK_HOME/tools/node`
+        //   2) Find from system
+        //   3) Download from remote
+        // 2. Create env
+        // 3. Install dependencies
+
+        // 1. Install node
+        let node_dir = store.tools_path(ToolBucket::Node);
+        let installer = NodeInstaller::new(node_dir);
+
+        let (node_request, allows_download) = match &hook.language_request {
+            LanguageRequest::Any { system_only } => (&NodeRequest::Any, !system_only),
+            LanguageRequest::Node(node_request) => (node_request, true),
+            _ => unreachable!(),
+        };
+        let node = installer
+            .install(store, node_request, allows_download)
+            .await
+            .context("Failed to install node")?;
+
+        let mut info = InstallInfo::new(
+            hook.language,
+            hook.env_key_dependencies().clone(),
+            &store.hooks_dir(),
+        )?;
+
+        let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
+        info.with_toolchain(node.node().to_path_buf());
+        info.with_language_version(node.version().version.clone());
+        info.with_extra(EXTRA_KEY_LTS, &lts);
+
+        // 2. Create env
+        let bin_dir = bin_dir(&info.env_path);
+        let lib_dir = lib_dir(&info.env_path);
+        fs_err::tokio::create_dir_all(&bin_dir).await?;
+        fs_err::tokio::create_dir_all(&lib_dir).await?;
+
+        // 3. Install dependencies
+        let deps = hook.install_dependencies();
+        if deps.is_empty() {
+            debug!("No dependencies to install");
+        } else {
+            // npm install <folder>:
+            // If <folder> sits inside the root of your project, its dependencies will be installed
+            // and may be hoisted to the top-level node_modules as they would for other types of dependencies.
+            // If <folder> sits outside the root of your project, npm will not install the package dependencies
+            // in the directory <folder>, but it will create a symlink to <folder>.
+            //
+            // NOTE: If you want to install the content of a directory like a package from the registry
+            // instead of creating a link, you would need to use the --install-links option.
+
+            // `npm` is a script that uses `/usr/bin/env node`, so we need to add the
+            // node toolchain directory to PATH so that `npm` can find `node`.
+            let node_bin = node.node().parent().expect("Node binary must have parent");
+            let new_path = prepend_paths(&[&bin_dir, node_bin]).context("Failed to join PATH")?;
+            let npm_cache = store.cache_path(CacheBucket::Npm);
+
+            let mut cmd = Cmd::new(node.npm(), "npm install");
+            cmd.arg("install")
+                .arg("-g")
+                .arg("--no-progress")
+                .arg("--no-save")
+                .arg("--no-fund")
+                .arg("--no-audit")
+                .arg("--install-links")
+                .args(&*deps)
+                .env(EnvVars::PATH, new_path)
+                .env(EnvVars::NODE_PATH, &lib_dir);
+            apply_npm_config_env(&mut cmd, &info.env_path, &npm_cache);
+            cmd.check(true).output().await?;
+        }
+
+        info.persist_env_path();
+
+        reporter.on_install_complete(progress);
+
+        Ok(InstalledHook::Installed {
+            hook,
+            info: Arc::new(info),
+        })
+    }
+
+    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+        let node = NodeResult::from_executables(info.toolchain.clone(), PathBuf::new())
+            .fill_version()
+            .await
+            .context("Failed to query node version")?;
+
+        if node.version().version != info.language_version {
+            anyhow::bail!(
+                "Node version mismatch: expected {}, found {}",
+                info.language_version,
+                node.version().version
+            );
+        }
+
+        Ok(())
+    }
+
+    async fn run(
+        &self,
+        hook: &InstalledHook,
+        filenames: &[&Path],
+        store: &Store,
+        reporter: &HookRunReporter,
+    ) -> Result<(i32, Vec<u8>)> {
+        let progress = reporter.on_run_start(hook, filenames.len());
+
+        let env_dir = hook.env_path().expect("Node must have env path");
+        let node_bin = hook.toolchain_dir().expect("Node binary must have parent");
+        let new_path =
+            prepend_paths(&[&bin_dir(env_dir), node_bin]).context("Failed to join PATH")?;
+
+        let entry = hook.entry.resolve(Some(&new_path), store)?;
+        let npm_cache = store.cache_path(CacheBucket::Npm);
+
+        let run = async |batch: &[&Path]| {
+            let mut cmd = Cmd::new(&entry[0], "node hook");
+            cmd.current_dir(hook.work_dir())
+                .args(&entry[1..])
+                .env(EnvVars::PATH, &new_path)
+                .env(EnvVars::NODE_PATH, lib_dir(env_dir))
+                .envs(&hook.env);
+            apply_npm_config_env(&mut cmd, env_dir, &npm_cache);
+            let mut output = cmd
+                .args(&hook.args)
+                .args(batch)
+                .check(false)
+                .stdin(Stdio::null())
+                .pty_output()
+                .await?;
+
+            reporter.on_run_progress(progress, batch.len() as u64);
+
+            output.stdout.extend(output.stderr);
+            let code = output.status.code().unwrap_or(1);
+            anyhow::Ok((code, output.stdout))
+        };
+
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
+
+        // Collect results
+        let mut combined_status = 0;
+        let mut combined_output = Vec::new();
+
+        for (code, output) in results {
+            combined_status |= code;
+            combined_output.extend(output);
+        }
+
+        reporter.on_run_complete(progress);
+
+        Ok((combined_status, combined_output))
+    }
+}
+
+fn apply_npm_config_env(cmd: &mut Cmd, prefix: &Path, cache: &Path) {
+    for key in NPM_CONFIG_ENVS_TO_REMOVE {
+        cmd.env_remove(key);
+    }
+    cmd.env(NPM_CONFIG_PREFIX_ENV, prefix);
+    cmd.env(NPM_CONFIG_CACHE_ENV, cache);
+}

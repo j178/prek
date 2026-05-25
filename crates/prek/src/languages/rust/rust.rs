@@ -1,0 +1,990 @@
+use std::env::consts::EXE_EXTENSION;
+use std::ffi::OsStr;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::str::FromStr;
+use std::sync::Arc;
+
+use anyhow::{Context, bail};
+use itertools::{Either, Itertools};
+use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
+use tracing::debug;
+
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::languages::LanguageImpl;
+use crate::languages::rust::RustRequest;
+use crate::languages::rust::installer::RustInstaller;
+use crate::languages::rust::rustup::Rustup;
+use crate::languages::rust::version::{Channel, EXTRA_KEY_CHANNEL};
+use crate::languages::version::LanguageRequest;
+use crate::process::Cmd;
+use crate::run::run_by_batch;
+use crate::store::{CacheBucket, Store, ToolBucket};
+
+fn format_cargo_dependency(dep: &str) -> String {
+    let (name, version) = dep.split_once(':').unwrap_or((dep, ""));
+    if version.is_empty() {
+        format!("{name}@*")
+    } else {
+        format!("{name}@{version}")
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum CargoCliDependency {
+    Crate {
+        name: String,
+        version: Option<String>,
+    },
+    Git {
+        url: String,
+        tag: Option<String>,
+        package: Option<String>,
+    },
+}
+
+impl FromStr for CargoCliDependency {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let is_url = s.starts_with("http://") || s.starts_with("https://");
+        if is_url {
+            let scheme_end = s
+                .find("://")
+                .map(|idx| idx + 3)
+                .with_context(|| format!("Invalid git URL `{s}`"))?;
+            let rest = &s[scheme_end..];
+
+            let parts: Vec<&str> = rest.rsplitn(3, ':').collect();
+            let (url_without_scheme, tag, package) = match parts.as_slice() {
+                [url] => (*url, None, None),
+                [tag, url] => {
+                    if tag.is_empty() {
+                        bail!(
+                            "Git CLI dependency `{s}` contains an empty tag; use `cli:<url>`, `cli:<url>:<tag>`, or `cli:<url>:<tag>:<package>`"
+                        );
+                    }
+                    (*url, Some(*tag), None)
+                }
+                [package, tag, url] => {
+                    if package.is_empty() {
+                        bail!(
+                            "Git CLI dependency `{s}` must specify a non-empty package when using `cli:<url>:<tag>:<package>`"
+                        );
+                    }
+                    let tag = if tag.is_empty() { None } else { Some(*tag) };
+                    (*url, tag, Some(*package))
+                }
+                _ => unreachable!(),
+            };
+
+            let url = format!("{}{}", &s[..scheme_end], url_without_scheme);
+            Ok(CargoCliDependency::Git {
+                url,
+                tag: tag.map(ToString::to_string),
+                package: package.map(ToString::to_string),
+            })
+        } else {
+            let (name, version) = if let Some((pkg, ver)) = s.rsplit_once(':') {
+                (pkg.to_string(), Some(ver.to_string()))
+            } else {
+                (s.to_string(), None)
+            };
+
+            Ok(CargoCliDependency::Crate { name, version })
+        }
+    }
+}
+
+impl CargoCliDependency {
+    fn to_cargo_args(&self) -> Vec<&str> {
+        let mut args: Vec<&str> = Vec::with_capacity(2);
+        match self {
+            CargoCliDependency::Crate { name, version } => {
+                args.push(name);
+                if let Some(version) = version {
+                    args.push("--version");
+                    args.push(version);
+                }
+            }
+            CargoCliDependency::Git { url, tag, package } => {
+                args.push("--git");
+                args.push(url);
+                if let Some(tag) = tag {
+                    args.push("--tag");
+                    args.push(tag);
+                }
+                if let Some(package) = package {
+                    args.push(package);
+                }
+            }
+        }
+
+        args
+    }
+}
+
+/// Find the package directory that produces the given binary.
+/// Returns (`package_dir`, `package_name`, `is_workspace`).
+async fn find_package_dir(
+    repo: &Path,
+    binary_name: &str,
+    cargo: Option<&Path>,
+    cargo_home: Option<&Path>,
+    new_path: Option<&OsStr>,
+) -> anyhow::Result<Option<(PathBuf, String, bool)>> {
+    let cargo = cargo.unwrap_or(Path::new("cargo"));
+
+    let mut cmd = Cmd::new(cargo, "cargo metadata");
+    if let Some(new_path) = new_path {
+        cmd.env(EnvVars::PATH, new_path);
+    }
+    if let Some(cargo_home) = cargo_home {
+        cmd.env(EnvVars::CARGO_HOME, cargo_home);
+    }
+    let output = cmd
+        .arg("metadata")
+        .arg("--format-version")
+        .arg("1")
+        .arg("--no-deps")
+        .arg("--manifest-path")
+        .arg(repo.join("Cargo.toml"))
+        .output()
+        .await?;
+    let stdout = str::from_utf8(&output.stdout)?
+        .lines()
+        .find(|line| line.starts_with('{'))
+        .ok_or(cargo_metadata::Error::NoJson)?;
+    let metadata: cargo_metadata::Metadata =
+        serde_json::from_str(stdout).context("Failed to parse cargo metadata output")?;
+
+    // Search all workspace packages for one that produces this binary
+    for package_id in &metadata.workspace_members {
+        let package = metadata
+            .packages
+            .iter()
+            .find(|p| &p.id == package_id)
+            .with_context(|| format!("Package not found in metadata for id: {package_id}"))?;
+
+        if package_produces_binary(package, binary_name) {
+            let package_dir = package
+                .manifest_path
+                .parent()
+                .expect("manifest should have parent")
+                .as_std_path()
+                .to_path_buf();
+
+            // It's a workspace if either:
+            // - there are multiple members, OR
+            // - the package is not at the workspace root
+            let is_workspace = metadata.workspace_members.len() > 1
+                || package_dir != metadata.workspace_root.as_std_path();
+
+            return Ok(Some((package_dir, package.name.to_string(), is_workspace)));
+        }
+    }
+
+    Ok(None)
+}
+
+/// Check if two names match, accounting for hyphen/underscore normalization.
+fn names_match(a: &str, b: &str) -> bool {
+    a == b || a.replace('-', "_") == b.replace('-', "_")
+}
+
+/// Check if a package produces a binary with the given name.
+fn package_produces_binary(package: &cargo_metadata::Package, binary_name: &str) -> bool {
+    package
+        .targets
+        .iter()
+        .filter(|t| t.is_bin())
+        .any(|t| names_match(&t.name, binary_name))
+}
+
+/// Copy executable binaries from a release directory to a destination bin directory.
+async fn copy_binaries(release_dir: &Path, dest_bin_dir: &Path) -> anyhow::Result<()> {
+    let mut entries = fs_err::tokio::read_dir(release_dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let file_type = entry.file_type().await?;
+        // Copy executable files (not directories, not .d files, etc.)
+        if file_type.is_file() {
+            if let Some(ext) = path.extension() {
+                // Skip non-binary files like .d, .rlib, etc.
+                if ext == "d" || ext == "rlib" || ext == "rmeta" {
+                    continue;
+                }
+            }
+            // On Unix, check if it's executable; on Windows, check for .exe
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let meta = entry.metadata().await?;
+                if meta.permissions().mode() & 0o111 != 0 {
+                    let dest = dest_bin_dir.join(entry.file_name());
+                    fs_err::tokio::copy(&path, &dest).await?;
+                }
+            }
+            #[cfg(windows)]
+            {
+                if path.extension().is_some_and(|e| e == "exe") {
+                    let dest = dest_bin_dir.join(entry.file_name());
+                    fs_err::tokio::copy(&path, &dest).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn install_local_project(
+    hook_binary: &str,
+    repo_path: &Path,
+    info: &InstallInfo,
+    lib_deps: &[&String],
+    cargo: &Path,
+    cargo_home: &Path,
+    new_path: &OsStr,
+) -> anyhow::Result<()> {
+    // Find the specific package directory for this hook's binary
+    let (package_dir, package_name, is_workspace) = match find_package_dir(
+        repo_path,
+        hook_binary,
+        Some(cargo),
+        Some(cargo_home),
+        Some(new_path),
+    )
+    .await
+    {
+        Err(e) => {
+            return Err(e.context("Failed to find package directory using cargo metadata"));
+        }
+        Ok(Some((package_dir, package_name, is_workspace))) => {
+            debug!(
+                "Found package `{}` for binary `{}` in repo `{}` at `{}`",
+                package_name,
+                hook_binary,
+                repo_path.display(),
+                package_dir.display(),
+            );
+            (package_dir, package_name, is_workspace)
+        }
+        Ok(None) => {
+            debug!(
+                "Binary `{}` not found in cargo metadata for repo `{}`, falling back to repo root",
+                hook_binary,
+                repo_path.display(),
+            );
+            (repo_path.to_path_buf(), String::new(), false)
+        }
+    };
+
+    if lib_deps.is_empty() {
+        // For packages without lib deps, use `cargo install` directly
+        Cmd::new(cargo, "install local")
+            .args(["install", "--bins", "--root"])
+            .arg(&info.env_path)
+            .args(["--path", ".", "--locked"])
+            .current_dir(&package_dir)
+            .env(EnvVars::PATH, new_path)
+            .env(EnvVars::CARGO_HOME, cargo_home)
+            .remove_git_envs()
+            .check(true)
+            .output()
+            .await?;
+    } else {
+        // For packages with lib deps, copy manifest, modify, build and copy binaries
+        let manifest_dir = info.env_path.join("manifest");
+        fs_err::tokio::create_dir_all(&manifest_dir).await?;
+
+        // Copy Cargo.toml
+        let src_manifest = package_dir.join("Cargo.toml");
+        let dst_manifest = manifest_dir.join("Cargo.toml");
+        fs_err::tokio::copy(&src_manifest, &dst_manifest).await?;
+
+        // Copy Cargo.lock if it exists (check both package dir and repo root for workspaces)
+        let lock_locations = if is_workspace {
+            vec![repo_path.join("Cargo.lock"), package_dir.join("Cargo.lock")]
+        } else {
+            vec![package_dir.join("Cargo.lock")]
+        };
+        for lock_path in lock_locations {
+            if lock_path.exists() {
+                fs_err::tokio::copy(&lock_path, manifest_dir.join("Cargo.lock")).await?;
+                break;
+            }
+        }
+
+        // Copy src directory (cargo add needs it to exist for path validation)
+        let src_dir = package_dir.join("src");
+        if src_dir.exists() {
+            let dst_src = manifest_dir.join("src");
+            fs_err::tokio::create_dir_all(&dst_src).await?;
+            let mut entries = fs_err::tokio::read_dir(&src_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                if entry.file_type().await?.is_file() {
+                    fs_err::tokio::copy(entry.path(), dst_src.join(entry.file_name())).await?;
+                }
+            }
+        }
+
+        // Run cargo add on the copied manifest
+        let mut cmd = Cmd::new(cargo, "add dependencies");
+        cmd.arg("add");
+        for dep in lib_deps {
+            cmd.arg(format_cargo_dependency(dep.as_str()));
+        }
+        cmd.current_dir(&manifest_dir)
+            .env(EnvVars::PATH, new_path)
+            .env(EnvVars::CARGO_HOME, cargo_home)
+            .remove_git_envs()
+            .check(true)
+            .output()
+            .await?;
+
+        // Build using cargo build with --manifest-path pointing to modified manifest
+        // but source files come from original package_dir
+        let target_dir = info.env_path.join("target");
+        let mut cmd = Cmd::new(cargo, "build local with deps");
+        cmd.args(["build", "--bins", "--release"])
+            .arg("--manifest-path")
+            .arg(&dst_manifest)
+            .arg("--target-dir")
+            .arg(&target_dir);
+
+        // For workspace members, explicitly specify the package
+        if is_workspace && !package_name.is_empty() {
+            cmd.args(["--package", &package_name]);
+        }
+
+        cmd.current_dir(&package_dir)
+            .env(EnvVars::PATH, new_path)
+            .env(EnvVars::CARGO_HOME, cargo_home)
+            .remove_git_envs()
+            .check(true)
+            .output()
+            .await?;
+
+        // Copy compiled binaries to the bin directory
+        copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
+
+        // Clean up manifest and target directories
+        fs_err::tokio::remove_dir_all(&manifest_dir).await?;
+        fs_err::tokio::remove_dir_all(&target_dir).await?;
+    }
+
+    Ok(())
+}
+
+async fn install_cli_dependency(
+    cli_dep: &str,
+    info: &InstallInfo,
+    cargo: &Path,
+    cargo_home: &Path,
+    new_path: &OsStr,
+) -> anyhow::Result<()> {
+    let dep = CargoCliDependency::from_str(cli_dep)?;
+
+    let mut cmd = Cmd::new(cargo, "install cli dep");
+    cmd.args(["install", "--bins", "--root"])
+        .arg(&info.env_path)
+        .args(dep.to_cargo_args())
+        .arg("--locked");
+
+    cmd.env(EnvVars::PATH, new_path)
+        .env(EnvVars::CARGO_HOME, cargo_home)
+        .remove_git_envs()
+        .check(true)
+        .output()
+        .await?;
+
+    Ok(())
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct Rust;
+
+impl LanguageImpl for Rust {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> anyhow::Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
+        // 1. Install Rust
+        let cargo_home = store.cache_path(CacheBucket::Cargo);
+        let rustup_dir = store.tools_path(ToolBucket::Rustup);
+        let rustup = Rustup::install(store, &rustup_dir).await?;
+        let installer = RustInstaller::new(rustup);
+
+        let (version, allows_download) = match &hook.language_request {
+            LanguageRequest::Any { system_only } => (&RustRequest::Any, !system_only),
+            LanguageRequest::Rust(version) => (version, true),
+            _ => unreachable!(),
+        };
+
+        let rust = installer
+            .install(version, allows_download)
+            .await
+            .context("Failed to install rust")?;
+        let rustc_bin = bin_dir(rust.toolchain());
+        let cargo = rustc_bin.join("cargo").with_extension(EXE_EXTENSION);
+        // Add toolchain bin to PATH, for cargo to use correct rustc
+        let new_path = prepend_paths(&[&rustc_bin]).context("Failed to join PATH")?;
+
+        let mut info = InstallInfo::new(
+            hook.language,
+            hook.env_key_dependencies().clone(),
+            &store.hooks_dir(),
+        )?;
+        info.with_toolchain(rust.toolchain().to_path_buf())
+            .with_language_version(rust.version().deref().clone());
+
+        // Store the channel name for cache matching
+        match version {
+            RustRequest::Channel(channel) => {
+                info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
+            }
+            RustRequest::Any => {
+                let channel = rust.version().channel().unwrap_or(Channel::Stable);
+                info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
+            }
+            _ => {}
+        }
+
+        // 2. Create environment
+        fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
+
+        // 3. Install dependencies
+        // Split dependencies by cli: prefix
+        let (cli_deps, lib_deps): (Vec<_>, Vec<_>) =
+            hook.additional_dependencies.iter().partition_map(|dep| {
+                if let Some(stripped) = dep.strip_prefix("cli:") {
+                    Either::Left(stripped)
+                } else {
+                    Either::Right(dep)
+                }
+            });
+
+        // Use the hook entry as the binary name to find the package, this could be improved by allowing an explicit binary name in the hook config.
+        let hook_entry = hook.entry.expect_direct().split()?;
+        let hook_bin = &hook_entry[0];
+
+        // Install library dependencies and local project
+        if let Some(repo) = hook.repo_path() {
+            install_local_project(
+                hook_bin,
+                repo,
+                &info,
+                &lib_deps,
+                &cargo,
+                &cargo_home,
+                &new_path,
+            )
+            .await?;
+        }
+
+        // Install CLI dependencies
+        for cli_dep in cli_deps {
+            install_cli_dependency(cli_dep, &info, &cargo, &cargo_home, &new_path).await?;
+        }
+
+        info.persist_env_path();
+
+        reporter.on_install_complete(progress);
+
+        Ok(InstalledHook::Installed {
+            hook,
+            info: Arc::new(info),
+        })
+    }
+
+    async fn check_health(&self, _info: &InstallInfo) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn run(
+        &self,
+        hook: &InstalledHook,
+        filenames: &[&Path],
+        store: &Store,
+        reporter: &HookRunReporter,
+    ) -> anyhow::Result<(i32, Vec<u8>)> {
+        let progress = reporter.on_run_start(hook, filenames.len());
+
+        let env_dir = hook.env_path().expect("Rust hook must have env path");
+        let info = hook.install_info().expect("Rust hook must be installed");
+
+        let rust_bin = bin_dir(env_dir);
+        let cargo_home = store.cache_path(CacheBucket::Cargo);
+        let rustc_bin = bin_dir(&info.toolchain);
+
+        let new_path = prepend_paths(&[&rust_bin, &rustc_bin]).context("Failed to join PATH")?;
+
+        let entry = hook.entry.resolve(Some(&new_path), store)?;
+        let run = async |batch: &[&Path]| {
+            let mut output = Cmd::new(&entry[0], "rust hook")
+                .current_dir(hook.work_dir())
+                .args(&entry[1..])
+                .env(EnvVars::PATH, &new_path)
+                .env(EnvVars::CARGO_HOME, &cargo_home)
+                .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
+                .envs(&hook.env)
+                .args(&hook.args)
+                .args(batch)
+                .check(false)
+                .stdin(Stdio::null())
+                .pty_output()
+                .await?;
+
+            reporter.on_run_progress(progress, batch.len() as u64);
+
+            output.stdout.extend(output.stderr);
+            let code = output.status.code().unwrap_or(1);
+            anyhow::Ok((code, output.stdout))
+        };
+
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
+
+        let mut combined_status = 0;
+        let mut combined_output = Vec::new();
+
+        for (code, output) in results {
+            combined_status |= code;
+            combined_output.extend(output);
+        }
+
+        reporter.on_run_complete(progress);
+
+        Ok((combined_status, combined_output))
+    }
+}
+
+pub(crate) fn bin_dir(env_path: &Path) -> PathBuf {
+    env_path.join("bin")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    async fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs_err::tokio::create_dir_all(parent).await.unwrap();
+        }
+        fs_err::tokio::write(path, content).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_single_package() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = r#"
+[package]
+name = "my-tool"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
+
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-tool", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(path, temp.path());
+        assert_eq!(pkg_name, "my-tool");
+        assert!(!is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_single_package_underscore_normalization() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = r#"
+[package]
+name = "my-tool"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
+
+        // Should match with underscores instead of hyphens
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool", None, None, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(path, temp.path());
+        assert!(!is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_workspace_with_root_package() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = r#"
+[package]
+name = "cargo-deny"
+version = "0.18.5"
+edition = "2021"
+
+[workspace]
+members = ["subcrate"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
+
+        // Create subcrate with a lib.rs
+        let subcrate_toml = r#"
+[package]
+name = "subcrate"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("subcrate/Cargo.toml"), subcrate_toml).await;
+        write_file(&temp.path().join("subcrate/src/lib.rs"), "").await;
+
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "cargo-deny", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(path, temp.path());
+        assert_eq!(pkg_name, "cargo-deny");
+        assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_workspace_member() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = r#"
+[workspace]
+members = ["cli", "lib"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        let cli_toml = r#"
+[package]
+name = "my-cli"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
+
+        let lib_toml = r#"
+[package]
+name = "my-lib"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("lib/Cargo.toml"), lib_toml).await;
+        write_file(&temp.path().join("lib/src/lib.rs"), "").await;
+
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-cli", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(path, temp.path().join("cli"));
+        assert_eq!(pkg_name, "my-cli");
+        assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_by_bin_name() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[workspace]
+members = ["crates/typos-cli"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        // Package is typos-cli but binary is typos
+        let cli_toml = r#"
+[package]
+name = "typos-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "typos"
+path = "src/main.rs"
+"#;
+        write_file(&temp.path().join("crates/typos-cli/Cargo.toml"), cli_toml).await;
+        write_file(
+            &temp.path().join("crates/typos-cli/src/main.rs"),
+            "fn main() {}",
+        )
+        .await;
+
+        // Should find by binary name, return package name
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "typos", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(path, temp.path().join("crates/typos-cli"));
+        assert_eq!(pkg_name, "typos-cli");
+        assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_by_src_bin_file() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[package]
+name = "my-pkg"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/bin/my-tool.rs"), "fn main() {}").await;
+        // Need a lib.rs or main.rs for the package itself
+        write_file(&temp.path().join("src/lib.rs"), "").await;
+
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool", None, None, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(path, temp.path());
+        assert!(!is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_virtual_workspace_nested_member() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[workspace]
+members = ["crates/cli"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        let cli_toml = r#"
+[package]
+name = "virtual-cli"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
+
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "virtual-cli", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(path, temp.path().join("crates/cli"));
+        assert_eq!(pkg_name, "virtual-cli");
+        assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_virtual_workspace_glob_members() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[workspace]
+members = ["crates/*"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        let cli_toml = r#"
+[package]
+name = "my-cli"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
+
+        let lib_toml = r#"
+[package]
+name = "my-lib"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("crates/lib/Cargo.toml"), lib_toml).await;
+        write_file(&temp.path().join("crates/lib/src/lib.rs"), "").await;
+
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-cli", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(path, temp.path().join("crates/cli"));
+        assert_eq!(pkg_name, "my-cli");
+        assert!(is_workspace);
+
+        // my-lib is a library (no binary), so searching for it should fail
+        let result = find_package_dir(temp.path(), "my-lib", None, None, None)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_no_cargo_toml() {
+        let temp = TempDir::new().unwrap();
+
+        let result = find_package_dir(temp.path(), "anything", None, None, None).await;
+        assert!(result.is_err());
+        // cargo metadata gives a different error message
+        assert!(result.unwrap_err().to_string().contains("cargo metadata"));
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_workspace_binary_not_found() {
+        let temp = TempDir::new().unwrap();
+        let cargo_toml = r#"
+[workspace]
+members = ["cli"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        let cli_toml = r#"
+[package]
+name = "some-other-tool"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
+
+        let result = find_package_dir(temp.path(), "nonexistent-binary", None, None, None)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_format_cargo_dependency() {
+        assert_eq!(format_cargo_dependency("serde"), "serde@*");
+        assert_eq!(format_cargo_dependency("serde:1.0"), "serde@1.0");
+        assert_eq!(format_cargo_dependency("tokio:1.0.0"), "tokio@1.0.0");
+    }
+
+    #[test]
+    fn test_parse_cargo_cli_dependency_crate_forms() {
+        assert_eq!(
+            CargoCliDependency::from_str("typos-cli").unwrap(),
+            CargoCliDependency::Crate {
+                name: "typos-cli".to_string(),
+                version: None,
+            }
+        );
+        assert_eq!(
+            CargoCliDependency::from_str("typos-cli:1.0").unwrap(),
+            CargoCliDependency::Crate {
+                name: "typos-cli".to_string(),
+                version: Some("1.0".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_cargo_cli_dependency_git_valid_forms() {
+        let cases = [
+            (
+                "https://github.com/fish-shell/fish-shell",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: None,
+                    package: None,
+                },
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: Some("v4.5.0".to_string()),
+                    package: None,
+                },
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell::fish",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: None,
+                    package: Some("fish".to_string()),
+                },
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0:fish",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: Some("v4.5.0".to_string()),
+                    package: Some("fish".to_string()),
+                },
+            ),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(CargoCliDependency::from_str(input).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_parse_cargo_cli_dependency_git_invalid_forms() {
+        let invalid_cases = [
+            "https://github.com/fish-shell/fish-shell:",
+            "https://github.com/fish-shell/fish-shell:v4.5.0:",
+            "https://github.com/fish-shell/fish-shell::",
+        ];
+
+        for input in invalid_cases {
+            assert!(
+                CargoCliDependency::from_str(input).is_err(),
+                "input: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_format_cargo_cli_dependency() {
+        let cases = [
+            ("typos-cli", vec!["typos-cli"]),
+            ("typos-cli:1.0", vec!["typos-cli", "--version", "1.0"]),
+            (
+                "https://github.com/fish-shell/fish-shell",
+                vec!["--git", "https://github.com/fish-shell/fish-shell"],
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0",
+                vec![
+                    "--git",
+                    "https://github.com/fish-shell/fish-shell",
+                    "--tag",
+                    "v4.5.0",
+                ],
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell::fish",
+                vec!["--git", "https://github.com/fish-shell/fish-shell", "fish"],
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0:fish",
+                vec![
+                    "--git",
+                    "https://github.com/fish-shell/fish-shell",
+                    "--tag",
+                    "v4.5.0",
+                    "fish",
+                ],
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let dep = CargoCliDependency::from_str(input).unwrap();
+            assert_eq!(dep.to_cargo_args(), expected, "input: {input}");
+        }
+    }
+}

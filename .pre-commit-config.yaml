@@ -1,22 +1,53 @@
 fail_fast: true
 default_install_hook_types: [pre-push]
-exclude: |
-  (?x)^(
-    .*/(snapshots)/.*|
-  )$
+exclude:
+  glob: '**/snapshots/**'
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+  - repo: builtin
     hooks:
       - id: trailing-whitespace
+        exclude:
+          glob: CHANGELOG.md
+      - id: mixed-line-ending
+      - id: check-yaml
+      - id: check-toml
       - id: end-of-file-fixer
-        exclude: docs/cli.md # Exclude generated doc
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.38.1
+    rev: v1.46.2
     hooks:
       - id: typos
+
+  - repo: https://github.com/executablebooks/mdformat
+    rev: '1.0.0'
+    hooks:
+      - id: mdformat
+        language: python  # ensures that Renovate can update additional_dependencies
+        args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
+        additional_dependencies:
+          - mdformat-frontmatter==2.0.10
+          - mdformat-mkdocs==5.1.4
+          - mdformat-simple-breaks==0.1.0
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.2
+    hooks:
+      - id: check-metaschema
+        files:
+          glob: prek.schema.json
+      - id: check-github-workflows
+      - id: check-renovate
+        additional_dependencies: ['json5']
+
+  - repo: local
+    hooks:
+      - id: taplo-fmt
+        name: taplo fmt
+        entry: taplo fmt --config .config/taplo.toml
+        language: python
+        additional_dependencies: ["taplo==0.9.3"]
+        types: [toml]
 
   - repo: local
     hooks:

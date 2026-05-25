@@ -15,6 +15,12 @@ $Tmp = "$($Drive)\prek-tmp"
 # Create the directory ahead of time in an attempt to avoid race-conditions
 New-Item $Tmp -ItemType Directory
 
+# Move Cargo to the dev drive
+New-Item -Path "$($Drive)/.cargo/bin" -ItemType Directory -Force
+if (Test-Path "C:/Users/runneradmin/.cargo") {
+    Copy-Item -Path "C:/Users/runneradmin/.cargo/*" -Destination "$($Drive)/.cargo/" -Recurse -Force
+}
+
 Write-Output `
 	"DEV_DRIVE=$($Drive)" `
 	"TMP=$($Tmp)" `
@@ -22,4 +28,6 @@ Write-Output `
 	"PREK_INTERNAL__TEST_DIR=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
+	"PREK_WORKSPACE=$($Drive)/prek" `
+    "PATH=$($Drive)/.cargo/bin;$env:PATH" `
 	>> $env:GITHUB_ENV

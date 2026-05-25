@@ -1,0 +1,533 @@
+use std::ops::Range;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use futures::{StreamExt, TryStreamExt};
+use rustc_hash::FxHashMap;
+use semver::Version;
+
+use crate::cli::ExitStatus;
+use crate::cli::auto_update::config::write_new_config;
+use crate::cli::auto_update::display::{apply_repo_updates, warn_frozen_mismatches};
+use crate::cli::auto_update::source::{collect_repo_sources, evaluate_repo_source};
+use crate::cli::reporter::AutoUpdateReporter;
+use crate::cli::run::Selectors;
+use crate::config::GlobPatterns;
+use crate::fs::CWD;
+use crate::printer::Printer;
+use crate::run::CONCURRENCY;
+use crate::settings::FilesystemOptions;
+use crate::store::Store;
+use crate::workspace::{Project, Workspace};
+
+mod config;
+mod display;
+mod repository;
+mod source;
+
+/// The `rev` value to write back to config, plus an optional `# frozen:` comment.
+#[derive(Default, Clone)]
+struct Revision {
+    /// The resolved revision string to store in `rev`.
+    rev: String,
+    /// The tag-like reference to preserve in a `# frozen:` comment.
+    frozen: Option<String>,
+}
+
+/// One occurrence of a remote repo in a project config file.
+struct RepoUsage<'a> {
+    /// The project whose config contains this repo entry.
+    project: &'a Project,
+    /// The number of remote repos in that project config.
+    remote_count: usize,
+    /// The position of this remote repo among the project's remote repos.
+    remote_index: usize,
+    /// The 1-based line number of this repo entry's `rev` setting.
+    rev_line_number: usize,
+    /// The existing `# frozen:` comment for this repo entry, if present.
+    current_frozen: Option<String>,
+    /// The source location of the existing `# frozen:` comment, if present.
+    current_frozen_site: Option<FrozenCommentSite>,
+}
+
+/// One distinct `repo + rev + hook set` target that should be evaluated.
+struct RepoTarget<'a> {
+    /// The remote repository URL.
+    repo: &'a str,
+    /// The currently configured `rev` for this target.
+    current_rev: &'a str,
+    /// The resolved cooldown window to apply when selecting an update for this target.
+    cooldown_days: u8,
+    /// The sorted hook ids that must still exist after updating this target.
+    required_hook_ids: Vec<&'a str>,
+    /// Every config usage that shares this exact `repo + rev + hook set`.
+    usages: Vec<RepoUsage<'a>>,
+}
+
+/// One fetched remote repository URL with all configured revisions that use it.
+struct RepoSource<'a> {
+    /// The remote repository URL.
+    repo: &'a str,
+    /// Distinct configured revisions that should be evaluated against this fetched repo.
+    targets: Vec<RepoTarget<'a>>,
+}
+
+/// The action to take when a `# frozen:` comment no longer matches a SHA `rev`.
+enum FrozenMismatchAction {
+    /// Rewrite the comment to this replacement tag.
+    ReplaceWith(String),
+    /// Remove the stale comment because no ref points at the pinned commit.
+    Remove,
+    /// Warn only because we cannot safely decide a comment-only fix.
+    NoReplacement,
+}
+
+/// Whether the pinned SHA is available from the refs fetched for `auto-update`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommitPresence {
+    /// The commit is present in the fetched repository view.
+    Present,
+    /// The commit is not present in the fetched repository view.
+    Absent,
+    /// The current Git cannot disable lazy fetch, so presence could not be checked safely.
+    Unknown,
+}
+
+/// Why an existing `# frozen:` comment no longer matches the configured `rev`.
+enum FrozenMismatchReason {
+    /// The frozen reference resolves successfully, but to a different commit than `rev`.
+    ResolvesToDifferentCommit,
+    /// The frozen reference could not be resolved at all.
+    Unresolvable,
+}
+
+/// One stale `# frozen:` comment found for a specific repo entry.
+struct FrozenMismatch<'a> {
+    /// The project config that contains this stale comment.
+    project: &'a Project,
+    /// The number of remote repos in that project config.
+    remote_size: usize,
+    /// The position of this remote repo among the project's remote repos.
+    remote_index: usize,
+    /// The 1-based line number of the `rev` setting that owns this stale comment.
+    rev_line_number: usize,
+    /// The current `# frozen:` reference string from config.
+    current_frozen: String,
+    /// The source location of the current `# frozen:` comment.
+    frozen_site: Option<FrozenCommentSite>,
+    /// Why the existing frozen reference is stale.
+    reason: FrozenMismatchReason,
+    /// Whether the pinned SHA is available in the fetched repository view.
+    current_rev_presence: CommitPresence,
+    /// The action to take for this stale comment.
+    action: FrozenMismatchAction,
+}
+
+/// The source location of a `# frozen:` comment value within a config line.
+#[derive(Clone)]
+struct FrozenCommentSite {
+    /// The 1-based line number in the config file.
+    line_number: usize,
+    /// The full source line that contains the `# frozen:` comment.
+    source_line: String,
+    /// The byte range of the frozen reference value within `source_line`.
+    span: Range<usize>,
+}
+
+/// Parsed frozen-comment metadata for one `rev` entry in config.
+#[derive(Clone)]
+struct FrozenRef {
+    /// The 1-based line number of the `rev` setting.
+    line_number: usize,
+    /// The parsed frozen reference value, if the `rev` line has one.
+    current_frozen: Option<String>,
+    /// The source location of that frozen reference value, if present.
+    site: Option<FrozenCommentSite>,
+}
+
+/// A tag reference with the metadata needed for cooldown selection and SHA matching.
+#[derive(Clone)]
+struct TagTimestamp {
+    /// The tag name without the `refs/tags/` prefix.
+    tag: String,
+    /// The parsed semantic version, if the tag looks like one.
+    version: Option<Version>,
+    /// The tag timestamp used for cooldown ordering.
+    timestamp: u64,
+    /// The peeled commit SHA the tag ultimately points at.
+    commit: String,
+}
+
+impl TagTimestamp {
+    fn new(tag: String, timestamp: u64, commit: String) -> Self {
+        let version = Version::parse(tag.strip_prefix('v').unwrap_or(&tag)).ok();
+        Self {
+            tag,
+            version,
+            timestamp,
+            commit,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct SkippedDowngrade {
+    /// The configured revision that was kept.
+    current: String,
+    /// The candidate tag that was rejected.
+    candidate: String,
+    /// The cooldown window used to select the candidate tag.
+    cooldown_days: u8,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum RevisionSelection {
+    /// No eligible revision was found.
+    Unchanged,
+    /// Update to this revision.
+    Update(String),
+    /// Keep the current revision because the candidate sorts older.
+    SkippedDowngrade(SkippedDowngrade),
+}
+
+struct TagFilters {
+    global_include: GlobPatterns,
+    global_exclude: GlobPatterns,
+    repo_include: FxHashMap<String, GlobPatterns>,
+    repo_exclude: FxHashMap<String, GlobPatterns>,
+}
+
+impl TagFilters {
+    fn new(
+        include_tag: Vec<String>,
+        exclude_tag: Vec<String>,
+        repo_include_tag: Vec<String>,
+        repo_exclude_tag: Vec<String>,
+    ) -> Result<Self> {
+        Ok(Self {
+            global_include: GlobPatterns::new(include_tag)
+                .context("Invalid --include-tag pattern")?,
+            global_exclude: GlobPatterns::new(exclude_tag)
+                .context("Invalid --exclude-tag pattern")?,
+            repo_include: build_repo_tag_patterns(repo_include_tag, "--repo-include-tag")?,
+            repo_exclude: build_repo_tag_patterns(repo_exclude_tag, "--repo-exclude-tag")?,
+        })
+    }
+
+    fn filter<'a>(&self, repo: &str, tags: &'a [TagTimestamp]) -> Vec<&'a TagTimestamp> {
+        tags.iter()
+            .filter(|tag| self.is_included(repo, &tag.tag) && !self.is_excluded(repo, &tag.tag))
+            .collect()
+    }
+
+    /// Returns whether a tag passes include filters for a repository.
+    ///
+    /// Repo-specific include filters override global include filters for that repo.
+    fn is_included(&self, repo: &str, tag: &str) -> bool {
+        if let Some(repo_include) = self.repo_include.get(repo) {
+            return repo_include.is_empty() || repo_include.is_match(Path::new(tag));
+        }
+
+        self.global_include.is_empty() || self.global_include.is_match(Path::new(tag))
+    }
+
+    /// Returns whether a tag matches any global or repo-specific exclude filter.
+    fn is_excluded(&self, repo: &str, tag: &str) -> bool {
+        self.global_exclude.is_match(Path::new(tag))
+            || self
+                .repo_exclude
+                .get(repo)
+                .is_some_and(|set| set.is_match(Path::new(tag)))
+    }
+}
+
+fn build_repo_tag_patterns(
+    values: Vec<String>,
+    option: &str,
+) -> Result<FxHashMap<String, GlobPatterns>> {
+    let mut patterns_by_repo: FxHashMap<String, Vec<String>> = FxHashMap::default();
+    for value in values {
+        let (repo, pattern) = value.rsplit_once('=').ok_or_else(|| {
+            anyhow::anyhow!("Invalid {option} value `{value}`: expected `<repo>=<pattern>`")
+        })?;
+        if repo.is_empty() || pattern.is_empty() {
+            anyhow::bail!("Invalid {option} value `{value}`: expected `<repo>=<pattern>`");
+        }
+        patterns_by_repo
+            .entry(repo.to_string())
+            .or_default()
+            .push(pattern.to_string());
+    }
+
+    patterns_by_repo
+        .into_iter()
+        .map(|(repo, patterns)| {
+            Ok((
+                repo,
+                GlobPatterns::new(patterns).with_context(|| format!("Invalid {option} pattern"))?,
+            ))
+        })
+        .collect()
+}
+
+/// The successful result of evaluating one configured `repo + rev + hook set` target.
+struct ResolvedRepoUpdate<'a> {
+    /// The revision data that may be written back to config.
+    revision: Revision,
+    /// A candidate revision that was not selected because it would move backward.
+    skipped_downgrade: Option<SkippedDowngrade>,
+    /// Any stale `# frozen:` comments found for this target's usages.
+    frozen_mismatches: Vec<FrozenMismatch<'a>>,
+}
+
+/// The final outcome for one configured `repo + rev + hook set` target.
+struct RepoUpdate<'a> {
+    /// The target that was evaluated.
+    target: &'a RepoTarget<'a>,
+    /// The computed result for this target.
+    result: Result<ResolvedRepoUpdate<'a>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ProjectUpdateKey<'a> {
+    config_file: &'a Path,
+}
+
+impl<'a> ProjectUpdateKey<'a> {
+    fn config_file(self) -> &'a Path {
+        self.config_file
+    }
+}
+
+impl<'a> From<&'a Project> for ProjectUpdateKey<'a> {
+    fn from(project: &'a Project) -> Self {
+        Self {
+            config_file: project.config_file(),
+        }
+    }
+}
+
+/// Pending config mutations grouped by project config file.
+type ProjectUpdates<'a> = FxHashMap<ProjectUpdateKey<'a>, Vec<Option<Revision>>>;
+
+struct ApplyRepoUpdatesResult {
+    failure: bool,
+    has_updates: bool,
+}
+
+enum DisplayEventKind {
+    Update {
+        current: Revision,
+        next: Revision,
+    },
+    SkippedDowngrade {
+        current: String,
+        candidate: String,
+        cooldown_days: u8,
+    },
+    FrozenUpdate {
+        current: String,
+        next: String,
+    },
+    FrozenRemove {
+        current: String,
+    },
+    UpToDate {
+        current: Revision,
+    },
+    Failure {
+        error: String,
+    },
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DisplayStream {
+    Stdout,
+    Stderr,
+}
+
+struct DisplayEvent<'a> {
+    stream: DisplayStream,
+    project: &'a Project,
+    repo: &'a str,
+    remote_index: usize,
+    line_number: usize,
+    kind: DisplayEventKind,
+}
+
+struct FrozenWarningEvent<'a> {
+    project: &'a Project,
+    repo: &'a str,
+    current_rev: &'a str,
+    remote_index: usize,
+    mismatch: &'a FrozenMismatch<'a>,
+}
+
+type RepoOccurrences<'a> = FxHashMap<(&'a Path, &'a str), usize>;
+
+/// Updates remote repo revisions and, when possible, keeps existing `# frozen:` comments in sync.
+#[expect(clippy::fn_params_excessive_bools)]
+pub(crate) async fn auto_update(
+    store: &Store,
+    config: Option<PathBuf>,
+    filter_repos: Vec<String>,
+    exclude_repos: Vec<String>,
+    include_tag: Vec<String>,
+    exclude_tag: Vec<String>,
+    repo_include_tag: Vec<String>,
+    repo_exclude_tag: Vec<String>,
+    verbose: bool,
+    bleeding_edge: bool,
+    freeze: bool,
+    jobs: usize,
+    dry_run: bool,
+    exit_code: bool,
+    cooldown_days: Option<u8>,
+    filesystem: Option<FilesystemOptions>,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    // TODO: support selectors?
+    let selectors = Selectors::default();
+    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
+
+    let tag_filters =
+        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
+    let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
+    let reporter = AutoUpdateReporter::new(printer);
+
+    let repo_sources = collect_repo_sources(&workspace, cooldown_days, filesystem.as_ref())?;
+    let sources = repo_sources.iter().filter(|repo_source| {
+        (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
+            && !exclude_repos.iter().any(|repo| repo == repo_source.repo)
+    });
+    let outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
+        .map(async |repo_source| {
+            let progress = reporter.on_update_start(repo_source.repo);
+            let result =
+                evaluate_repo_source(repo_source, bleeding_edge, freeze, &tag_filters).await;
+            reporter.on_update_complete(progress);
+            result
+        })
+        .buffer_unordered(jobs)
+        .try_collect::<Vec<_>>()
+        .await?
+        .into_iter()
+        .flatten()
+        .collect();
+
+    reporter.on_complete();
+
+    warn_frozen_mismatches(&outcomes, printer)?;
+
+    // Group results by project config file
+    let mut project_updates: ProjectUpdates<'_> = FxHashMap::default();
+    let apply_result =
+        apply_repo_updates(outcomes, verbose, dry_run, printer, &mut project_updates)?;
+
+    if !dry_run {
+        for (project, revisions) in project_updates {
+            if revisions.iter().any(Option::is_some) {
+                write_new_config(project.config_file(), &revisions).await?;
+            }
+        }
+    }
+
+    if apply_result.failure || (exit_code && apply_result.has_updates) {
+        return Ok(ExitStatus::Failure);
+    }
+    Ok(ExitStatus::Success)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tag(name: &str) -> TagTimestamp {
+        TagTimestamp::new(name.to_string(), 0, String::new())
+    }
+
+    fn filtered_tags(filters: &TagFilters, repo: &str, tags: &[TagTimestamp]) -> Vec<String> {
+        filters
+            .filter(repo, tags)
+            .into_iter()
+            .map(|tag| tag.tag.clone())
+            .collect()
+    }
+
+    #[test]
+    fn tag_filters_keep_all_tags_without_filters() {
+        let filters = TagFilters::new(Vec::new(), Vec::new(), Vec::new(), Vec::new()).unwrap();
+        let tags = [tag("v1.0.0"), tag("nightly")];
+
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/repo", &tags),
+            vec!["v1.0.0", "nightly"]
+        );
+    }
+
+    #[test]
+    fn tag_filters_repo_include_overrides_global_include() {
+        let filters = TagFilters::new(
+            vec!["v1.*".to_string()],
+            Vec::new(),
+            vec!["https://example.com/repo=v*.1.0".to_string()],
+            Vec::new(),
+        )
+        .unwrap();
+        let tags = [tag("v1.0.0"), tag("v1.1.0"), tag("v2.1.0")];
+
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/repo", &tags),
+            vec!["v1.1.0", "v2.1.0"]
+        );
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/other", &tags),
+            vec!["v1.0.0", "v1.1.0"]
+        );
+    }
+
+    #[test]
+    fn tag_filters_apply_excludes_after_includes() {
+        let filters = TagFilters::new(
+            vec!["v*".to_string()],
+            vec!["*-rc*".to_string()],
+            Vec::new(),
+            vec!["https://example.com/repo=v2.*".to_string()],
+        )
+        .unwrap();
+        let tags = [
+            tag("v1.0.0"),
+            tag("v2.0.0"),
+            tag("v3.0.0-rc1"),
+            tag("nightly"),
+        ];
+
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/repo", &tags),
+            vec!["v1.0.0"]
+        );
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/other", &tags),
+            vec!["v1.0.0", "v2.0.0"]
+        );
+    }
+
+    #[test]
+    fn tag_filters_reject_invalid_repo_filter_values() {
+        let result = TagFilters::new(
+            Vec::new(),
+            Vec::new(),
+            vec!["https://example.com/repo".to_string()],
+            Vec::new(),
+        );
+
+        match result {
+            Ok(_) => panic!("expected invalid repo tag filter to fail"),
+            Err(err) => assert!(
+                err.to_string().contains("expected `<repo>=<pattern>`"),
+                "{err:#}"
+            ),
+        }
+    }
+}

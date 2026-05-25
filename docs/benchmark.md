@@ -6,7 +6,7 @@ Caveats:
 
 - Benchmark performance may vary based on hardware, OS, network conditions, and other factors.
 - Benchmarks are not exhaustive; results may vary with different repositories and configurations.
-- Prek is under active development; performance may improve over time.
+- prek is under active development; performance may improve over time.
 
 Environment:
 
@@ -19,7 +19,7 @@ RAM: 18GB
 
 ## Cold installation
 
-Here is a benchmark of installing hooks from [Airflow](https://github.com/apache/airflow), which has a large and complex pre-commit configuration.
+Here is a benchmark of installing hooks from [Apache Airflow](https://github.com/apache/airflow), which has a large and complex pre-commit configuration.
 
 Steps:
 
@@ -35,21 +35,21 @@ hyperfine \
     --prepare 'prek clean && pre-commit clean && uv cache clean' \
     --setup 'prek --version && pre-commit --version' \
     --runs 1 \
-    'prek install-hooks' \
+    'prek prepare-hooks' \
     'pre-commit install-hooks'
 ```
 
 Results:
 
 ```
-Benchmark 1: prek install-hooks
+Benchmark 1: prek prepare-hooks
   Time (abs ≡):        18.395 s               [User: 11.234 s, System: 9.979 s]
 
 Benchmark 2: pre-commit install-hooks
   Time (abs ≡):        186.990 s               [User: 68.774 s, System: 39.379 s]
 
 Summary
-  prek install-hooks ran
+  prek prepare-hooks ran
    10.17 times faster than pre-commit install-hooks
 ```
 

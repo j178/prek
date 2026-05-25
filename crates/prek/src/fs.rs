@@ -1,0 +1,623 @@
+// MIT License
+//
+// Copyright (c) 2023 Astral Software Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::fmt::Display;
+use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::Duration;
+
+use anyhow::Context;
+use rustc_hash::FxHashMap;
+#[cfg(test)]
+use rustc_hash::FxHashSet;
+use tracing::{debug, error, info, trace};
+
+use crate::cli::reporter;
+
+pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::env::current_dir()
+        .map(|cwd| dunce::canonicalize(&cwd).unwrap_or(cwd))
+        .expect("The current directory must be exist")
+});
+
+static IN_PROCESS_LOCK_HELD_COUNTS: LazyLock<Mutex<FxHashMap<PathBuf, usize>>> =
+    LazyLock::new(Default::default);
+
+#[cfg(test)]
+static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(Default::default);
+
+// Test-only override: treat contention for specific lock paths as cross-process so we emit the
+// warning even if the lock is held by the current process. This lets unit tests exercise the
+// warning logic without spawning another process, and avoids affecting unrelated locks/tests.
+#[cfg(test)]
+static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
+    LazyLock::new(Default::default);
+
+/// Expand a path starting with `~` to the user's home directory.
+pub(crate) fn expand_tilde(path: PathBuf) -> PathBuf {
+    if let Ok(stripped) = path.strip_prefix("~") {
+        if let Some(home) = std::env::home_dir() {
+            return home.join(stripped);
+        }
+    }
+    path
+}
+
+/// A file lock that is automatically released when dropped.
+#[derive(Debug)]
+pub struct LockedFile {
+    file: fs_err::File,
+    path: PathBuf,
+}
+
+impl LockedFile {
+    /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
+    fn lock_file_blocking(
+        file: fs_err::File,
+        resource: &str,
+    ) -> Result<fs_err::File, std::io::Error> {
+        trace!(
+            resource,
+            path = %file.path().display(),
+            "Checking lock",
+        );
+        match file.try_lock() {
+            Ok(()) => {
+                debug!(resource, "Acquired lock");
+                Ok(file)
+            }
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures
+                if !matches!(err, std::fs::TryLockError::WouldBlock) {
+                    trace!(error = ?err, "Try lock error");
+                }
+                info!(
+                    resource,
+                    path = %file.path().display(),
+                    "Waiting to acquire lock",
+                );
+                file.lock().map_err(|err| {
+                    // Not a fs_err method, we need to build our own path context
+                    std::io::Error::other(format!(
+                        "Could not acquire lock for `{resource}` at `{}`: {}",
+                        file.path().display(),
+                        err
+                    ))
+                })?;
+                trace!(resource, "Acquired lock");
+                Ok(file)
+            }
+        }
+    }
+
+    /// Acquire a cross-process lock for a resource using a file at the provided path.
+    pub async fn acquire(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let path = path.as_ref().to_path_buf();
+
+        let file = fs_err::File::create(&path)?;
+
+        let resource = resource.to_string();
+        let mut task =
+            tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource));
+
+        let warning_path = path.clone();
+
+        let file = tokio::select! {
+            result = &mut task => result??,
+            () = tokio::time::sleep(Duration::from_secs(1)) => {
+                let held_by_this_process = {
+                    let held_by_this_process = IN_PROCESS_LOCK_HELD_COUNTS
+                                .lock()
+                                .unwrap()
+                                .get(&warning_path)
+                                .is_some_and(|count| *count > 0);
+
+                    #[cfg(test)]
+                    {
+                        let forced_cross_process = FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
+                            .lock()
+                            .unwrap()
+                            .contains(&warning_path);
+
+                        if forced_cross_process {
+                            false
+                        } else {
+                            held_by_this_process
+                        }
+                    }
+
+                    #[cfg(not(test))]
+                    {
+                        held_by_this_process
+                    }
+                };
+
+                if !held_by_this_process {
+                    reporter::suspend(move || {
+                        #[cfg(test)]
+                        {
+                            LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path);
+                        }
+
+                        #[cfg(not(test))]
+                        {
+                            crate::warn_user!(
+                                "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                                warning_path.display()
+                            );
+                        }
+                    });
+                }
+
+                task.await??
+            }
+        };
+
+        {
+            let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
+            *held.entry(path.clone()).or_insert(0) += 1;
+        }
+
+        Ok(Self { file, path })
+    }
+}
+
+impl Drop for LockedFile {
+    fn drop(&mut self) {
+        if let Err(err) = self.file.file().unlock() {
+            error!(
+                "Failed to unlock {}; program may be stuck: {}",
+                self.file.path().display(),
+                err
+            );
+        } else {
+            let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
+            if let Some(count) = held.get_mut(&self.path) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    held.remove(&self.path);
+                }
+            }
+            trace!(path = %self.file.path().display(), "Released lock");
+        }
+    }
+}
+
+/// Normalizes a path to use `/` as a separator everywhere, even on platforms
+/// that recognize other characters as separators.
+#[cfg(not(windows))]
+pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
+    path
+}
+
+/// Normalizes a path to use `/` as a separator everywhere, even on platforms
+/// that recognize other characters as separators.
+#[cfg(windows)]
+pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
+    use std::ffi::OsString;
+
+    if !path.as_os_str().as_encoded_bytes().contains(&b'\\') {
+        return path;
+    }
+
+    let mut path = path.into_os_string().into_encoded_bytes();
+    for byte in &mut path {
+        if *byte == b'\\' {
+            *byte = b'/';
+        }
+    }
+
+    // SAFETY: `path` came from `OsString::into_encoded_bytes`, and we only
+    // replace ASCII `\` with ASCII `/`. ASCII bytes cannot appear inside a
+    // non-ASCII UTF-8/WTF-8 sequence, so this preserves the encoding invariant
+    // required by `from_encoded_bytes_unchecked`.
+    PathBuf::from(unsafe { OsString::from_encoded_bytes_unchecked(path) })
+}
+
+/// Compute a path describing `path` relative to `base`.
+///
+/// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
+/// `lib/marker.txt` and `lib/python/site-packages` -> `../../marker.txt`
+/// `bin/foo_launcher` and `lib/python/site-packages` -> `../../../bin/foo_launcher`
+///
+/// Returns `Err` if there is no relative path between `path` and `base` (for example, if the paths
+/// are on different drives on Windows).
+pub fn relative_to(
+    path: impl AsRef<Path>,
+    base: impl AsRef<Path>,
+) -> Result<PathBuf, std::io::Error> {
+    // Find the longest common prefix, and also return the path stripped from that prefix
+    let (stripped, common_prefix) = base
+        .as_ref()
+        .ancestors()
+        .find_map(|ancestor| {
+            // Simplifying removes the UNC path prefix on windows.
+            dunce::simplified(path.as_ref())
+                .strip_prefix(dunce::simplified(ancestor))
+                .ok()
+                .map(|stripped| (stripped, ancestor))
+        })
+        .ok_or_else(|| {
+            std::io::Error::other(format!(
+                "Trivial strip failed: {} vs. {}",
+                path.as_ref().display(),
+                base.as_ref().display()
+            ))
+        })?;
+
+    // go as many levels up as required
+    let levels_up = base.as_ref().components().count() - common_prefix.components().count();
+    let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
+
+    Ok(up.join(stripped))
+}
+
+/// Create a symlink to the file, or copy it if symlink creation fails.
+/// Tries symlink first, then falls back to a regular file copy.
+pub(crate) async fn symlink_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
+    match fs_err::tokio::symlink_metadata(target).await {
+        Ok(_) => {
+            fs_err::tokio::remove_file(target).await?;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Try symlink on Unix systems
+        match fs_err::tokio::symlink(source, target).await {
+            Ok(()) => {
+                trace!(
+                    "Created symlink from {} to {}",
+                    source.display(),
+                    target.display()
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                trace!(
+                    "Failed to create symlink from {} to {}: {}",
+                    source.display(),
+                    target.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        // Try Windows symlink API (requires admin privileges)
+        match fs_err::tokio::symlink_file(source, target).await {
+            Ok(()) => {
+                trace!(
+                    "Created Windows symlink from {} to {}",
+                    source.display(),
+                    target.display()
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                trace!(
+                    "Failed to create Windows symlink from {} to {}: {}",
+                    source.display(),
+                    target.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    // Fallback to copy
+    trace!(
+        "Falling back to copy from {} to {}",
+        source.display(),
+        target.display()
+    );
+    fs_err::tokio::copy(source, target).await.with_context(|| {
+        format!(
+            "Failed to copy file from {} to {}",
+            source.display(),
+            target.display(),
+        )
+    })?;
+
+    Ok(())
+}
+
+pub trait Simplified {
+    /// Simplify a [`Path`].
+    ///
+    /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's a no-op.
+    fn simplified(&self) -> &Path;
+
+    /// Render a [`Path`] for display.
+    ///
+    /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's
+    /// equivalent to [`std::path::Display`].
+    fn simplified_display(&self) -> impl Display;
+
+    /// Render a [`Path`] for user-facing display.
+    ///
+    /// Like [`simplified_display`], but relativizes the path against the current working directory.
+    fn user_display(&self) -> impl Display;
+}
+
+impl<T: AsRef<Path>> Simplified for T {
+    fn simplified(&self) -> &Path {
+        dunce::simplified(self.as_ref())
+    }
+
+    fn simplified_display(&self) -> impl Display {
+        dunce::simplified(self.as_ref()).display()
+    }
+
+    fn user_display(&self) -> impl Display {
+        let path = dunce::simplified(self.as_ref());
+
+        // If current working directory is root, display the path as-is.
+        if CWD.ancestors().nth(1).is_none() {
+            return path.display();
+        }
+
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
+
+        path.display()
+    }
+}
+
+/// Clean a path lexically, without touching the filesystem.
+pub(crate) trait PathClean {
+    fn clean(&self) -> PathBuf;
+}
+
+impl PathClean for Path {
+    fn clean(&self) -> PathBuf {
+        clean_path(self)
+    }
+}
+
+impl PathClean for PathBuf {
+    fn clean(&self) -> PathBuf {
+        clean_path(self)
+    }
+}
+
+fn clean_path(path: impl AsRef<Path>) -> PathBuf {
+    let mut out = Vec::new();
+
+    for component in path.as_ref().components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match out.last() {
+                Some(Component::RootDir) => {}
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                None | Some(Component::CurDir | Component::ParentDir | Component::Prefix(_)) => {
+                    out.push(component);
+                }
+            },
+            component => out.push(component),
+        }
+    }
+
+    if out.is_empty() {
+        PathBuf::from(".")
+    } else {
+        out.iter().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::time::Duration;
+
+    #[test]
+    fn path_clean() {
+        use super::PathClean;
+
+        let cases = [
+            ("", "."),
+            (".", "."),
+            ("./test/./path", "test/path"),
+            ("test/path/..", "test"),
+            ("test/path/../../..", ".."),
+            ("test/path/../../../..", "../.."),
+            ("../test/..", ".."),
+            ("/../test", "/test"),
+            ("/test/path/../../../..", "/"),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(Path::new(input).clean(), PathBuf::from(expected), "{input}");
+        }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn normalize_path_keeps_non_windows_paths_unchanged() {
+        let path = PathBuf::from(r"foo\bar/baz");
+
+        assert_eq!(super::normalize_path(path.clone()), path);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_path_replaces_windows_separators() {
+        let path = PathBuf::from(r"foo\bar/baz");
+        let normalized = super::normalize_path(path);
+
+        assert_eq!(normalized.as_os_str().as_encoded_bytes(), b"foo/bar/baz");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_path_preserves_non_utf8_windows_paths() {
+        use std::ffi::OsString;
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+        let path = PathBuf::from(OsString::from_wide(&[
+            u16::from(b'a'),
+            u16::from(b'\\'),
+            0xD800,
+            u16::from(b'\\'),
+            u16::from(b'b'),
+        ]));
+        let normalized = super::normalize_path(path);
+        let normalized = normalized.as_os_str().encode_wide().collect::<Vec<_>>();
+
+        assert_eq!(
+            normalized,
+            vec![
+                u16::from(b'a'),
+                u16::from(b'/'),
+                0xD800,
+                u16::from(b'/'),
+                u16::from(b'b'),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn symlink_or_copy_creates_symlink() -> anyhow::Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let source = tmp.path().join("source");
+        let target = tmp.path().join("target");
+        fs_err::write(&source, "source content")?;
+
+        super::symlink_or_copy(&source, &target).await?;
+
+        assert!(fs_err::symlink_metadata(&target)?.file_type().is_symlink());
+        assert_eq!(fs_err::read_link(target)?, source);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn symlink_or_copy_replaces_existing_file() -> anyhow::Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let source = tmp.path().join("source");
+        let target = tmp.path().join("target");
+        fs_err::write(&source, "new content")?;
+        fs_err::write(&target, "old content")?;
+
+        super::symlink_or_copy(&source, &target).await?;
+
+        assert_eq!(fs_err::read_to_string(&target)?, "new content");
+        #[cfg(unix)]
+        assert!(fs_err::symlink_metadata(&target)?.file_type().is_symlink());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn lock_warning_suppressed_for_in_process_contention() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let lock_path = tmp.path().join(".lock");
+
+        // First acquire should succeed immediately.
+        let lock1 = super::LockedFile::acquire(&lock_path, "test-lock")
+            .await
+            .expect("acquire lock1");
+
+        let held_count = super::IN_PROCESS_LOCK_HELD_COUNTS
+            .lock()
+            .unwrap()
+            .get(&lock_path)
+            .copied();
+        assert_eq!(
+            held_count,
+            Some(1),
+            "expected held-count to be set after first acquire"
+        );
+
+        // Second acquire should block, but since the lock is held by this process, it should NOT
+        // trigger the "Another prek process" warning.
+        let lock_path2 = lock_path.clone();
+        let task =
+            tokio::spawn(async move { super::LockedFile::acquire(lock_path2, "test-lock").await });
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        let warning = super::LOCK_WARNING_PATHS
+            .lock()
+            .unwrap()
+            .contains(&lock_path);
+        assert!(
+            !warning,
+            "expected no warning for in-process contention, got: {warning:?}"
+        );
+
+        drop(lock1);
+        task.await.expect("join task").expect("acquire lock2");
+    }
+
+    #[tokio::test]
+    async fn lock_warning_emitted_when_forced_cross_process() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let lock_path = tmp.path().join(".lock");
+
+        super::FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
+            .lock()
+            .unwrap()
+            .insert(lock_path.clone());
+
+        // First acquire should succeed immediately.
+        let lock1 = super::LockedFile::acquire(&lock_path, "test-lock")
+            .await
+            .expect("acquire lock1");
+
+        // Second acquire should block and emit the warning due to the forced override.
+        let lock_path2 = lock_path.clone();
+        let task =
+            tokio::spawn(async move { super::LockedFile::acquire(lock_path2, "test-lock").await });
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        let warning = super::LOCK_WARNING_PATHS
+            .lock()
+            .unwrap()
+            .contains(&lock_path);
+        assert!(
+            warning,
+            "expected warning when forced cross-process mode is enabled"
+        );
+
+        // Cleanup.
+        super::FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
+            .lock()
+            .unwrap()
+            .remove(&lock_path);
+        drop(lock1);
+        task.await.expect("join task").expect("acquire lock2");
+    }
+}
