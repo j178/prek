@@ -420,7 +420,7 @@ fn language_version() {
         .expect("Failed to read deno tools directory")
         .flatten()
         .filter_map(|d| {
-            let filename = d.file_name().to_string_lossy().to_string();
+            let filename = d.file_name().to_string_lossy().into_owned();
             if filename.starts_with('.') {
                 None
             } else {

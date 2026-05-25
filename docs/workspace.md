@@ -102,6 +102,10 @@ Projects are executed from **deepest to shallowest**:
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
 
+Projects at the same depth can run concurrently because the file sets passed to their hooks do not overlap. Concurrency is still bounded by prek's global concurrency limit.
+
+This concurrency assumes hooks only operate on their own project state and the files passed to them. Hooks that read from or write to shared resources outside their project directory (for example, sibling project files, shared caches, lockfiles, or other global state) may still contend and should be designed to avoid that.
+
 ### File Processing Behavior
 
 **By default**, files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
@@ -133,30 +137,26 @@ When running `prek run` on the example structure above, you might see output lik
 
 ```console
 $ prek run
-Running hooks for `src/backend`:
-check python ast.........................................................Passed
-check for merge conflicts................................................Passed
-black....................................................................Passed
-isort....................................................................Passed
-
-Running hooks for `docs`:
-Markdownlint.........................................(unimplemented yet)Skipped
-
-Running hooks for `frontend`:
-prettier.................................................................Passed
-
-Running hooks for `src`:
-isort....................................................................Passed
-mypy.....................................................................Passed
-check python ast.........................................................Passed
-check docstring is first.................................................Passed
-
-Running hooks for `.`:
-fix end of files.........................................................Passed
-check yaml...............................................................Passed
-check for added large files..............................................Passed
-trim trailing whitespace.................................................Passed
-check for merge conflicts................................................Passed
+✓ src/backend
+  check python ast.......................................................Passed
+  check for merge conflicts..............................................Passed
+  black..................................................................Passed
+  isort..................................................................Passed
+✓ docs
+  Markdownlint.......................................(unimplemented yet)Skipped
+✓ frontend
+  prettier...............................................................Passed
+✓ src
+  isort..................................................................Passed
+  mypy...................................................................Passed
+  check python ast.......................................................Passed
+  check docstring is first...............................................Passed
+✓ <workspace>
+  fix end of files.......................................................Passed
+  check yaml.............................................................Passed
+  check for added large files............................................Passed
+  trim trailing whitespace...............................................Passed
+  check for merge conflicts..............................................Passed
 ```
 
 Notice how:

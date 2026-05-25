@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::ops::ControlFlow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -64,7 +64,7 @@ impl MetaHook {
                 name: "Check hooks apply".to_string(),
                 priority: None,
                 options: HookOptions {
-                    files: Some(config_file_glob.clone()),
+                    files: Some(config_file_glob),
                     ..Default::default()
                 },
             },
@@ -111,7 +111,7 @@ pub(crate) async fn check_hooks_apply(
 
     let mut code = 0;
     let mut output = Vec::new();
-    let mut tag_cache = FileTagCache::default();
+    let tag_cache = FileTagCache::from_paths(input.iter().map(PathBuf::as_path));
 
     for project in projects {
         let project_hooks = project
@@ -133,8 +133,8 @@ pub(crate) async fn check_hooks_apply(
         let mut matches = vec![false; hooks.len()];
         let mut remaining = matches.len();
 
-        ProjectFiles::visit_for_project(input.iter(), hooks[0].project(), None, |file| {
-            let tags = file.tags(&mut tag_cache);
+        ProjectFiles::visit_for_project(input.iter(), hooks[0].project(), None, None, |file| {
+            let tags = file.tags(&tag_cache);
             for (matched, filter) in matches.iter_mut().zip(&filters) {
                 if *matched {
                     continue;
@@ -258,7 +258,7 @@ pub(crate) async fn check_useless_excludes(
 
     let mut code = 0;
     let mut output = Vec::new();
-    let mut tag_cache = FileTagCache::default();
+    let tag_cache = FileTagCache::from_paths(input_workspace.iter().map(PathBuf::as_path));
 
     for project in projects {
         let config = project.config();
@@ -299,8 +299,8 @@ pub(crate) async fn check_useless_excludes(
             .collect::<Vec<_>>();
         let mut remaining = exclude_matches.iter().filter(|matched| !**matched).count();
 
-        ProjectFiles::visit_for_project(input_workspace.iter(), &project, None, |file| {
-            let tags = file.tags(&mut tag_cache);
+        ProjectFiles::visit_for_project(input_workspace.iter(), &project, None, None, |file| {
+            let tags = file.tags(&tag_cache);
             for ((matched, (_, opts)), tag_filter) in exclude_matches
                 .iter_mut()
                 .zip(&hook_options)

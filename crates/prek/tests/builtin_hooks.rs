@@ -258,24 +258,24 @@ fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
         .assert()
         .success();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Running hooks for `project2`:
-    forbid new submodules....................................................Failed
-    - hook id: forbid-new-submodules
-    - exit code: 1
+    × project2
+      forbid new submodules..................................................Failed
+      - hook id: forbid-new-submodules
+      - exit code: 1
 
-      sub module: new submodule introduced
+        sub module: new submodule introduced
 
-      This commit introduces new git submodules.
-      Did you unintentionally `git add .`?
-      To fix this, run `git rm <submodule>`.
-      Also check `.gitmodules` for any unintended changes.
+        This commit introduces new git submodules.
+        Did you unintentionally `git add .`?
+        To fix this, run `git rm <submodule>`.
+        Also check `.gitmodules` for any unintended changes.
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -786,15 +786,15 @@ fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() 
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for `app`:
-    check for added large files..............................................Passed
+    ✓ app
+      check for added large files............................................Passed
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -820,19 +820,19 @@ fn check_added_large_files_workspace_mode_respects_project_relative_added_files(
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Running hooks for `app`:
-    check for added large files..............................................Failed
-    - hook id: check-added-large-files
-    - exit code: 1
+    × app
+      check for added large files............................................Failed
+      - hook id: check-added-large-files
+      - exit code: 1
 
-      large.bin (2 KB) exceeds 1 KB
+        large.bin (2 KB) exceeds 1 KB
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -929,100 +929,99 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     context.git_add(".");
 
     // First run: expect failures and auto-fixes where applicable.
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Running hooks for `app`:
-    identity.................................................................Passed
-    - hook id: identity
-    - duration: [TIME]
+    × app
+      identity...............................................................Passed
+      - hook id: identity
+      - duration: [TIME]
 
-      correct.txt
-      invalid.yaml
-      empty.json
-      duplicate.json
-      trailing_ws.txt
-      large.bin
-      eof_multiple_lf.txt
-      duplicate.yaml
-      empty.yaml
-      mixed.txt
-      invalid.json
-      .pre-commit-config.yaml
-      eof_no_newline.txt
-    fix end of files.........................................................Failed
-    - hook id: end-of-file-fixer
-    - exit code: 1
-    - files were modified by this hook
+        correct.txt
+        invalid.yaml
+        empty.json
+        duplicate.json
+        trailing_ws.txt
+        large.bin
+        eof_multiple_lf.txt
+        duplicate.yaml
+        empty.yaml
+        mixed.txt
+        invalid.json
+        .pre-commit-config.yaml
+        eof_no_newline.txt
+      fix end of files.......................................................Failed
+      - hook id: end-of-file-fixer
+      - exit code: 1
+      - files were modified by this hook
 
-      Fixing invalid.yaml
-      Fixing duplicate.json
-      Fixing eof_no_newline.txt
-      Fixing eof_multiple_lf.txt
-      Fixing duplicate.yaml
-      Fixing invalid.json
-    check yaml...............................................................Failed
-    - hook id: check-yaml
-    - exit code: 1
+        Fixing invalid.yaml
+        Fixing duplicate.json
+        Fixing eof_no_newline.txt
+        Fixing eof_multiple_lf.txt
+        Fixing duplicate.yaml
+        Fixing invalid.json
+      check yaml.............................................................Failed
+      - hook id: check-yaml
+      - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
-       --> <input>:2:1
-        |
-      1 | a: 1
-      2 | a: 2
-        | ^ duplicate mapping key: a not allowed here)
-      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
-       --> <input>:1:5
-        |
-      1 | a: b: c
-        |     ^ mapping values are not allowed in this context)
-    check json...............................................................Failed
-    - hook id: check-json
-    - exit code: 1
+        duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
+         --> <input>:2:1
+          |
+        1 | a: 1
+        2 | a: 2
+          | ^ duplicate mapping key: a not allowed here)
+        invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
+         --> <input>:1:5
+          |
+        1 | a: b: c
+          |     ^ mapping values are not allowed in this context)
+      check json.............................................................Failed
+      - hook id: check-json
+      - exit code: 1
 
-      duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
-      invalid.json: Failed to json decode (trailing comma at line 1 column 9)
-    mixed line ending........................................................Failed
-    - hook id: mixed-line-ending
-    - exit code: 1
-    - files were modified by this hook
+        duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
+        invalid.json: Failed to json decode (trailing comma at line 1 column 9)
+      mixed line ending......................................................Failed
+      - hook id: mixed-line-ending
+      - exit code: 1
+      - files were modified by this hook
 
-      Fixing mixed.txt
-    trim trailing whitespace.................................................Failed
-    - hook id: trailing-whitespace
-    - exit code: 1
-    - files were modified by this hook
+        Fixing mixed.txt
+      trim trailing whitespace...............................................Failed
+      - hook id: trailing-whitespace
+      - exit code: 1
+      - files were modified by this hook
 
-      Fixing trailing_ws.txt
-    check for added large files..............................................Failed
-    - hook id: check-added-large-files
-    - exit code: 1
+        Fixing trailing_ws.txt
+      check for added large files............................................Failed
+      - hook id: check-added-large-files
+      - exit code: 1
 
-      large.bin (2 KB) exceeds 1 KB
+        large.bin (2 KB) exceeds 1 KB
+    ✓ <workspace>
+      identity...............................................................Passed
+      - hook id: identity
+      - duration: [TIME]
 
-    Running hooks for `.`:
-    identity.................................................................Passed
-    - hook id: identity
-    - duration: [TIME]
-
-      app/.pre-commit-config.yaml
-      app/invalid.json
-      app/duplicate.yaml
-      app/correct.txt
-      app/mixed.txt
-      app/invalid.yaml
-      app/empty.yaml
-      app/duplicate.json
-      app/empty.json
-      app/large.bin
-      app/eof_no_newline.txt
-      .pre-commit-config.yaml
-      app/eof_multiple_lf.txt
-      app/trailing_ws.txt
+        app/.pre-commit-config.yaml
+        app/invalid.json
+        app/duplicate.yaml
+        app/correct.txt
+        app/mixed.txt
+        app/invalid.yaml
+        app/empty.yaml
+        app/duplicate.json
+        app/empty.json
+        app/large.bin
+        app/eof_no_newline.txt
+        .pre-commit-config.yaml
+        app/eof_multiple_lf.txt
+        app/trailing_ws.txt
 
     ----- stderr -----
-    ");
+    "#);
 
     // Manually fix the files that can't be auto-fixed.
     app.child("invalid.yaml").write_str("a:\n  b: c\n")?;
@@ -1035,57 +1034,56 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     context.git_add(".");
 
     // Second run: all hooks should now pass.
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for `app`:
-    identity.................................................................Passed
-    - hook id: identity
-    - duration: [TIME]
+    ✓ app
+      identity...............................................................Passed
+      - hook id: identity
+      - duration: [TIME]
 
-      correct.txt
-      invalid.yaml
-      empty.json
-      duplicate.json
-      trailing_ws.txt
-      large.bin
-      eof_multiple_lf.txt
-      duplicate.yaml
-      empty.yaml
-      mixed.txt
-      invalid.json
-      .pre-commit-config.yaml
-      eof_no_newline.txt
-    fix end of files.........................................................Passed
-    check yaml...............................................................Passed
-    check json...............................................................Passed
-    mixed line ending........................................................Passed
-    trim trailing whitespace.................................................Passed
-    check for added large files..............................................Passed
+        correct.txt
+        invalid.yaml
+        empty.json
+        duplicate.json
+        trailing_ws.txt
+        large.bin
+        eof_multiple_lf.txt
+        duplicate.yaml
+        empty.yaml
+        mixed.txt
+        invalid.json
+        .pre-commit-config.yaml
+        eof_no_newline.txt
+      fix end of files.......................................................Passed
+      check yaml.............................................................Passed
+      check json.............................................................Passed
+      mixed line ending......................................................Passed
+      trim trailing whitespace...............................................Passed
+      check for added large files............................................Passed
+    ✓ <workspace>
+      identity...............................................................Passed
+      - hook id: identity
+      - duration: [TIME]
 
-    Running hooks for `.`:
-    identity.................................................................Passed
-    - hook id: identity
-    - duration: [TIME]
-
-      app/.pre-commit-config.yaml
-      app/invalid.json
-      app/duplicate.yaml
-      app/correct.txt
-      app/mixed.txt
-      app/invalid.yaml
-      app/empty.yaml
-      app/duplicate.json
-      app/empty.json
-      app/large.bin
-      app/eof_no_newline.txt
-      .pre-commit-config.yaml
-      app/eof_multiple_lf.txt
-      app/trailing_ws.txt
+        app/.pre-commit-config.yaml
+        app/invalid.json
+        app/duplicate.yaml
+        app/correct.txt
+        app/mixed.txt
+        app/invalid.yaml
+        app/empty.yaml
+        app/duplicate.json
+        app/empty.json
+        app/large.bin
+        app/eof_no_newline.txt
+        .pre-commit-config.yaml
+        app/eof_multiple_lf.txt
+        app/trailing_ws.txt
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -3094,13 +3092,13 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    Running hooks for `app`:
-    check for case conflicts.................................................Failed
-    - hook id: check-case-conflict
-    - exit code: 1
+    × app
+      check for case conflicts...............................................Failed
+      - hook id: check-case-conflict
+      - exit code: 1
 
-      Case-insensitivity conflict found: FOO.txt
-      Case-insensitivity conflict found: foo.txt
+        Case-insensitivity conflict found: FOO.txt
+        Case-insensitivity conflict found: foo.txt
 
     ----- stderr -----
     "#

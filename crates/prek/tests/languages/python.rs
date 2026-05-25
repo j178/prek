@@ -120,7 +120,7 @@ fn language_version() -> anyhow::Result<()> {
                 // Skip symlinks, which may point to other versions.
                 return None;
             }
-            let filename = d.file_name().to_string_lossy().to_string();
+            let filename = d.file_name().to_string_lossy().into_owned();
             if filename.starts_with('.') {
                 None
             } else {

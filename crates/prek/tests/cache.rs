@@ -527,7 +527,7 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
             continue;
         }
 
-        let name = entry.file_name().to_string_lossy().to_string();
+        let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with("python-") {
             local_envs.push(name);
         }
@@ -626,7 +626,7 @@ fn write_config_tracking_file(
 ) -> anyhow::Result<()> {
     let configs: Vec<String> = configs
         .iter()
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().into_owned())
         .collect();
     let content = serde_json::to_string_pretty(&configs)?;
     home.child("config-tracking.json").write_str(&content)?;

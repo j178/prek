@@ -189,35 +189,35 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     context.write_pre_commit_config("repos: []");
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Running hooks for `app`:
-    Check hooks apply........................................................Failed
-    - hook id: check-hooks-apply
-    - exit code: 1
+    × app
+      Check hooks apply......................................................Failed
+      - hook id: check-hooks-apply
+      - exit code: 1
 
-      match-no-files does not apply to this repository
-    Check useless excludes...................................................Failed
-    - hook id: check-useless-excludes
-    - exit code: 1
+        match-no-files does not apply to this repository
+      Check useless excludes.................................................Failed
+      - hook id: check-useless-excludes
+      - exit code: 1
 
-      The exclude pattern `regex: $nonexistent^` for `useless-exclude` does not match any files
-    identity.................................................................Passed
-    - hook id: identity
-    - duration: [TIME]
+        The exclude pattern `regex: $nonexistent^` for `useless-exclude` does not match any files
+      identity...............................................................Passed
+      - hook id: identity
+      - duration: [TIME]
 
-      file.txt
-      .pre-commit-config.yaml
-      valid.json
-      invalid.json
-      main.py
-    match no files.......................................(no files to check)Skipped
-    useless exclude..........................................................Passed
+        file.txt
+        .pre-commit-config.yaml
+        valid.json
+        invalid.json
+        main.py
+      match no files.....................................(no files to check)Skipped
+      useless exclude........................................................Passed
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -259,15 +259,15 @@ fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Resu
     context.write_pre_commit_config("repos: []");
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for `app`:
-    Check useless excludes...................................................Passed
+    ✓ app
+      Check useless excludes.................................................Passed
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }

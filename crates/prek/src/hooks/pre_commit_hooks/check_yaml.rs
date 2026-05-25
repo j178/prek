@@ -52,10 +52,9 @@ async fn check_file(
         ignore_binary_tag_for_string: true,
     };
     if allow_multi_docs {
-        if let Err(e) = serde_saphyr::from_slice_multiple_with_options::<serde_json::Value>(
-            &content,
-            options.clone(),
-        ) {
+        if let Err(e) =
+            serde_saphyr::from_slice_multiple_with_options::<serde_json::Value>(&content, options)
+        {
             let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
             return Ok((1, error_message.into_bytes()));
         }

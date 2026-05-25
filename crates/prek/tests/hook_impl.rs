@@ -669,7 +669,7 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
         .chain([("[a-f0-9]{7}", "abc1234")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), commit, @r"
+    cmd_snapshot!(filters.clone(), commit, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -680,27 +680,25 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
      create mode 100644 project3/.pre-commit-config.yaml
 
     ----- stderr -----
-    Running hooks for `project2`:
-    Test Hook................................................................Passed
-    - hook id: test-hook
-    - duration: [TIME]
+    ✓ project2
+      Test Hook..............................................................Passed
+      - hook id: test-hook
+      - duration: [TIME]
 
-      cwd: [TEMP_DIR]/project2
+        cwd: [TEMP_DIR]/project2
+    ✓ project3
+      Test Hook..............................................................Passed
+      - hook id: test-hook
+      - duration: [TIME]
 
-    Running hooks for `project3`:
-    Test Hook................................................................Passed
-    - hook id: test-hook
-    - duration: [TIME]
+        cwd: [TEMP_DIR]/project3
+    ✓ <workspace>
+      Test Hook..............................................................Passed
+      - hook id: test-hook
+      - duration: [TIME]
 
-      cwd: [TEMP_DIR]/project3
-
-    Running hooks for `.`:
-    Test Hook................................................................Passed
-    - hook id: test-hook
-    - duration: [TIME]
-
-      cwd: [TEMP_DIR]/
-    ");
+        cwd: [TEMP_DIR]/
+    "#);
 
     Ok(())
 }
@@ -750,7 +748,7 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
         .chain([("[a-f0-9]{7}", "abc1234")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, commit, @r"
+    cmd_snapshot!(filters, commit, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -760,22 +758,21 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
      create mode 100644 template/.pre-commit-config.yaml
 
     ----- stderr -----
-    Running hooks for `template`:
-    Commit Msg Args..........................................................Passed
-    - hook id: commit-msg-args
-    - duration: [TIME]
+    ✓ template
+      Commit Msg Args........................................................Passed
+      - hook id: commit-msg-args
+      - duration: [TIME]
 
-      cwd: [TEMP_DIR]/template
-      args: ['../.git/COMMIT_EDITMSG']
+        cwd: [TEMP_DIR]/template
+        args: ['../.git/COMMIT_EDITMSG']
+    ✓ <workspace>
+      Commit Msg Args........................................................Passed
+      - hook id: commit-msg-args
+      - duration: [TIME]
 
-    Running hooks for `.`:
-    Commit Msg Args..........................................................Passed
-    - hook id: commit-msg-args
-    - duration: [TIME]
-
-      cwd: [TEMP_DIR]/
-      args: ['.git/COMMIT_EDITMSG']
-    ");
+        cwd: [TEMP_DIR]/
+        args: ['.git/COMMIT_EDITMSG']
+    "#);
 
     Ok(())
 }
@@ -1192,7 +1189,7 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
         .chain([("[a-f0-9]{7}", "abc1234")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), commit, @r"
+    cmd_snapshot!(filters.clone(), commit, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1203,13 +1200,13 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
      create mode 100644 project3/.pre-commit-config.yaml
 
     ----- stderr -----
-    Running hooks for `project2`:
-    Test Hook................................................................Passed
-    - hook id: test-hook
-    - duration: [TIME]
+    ✓ project2
+      Test Hook..............................................................Passed
+      - hook id: test-hook
+      - duration: [TIME]
 
-      cwd: [TEMP_DIR]/project2
-    ");
+        cwd: [TEMP_DIR]/project2
+    "#);
 
     Ok(())
 }

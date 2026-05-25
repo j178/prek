@@ -134,7 +134,7 @@ impl DirectHookEntry {
     ) -> Result<PreparedHookEntry, Error> {
         let mut split = self.split()?;
         let cmd = repo_path.join(&split[0]);
-        split[0] = cmd.to_string_lossy().to_string();
+        split[0] = cmd.to_string_lossy().into_owned();
 
         Ok(PreparedHookEntry::direct(resolve_command(split, env_path)))
     }
@@ -194,7 +194,7 @@ impl Shell {
     }
 
     fn argv_for_script(self, script_path: &Path) -> Vec<String> {
-        let script = script_path.to_string_lossy().to_string();
+        let script = script_path.to_string_lossy().into_owned();
         match self {
             Self::Sh => vec!["sh".to_string(), "-e".to_string(), script],
             Self::Bash => bash_argv(script),

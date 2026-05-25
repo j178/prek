@@ -59,34 +59,32 @@ fn workspace_docker() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for `project1`:
-    Hello World..............................................................Passed
-    - hook id: hello-world
-    - duration: [TIME]
+    ✓ project1
+      Hello World............................................................Passed
+      - hook id: hello-world
+      - duration: [TIME]
 
-      project1.txt .pre-commit-config.yaml
+        project1.txt .pre-commit-config.yaml
+    ✓ project2
+      Hello World............................................................Passed
+      - hook id: hello-world
+      - duration: [TIME]
 
-    Running hooks for `project2`:
-    Hello World..............................................................Passed
-    - hook id: hello-world
-    - duration: [TIME]
+        project2.txt .pre-commit-config.yaml
+    ✓ <workspace>
+      Hello World............................................................Passed
+      - hook id: hello-world
+      - duration: [TIME]
 
-      project2.txt .pre-commit-config.yaml
-
-    Running hooks for `.`:
-    Hello World..............................................................Passed
-    - hook id: hello-world
-    - duration: [TIME]
-
-      project1/.pre-commit-config.yaml .pre-commit-config.yaml project2/project2.txt project1/project1.txt
-      project2/.pre-commit-config.yaml
+        project1/.pre-commit-config.yaml .pre-commit-config.yaml project2/project2.txt project1/project1.txt
+        project2/.pre-commit-config.yaml
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }

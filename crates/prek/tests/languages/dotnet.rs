@@ -194,7 +194,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
     let mut found_10 = false;
 
     for entry in fs_err::read_dir(dotnet_tool_root.path())?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
+        let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with('8') {
             found_8 = true;
         }

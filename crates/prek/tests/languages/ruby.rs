@@ -933,7 +933,7 @@ fn prebuilt_vs_compiled_gems() -> anyhow::Result<()> {
 
     let gem_dirs: Vec<String> = fs_err::read_dir(&gems_dir)?
         .filter_map(Result::ok)
-        .map(|e| e.file_name().to_string_lossy().to_string())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
 
     // sqlite3 should have a platform suffix (precompiled)
@@ -1097,7 +1097,7 @@ fn auto_download() -> anyhow::Result<()> {
         .read_dir()?
         .flatten()
         .filter_map(|d| {
-            let filename = d.file_name().to_string_lossy().to_string();
+            let filename = d.file_name().to_string_lossy().into_owned();
             if filename.starts_with('.') {
                 None
             } else {

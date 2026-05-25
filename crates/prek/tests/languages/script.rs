@@ -95,26 +95,25 @@ mod unix {
         )?;
         context.git_add(".");
 
-        cmd_snapshot!(context.filters(), context.run(), @r"
+        cmd_snapshot!(context.filters(), context.run(), @r#"
         success: true
         exit_code: 0
         ----- stdout -----
-        Running hooks for `child`:
-        script...................................................................Passed
-        - hook id: script
-        - duration: [TIME]
+        ✓ child
+          script.................................................................Passed
+          - hook id: script
+          - duration: [TIME]
 
-          Hello, World from child!
+            Hello, World from child!
+        ✓ <workspace>
+          script.................................................................Passed
+          - hook id: script
+          - duration: [TIME]
 
-        Running hooks for `.`:
-        script...................................................................Passed
-        - hook id: script
-        - duration: [TIME]
-
-          Hello, World!
+            Hello, World!
 
         ----- stderr -----
-        ");
+        "#);
 
         cmd_snapshot!(context.filters(), context.run().current_dir(&child), @r"
         success: true

@@ -2156,18 +2156,18 @@ fn color() -> Result<()> {
     ");
 
     // Force color output
-    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    color....................................................................[42mPassed[49m
+    color[32m....................................................................[39m[42mPassed[49m
     [2m- hook id: color[0m
     [2m- duration: [TIME][0m
 
       [1;32mHello, world![0m
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -2906,19 +2906,18 @@ fn show_diff_on_failure() -> Result<()> {
 
     // Run in the root
     // Since we add a new subproject, use `--refresh` to find that.
-    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure").arg("--refresh"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure").arg("--refresh"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Running hooks for `app`:
-    modify...................................................................Failed
-    - hook id: modify
-    - files were modified by this hook
-
-    Running hooks for `.`:
-    modify...................................................................Failed
-    - hook id: modify
-    - files were modified by this hook
+    × app
+      modify.................................................................Failed
+      - hook id: modify
+      - files were modified by this hook
+    × <workspace>
+      modify.................................................................Failed
+      - hook id: modify
+      - files were modified by this hook
     All changes made by hooks:
     diff --git a/app/file.txt b/app/file.txt
     index [OLD]..[NEW] 100644
@@ -2938,7 +2937,7 @@ fn show_diff_on_failure() -> Result<()> {
     +Added line
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -3255,18 +3254,18 @@ fn run_with_stdin_closed() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--color").arg("always"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--color").arg("always"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-stdin..............................................................[42mPassed[49m
+    check-stdin[32m..............................................................[39m[42mPassed[49m
     [2m- hook id: check-stdin[0m
     [2m- duration: [TIME][0m
 
       STDIN closed
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 /// Test `prek --version` outputs version info.

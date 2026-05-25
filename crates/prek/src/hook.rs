@@ -383,7 +383,7 @@ impl HookBuilder {
         let priority = self
             .hook_spec
             .priority
-            .unwrap_or(u32::try_from(self.idx).expect("idx too large"));
+            .unwrap_or_else(|| u32::try_from(self.idx).expect("idx too large"));
 
         let mut hook = Hook {
             dependencies: OnceLock::new(),
@@ -548,7 +548,7 @@ impl Hook {
     pub(crate) fn install_dependencies(&self) -> Cow<'_, FxHashSet<String>> {
         if let Some(repo_path) = self.repo_path() {
             let mut deps = self.additional_dependencies.clone();
-            deps.insert(repo_path.to_string_lossy().to_string());
+            deps.insert(repo_path.to_string_lossy().into_owned());
             Cow::Owned(deps)
         } else {
             Cow::Borrowed(&self.additional_dependencies)

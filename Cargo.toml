@@ -37,6 +37,7 @@ clap = { version = "4.6.0", features = [
   "wrap_help",
 ] }
 clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
+console = { version = "0.16", default-features = false, features = ["std"] }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
