@@ -59,7 +59,7 @@ memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.13.1", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
-quick-xml = { version = "0.39" }
+quick-xml = { version = "0.40" }
 rand = { version = "0.10.0" }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "http2",
