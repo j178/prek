@@ -500,7 +500,7 @@ async fn run_hooks<'paths>(
         let mut project_runs = Vec::new();
 
         for project in projects {
-            let Some(hooks) = project_to_hooks.remove(project) else {
+            let Some(mut hooks) = project_to_hooks.remove(project) else {
                 if let RunInput::Files(files) = input {
                     ProjectFiles::consume_for_project(
                         files.iter(),
@@ -512,7 +512,6 @@ async fn run_hooks<'paths>(
                 continue;
             };
 
-            let mut hooks = hooks;
             // Sort hooks by priority (lower number means higher priority).
             // If two hooks have the same priority, preserve their original order from the config.
             hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));

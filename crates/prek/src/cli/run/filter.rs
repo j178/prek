@@ -164,18 +164,17 @@ impl<'a> FileTagCache<'a> {
 
     pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
         self.tags_by_file[file_idx]
-            .get_or_init(|| identify_tags(self.paths[file_idx]))
+            .get_or_init(|| {
+                let path = self.paths[file_idx];
+                match tags_from_path(path) {
+                    Ok(tags) => Some(tags),
+                    Err(err) => {
+                        error!(filename = ?path.display(), error = %err, "Failed to get tags");
+                        None
+                    }
+                }
+            })
             .as_ref()
-    }
-}
-
-fn identify_tags(path: &Path) -> Option<TagSet> {
-    match tags_from_path(path) {
-        Ok(tags) => Some(tags),
-        Err(err) => {
-            error!(filename = ?path.display(), error = %err, "Failed to get tags");
-            None
-        }
     }
 }
 
@@ -277,6 +276,7 @@ impl<'a> ProjectFiles<'a> {
                 continue;
             }
 
+            // Consume this file in current orphan project, so it won't be visited by parent projects.
             if orphan {
                 if let Some(newly_consumed_files) = newly_consumed_files.as_mut() {
                     if !newly_consumed_files.insert(filename) {

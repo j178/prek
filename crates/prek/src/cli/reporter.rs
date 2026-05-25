@@ -342,165 +342,6 @@ impl HookRunReporter {
         }
     }
 
-    fn update_project_summary(&self, project: &mut ProjectBar) {
-        let Some(message) = project.completed.hidden_summary() else {
-            return;
-        };
-
-        let summary = if let Some(summary) = &project.hidden_summary {
-            summary.clone()
-        } else {
-            let summary = self.reporter.children.insert_after(
-                &project.header,
-                ProgressBar::with_draw_target(None, self.reporter.printer.target()),
-            );
-            summary.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-            project.hidden_summary = Some(summary.clone());
-            summary
-        };
-        if project.completed.visible_len() == 0 {
-            project.last_line = summary.clone();
-        }
-        summary.set_message(format!("  {}", message.dimmed()));
-    }
-
-    fn progress_line_limit(&self) -> Option<usize> {
-        if self.reporter.children.is_hidden() {
-            return None;
-        }
-
-        Term::stderr()
-            .size_checked()
-            .map(|(height, _)| usize::from(height))
-            .filter(|height| *height > 0)
-    }
-
-    fn active_project_lines(projects: &FxHashMap<usize, ProjectBar>, running: usize) -> usize {
-        1 + running
-            + projects
-                .values()
-                .map(|project| {
-                    1 + project.completed.visible_len()
-                        + usize::from(project.completed.is_collapsed())
-                })
-                .sum::<usize>()
-    }
-
-    fn collapse_completed_projects(
-        &self,
-        projects: &mut FxHashMap<usize, ProjectBar>,
-        running: usize,
-    ) -> Vec<HookBar> {
-        let Some(limit) = self.progress_line_limit() else {
-            return Vec::new();
-        };
-
-        let mut removed = Vec::new();
-        while Self::active_project_lines(projects, running) > limit {
-            let Some(project_idx) = projects
-                .iter()
-                .filter(|(_, project)| project.finished && project.completed.has_hideable_visible())
-                .min_by_key(|(_, project)| project.order)
-                .map(|(project_idx, _)| *project_idx)
-            else {
-                break;
-            };
-
-            let Some(project) = projects.get_mut(&project_idx) else {
-                break;
-            };
-            removed.extend(project.completed.hide_visible());
-            self.update_project_summary(project);
-        }
-
-        removed
-    }
-
-    fn remember_completed(&self, completed: HookBar, running: usize) {
-        let trimmed = if self.show_project_headers {
-            let mut projects = self.projects.lock().unwrap();
-            if let Some(project) = projects.get_mut(&completed.hook_key.project_idx) {
-                project.completed.push(completed);
-                self.update_project_summary(project);
-                self.collapse_completed_projects(&mut projects, running)
-            } else {
-                vec![completed]
-            }
-        } else {
-            self.completed.lock().unwrap().push(completed);
-            Vec::new()
-        };
-
-        for completed in trimmed {
-            self.reporter.children.remove(&completed.progress);
-        }
-    }
-
-    pub fn on_run_result(&self, hook: &Hook, passed: bool) {
-        let hook_key = HookKey::from_hook(hook);
-        let progress = if self.show_project_headers {
-            let running = self.running.lock().unwrap().len();
-            let mut projects = self.projects.lock().unwrap();
-            let Some(project) = projects.get_mut(&hook_key.project_idx) else {
-                return;
-            };
-            let progress = project.completed.record_result(hook_key, passed);
-            self.update_project_summary(project);
-            let trimmed = self.collapse_completed_projects(&mut projects, running);
-            drop(projects);
-            for completed in trimmed {
-                self.reporter.children.remove(&completed.progress);
-            }
-            progress
-        } else {
-            let mut completed = self.completed.lock().unwrap();
-            completed.record_result(hook_key, passed)
-        };
-        let Some(progress) = progress else {
-            return;
-        };
-
-        let label = progress.message();
-        let (status, status_width) = if passed {
-            ("Passed".on_green().to_string(), "Passed".width())
-        } else {
-            ("Failed".on_red().to_string(), "Failed".width())
-        };
-        let dots = self
-            .dots
-            .saturating_add("Passed".width())
-            .saturating_sub(label.width() + status_width);
-        let dots = ".".repeat(dots).green().to_string();
-
-        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!("{label}{dots}{status}"));
-        progress.finish();
-    }
-
-    pub fn on_project_complete(&self, project: &workspace::Project, failed: bool) {
-        let running = self.running.lock().unwrap().len();
-        let mut projects = self.projects.lock().unwrap();
-        let Some(project_bar) = projects.get_mut(&project.idx()) else {
-            return;
-        };
-        project_bar.finished = true;
-        let header = &project_bar.header;
-        header.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        header.set_message(format!(
-            "{} {}",
-            project_status_marker(failed),
-            project.display_name().cyan().bold()
-        ));
-
-        header.finish();
-
-        let trimmed = self.collapse_completed_projects(&mut projects, running);
-        drop(projects);
-        for completed in trimmed {
-            self.reporter.children.remove(&completed.progress);
-        }
-    }
-
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
         let id = self.reporter.state.lock().unwrap().id();
 
@@ -585,6 +426,71 @@ impl HookRunReporter {
         self.remember_completed(running, running_count);
     }
 
+    pub fn on_run_result(&self, hook: &Hook, passed: bool) {
+        let hook_key = HookKey::from_hook(hook);
+        let progress = if self.show_project_headers {
+            let running = self.running.lock().unwrap().len();
+            let mut projects = self.projects.lock().unwrap();
+            let Some(project) = projects.get_mut(&hook_key.project_idx) else {
+                return;
+            };
+            let progress = project.completed.record_result(hook_key, passed);
+            self.update_project_summary(project);
+            let trimmed = self.collapse_completed_projects(&mut projects, running);
+            drop(projects);
+            for completed in trimmed {
+                self.reporter.children.remove(&completed.progress);
+            }
+            progress
+        } else {
+            let mut completed = self.completed.lock().unwrap();
+            completed.record_result(hook_key, passed)
+        };
+        let Some(progress) = progress else {
+            return;
+        };
+
+        let label = progress.message();
+        let (status, status_width) = if passed {
+            ("Passed".on_green().to_string(), "Passed".width())
+        } else {
+            ("Failed".on_red().to_string(), "Failed".width())
+        };
+        let dots = self
+            .dots
+            .saturating_add("Passed".width())
+            .saturating_sub(label.width() + status_width);
+        let dots = ".".repeat(dots).green().to_string();
+
+        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        progress.set_message(format!("{label}{dots}{status}"));
+        progress.finish();
+    }
+
+    pub fn on_project_complete(&self, project: &workspace::Project, failed: bool) {
+        let running = self.running.lock().unwrap().len();
+        let mut projects = self.projects.lock().unwrap();
+        let Some(project_bar) = projects.get_mut(&project.idx()) else {
+            return;
+        };
+        project_bar.finished = true;
+        let header = &project_bar.header;
+        header.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+        header.set_message(format!(
+            "{} {}",
+            project_status_marker(failed),
+            project.display_name().cyan().bold()
+        ));
+
+        header.finish();
+
+        let trimmed = self.collapse_completed_projects(&mut projects, running);
+        drop(projects);
+        for completed in trimmed {
+            self.reporter.children.remove(&completed.progress);
+        }
+    }
+
     pub fn clear_completed(&self) {
         let standalone_completed = {
             let mut completed = self.completed.lock().unwrap();
@@ -623,6 +529,100 @@ impl HookRunReporter {
     pub fn on_complete(&self) {
         self.clear_completed();
         self.reporter.on_complete();
+    }
+
+    fn remember_completed(&self, completed: HookBar, running: usize) {
+        let trimmed = if self.show_project_headers {
+            let mut projects = self.projects.lock().unwrap();
+            if let Some(project) = projects.get_mut(&completed.hook_key.project_idx) {
+                project.completed.push(completed);
+                self.update_project_summary(project);
+                self.collapse_completed_projects(&mut projects, running)
+            } else {
+                vec![completed]
+            }
+        } else {
+            self.completed.lock().unwrap().push(completed);
+            Vec::new()
+        };
+
+        for completed in trimmed {
+            self.reporter.children.remove(&completed.progress);
+        }
+    }
+
+    fn update_project_summary(&self, project: &mut ProjectBar) {
+        let Some(message) = project.completed.hidden_summary() else {
+            return;
+        };
+
+        let summary = if let Some(summary) = &project.hidden_summary {
+            summary.clone()
+        } else {
+            let summary = self.reporter.children.insert_after(
+                &project.header,
+                ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+            );
+            summary.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+            project.hidden_summary = Some(summary.clone());
+            summary
+        };
+        if project.completed.visible_len() == 0 {
+            project.last_line = summary.clone();
+        }
+        summary.set_message(format!("  {}", message.dimmed()));
+    }
+
+    fn progress_line_limit(&self) -> Option<usize> {
+        if self.reporter.children.is_hidden() {
+            return None;
+        }
+
+        Term::stderr()
+            .size_checked()
+            .map(|(height, _)| usize::from(height))
+            .filter(|height| *height > 0)
+    }
+
+    fn active_project_lines(projects: &FxHashMap<usize, ProjectBar>, running: usize) -> usize {
+        1 + running
+            + projects
+                .values()
+                .map(|project| {
+                    1 + project.completed.visible_len()
+                        + usize::from(project.completed.is_collapsed())
+                })
+                .sum::<usize>()
+    }
+
+    fn collapse_completed_projects(
+        &self,
+        projects: &mut FxHashMap<usize, ProjectBar>,
+        running: usize,
+    ) -> Vec<HookBar> {
+        let Some(limit) = self.progress_line_limit() else {
+            return Vec::new();
+        };
+
+        let mut removed = Vec::new();
+        while Self::active_project_lines(projects, running) > limit {
+            let Some(project_idx) = projects
+                .iter()
+                .filter(|(_, project)| project.finished && project.completed.has_hideable_visible())
+                .min_by_key(|(_, project)| project.order)
+                .map(|(project_idx, _)| *project_idx)
+            else {
+                break;
+            };
+
+            let Some(project) = projects.get_mut(&project_idx) else {
+                break;
+            };
+            removed.extend(project.completed.hide_visible());
+            self.update_project_summary(project);
+        }
+
+        removed
     }
 }
 
