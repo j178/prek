@@ -45,6 +45,22 @@ If you encounter "Too many open files" errors, lowering this value or raising th
 Disable Rust-native built-in hooks; always use the original hook implementation.
 See [Built-in Fast Hooks](../builtin.md) for details.
 
+### `PREK_NO_STASH`
+
+Disable the working-tree keeper that stashes unstaged changes before running hooks
+and restores them afterwards.
+Equivalent to passing `--no-stash` on the command line or setting `no_stash: true`
+in the project configuration file.
+
+The autostash behavior is undesirable when working with several agents or tools at
+once on the same code — the keeper's recovery path runs `git checkout -- <root>`,
+which can clobber uncommitted work in flight from concurrent processes.
+With this set, prek leaves the working tree untouched while hooks run.
+
+Precedence (highest wins): the `--no-stash` flag, then `PREK_NO_STASH`, then the
+`no_stash` config key. An explicit `PREK_NO_STASH=0` overrides a `no_stash: true`
+config entry.
+
 ### `PREK_UV_SOURCE`
 
 Control how uv (Python package installer) is installed.

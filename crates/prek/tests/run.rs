@@ -1347,6 +1347,7 @@ fn global_path_options_expand_tilde() -> Result<()> {
         show_diff_on_failure: false,
         fail_fast: false,
         no_fail_fast: false,
+        no_stash: false,
         dry_run: false,
         extra: RunExtraArgs {
             remote_branch: None,
@@ -1487,6 +1488,126 @@ fn staged_files_only() -> Result<()> {
 
     let content = context.read("file.txt");
     assert_snapshot!(content, @"Hello world again!");
+
+    Ok(())
+}
+
+/// With `--no-stash`, the worktree keeper is bypassed entirely: unstaged
+/// changes remain in place while hooks run, no patch file is created, and
+/// no stash/restore stderr messages are emitted.
+#[test]
+fn no_stash_flag_skips_worktree_keeper() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print(open("file.txt", "rt").read())'
+                verbose: true
+                types: [text]
+   "#});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // Add an unstaged modification. Without `--no-stash` the keeper would
+    // stash this and the hook would see the staged "Hello, world!" content.
+    // With `--no-stash`, the hook sees the on-disk "Hello world again!".
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello world again!")?;
+
+    cmd_snapshot!(context.filters(), context.run().arg("--no-stash"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trailing-whitespace......................................................Passed
+    - hook id: trailing-whitespace
+    - duration: [TIME]
+
+      Hello world again!
+
+    ----- stderr -----
+    ");
+
+    // The unstaged content must still be present after the run.
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello world again!");
+
+    // No patch file should have been created in the prek patches dir.
+    let patches_dir = context.home_dir().child("patches");
+    if patches_dir.exists() {
+        let entries: Vec<_> = fs_err::read_dir(patches_dir.path())?.collect();
+        assert!(
+            entries.is_empty(),
+            "--no-stash must not create patch files, found: {entries:?}"
+        );
+    }
+
+    Ok(())
+}
+
+/// `PREK_NO_STASH=1` env var should produce the same effect as `--no-stash`.
+#[test]
+fn no_stash_env_var_skips_worktree_keeper() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print(open("file.txt", "rt").read())'
+                verbose: true
+                types: [text]
+   "#});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello world again!")?;
+
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_NO_STASH, "1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trailing-whitespace......................................................Passed
+    - hook id: trailing-whitespace
+    - duration: [TIME]
+
+      Hello world again!
+
+    ----- stderr -----
+    ");
+
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello world again!");
+
+    // No patch file should have been created in the prek patches dir.
+    let patches_dir = context.home_dir().child("patches");
+    if patches_dir.exists() {
+        let entries: Vec<_> = fs_err::read_dir(patches_dir.path())?.collect();
+        assert!(
+            entries.is_empty(),
+            "PREK_NO_STASH=1 must not create patch files, found: {entries:?}"
+        );
+    }
 
     Ok(())
 }
@@ -2468,6 +2589,7 @@ fn selectors_completion() -> Result<()> {
     --stage	The stage during which the hook is fired
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
+    --no-stash	Do not clean unstaged changes via the working-tree keeper before running hooks
     --dry-run	Do not run the hooks, but print the hooks that would have been run
     --config	Path to alternate config file
     --cd	Change to directory before running

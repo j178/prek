@@ -56,6 +56,7 @@ pub(crate) async fn run(
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
+    no_stash: bool,
     refresh: bool,
     extra_args: RunExtraArgs,
     verbose: bool,
@@ -78,7 +79,13 @@ pub(crate) async fn run(
     // Ensure we are in a git repository.
     LazyLock::force(&GIT_ROOT).as_ref()?;
 
-    let should_stash = !all_files && files.is_empty() && directories.is_empty();
+    // `--no-stash` flag or `PREK_NO_STASH=<boolish>` env var disables the
+    // working-tree keeper entirely. Useful when downstream hooks re-stage files
+    // and conflict with prek's stash restore on large diffs.
+    let no_stash =
+        no_stash || EnvVars::var_as_bool(EnvVars::PREK_NO_STASH).unwrap_or(false);
+    let should_stash =
+        !all_files && files.is_empty() && directories.is_empty() && !no_stash;
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {

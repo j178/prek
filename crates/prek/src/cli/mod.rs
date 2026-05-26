@@ -567,6 +567,15 @@ pub(crate) struct RunArgs {
     #[arg(long, hide = true, overrides_with = "fail_fast")]
     pub(crate) no_fail_fast: bool,
 
+    /// Do not clean unstaged changes via the working-tree keeper before running hooks.
+    ///
+    /// Equivalent to setting `PREK_NO_STASH=1` or `no_stash: true` in the project
+    /// configuration file. Useful when several agents or tools are editing the same
+    /// repository concurrently, where the keeper's recovery path can clobber
+    /// uncommitted work in flight from other processes.
+    #[arg(long)]
+    pub(crate) no_stash: bool,
+
     /// Do not run the hooks, but print the hooks that would have been run.
     #[arg(long)]
     pub(crate) dry_run: bool,

@@ -298,6 +298,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.show_diff_on_failure,
                 flag(args.fail_fast, args.no_fail_fast),
                 args.dry_run,
+                args.no_stash,
                 cli.globals.refresh,
                 args.extra,
                 cli.globals.verbose > 0,
