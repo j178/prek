@@ -1612,6 +1612,132 @@ fn no_stash_env_var_skips_worktree_keeper() -> Result<()> {
     Ok(())
 }
 
+/// Top-level `no_stash: true` in `.pre-commit-config.yaml` should produce the
+/// same effect as the `--no-stash` flag or `PREK_NO_STASH=1` env var.
+#[test]
+fn no_stash_config_key_skips_worktree_keeper() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        no_stash: true
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print(open("file.txt", "rt").read())'
+                verbose: true
+                types: [text]
+   "#});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // Add an unstaged modification. With config `no_stash: true` the keeper is
+    // skipped and the hook should observe the on-disk "Hello world again!"
+    // rather than the stashed-staged "Hello, world!".
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello world again!")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trailing-whitespace......................................................Passed
+    - hook id: trailing-whitespace
+    - duration: [TIME]
+
+      Hello world again!
+
+    ----- stderr -----
+    ");
+
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello world again!");
+
+    // No patch file should have been created in the prek patches dir.
+    let patches_dir = context.home_dir().child("patches");
+    if patches_dir.exists() {
+        let entries: Vec<_> = fs_err::read_dir(patches_dir.path())?.collect();
+        assert!(
+            entries.is_empty(),
+            "no_stash: true must not create patch files, found: {entries:?}"
+        );
+    }
+
+    Ok(())
+}
+
+/// Documented precedence: an explicit `PREK_NO_STASH=0` overrides
+/// `no_stash: true` in the project configuration. With the env var set false,
+/// the working-tree keeper must engage even when the config opts out.
+#[test]
+fn no_stash_env_false_overrides_config_true() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        no_stash: true
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print(open("file.txt", "rt").read())'
+                verbose: true
+                types: [text]
+   "#});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // Non-staged change that the keeper must stash/restore when engaged.
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello world again!")?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(r"/\d+-\d+.patch", "/[TIME]-[PID].patch")])
+        .collect();
+
+    // `PREK_NO_STASH=0` must override config `no_stash: true`, re-engaging the
+    // keeper. The hook therefore sees the staged "Hello, world!" content
+    // rather than the on-disk "Hello world again!", and stash/restore stderr
+    // lines are emitted.
+    cmd_snapshot!(filters, context.run().env(EnvVars::PREK_NO_STASH, "0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trailing-whitespace......................................................Passed
+    - hook id: trailing-whitespace
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
+    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    // The unstaged content must be restored after the run.
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello world again!");
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {

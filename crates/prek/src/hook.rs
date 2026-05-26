@@ -940,6 +940,7 @@ mod tests {
                     files: None,
                     exclude: None,
                     fail_fast: None,
+                    no_stash: None,
                     minimum_prek_version: None,
                     orphan: None,
                     _unused_keys: {},

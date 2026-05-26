@@ -79,23 +79,38 @@ pub(crate) async fn run(
     // Ensure we are in a git repository.
     LazyLock::force(&GIT_ROOT).as_ref()?;
 
-    // `--no-stash` flag or `PREK_NO_STASH=<boolish>` env var disables the
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
+    let mut workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+
+    // `--no-stash` flag, `PREK_NO_STASH=<boolish>` env var, or the top-level
+    // `no_stash: true` key in the root project's config disables the
     // working-tree keeper entirely. Useful when downstream hooks re-stage files
     // and conflict with prek's stash restore on large diffs.
-    let no_stash =
-        no_stash || EnvVars::var_as_bool(EnvVars::PREK_NO_STASH).unwrap_or(false);
-    let should_stash =
-        !all_files && files.is_empty() && directories.is_empty() && !no_stash;
+    // Resolution precedence (highest wins): CLI flag > env var > config > default-false.
+    let config_no_stash = workspace
+        .projects()
+        .iter()
+        .find(|p| p.is_root())
+        .and_then(|p| p.config().no_stash)
+        .unwrap_or(false);
+    // CLI flag wins outright. Otherwise an explicit env var value (including
+    // `PREK_NO_STASH=0`) overrides the config; absent any env var we fall back
+    // to the config value (default false).
+    let no_stash = if no_stash {
+        true
+    } else if let Some(env_value) = EnvVars::var_as_bool(EnvVars::PREK_NO_STASH) {
+        env_value
+    } else {
+        config_no_stash
+    };
+    let should_stash = !all_files && files.is_empty() && directories.is_empty() && !no_stash;
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {
         anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
-
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
-    let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace =
-        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     if should_stash {
         workspace.check_configs_staged().await?;

@@ -1136,6 +1136,12 @@ pub(crate) struct Config {
     /// Set to true to have prek stop running hooks after the first failure.
     /// Default is false.
     pub fail_fast: Option<bool>,
+    /// Set to true to skip prek's working-tree keeper (stash/restore of unstaged
+    /// changes before running hooks). Equivalent to passing `--no-stash` or
+    /// setting `PREK_NO_STASH=1`. Useful when hook chains aggressively re-stage
+    /// files and conflict with prek's patch-based restore on large diffs.
+    /// Default is false.
+    pub no_stash: Option<bool>,
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,

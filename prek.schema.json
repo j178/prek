@@ -118,6 +118,10 @@
       "description": "Set to true to have prek stop running hooks after the first failure.\nDefault is false.",
       "type": "boolean"
     },
+    "no_stash": {
+      "description": "Set to true to skip prek's working-tree keeper (stash/restore of unstaged\nchanges before running hooks). Equivalent to passing `--no-stash` or\nsetting `PREK_NO_STASH=1`. Useful when hook chains aggressively re-stage\nfiles and conflict with prek's patch-based restore on large diffs.\nDefault is false.",
+      "type": "boolean"
+    },
     "minimum_prek_version": {
       "description": "The minimum version of prek required to run this configuration.",
       "type": "string"

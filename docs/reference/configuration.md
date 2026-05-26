@@ -219,6 +219,39 @@ Stop the run after the first failing hook.
 
 This is a global default; individual hooks can also set `fail_fast`.
 
+### `no_stash`
+
+Disable the working-tree keeper that stashes unstaged changes before running hooks
+and restores them afterwards. With this set, prek leaves the working tree untouched
+while hooks run.
+
+- Type: boolean
+- Default: `false`
+
+The autostash behavior is undesirable when working with several agents or tools at
+once on the same code — the keeper's recovery path runs `git checkout -- <root>`,
+which can clobber uncommitted work in flight from concurrent processes.
+Setting `no_stash: true` opts the entire repository out of that behavior.
+
+Equivalent to passing `--no-stash` on the command line or setting the
+`PREK_NO_STASH` environment variable. Precedence (highest wins): the CLI flag,
+then the environment variable, then this config key. An explicit
+`PREK_NO_STASH=0` overrides a `no_stash: true` config entry.
+
+Example:
+
+=== "prek.toml"
+
+    ```toml
+    no_stash = true
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    no_stash: true
+    ```
+
 ### `default_language_version`
 
 Map a language name to the default [`language_version`](#language_version) used by hooks of that language.
