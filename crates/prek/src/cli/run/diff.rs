@@ -55,6 +55,12 @@ impl<'a> DiffTracker<'a> {
                 if !git::has_worktree_diff(self.path).await? {
                     return Ok(false);
                 }
+                // `git diff-files --quiet` is stat-based and reports dirty for any in-place rewrite
+                // (mtime bump) even when content is unchanged 
+                let curr_diff = git::get_diff(self.path).await?;
+                if curr_diff.is_empty() {
+                    return Ok(false);
+                }
                 // Capture the dirty state after this group so later groups can
                 // compare against the exact diff left by previous hooks.
                 self.baseline = DiffBaseline::Snapshot(git::get_diff(self.path).await?);
