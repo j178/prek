@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
@@ -85,27 +86,20 @@ impl CompletedBars {
         self.visible.push_back(completed);
     }
 
-    fn hide_visible(&mut self) -> VecDeque<HookBar> {
-        let mut removed = VecDeque::new();
-        let mut visible = VecDeque::new();
-        while let Some(completed) = self.visible.pop_front() {
-            if completed.passed.is_some() {
-                self.hide_completed(&completed);
-                removed.push_back(completed);
-            } else {
-                visible.push_back(completed);
+    fn hide_one_line(&mut self) -> VecDeque<HookBar> {
+        let count = if self.is_collapsed() { 1 } else { 2 };
+        debug_assert!(self.can_hide_one_line());
+
+        let removed: VecDeque<_> = self.visible.drain(..count).collect();
+        for completed in &removed {
+            match completed.passed {
+                Some(true) => self.hidden_passed += 1,
+                Some(false) => self.hidden_failed += 1,
+                None => {}
             }
         }
-        self.visible = visible;
-        removed
-    }
 
-    fn hide_completed(&mut self, completed: &HookBar) {
-        match completed.passed {
-            Some(true) => self.hidden_passed += 1,
-            Some(false) => self.hidden_failed += 1,
-            None => {}
-        }
+        removed
     }
 
     fn record_result(&mut self, hook_key: HookKey, passed: bool) -> Option<ProgressBar> {
@@ -125,10 +119,13 @@ impl CompletedBars {
         self.visible.len()
     }
 
-    fn has_hideable_visible(&self) -> bool {
+    fn can_hide_one_line(&self) -> bool {
+        let count = if self.is_collapsed() { 1 } else { 2 };
         self.visible
             .iter()
-            .any(|completed| completed.passed.is_some())
+            .take_while(|completed| completed.passed.is_some())
+            .count()
+            >= count
     }
 
     fn hidden_len(&self) -> usize {
@@ -145,21 +142,12 @@ impl CompletedBars {
             return None;
         }
 
-        if self.hidden_passed == hidden {
-            return Some(format!("⋮ {hidden} hooks hidden: all passed"));
-        }
-        if self.hidden_failed == hidden {
-            return Some(format!("⋮ {hidden} hooks hidden: all failed"));
-        }
-
-        let mut statuses = Vec::new();
-        if self.hidden_passed > 0 {
-            statuses.push(format!("{} passed", self.hidden_passed));
-        }
-        if self.hidden_failed > 0 {
-            statuses.push(format!("{} failed", self.hidden_failed));
-        }
-        Some(format!("⋮ {hidden} hooks hidden: {}", statuses.join(", ")))
+        let status = match (self.hidden_passed, self.hidden_failed) {
+            (passed, 0) => format!("{passed} passed"),
+            (0, failed) => format!("{failed} failed"),
+            (passed, failed) => format!("{passed} passed, {failed} failed"),
+        };
+        Some(format!("⋮ {hidden} hooks hidden: {status}"))
     }
 
     fn clear(&mut self) -> VecDeque<HookBar> {
@@ -170,14 +158,34 @@ impl CompletedBars {
 }
 
 #[derive(Debug)]
-struct ProjectBar {
+struct HookGroup {
     order: usize,
-    finished: bool,
-    header: ProgressBar,
-    last_line: ProgressBar,
+    header: Option<ProgressBar>,
+    last_line: Option<ProgressBar>,
     hidden_summary: Option<ProgressBar>,
     completed: CompletedBars,
 }
+
+impl HookGroup {
+    fn new(order: usize, header: Option<ProgressBar>) -> Self {
+        let last_line = header.clone();
+        Self {
+            order,
+            header,
+            last_line,
+            hidden_summary: None,
+            completed: CompletedBars::default(),
+        }
+    }
+
+    fn line_count(&self) -> usize {
+        usize::from(self.header.is_some())
+            + self.completed.visible_len()
+            + usize::from(self.completed.is_collapsed())
+    }
+}
+
+type HookGroups = FxHashMap<usize, HookGroup>;
 
 pub(crate) fn project_status_marker(failed: bool) -> String {
     if failed {
@@ -322,8 +330,7 @@ pub(crate) struct HookRunReporter {
     dots: usize,
     show_project_headers: bool,
     running: Mutex<FxHashMap<usize, HookBar>>,
-    completed: Mutex<CompletedBars>,
-    projects: Mutex<FxHashMap<usize, ProjectBar>>,
+    groups: Mutex<HookGroups>,
 }
 
 impl HookRunReporter {
@@ -337,8 +344,7 @@ impl HookRunReporter {
             dots,
             show_project_headers,
             running: Mutex::default(),
-            completed: Mutex::default(),
-            projects: Mutex::default(),
+            groups: Mutex::default(),
         }
     }
 
@@ -346,11 +352,13 @@ impl HookRunReporter {
         let id = self.reporter.state.lock().unwrap().id();
 
         let progress_len = if len == 0 { 1 } else { len as u64 };
+        let mut running = self.running.lock().unwrap();
 
-        let (progress, label) = if self.show_project_headers {
-            let mut projects = self.projects.lock().unwrap();
-            let order = projects.len();
-            let project_bar = projects.entry(hook.project().idx()).or_insert_with(|| {
+        let mut groups = self.groups.lock().unwrap();
+        let project_idx = hook.project().idx();
+        let order = groups.len();
+        if let Entry::Vacant(entry) = groups.entry(project_idx) {
+            let header = if self.show_project_headers {
                 let header = self.reporter.children.insert_before(
                     &self.reporter.root,
                     ProgressBar::with_draw_target(None, self.reporter.printer.target()),
@@ -362,29 +370,33 @@ impl HookRunReporter {
                         .tick_strings(SPINNER_TICKS),
                 );
                 header.set_message(format!("{}", hook.project().display_name().cyan().bold()));
-                ProjectBar {
-                    order,
-                    finished: false,
-                    last_line: header.clone(),
-                    header,
-                    hidden_summary: None,
-                    completed: CompletedBars::default(),
-                }
-            });
-            let progress = self.reporter.children.insert_after(
-                &project_bar.last_line,
+                Some(header)
+            } else {
+                None
+            };
+            entry.insert(HookGroup::new(order, header));
+        }
+        for completed in self.collapse_to_fit_new_progress(&mut groups, running.len()) {
+            self.reporter.children.remove(&completed.progress);
+        }
+        let group = groups.get_mut(&project_idx).unwrap();
+        let progress = if let Some(last_line) = &group.last_line {
+            self.reporter.children.insert_after(
+                last_line,
                 ProgressBar::with_draw_target(Some(progress_len), self.reporter.printer.target()),
-            );
-            project_bar.last_line = progress.clone();
-            (progress, format!("  {}", hook.name))
+            )
         } else {
-            let progress = self.reporter.children.insert_before(
+            self.reporter.children.insert_before(
                 &self.reporter.root,
                 ProgressBar::with_draw_target(Some(progress_len), self.reporter.printer.target()),
-            );
-            (progress, hook.name.clone())
+            )
         };
-
+        group.last_line = Some(progress.clone());
+        let label = if self.show_project_headers {
+            format!("  {}", hook.name)
+        } else {
+            hook.name.clone()
+        };
         let dots = self.dots.saturating_sub(label.width());
         progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
@@ -393,7 +405,7 @@ impl HookRunReporter {
                 .progress_chars(".."),
         );
         progress.set_message(label);
-        self.running.lock().unwrap().insert(
+        running.insert(
             id,
             HookBar {
                 hook_key: HookKey::from_hook(hook),
@@ -411,11 +423,9 @@ impl HookRunReporter {
     }
 
     pub fn on_run_complete(&self, id: usize) {
-        let (running, running_count) = {
+        let running = {
             let mut running = self.running.lock().unwrap();
-            let completed = running.remove(&id).unwrap();
-            let running_count = running.len();
-            (completed, running_count)
+            running.remove(&id).unwrap()
         };
         self.reporter.root.inc(1);
 
@@ -423,28 +433,17 @@ impl HookRunReporter {
         let progress = &running.progress;
         progress.set_position(progress.length().unwrap_or(1));
         progress.finish();
-        self.remember_completed(running, running_count);
+        self.remember_completed(running);
     }
 
     pub fn on_run_result(&self, hook: &Hook, passed: bool) {
         let hook_key = HookKey::from_hook(hook);
-        let progress = if self.show_project_headers {
-            let running = self.running.lock().unwrap().len();
-            let mut projects = self.projects.lock().unwrap();
-            let Some(project) = projects.get_mut(&hook_key.project_idx) else {
+        let progress = {
+            let mut groups = self.groups.lock().unwrap();
+            let Some(group) = groups.get_mut(&hook_key.project_idx) else {
                 return;
             };
-            let progress = project.completed.record_result(hook_key, passed);
-            self.update_project_summary(project);
-            let trimmed = self.collapse_completed_projects(&mut projects, running);
-            drop(projects);
-            for completed in trimmed {
-                self.reporter.children.remove(&completed.progress);
-            }
-            progress
-        } else {
-            let mut completed = self.completed.lock().unwrap();
-            completed.record_result(hook_key, passed)
+            group.completed.record_result(hook_key, passed)
         };
         let Some(progress) = progress else {
             return;
@@ -468,13 +467,13 @@ impl HookRunReporter {
     }
 
     pub fn on_project_complete(&self, project: &workspace::Project, failed: bool) {
-        let running = self.running.lock().unwrap().len();
-        let mut projects = self.projects.lock().unwrap();
-        let Some(project_bar) = projects.get_mut(&project.idx()) else {
+        let mut groups = self.groups.lock().unwrap();
+        let Some(group) = groups.get_mut(&project.idx()) else {
             return;
         };
-        project_bar.finished = true;
-        let header = &project_bar.header;
+        let Some(header) = &group.header else {
+            return;
+        };
         header.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         header.set_message(format!(
             "{} {}",
@@ -483,39 +482,16 @@ impl HookRunReporter {
         ));
 
         header.finish();
-
-        let trimmed = self.collapse_completed_projects(&mut projects, running);
-        drop(projects);
-        for completed in trimmed {
-            self.reporter.children.remove(&completed.progress);
-        }
     }
 
     pub fn clear_completed(&self) {
-        let standalone_completed = {
-            let mut completed = self.completed.lock().unwrap();
-            completed.clear()
-        };
-        let projects = {
-            let mut projects = self.projects.lock().unwrap();
-            projects
-                .drain()
-                .map(|(_, project)| project)
-                .collect::<Vec<_>>()
+        let groups = {
+            let mut groups = self.groups.lock().unwrap();
+            std::mem::take(&mut *groups)
         };
 
-        for completed in standalone_completed {
-            self.reporter.children.remove(&completed.progress);
-        }
-
-        for mut project in projects {
-            self.reporter.children.remove(&project.header);
-            if let Some(summary) = project.hidden_summary {
-                self.reporter.children.remove(&summary);
-            }
-            for completed in project.completed.clear() {
-                self.reporter.children.remove(&completed.progress);
-            }
+        for (_, group) in groups {
+            self.clear_group(group);
         }
     }
 
@@ -531,46 +507,59 @@ impl HookRunReporter {
         self.reporter.on_complete();
     }
 
-    fn remember_completed(&self, completed: HookBar, running: usize) {
-        let trimmed = if self.show_project_headers {
-            let mut projects = self.projects.lock().unwrap();
-            if let Some(project) = projects.get_mut(&completed.hook_key.project_idx) {
-                project.completed.push(completed);
-                self.update_project_summary(project);
-                self.collapse_completed_projects(&mut projects, running)
-            } else {
-                vec![completed]
-            }
-        } else {
-            self.completed.lock().unwrap().push(completed);
-            Vec::new()
+    fn remember_completed(&self, completed: HookBar) {
+        let mut groups = self.groups.lock().unwrap();
+        let Some(group) = groups.get_mut(&completed.hook_key.project_idx) else {
+            drop(groups);
+            self.reporter.children.remove(&completed.progress);
+            return;
         };
+        group.completed.push(completed);
+    }
 
-        for completed in trimmed {
+    fn clear_group(&self, mut group: HookGroup) {
+        if let Some(header) = group.header {
+            self.reporter.children.remove(&header);
+        }
+        if let Some(summary) = group.hidden_summary {
+            self.reporter.children.remove(&summary);
+        }
+        for completed in group.completed.clear() {
             self.reporter.children.remove(&completed.progress);
         }
     }
 
-    fn update_project_summary(&self, project: &mut ProjectBar) {
-        let Some(message) = project.completed.hidden_summary() else {
+    fn update_group_summary(&self, group: &mut HookGroup, anchor: &ProgressBar) {
+        let Some(message) = group.completed.hidden_summary() else {
             return;
         };
 
-        let summary = if let Some(summary) = &project.hidden_summary {
+        let summary = if let Some(summary) = &group.hidden_summary {
             summary.clone()
         } else {
-            let summary = self.reporter.children.insert_after(
-                &project.header,
-                ProgressBar::with_draw_target(None, self.reporter.printer.target()),
-            );
+            let summary = if let Some(header) = &group.header {
+                self.reporter.children.insert_after(
+                    header,
+                    ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+                )
+            } else {
+                self.reporter.children.insert_before(
+                    anchor,
+                    ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+                )
+            };
             summary.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-            project.hidden_summary = Some(summary.clone());
+            group.hidden_summary = Some(summary.clone());
             summary
         };
-        if project.completed.visible_len() == 0 {
-            project.last_line = summary.clone();
+        if group.completed.visible_len() == 0 {
+            group.last_line = Some(summary.clone());
         }
-        summary.set_message(format!("  {}", message.dimmed()));
+        if group.header.is_some() {
+            summary.set_message(format!("  {}", message.dimmed()));
+        } else {
+            summary.set_message(format!("{}", message.dimmed()));
+        }
     }
 
     fn progress_line_limit(&self) -> Option<usize> {
@@ -584,20 +573,22 @@ impl HookRunReporter {
             .filter(|height| *height > 0)
     }
 
-    fn active_project_lines(projects: &FxHashMap<usize, ProjectBar>, running: usize) -> usize {
-        1 + running
-            + projects
-                .values()
-                .map(|project| {
-                    1 + project.completed.visible_len()
-                        + usize::from(project.completed.is_collapsed())
-                })
-                .sum::<usize>()
+    fn active_lines(groups: &HookGroups, running: usize) -> usize {
+        let group_lines = groups.values().map(HookGroup::line_count).sum::<usize>();
+        1 + running + group_lines
     }
 
-    fn collapse_completed_projects(
+    fn collapse_candidate(groups: &HookGroups) -> Option<usize> {
+        groups
+            .iter()
+            .filter(|(_, group)| group.completed.can_hide_one_line())
+            .min_by_key(|(_, group)| group.order)
+            .map(|(project_idx, _)| *project_idx)
+    }
+
+    fn collapse_to_fit_new_progress(
         &self,
-        projects: &mut FxHashMap<usize, ProjectBar>,
+        groups: &mut HookGroups,
         running: usize,
     ) -> Vec<HookBar> {
         let Some(limit) = self.progress_line_limit() else {
@@ -605,21 +596,16 @@ impl HookRunReporter {
         };
 
         let mut removed = Vec::new();
-        while Self::active_project_lines(projects, running) > limit {
-            let Some(project_idx) = projects
-                .iter()
-                .filter(|(_, project)| project.finished && project.completed.has_hideable_visible())
-                .min_by_key(|(_, project)| project.order)
-                .map(|(project_idx, _)| *project_idx)
-            else {
+        while Self::active_lines(groups, running).saturating_add(1) > limit {
+            let Some(project_idx) = Self::collapse_candidate(groups) else {
                 break;
             };
+            let group = groups.get_mut(&project_idx).unwrap();
 
-            let Some(project) = projects.get_mut(&project_idx) else {
-                break;
-            };
-            removed.extend(project.completed.hide_visible());
-            self.update_project_summary(project);
+            let hidden = group.completed.hide_one_line();
+            let anchor = hidden.front().unwrap().progress.clone();
+            self.update_group_summary(group, &anchor);
+            removed.extend(hidden);
         }
 
         removed
@@ -688,6 +674,32 @@ impl CleaningReporter {
 mod tests {
     use super::*;
 
+    fn completed_bar(hook_idx: usize, passed: Option<bool>) -> HookBar {
+        project_completed_bar(0, hook_idx, passed)
+    }
+
+    fn project_completed_bar(project_idx: usize, hook_idx: usize, passed: Option<bool>) -> HookBar {
+        HookBar {
+            hook_key: HookKey {
+                project_idx,
+                hook_idx,
+            },
+            progress: ProgressBar::hidden(),
+            passed,
+        }
+    }
+
+    fn hook_group(order: usize, has_header: bool) -> HookGroup {
+        HookGroup::new(order, has_header.then(ProgressBar::hidden))
+    }
+
+    fn progress_bar(reporter: &HookRunReporter) -> ProgressBar {
+        reporter.reporter.children.insert_before(
+            &reporter.reporter.root,
+            ProgressBar::with_draw_target(None, reporter.reporter.printer.target()),
+        )
+    }
+
     #[test]
     fn hidden_summary_shows_total_and_result_breakdown() {
         let completed = CompletedBars {
@@ -696,7 +708,7 @@ mod tests {
         };
         assert_eq!(
             completed.hidden_summary().as_deref(),
-            Some("⋮ 8 hooks hidden: all passed")
+            Some("⋮ 8 hooks hidden: 8 passed")
         );
 
         let completed = CompletedBars {
@@ -705,7 +717,7 @@ mod tests {
         };
         assert_eq!(
             completed.hidden_summary().as_deref(),
-            Some("⋮ 8 hooks hidden: all failed")
+            Some("⋮ 8 hooks hidden: 8 failed")
         );
 
         let completed = CompletedBars {
@@ -717,5 +729,157 @@ mod tests {
             completed.hidden_summary().as_deref(),
             Some("⋮ 8 hooks hidden: 6 passed, 2 failed")
         );
+    }
+
+    #[test]
+    fn hiding_completed_bars_frees_one_line() {
+        let mut completed = CompletedBars::default();
+
+        completed.push(completed_bar(0, Some(true)));
+        assert!(!completed.can_hide_one_line());
+
+        completed.push(completed_bar(1, Some(false)));
+        completed.push(completed_bar(2, Some(true)));
+        let removed = completed.hide_one_line();
+        assert_eq!(removed.len(), 2);
+        assert_eq!(completed.visible_len(), 1);
+        assert_eq!(
+            completed.hidden_summary().as_deref(),
+            Some("⋮ 2 hooks hidden: 1 passed, 1 failed")
+        );
+
+        let removed = completed.hide_one_line();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(completed.visible_len(), 0);
+        assert_eq!(
+            completed.hidden_summary().as_deref(),
+            Some("⋮ 3 hooks hidden: 2 passed, 1 failed")
+        );
+    }
+
+    #[test]
+    fn hiding_requires_a_known_result_prefix() {
+        let mut completed = CompletedBars::default();
+
+        completed.push(completed_bar(0, None));
+        completed.push(completed_bar(1, Some(true)));
+        completed.push(completed_bar(2, Some(true)));
+
+        assert!(!completed.can_hide_one_line());
+    }
+
+    #[test]
+    fn group_line_count_includes_header_visible_and_hidden_summary() {
+        let mut group = hook_group(0, false);
+        assert_eq!(group.line_count(), 0);
+
+        group.completed.push(completed_bar(0, Some(true)));
+        group.completed.push(completed_bar(1, None));
+        assert_eq!(group.line_count(), 2);
+
+        let mut group = hook_group(0, true);
+        group.completed.push(completed_bar(0, Some(true)));
+        group.completed.hidden_failed = 1;
+
+        assert_eq!(group.line_count(), 3);
+    }
+
+    #[test]
+    fn active_lines_includes_root_running_and_group_lines() {
+        let mut groups = HookGroups::default();
+
+        let mut first = hook_group(0, true);
+        first
+            .completed
+            .push(project_completed_bar(1, 0, Some(true)));
+        first.completed.hidden_passed = 2;
+        groups.insert(1, first);
+
+        let mut second = hook_group(1, false);
+        second
+            .completed
+            .push(project_completed_bar(2, 0, Some(false)));
+        groups.insert(2, second);
+
+        assert_eq!(HookRunReporter::active_lines(&groups, 2), 7);
+    }
+
+    #[test]
+    fn collapse_candidate_picks_oldest_hideable_group() {
+        let mut groups = HookGroups::default();
+
+        let mut oldest = hook_group(0, false);
+        oldest
+            .completed
+            .push(project_completed_bar(10, 0, Some(true)));
+        groups.insert(10, oldest);
+
+        let mut older_hideable = hook_group(1, false);
+        older_hideable
+            .completed
+            .push(project_completed_bar(20, 0, Some(true)));
+        older_hideable
+            .completed
+            .push(project_completed_bar(20, 1, Some(false)));
+        groups.insert(20, older_hideable);
+
+        let mut newer_hideable = hook_group(2, false);
+        newer_hideable.completed.hidden_passed = 1;
+        newer_hideable
+            .completed
+            .push(project_completed_bar(30, 0, Some(true)));
+        groups.insert(30, newer_hideable);
+
+        assert_eq!(HookRunReporter::collapse_candidate(&groups), Some(20));
+    }
+
+    #[test]
+    fn update_group_summary_creates_project_summary_line() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, true);
+        let mut group = HookGroup::new(0, Some(progress_bar(&reporter)));
+        group.completed.hidden_passed = 2;
+        group.completed.hidden_failed = 1;
+
+        reporter.update_group_summary(&mut group, &ProgressBar::hidden());
+
+        let summary = group.hidden_summary.as_ref().unwrap();
+        let message = summary.message().clone();
+        assert!(message.starts_with("  "));
+        assert!(message.contains("⋮ 3 hooks hidden: 2 passed, 1 failed"));
+        assert_eq!(
+            group.last_line.as_ref().unwrap().message(),
+            summary.message()
+        );
+    }
+
+    #[test]
+    fn update_group_summary_uses_anchor_without_project_header() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, false);
+        let anchor = progress_bar(&reporter);
+        let mut group = hook_group(0, false);
+        group.completed.hidden_failed = 1;
+
+        reporter.update_group_summary(&mut group, &anchor);
+
+        let summary = group.hidden_summary.as_ref().unwrap();
+        let message = summary.message().clone();
+        assert!(!message.starts_with("  "));
+        assert!(message.contains("⋮ 1 hooks hidden: 1 failed"));
+        assert_eq!(
+            group.last_line.as_ref().unwrap().message(),
+            summary.message()
+        );
+    }
+
+    #[test]
+    fn update_group_summary_is_noop_without_hidden_completed() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, false);
+        let anchor = progress_bar(&reporter);
+        let mut group = hook_group(0, false);
+
+        reporter.update_group_summary(&mut group, &anchor);
+
+        assert!(group.hidden_summary.is_none());
+        assert!(group.last_line.is_none());
     }
 }
