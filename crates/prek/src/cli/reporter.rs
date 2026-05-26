@@ -675,14 +675,29 @@ mod tests {
     use super::*;
 
     fn completed_bar(hook_idx: usize, passed: Option<bool>) -> HookBar {
+        project_completed_bar(0, hook_idx, passed)
+    }
+
+    fn project_completed_bar(project_idx: usize, hook_idx: usize, passed: Option<bool>) -> HookBar {
         HookBar {
             hook_key: HookKey {
-                project_idx: 0,
+                project_idx,
                 hook_idx,
             },
             progress: ProgressBar::hidden(),
             passed,
         }
+    }
+
+    fn hook_group(order: usize, has_header: bool) -> HookGroup {
+        HookGroup::new(order, has_header.then(ProgressBar::hidden))
+    }
+
+    fn progress_bar(reporter: &HookRunReporter) -> ProgressBar {
+        reporter.reporter.children.insert_before(
+            &reporter.reporter.root,
+            ProgressBar::with_draw_target(None, reporter.reporter.printer.target()),
+        )
     }
 
     #[test]
@@ -751,5 +766,120 @@ mod tests {
         completed.push(completed_bar(2, Some(true)));
 
         assert!(!completed.can_hide_one_line());
+    }
+
+    #[test]
+    fn group_line_count_includes_header_visible_and_hidden_summary() {
+        let mut group = hook_group(0, false);
+        assert_eq!(group.line_count(), 0);
+
+        group.completed.push(completed_bar(0, Some(true)));
+        group.completed.push(completed_bar(1, None));
+        assert_eq!(group.line_count(), 2);
+
+        let mut group = hook_group(0, true);
+        group.completed.push(completed_bar(0, Some(true)));
+        group.completed.hidden_failed = 1;
+
+        assert_eq!(group.line_count(), 3);
+    }
+
+    #[test]
+    fn active_lines_includes_root_running_and_group_lines() {
+        let mut groups = HookGroups::default();
+
+        let mut first = hook_group(0, true);
+        first
+            .completed
+            .push(project_completed_bar(1, 0, Some(true)));
+        first.completed.hidden_passed = 2;
+        groups.insert(1, first);
+
+        let mut second = hook_group(1, false);
+        second
+            .completed
+            .push(project_completed_bar(2, 0, Some(false)));
+        groups.insert(2, second);
+
+        assert_eq!(HookRunReporter::active_lines(&groups, 2), 7);
+    }
+
+    #[test]
+    fn collapse_candidate_picks_oldest_hideable_group() {
+        let mut groups = HookGroups::default();
+
+        let mut oldest = hook_group(0, false);
+        oldest
+            .completed
+            .push(project_completed_bar(10, 0, Some(true)));
+        groups.insert(10, oldest);
+
+        let mut older_hideable = hook_group(1, false);
+        older_hideable
+            .completed
+            .push(project_completed_bar(20, 0, Some(true)));
+        older_hideable
+            .completed
+            .push(project_completed_bar(20, 1, Some(false)));
+        groups.insert(20, older_hideable);
+
+        let mut newer_hideable = hook_group(2, false);
+        newer_hideable.completed.hidden_passed = 1;
+        newer_hideable
+            .completed
+            .push(project_completed_bar(30, 0, Some(true)));
+        groups.insert(30, newer_hideable);
+
+        assert_eq!(HookRunReporter::collapse_candidate(&groups), Some(20));
+    }
+
+    #[test]
+    fn update_group_summary_creates_project_summary_line() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, true);
+        let mut group = HookGroup::new(0, Some(progress_bar(&reporter)));
+        group.completed.hidden_passed = 2;
+        group.completed.hidden_failed = 1;
+
+        reporter.update_group_summary(&mut group, &ProgressBar::hidden());
+
+        let summary = group.hidden_summary.as_ref().unwrap();
+        let message = summary.message().clone();
+        assert!(message.starts_with("  "));
+        assert!(message.contains("⋮ 3 hooks hidden: 2 passed, 1 failed"));
+        assert_eq!(
+            group.last_line.as_ref().unwrap().message(),
+            summary.message()
+        );
+    }
+
+    #[test]
+    fn update_group_summary_uses_anchor_without_project_header() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, false);
+        let anchor = progress_bar(&reporter);
+        let mut group = hook_group(0, false);
+        group.completed.hidden_failed = 1;
+
+        reporter.update_group_summary(&mut group, &anchor);
+
+        let summary = group.hidden_summary.as_ref().unwrap();
+        let message = summary.message().clone();
+        assert!(!message.starts_with("  "));
+        assert!(message.contains("⋮ 1 hooks hidden: 1 failed"));
+        assert_eq!(
+            group.last_line.as_ref().unwrap().message(),
+            summary.message()
+        );
+    }
+
+    #[test]
+    fn update_group_summary_is_noop_without_hidden_completed() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, false);
+        let anchor = progress_bar(&reporter);
+        let mut group = hook_group(0, false);
+
+        reporter.update_group_summary(&mut group, &anchor);
+
+        assert!(group.hidden_summary.is_none());
+        assert!(group.last_line.is_none());
     }
 }
