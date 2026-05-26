@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.4.2
+
+Released on 2026-05-26.
+
+### Highlights
+
+0.4.2 is mainly about making `prek run` faster in large repos.
+
+`prek` now does less `git diff` work. After hooks run, `prek` uses diff checks
+to detect files changed by hooks. If a hook modifies files, prek marks that hook
+as failed. That is important, but full diff snapshots can be slow in big repos,
+especially when they happen after every hook group.
+
+We skip the expensive diff path in two common cases: built-in hooks that prek
+knows are read-only, and clean worktrees where a cheap dirty check is enough
+unless a hook actually changes files. In the right large-repo workload,
+skipping that work can make runs up to 10x faster.
+
+Workspace mode is faster too. Hooks have historically been too serial.
+Priority-based concurrency helped, but it required users to choose good
+`priority` values. Now sibling projects at the same workspace depth run in
+parallel automatically. Their files do not overlap, so this is safe and needs
+no extra config. For multi-project workspaces, this can dramatically reduce
+total hook time.
+
+### Sponsorship
+
+If `prek` saves time for you or your team, please consider sponsoring the
+project on [GitHub Sponsors](https://github.com/sponsors/j178). It helps keep
+new features, performance work, and maintenance moving.
+
+### Enhancements
+
+- Run same-depth projects concurrently ([#2110](https://github.com/j178/prek/pull/2110))
+- Make rustup install profile configurable ([#2111](https://github.com/j178/prek/pull/2111))
+- Simplify hook progress folding ([#2125](https://github.com/j178/prek/pull/2125))
+
+### Performance
+
+- Optimize diff checks for clean worktrees ([#2109](https://github.com/j178/prek/pull/2109))
+- Skip diff checks for read-only hooks ([#2108](https://github.com/j178/prek/pull/2108))
+
+### Contributors
+
+- @j178
+- @Carlomus
+
 ## 0.4.1
 
 Released on 2026-05-20.
