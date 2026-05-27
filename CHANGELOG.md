@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.3
+
+Released on 2026-05-27.
+
+### Bug fixes
+
+- Ignore stat-only hook rewrites ([#2131](https://github.com/j178/prek/pull/2131))
+
+### Sponsorship
+
+If `prek` saves time for you or your team, please consider sponsoring the
+project on [GitHub Sponsors](https://github.com/sponsors/j178). It helps keep
+new features, performance work, and maintenance moving.
+
+### Contributors
+
+- @stevbev
+
 ## 0.4.2
 
 Released on 2026-05-26.
