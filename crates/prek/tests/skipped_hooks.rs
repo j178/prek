@@ -457,6 +457,67 @@ fn may_modify_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
 }
 
 #[test]
+fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: rewrite-identical
+                name: rewrite-identical
+                language: system
+                entry: python3 rewrite.py
+                files: \.txt$
+    "});
+    cwd.child("rewrite.py").write_str(indoc::indoc! {r"
+        from pathlib import Path
+        import os
+        import sys
+        import time
+
+        for filename in sys.argv[1:]:
+            path = Path(filename)
+            path.write_text(path.read_text())
+            timestamp = time.time() + 10
+            os.utime(path, (timestamp, timestamp))
+    "})?;
+
+    cwd.child("file.txt").write_str("original\n")?;
+    context.git_add(".");
+
+    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+
+    assert!(
+        output.status.success(),
+        "rewriting identical content should not be treated as a hook modification"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("rewrite-identical") && stdout.contains("Passed"));
+    assert!(!stdout.contains("files were modified by this hook"));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
+    assert_eq!(
+        has_worktree_diff_calls, 1,
+        "Expected one cheap worktree diff check, found {has_worktree_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    let get_diff_calls = stderr.matches("get_diff").count();
+    assert_eq!(
+        get_diff_calls, 1,
+        "Expected one content diff to filter out stat-only changes, found {get_diff_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
