@@ -1738,6 +1738,99 @@ fn no_stash_env_false_overrides_config_true() -> Result<()> {
     Ok(())
 }
 
+/// Root `no_stash: true` must be honoured when the CLI selector narrows the
+/// run to a nested project, i.e. when the root project is absent from the
+/// selector-filtered set returned by `workspace.projects()`.
+///
+/// Regression test for: "Honor root `no_stash` when filtering projects".
+#[test]
+fn no_stash_root_config_honoured_when_nested_project_selected() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Root config opts out of stashing.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        no_stash: true
+        repos:
+          - repo: local
+            hooks:
+              - id: check-root
+                name: check-root
+                language: system
+                entry: python3 -c 'print("root")'
+                verbose: true
+                types: [text]
+    "#});
+
+    // Nested project does NOT have `no_stash` — the root opt-out must still
+    // propagate when the run is scoped to `subproj/` only.
+    context
+        .work_dir()
+        .child("subproj")
+        .create_dir_all()
+        .expect("Failed to create subproj dir");
+    context
+        .work_dir()
+        .child("subproj/.pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: trailing-whitespace
+                    name: trailing-whitespace
+                    language: system
+                    entry: python3 -c 'print(open("file.txt", "rt").read())'
+                    verbose: true
+                    types: [text]
+        "#})
+        .expect("Failed to write subproj config");
+
+    context
+        .work_dir()
+        .child("subproj/file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // Unstaged modification — with the keeper engaged this would be stashed.
+    // With root `no_stash: true` honoured it must remain visible to the hook.
+    context
+        .work_dir()
+        .child("subproj/file.txt")
+        .write_str("Hello world again!")?;
+
+    // Select only the nested project; the root project is NOT in the filtered
+    // set. The keeper must still be disabled because the root config says so.
+    cmd_snapshot!(context.filters(), context.run().arg("subproj/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ subproj
+      trailing-whitespace....................................................Passed
+      - hook id: trailing-whitespace
+      - duration: [TIME]
+
+        Hello world again!
+
+    ----- stderr -----
+    ");
+
+    // The unstaged content must still be present after the run.
+    let content = context.read("subproj/file.txt");
+    assert_snapshot!(content, @"Hello world again!");
+
+    // No patch file should have been created.
+    let patches_dir = context.home_dir().child("patches");
+    if patches_dir.exists() {
+        let entries: Vec<_> = fs_err::read_dir(patches_dir.path())?.collect();
+        assert!(
+            entries.is_empty(),
+            "root no_stash: true must suppress patch files even with nested selector, found: {entries:?}"
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {

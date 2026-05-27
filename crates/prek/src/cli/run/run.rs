@@ -89,8 +89,12 @@ pub(crate) async fn run(
     // working-tree keeper entirely. Useful when downstream hooks re-stage files
     // and conflict with prek's stash restore on large diffs.
     // Resolution precedence (highest wins): CLI flag > env var > config > default-false.
+    // Use `all_projects()` (the unfiltered set) instead of `projects()` so that
+    // a root-level `no_stash: true` is honoured even when the CLI selector
+    // narrows the run to a nested project and the root project is absent from
+    // the filtered set.
     let config_no_stash = workspace
-        .projects()
+        .all_projects()
         .iter()
         .find(|p| p.is_root())
         .and_then(|p| p.config().no_stash)
