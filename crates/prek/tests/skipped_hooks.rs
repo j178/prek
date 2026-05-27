@@ -457,6 +457,7 @@ fn may_modify_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
 fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
