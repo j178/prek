@@ -37,6 +37,14 @@ TAG_SET_CONSTS = [
     ("TAG_SET_YAML", ["yaml"]),
 ]
 
+CUSTOM_EXTENSIONS = {
+    'cts': ['text', 'ts'],
+    'mts': ['text', 'ts'],
+}
+
+for ext, tags in CUSTOM_EXTENSIONS.items():
+    EXTENSIONS[ext] = tags
+
 SELF_DIR = Path(__file__).parent
 TAGS_FILE = SELF_DIR / "src/tags.rs"
 
