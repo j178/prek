@@ -605,6 +605,12 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("Tiltfile.dev"));
         assert_tagset(&tags, &["text", "tiltfile"]);
+
+        let tags = super::tags_from_filename(Path::new("tsmtsfile.mts"));
+        assert_tagset(&tags, &["text", "ts"]);
+
+        let tags = super::tags_from_filename(Path::new("tsctsfile.cts"));
+        assert_tagset(&tags, &["text", "ts"]);
     }
 
     #[test]
