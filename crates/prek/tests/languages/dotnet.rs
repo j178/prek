@@ -212,67 +212,6 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Test that `additional_dependencies` are installed correctly.
-#[test]
-fn additional_dependencies() {
-    if !EnvVars::is_set(EnvVars::CI) {
-        return;
-    }
-
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: local
-                name: local
-                language: dotnet
-                entry: dotnet-outdated --version
-                additional_dependencies: ["dotnet-outdated-tool"]
-                always_run: true
-                verbose: true
-                pass_filenames: false
-    "#});
-    context.git_add(".");
-
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]")])
-        .collect();
-
-    cmd_snapshot!(filters.clone(), context.run(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    local....................................................................Passed
-    - hook id: local
-    - duration: [TIME]
-
-      A .NET Core global tool to list outdated Nuget packages.
-      4.7.1+[SHA]
-
-    ----- stderr -----
-    ");
-
-    // Run again to verify the `check_health` logic.
-    cmd_snapshot!(filters, context.run(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    local....................................................................Passed
-    - hook id: local
-    - duration: [TIME]
-
-      A .NET Core global tool to list outdated Nuget packages.
-      4.7.1+[SHA]
-
-    ----- stderr -----
-    ");
-}
-
 /// Test installing a specific version of a dotnet tool.
 #[test]
 fn additional_dependencies_with_version() {
@@ -304,6 +243,21 @@ fn additional_dependencies_with_version() {
         .chain([(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]")])
         .collect();
 
+    cmd_snapshot!(filters.clone(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+    - hook id: local
+    - duration: [TIME]
+
+      A .NET Core global tool to list outdated Nuget packages.
+      4.7.1+[SHA]
+
+    ----- stderr -----
+    ");
+
+    // Run again to verify the `check_health` logic.
     cmd_snapshot!(filters, context.run(), @"
     success: true
     exit_code: 0
