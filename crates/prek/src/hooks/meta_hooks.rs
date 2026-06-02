@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::CONFIG_FILENAMES;
 
-use crate::cli::reporter::HookRunReporter;
+use crate::cli::run::HookRunReporter;
 use crate::cli::run::{
     CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, collect_run_input,
 };

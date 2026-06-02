@@ -7,7 +7,8 @@ use anyhow::Context;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::golang::GoRequest;
@@ -157,7 +158,7 @@ impl LanguageImpl for Golang {
                 .args(batch)
                 .check(false)
                 .stdin(Stdio::null())
-                .pty_output()
+                .pty_output_with_sink(reporter.output_sink(progress))
                 .await?;
 
             reporter.on_run_progress(progress, batch.len() as u64);

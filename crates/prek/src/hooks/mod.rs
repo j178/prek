@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use prek_consts::env_vars::EnvVars;
 
-use crate::cli::reporter::HookRunReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, Repo};
 pub(crate) use crate::hooks::builtin_hooks::BuiltinHooks;
 pub(crate) use crate::hooks::meta_hooks::MetaHooks;

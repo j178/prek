@@ -8,7 +8,8 @@ use prek_consts::env_vars::EnvVars;
 use prek_identify::parse_shebang;
 use tracing::{instrument, trace};
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::config::Language;
 use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};

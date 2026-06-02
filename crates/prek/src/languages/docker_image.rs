@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::docker::Docker;
@@ -55,7 +56,7 @@ impl LanguageImpl for DockerImage {
                 .args(batch)
                 .check(false)
                 .stdin(Stdio::null())
-                .output()
+                .output_with_sink(reporter.output_sink(progress))
                 .await?;
 
             reporter.on_run_progress(progress, batch.len() as u64);

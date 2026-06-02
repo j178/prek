@@ -11,7 +11,8 @@ use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use tracing::{debug, trace};
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
@@ -207,7 +208,7 @@ impl LanguageImpl for Python {
                 .args(batch)
                 .check(false)
                 .stdin(Stdio::null())
-                .pty_output()
+                .pty_output_with_sink(reporter.output_sink(progress))
                 .await?;
 
             reporter.on_run_progress(progress, batch.len() as u64);
