@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use console::{Term, strip_ansi_codes};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -33,6 +33,8 @@ struct HookBar {
     output_bars: Vec<ProgressBar>,
     /// Rolling text state rendered into `output_bars`.
     output_preview: OutputPreview,
+    /// Hook start time, used to avoid flashing output preview rows for fast hooks.
+    started_at: Instant,
     /// Result is filled by `on_run_result`; it stays `None` between completion
     /// and result reporting.
     passed: Option<bool>,
@@ -45,6 +47,7 @@ impl HookBar {
             progress,
             output_bars: Vec::new(),
             output_preview: OutputPreview::default(),
+            started_at: Instant::now(),
             passed: None,
         }
     }
@@ -65,6 +68,10 @@ impl HookBar {
         chunk: &[u8],
     ) -> Option<ProgressBar> {
         self.output_preview.push_chunk(chunk);
+        if self.output_bars.is_empty() && self.started_at.elapsed() < HOOK_OUTPUT_PREVIEW_DELAY {
+            return None;
+        }
+
         let lines = self.output_preview.visible_lines();
         let mut inserted_tail = None;
 
@@ -321,6 +328,7 @@ fn is_preview_char(ch: char) -> bool {
 }
 
 const HOOK_OUTPUT_PREVIEW_LINES: usize = 3;
+const HOOK_OUTPUT_PREVIEW_DELAY: Duration = Duration::from_millis(500);
 const HOOK_OUTPUT_PREVIEW_PREFIX: &str = "    => ";
 
 fn truncate_to_width(input: &str, width: usize) -> Cow<'_, str> {
@@ -743,8 +751,29 @@ mod tests {
             progress: ProgressBar::hidden(),
             output_bars: Vec::new(),
             output_preview: OutputPreview::default(),
+            started_at: Instant::now(),
             passed,
         }
+    }
+
+    fn running_hook_bar(reporter: &HookRunReporter, started_at: Instant) -> HookBar {
+        HookBar {
+            hook_key: HookKey {
+                project_idx: 0,
+                hook_idx: 0,
+            },
+            progress: progress_bar(reporter),
+            output_bars: Vec::new(),
+            output_preview: OutputPreview::default(),
+            started_at,
+            passed: None,
+        }
+    }
+
+    fn elapsed_start() -> Instant {
+        Instant::now()
+            .checked_sub(HOOK_OUTPUT_PREVIEW_DELAY + Duration::from_millis(1))
+            .unwrap()
     }
 
     fn hook_group(order: usize, has_header: bool) -> HookGroup {
@@ -838,6 +867,36 @@ mod tests {
         preview.push_chunk(b"one\ntwo\nthree\nfour\n");
 
         assert_eq!(preview.visible_lines(), ["two", "three", "four"]);
+    }
+
+    #[test]
+    fn hook_output_preview_is_buffered_before_delay() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, false);
+        let mut hook_bar = running_hook_bar(&reporter, Instant::now());
+
+        let tail = hook_bar.push_output(&reporter.reporter, 80, b"first\n");
+
+        assert!(tail.is_none());
+        assert!(hook_bar.output_bars.is_empty());
+        assert_eq!(hook_bar.output_preview.visible_lines(), ["first"]);
+    }
+
+    #[test]
+    fn hook_output_preview_shows_buffered_lines_after_delay() {
+        let reporter = HookRunReporter::new(Printer::Silent, 80, false);
+        let mut hook_bar = running_hook_bar(&reporter, Instant::now());
+
+        hook_bar.push_output(&reporter.reporter, 80, b"first\n");
+        hook_bar.started_at = elapsed_start();
+        let tail = hook_bar.push_output(&reporter.reporter, 80, b"second\n");
+
+        assert!(tail.is_some());
+        let messages = hook_bar
+            .output_bars
+            .iter()
+            .map(|bar| bar.message().clone())
+            .collect::<Vec<_>>();
+        assert_eq!(messages, ["first", "second"]);
     }
 
     #[test]
