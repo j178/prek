@@ -211,6 +211,8 @@ pub(crate) async fn try_repo(
         Some(config_file),
         vec![],
         vec![],
+        run_args.groups,
+        run_args.no_groups,
         run_args.stage,
         run_args.from_ref,
         run_args.to_ref,

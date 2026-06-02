@@ -154,6 +154,33 @@ fn validate_manifest() -> anyhow::Result<()> {
 
     context
         .work_dir()
+        .child("hooks-config-only.yaml")
+        .write_str(indoc::indoc! {r"
+            -   id: check-added-large-files
+                name: check for added large files
+                description: prevents giant files from being committed.
+                entry: check-added-large-files
+                language: python
+                priority: 10
+                groups: [ci]
+        "})?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context.validate_manifest().arg("hooks-config-only.yaml"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignored unexpected keys in `hooks-config-only.yaml`: `hooks[0].groups`, `hooks[0].priority`
+    success: All manifests are valid
+    "
+    );
+
+    context
+        .work_dir()
         .child("hooks-1.yaml")
         .write_str(indoc::indoc! {r"
             -   id: check-added-large-files

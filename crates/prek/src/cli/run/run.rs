@@ -22,8 +22,8 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::diff::DiffTracker;
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
-    CollectOptions, FileTagCache, HookFileFilter, HookRunReporter, ProjectFiles, RunInput,
-    Selectors, collect_run_input, project_status_marker,
+    CollectOptions, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter, ProjectFiles,
+    RunInput, Selectors, collect_run_input, project_status_marker,
 };
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{PassFilenames, Stage};
@@ -44,6 +44,8 @@ pub(crate) async fn run(
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
+    groups: Vec<String>,
+    no_groups: Vec<String>,
     hook_stage: Option<Stage>,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -85,6 +87,7 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
+    let group_filters = GroupFilters::parse(&groups, &no_groups);
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
@@ -105,10 +108,12 @@ pub(crate) async fn run(
     let selected_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))
+        .filter(|h| group_filters.matches_hook(h))
         .map(Arc::new)
         .collect();
 
     selectors.report_unused();
+    group_filters.report_unused();
 
     if selected_hooks.is_empty() {
         writeln!(
@@ -129,16 +134,20 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    let (filtered_hooks, hook_stage) = if let Some(hook_stage) = hook_stage {
+    let (filtered_hooks, input_hook_stage) = if let Some(hook_stage) = hook_stage {
         let hooks = selected_hooks
             .iter()
             .filter(|h| h.stages.contains(hook_stage))
             .cloned()
             .collect::<Vec<_>>();
         (hooks, hook_stage)
+    } else if group_filters.is_active() {
+        // Group selection without an explicit stage has no stage selector. File
+        // collection still needs a mode, so keep the normal `prek run` input mode.
+        (selected_hooks, Stage::PreCommit)
     } else {
         // Try filtering by `pre-commit` stage first.
-        let mut hook_stage = Stage::PreCommit;
+        let mut input_hook_stage = Stage::PreCommit;
         let mut hooks = selected_hooks
             .iter()
             .filter(|h| h.stages.contains(Stage::PreCommit))
@@ -146,21 +155,18 @@ pub(crate) async fn run(
             .collect::<Vec<_>>();
         if hooks.is_empty() && selectors.includes_only_hook_targets() {
             // If no hooks found for `pre-commit` stage, try fallback to `manual` stage for hooks specified directly.
-            hook_stage = Stage::Manual;
+            input_hook_stage = Stage::Manual;
             hooks = selected_hooks
                 .iter()
                 .filter(|h| h.stages.contains(Stage::Manual))
                 .cloned()
                 .collect();
         }
-        (hooks, hook_stage)
+        (hooks, input_hook_stage)
     };
 
     if filtered_hooks.is_empty() {
-        debug!(
-            stage = %hook_stage,
-            "No hooks found for stage after filtering, exit early"
-        );
+        debug!("No hooks found for stage after filtering, exit early");
         return Ok(ExitStatus::Success);
     }
 
@@ -184,7 +190,7 @@ pub(crate) async fn run(
     let input = collect_run_input(
         workspace.root(),
         CollectOptions {
-            hook_stage,
+            hook_stage: input_hook_stage,
             from_ref,
             to_ref,
             all_files,

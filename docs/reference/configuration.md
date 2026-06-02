@@ -1003,6 +1003,80 @@ Allowed values:
 
 When you run [`prek run --hook-stage <stage>`](cli.md#prek-run), only hooks configured for that stage are considered.
 
+### `groups`
+
+Tag a hook with user-defined run groups.
+
+!!! note "prek-only"
+
+    `groups` is a `prek` extension. Upstream `pre-commit` does not support selecting hooks by group.
+
+- Type: list of strings
+- Default: `[]`
+
+Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run--group) and [`prek run --no-group <group>`](cli.md#prek-run--no-group).
+
+`groups` is a project configuration field. If it appears in a remote
+`.pre-commit-hooks.yaml` manifest, `prek` warns and ignores it.
+
+Examples:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "format",
+        name = "Format Python",
+        language = "system",
+        entry = "ruff format",
+        groups = ["format", "ci"],
+      },
+      {
+        id = "lint",
+        name = "Lint Python",
+        language = "system",
+        entry = "ruff check",
+        groups = ["lint", "ci"],
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: format
+            name: Format Python
+            language: system
+            entry: ruff format
+            groups: [format, ci]
+
+          - id: lint
+            name: Lint Python
+            language: system
+            entry: ruff check
+            groups: [lint, ci]
+    ```
+
+Run only the `ci` group:
+
+```bash
+prek run --all-files --group ci
+```
+
+Run everything except formatters:
+
+```bash
+prek run --all-files --no-group format
+```
+
+If a hook matches both `--group` and `--no-group`, `--no-group` wins.
+
 ### `require_serial`
 
 Force a hook to run without parallel invocations (one in-flight process for that hook at a time).

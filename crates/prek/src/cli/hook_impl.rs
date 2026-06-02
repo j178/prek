@@ -125,6 +125,8 @@ pub(crate) async fn hook_impl(
         config,
         includes,
         skips,
+        vec![],
+        vec![],
         Some(hook_type.into()),
         run_args.from_ref,
         run_args.to_ref,

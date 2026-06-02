@@ -681,6 +681,11 @@ pub(crate) struct RemoteHook {
     /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    ///
+    /// This is a project configuration field, not remote manifest metadata. If it
+    /// appears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.
+    pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -703,6 +708,8 @@ pub(crate) struct LocalHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -721,6 +728,8 @@ pub(crate) struct MetaHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -783,6 +792,9 @@ impl TryFrom<RemoteHook> for MetaHook {
         if hook_options.priority.is_some() {
             meta_hook.priority = hook_options.priority;
         }
+        if hook_options.groups.is_some() {
+            meta_hook.groups = hook_options.groups;
+        }
         meta_hook.options.update(&hook_options.options);
 
         Ok(meta_hook)
@@ -805,6 +817,8 @@ pub(crate) struct BuiltinHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    pub groups: Option<Vec<String>>,
     /// Common hook options.
     ///
     /// Builtin hooks allow the same set of options overrides as other hooks.
@@ -839,6 +853,9 @@ impl TryFrom<RemoteHook> for BuiltinHook {
         }
         if hook_options.priority.is_some() {
             builtin_hook.priority = hook_options.priority;
+        }
+        if hook_options.groups.is_some() {
+            builtin_hook.groups = hook_options.groups;
         }
         builtin_hook.options.update(&hook_options.options);
 
@@ -1094,6 +1111,7 @@ where
         entry: hook.entry.ok_or_else(|| E::missing_field("entry"))?,
         language: hook.language.ok_or_else(|| E::missing_field("language"))?,
         priority: hook.priority,
+        groups: hook.groups,
         options: hook.options,
     })
 }

@@ -136,7 +136,7 @@ impl Selector {
 pub(crate) struct Selectors {
     includes: Vec<Selector>,
     skips: Vec<Selector>,
-    usage: Arc<Mutex<SelectorUsage>>,
+    usage: Arc<Mutex<FilterUsage>>,
 }
 
 impl Selectors {
@@ -221,7 +221,7 @@ impl Selectors {
         let mut skipped = false;
         for (idx, skip) in self.skips.iter().enumerate() {
             if skip.matches_hook(hook) {
-                usage.use_skip(idx);
+                usage.use_exclude(idx);
                 skipped = true;
             }
         }
@@ -251,7 +251,7 @@ impl Selectors {
         for (idx, skip) in self.skips.iter().enumerate() {
             if let SelectorExpr::HookId(id) = &skip.expr {
                 if id == hook_id {
-                    usage.use_skip(idx);
+                    usage.use_exclude(idx);
                     skipped = true;
                 }
             }
@@ -283,7 +283,7 @@ impl Selectors {
         for (idx, skip) in self.skips.iter().enumerate() {
             if let SelectorExpr::ProjectPrefix(project_path) = &skip.expr {
                 if path.starts_with(project_path) {
-                    usage.use_skip(idx);
+                    usage.use_exclude(idx);
                     skipped = true;
                 }
             }
@@ -319,34 +319,135 @@ impl Selectors {
     }
 }
 
-#[derive(Default, Debug)]
-struct SelectorUsage {
-    used_includes: FxHashSet<usize>,
-    used_skips: FxHashSet<usize>,
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GroupFilters {
+    includes: Vec<String>,
+    excludes: Vec<String>,
+    usage: Arc<Mutex<FilterUsage>>,
 }
 
-impl SelectorUsage {
+impl GroupFilters {
+    pub(crate) fn parse(includes: &[String], excludes: &[String]) -> Self {
+        let parse_groups = |groups: &[String]| {
+            let mut seen = FxHashSet::default();
+            let mut names = Vec::new();
+
+            for group in groups {
+                if seen.insert(group.as_str()) {
+                    names.push(group.clone());
+                }
+            }
+
+            names
+        };
+
+        Self {
+            includes: parse_groups(includes),
+            excludes: parse_groups(excludes),
+            usage: Arc::default(),
+        }
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        !self.includes.is_empty() || !self.excludes.is_empty()
+    }
+
+    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
+        let mut usage = self.usage.lock().unwrap();
+
+        let mut excluded = false;
+        for (idx, exclude) in self.excludes.iter().enumerate() {
+            if hook.groups.contains(exclude) {
+                usage.use_exclude(idx);
+                excluded = true;
+            }
+        }
+
+        if self.includes.is_empty() {
+            return !excluded;
+        }
+
+        let mut included = false;
+        for (idx, include) in self.includes.iter().enumerate() {
+            if hook.groups.contains(include) {
+                usage.use_include(idx);
+                included = true;
+            }
+        }
+
+        included && !excluded
+    }
+
+    pub(crate) fn report_unused(&self) {
+        let usage = self.usage.lock().unwrap();
+        let unused = usage
+            .unused_includes(&self.includes)
+            .map(|(_, group)| format!("--group={group}"))
+            .chain(
+                usage
+                    .unused_excludes(&self.excludes)
+                    .map(|(_, group)| format!("--no-group={group}")),
+            )
+            .collect::<Vec<_>>();
+
+        match unused.as_slice() {
+            [] => {}
+            [group] => {
+                warn_user!("group selector `{group}` did not match any hooks");
+            }
+            _ => {
+                let warning = unused
+                    .iter()
+                    .map(|group| format!("  - `{group}`"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                warn_user!("the following group selectors did not match any hooks:");
+                anstream::eprintln!("{warning}");
+            }
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+struct FilterUsage {
+    used_includes: FxHashSet<usize>,
+    used_excludes: FxHashSet<usize>,
+}
+
+impl FilterUsage {
     fn use_include(&mut self, idx: usize) {
         self.used_includes.insert(idx);
     }
 
-    fn use_skip(&mut self, idx: usize) {
-        self.used_skips.insert(idx);
+    fn use_exclude(&mut self, idx: usize) {
+        self.used_excludes.insert(idx);
     }
 
-    fn report_unused(&self, selectors: &Selectors) {
-        let unused = selectors
-            .includes
+    fn unused_includes<'a, T>(
+        &'a self,
+        values: &'a [T],
+    ) -> impl Iterator<Item = (usize, &'a T)> + 'a {
+        values
             .iter()
             .enumerate()
             .filter(|(idx, _)| !self.used_includes.contains(idx))
-            .chain(
-                selectors
-                    .skips
-                    .iter()
-                    .enumerate()
-                    .filter(|(idx, _)| !self.used_skips.contains(idx)),
-            )
+    }
+
+    fn unused_excludes<'a, T>(
+        &'a self,
+        values: &'a [T],
+    ) -> impl Iterator<Item = (usize, &'a T)> + 'a {
+        values
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| !self.used_excludes.contains(idx))
+    }
+
+    fn report_unused(&self, selectors: &Selectors) {
+        let unused = self
+            .unused_includes(&selectors.includes)
+            .chain(self.unused_excludes(&selectors.skips))
             .collect::<Vec<_>>();
 
         match unused.as_slice() {

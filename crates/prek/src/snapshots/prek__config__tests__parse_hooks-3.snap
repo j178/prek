@@ -15,6 +15,7 @@ Config {
                         entry: "cargo fmt",
                         language: Rust,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,

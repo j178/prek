@@ -16,6 +16,7 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -57,6 +58,7 @@ Config {
                         priority: Some(
                             10,
                         ),
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -95,6 +97,7 @@ Config {
                         entry: "cargo fmt --",
                         language: System,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -139,6 +142,7 @@ Config {
                         entry: "cargo dev generate-all",
                         language: System,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: Some(
@@ -188,6 +192,7 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -232,6 +237,7 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -262,6 +268,7 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,

@@ -107,6 +107,46 @@ fn skipped_installable_hook_does_not_install_env() -> Result<()> {
     Ok(())
 }
 
+/// Installable hooks excluded by group selection should not create environments.
+#[test]
+fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: selected
+                name: selected
+                language: system
+                entry: python3 -c "print('selected')"
+                always_run: true
+                groups: [ci]
+              - id: excluded-python
+                name: excluded-python
+                language: python
+                entry: python -c "print('excluded')"
+                always_run: true
+                groups: [slow]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    selected.................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(hook_env_count(&context)?, 0);
+
+    Ok(())
+}
+
 /// `always_run` installable hooks still install and run without matching files.
 #[test]
 fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {

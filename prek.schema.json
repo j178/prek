@@ -220,6 +220,13 @@
           "type": "integer",
           "minimum": 0
         },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\n\nThis is a project configuration field, not remote manifest metadata. If it\nappears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "alias": {
           "description": "Not documented in the official docs.",
           "type": "string"
@@ -477,6 +484,13 @@
           "type": "integer",
           "minimum": 0
         },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "alias": {
           "description": "Not documented in the official docs.",
           "type": "string"
@@ -639,6 +653,13 @@
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": "integer",
           "minimum": 0
+        },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\n\nThis is a project configuration field, not remote manifest metadata. If it\nappears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "alias": {
           "description": "Not documented in the official docs.",
@@ -807,6 +828,13 @@
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": "integer",
           "minimum": 0
+        },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\n\nThis is a project configuration field, not remote manifest metadata. If it\nappears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "alias": {
           "description": "Not documented in the official docs.",

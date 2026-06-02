@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -54,6 +55,7 @@ pub(crate) struct HookSpec {
     pub entry: String,
     pub language: Language,
     pub priority: Option<u32>,
+    pub groups: Option<Vec<String>>,
     pub options: HookOptions,
 }
 
@@ -70,6 +72,9 @@ impl HookSpec {
         }
         if let Some(priority) = config.priority {
             self.priority = Some(priority);
+        }
+        if config.groups.is_some() {
+            self.groups.clone_from(&config.groups);
         }
 
         self.options.update(&config.options);
@@ -103,6 +108,7 @@ impl From<ManifestHook> for HookSpec {
             entry: hook.entry,
             language: hook.language,
             priority: None,
+            groups: None,
             options: hook.options,
         }
     }
@@ -116,6 +122,7 @@ impl From<LocalHook> for HookSpec {
             entry: hook.entry,
             language: hook.language,
             priority: hook.priority,
+            groups: hook.groups,
             options: hook.options,
         }
     }
@@ -129,6 +136,7 @@ impl From<MetaHook> for HookSpec {
             entry: String::new(),
             language: Language::System,
             priority: hook.priority,
+            groups: hook.groups,
             options: hook.options,
         }
     }
@@ -142,6 +150,7 @@ impl From<BuiltinHook> for HookSpec {
             entry: hook.entry,
             language: Language::System,
             priority: hook.priority,
+            groups: hook.groups,
             options: hook.options,
         }
     }
@@ -269,6 +278,7 @@ impl HookBuilder {
             shell,
             ..
         } = &self.hook_spec.options;
+        let groups = &self.hook_spec.groups;
 
         let additional_dependencies = additional_dependencies
             .as_ref()
@@ -295,6 +305,17 @@ impl HookBuilder {
                         language,
                     ),
                 });
+            }
+        }
+
+        if let Some(groups) = groups {
+            for group in groups {
+                if group.is_empty() {
+                    return Err(Error::Hook {
+                        hook: self.hook_spec.id.clone(),
+                        error: anyhow::anyhow!("Hook specified an empty group name"),
+                    });
+                }
             }
         }
 
@@ -351,6 +372,13 @@ impl HookBuilder {
 
         self.check()?;
 
+        let groups = self
+            .hook_spec
+            .groups
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
         let options = self.hook_spec.options;
         let language_version = options.language_version.unwrap_or_default();
         let alias = options.alias.unwrap_or_default();
@@ -371,7 +399,6 @@ impl HookBuilder {
             .unwrap_or_default()
             .into_iter()
             .collect::<FxHashSet<_>>();
-
         let language_request = LanguageRequest::parse(self.hook_spec.language, &language_version)
             .map_err(|e| Error::Hook {
             hook: self.hook_spec.id.clone(),
@@ -395,6 +422,7 @@ impl HookBuilder {
             language: self.hook_spec.language,
 
             priority,
+            groups,
             entry,
             stages,
             language_request,
@@ -464,6 +492,7 @@ pub(crate) struct Hook {
     pub verbose: bool,
     pub minimum_prek_version: Option<String>,
     pub priority: u32,
+    pub groups: BTreeSet<String>,
 }
 
 impl Display for Hook {
@@ -883,6 +912,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 env: Some(base_env),
                 shell: Some(Shell::Sh),
@@ -900,6 +930,7 @@ mod tests {
             entry: Some("python3 -c 'print(2)'".to_string()),
             language: None,
             priority: Some(42),
+            groups: Some(vec!["ci".to_string(), "format".to_string()]),
             options: HookOptions {
                 alias: Some("alias-1".to_string()),
                 types: Some(tags::TAG_SET_TEXT),
@@ -998,6 +1029,10 @@ mod tests {
             verbose: true,
             minimum_prek_version: None,
             priority: 42,
+            groups: {
+                "ci",
+                "format",
+            },
         }
         "#);
 
@@ -1022,6 +1057,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 stages: Some(Stages::from([])),
                 ..Default::default()
@@ -1036,6 +1072,39 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn hook_builder_rejects_empty_group_names() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            groups: Some(vec![String::new()]),
+            options: HookOptions::default(),
+        };
+
+        let err = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("Invalid hook `test-hook`"));
+        assert!(format!("{err:?}").contains("empty group"));
+
+        Ok(())
+    }
+
     #[test]
     fn hook_spec_apply_project_defaults_sets_explicit_all_when_default_stages_missing() {
         let config: Config = serde_saphyr::from_str("repos: []\n").expect("config should parse");
@@ -1046,6 +1115,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions::default(),
         };
 
@@ -1072,6 +1142,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions::default(),
         };
 
@@ -1101,6 +1172,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions::default(),
         };
 
@@ -1131,6 +1203,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 stages: Some(Stages::from([])),
                 ..Default::default()
@@ -1182,6 +1255,7 @@ mod tests {
             entry: "./hook.py".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 language_version: language_version.map(str::to_string),
                 ..Default::default()

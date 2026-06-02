@@ -550,10 +550,25 @@ pub(crate) struct RunArgs {
     ///
     /// When specified, only hooks configured for that stage (for example `manual`,
     /// `pre-commit`, or `pre-push`) will run.
-    /// Defaults to `pre-commit` if not specified.
-    /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
+    /// When not specified and no group filter is active, `prek run` starts with
+    /// hooks eligible for `pre-commit`. If no hook is selected and the command
+    /// named hook IDs, those same IDs are matched again against hooks configured
+    /// for `manual`. With `--group` or `--no-group`, omitting the stage means
+    /// hooks from any stage can match.
     #[arg(long, value_enum, alias = "hook-stage")]
     pub(crate) stage: Option<Stage>,
+
+    /// Run hooks belonging to the specified group.
+    ///
+    /// Can be specified multiple times.
+    #[arg(long = "group", value_name = "GROUP")]
+    pub(crate) groups: Vec<String>,
+
+    /// Do not run hooks belonging to the specified group.
+    ///
+    /// Can be specified multiple times. Exclusion wins over inclusion.
+    #[arg(long = "no-group", value_name = "GROUP")]
+    pub(crate) no_groups: Vec<String>,
 
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]

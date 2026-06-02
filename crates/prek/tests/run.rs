@@ -510,6 +510,185 @@ fn priorities_respected() {
 }
 
 #[test]
+fn run_group_selects_matching_hooks_and_ignores_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: ci-check
+                name: CI Check
+                language: system
+                entry: python3 -c "print('ci')"
+                always_run: true
+                stages: [pre-push]
+                groups: [ci]
+              - id: local-check
+                name: Local Check
+                language: system
+                entry: python3 -c "print('local')"
+                always_run: true
+                stages: [pre-commit]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    CI Check.................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn run_no_group_excludes_matching_hooks_and_keeps_ungrouped_hooks() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: format
+                name: Format
+                language: system
+                entry: python3 -c "print('format')"
+                always_run: true
+                groups: [format]
+              - id: lint
+                name: Lint
+                language: system
+                entry: python3 -c "print('lint')"
+                always_run: true
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--no-group").arg("format"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Lint.....................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn run_group_exclusion_wins_over_inclusion() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: fast-lint
+                name: Fast Lint
+                language: system
+                entry: python3 -c "print('fast')"
+                always_run: true
+                groups: [ci]
+              - id: slow-lint
+                name: Slow Lint
+                language: system
+                entry: python3 -c "print('slow')"
+                always_run: true
+                groups: [ci, slow]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci").arg("--no-group").arg("slow"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Fast Lint................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn run_unknown_group_warns_and_empty_selection_fails() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: lint
+                name: Lint
+                language: system
+                entry: python3 -c "print('lint')"
+                always_run: true
+                groups: [ci]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("missing"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: group selector `--group=missing` did not match any hooks
+    error: No hooks found after filtering with the given selectors
+    "#);
+}
+
+#[test]
+fn run_group_and_stage_filters_intersect() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: ci-push
+                name: CI Push
+                language: system
+                entry: python3 -c "print('ci-push')"
+                always_run: true
+                stages: [pre-push]
+                groups: [ci]
+              - id: ci-manual
+                name: CI Manual
+                language: system
+                entry: python3 -c "print('ci-manual')"
+                always_run: true
+                stages: [manual]
+                groups: [ci]
+              - id: other-push
+                name: Other Push
+                language: system
+                entry: python3 -c "print('other-push')"
+                always_run: true
+                stages: [pre-push]
+                groups: [other]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci").arg("--stage").arg("pre-push"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    CI Push..................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn priority_fail_fast_stops_later_groups() {
     let context = TestContext::new();
     context.init_project();
@@ -1344,6 +1523,8 @@ fn global_path_options_expand_tilde() -> Result<()> {
         to_ref: None,
         last_commit: false,
         stage: None,
+        groups: [],
+        no_groups: [],
         show_diff_on_failure: false,
         fail_fast: false,
         no_fail_fast: false,
@@ -2532,6 +2713,8 @@ fn selectors_completion() -> Result<()> {
     --to-ref	The destination ref in a `from_ref...to_ref` diff expression. Defaults to `HEAD` if `from_ref` is specified
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
     --stage	The stage during which the hook is fired
+    --group	Run hooks belonging to the specified group
+    --no-group	Do not run hooks belonging to the specified group
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run

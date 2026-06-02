@@ -13,6 +13,7 @@ Config {
                         id: "check-hooks-apply",
                         name: "Check hooks apply",
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: Some(
@@ -52,6 +53,7 @@ Config {
                         id: "check-useless-excludes",
                         name: "Check useless excludes",
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: Some(
@@ -91,6 +93,7 @@ Config {
                         id: "identity",
                         name: "identity",
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
