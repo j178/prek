@@ -64,44 +64,35 @@ impl HookBar {
         width: usize,
         chunk: &[u8],
     ) -> Option<ProgressBar> {
-        let old_line_count = self.output_bars.len();
         self.output_preview.push_chunk(chunk);
         let lines = self.output_preview.visible_lines();
-        let line_count = lines.len();
+        let mut inserted_tail = None;
 
-        // Create preview rows only as output needs them, so short output does not
-        // reserve the full rolling window height.
-        while self.output_bars.len() < line_count {
-            let tail = self.output_bars.last().unwrap_or(&self.progress).clone();
-            let output = reporter.children.insert_after(
-                &tail,
-                ProgressBar::with_draw_target(None, reporter.printer.target()),
-            );
-            output.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-            output.set_message(HOOK_OUTPUT_PREVIEW_PREFIX.dimmed().to_string());
-            self.output_bars.push(output);
-        }
+        for (idx, line) in lines.iter().enumerate() {
+            if idx == self.output_bars.len() {
+                let tail = self.output_bars.last().unwrap_or(&self.progress).clone();
+                let output = reporter.children.insert_after(
+                    &tail,
+                    ProgressBar::with_draw_target(None, reporter.printer.target()),
+                );
+                output.set_style(
+                    ProgressStyle::with_template("{prefix:.dim}{wide_msg:.dim}").unwrap(),
+                );
+                output.set_prefix(HOOK_OUTPUT_PREVIEW_PREFIX);
+                self.output_bars.push(output);
+                inserted_tail = self.output_bars.last().cloned();
+            }
 
-        for (line, output_bar) in lines.iter().zip(&self.output_bars) {
             let line = line.trim_end();
             let message = if width == 0 {
                 String::new()
             } else {
-                format!(
-                    "{HOOK_OUTPUT_PREVIEW_PREFIX}{}",
-                    truncate_to_width(line, width)
-                )
-                .dimmed()
-                .to_string()
+                truncate_to_width(line, width).into_owned()
             };
-            output_bar.set_message(message);
+            self.output_bars[idx].set_message(message);
         }
 
-        if self.output_bars.len() > old_line_count {
-            self.output_bars.last().cloned()
-        } else {
-            None
-        }
+        inserted_tail
     }
 }
 
