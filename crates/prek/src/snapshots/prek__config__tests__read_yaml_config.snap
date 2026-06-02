@@ -311,6 +311,7 @@ Config {
     fail_fast: Some(
         true,
     ),
+    no_stash: None,
     minimum_prek_version: None,
     orphan: None,
     _unused_keys: {},

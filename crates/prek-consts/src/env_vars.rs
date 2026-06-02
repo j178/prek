@@ -25,6 +25,7 @@ impl EnvVars {
     pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
     pub const PREK_MAX_CONCURRENCY: &'static str = "PREK_MAX_CONCURRENCY";
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
+    pub const PREK_NO_STASH: &'static str = "PREK_NO_STASH";
     pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";

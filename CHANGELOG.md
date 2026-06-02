@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Enhancements
+
+- Add opt-out for the working-tree keeper via `--no-stash`, `PREK_NO_STASH`, and a
+  `no_stash` top-level config key. The autostash behavior is undesirable when
+  working with several agents or tools at once on the same code — the keeper's
+  recovery path runs `git checkout -- <root>`, which can clobber uncommitted work
+  in flight from concurrent processes.
+
 ## 0.4.3
 
 Released on 2026-05-27.
