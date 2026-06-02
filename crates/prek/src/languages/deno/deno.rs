@@ -7,7 +7,8 @@ use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use tracing::debug;
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::deno::DenoRequest;

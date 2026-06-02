@@ -11,7 +11,8 @@ use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use tracing::{debug, trace};
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;

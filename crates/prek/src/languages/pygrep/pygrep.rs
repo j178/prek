@@ -7,7 +7,8 @@ use prek_consts::env_vars::EnvVars;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::python::{Uv, python_exec, query_python_info_cached};

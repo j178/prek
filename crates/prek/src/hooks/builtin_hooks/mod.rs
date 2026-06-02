@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use prek_identify::tags;
 
-use crate::cli::reporter::HookRunReporter;
+use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;

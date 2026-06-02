@@ -12,7 +12,8 @@ use prek_consts::env_vars::EnvVars;
 use regex::Regex;
 use tracing::{trace, warn};
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;

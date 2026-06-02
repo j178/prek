@@ -18,14 +18,12 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::{debug, error, trace};
 use unicode_width::UnicodeWidthStr;
 
-use crate::cli::reporter::{
-    HookInitReporter, HookInstallReporter, HookRunReporter, project_status_marker,
-};
+use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::diff::DiffTracker;
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
-    CollectOptions, FileTagCache, HookFileFilter, ProjectFiles, RunInput, Selectors,
-    collect_run_input,
+    CollectOptions, FileTagCache, HookFileFilter, HookRunReporter, ProjectFiles, RunInput,
+    Selectors, collect_run_input, project_status_marker,
 };
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{PassFilenames, Stage};

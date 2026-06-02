@@ -8,7 +8,8 @@ use prek_consts::prepend_paths;
 use semver::Version;
 use tracing::debug;
 
-use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::cli::reporter::HookInstallReporter;
+use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
