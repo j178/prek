@@ -19,6 +19,16 @@ use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
 
+pub(crate) fn validate_group_name(group: &str) -> std::result::Result<(), &'static str> {
+    if group.is_empty() {
+        Err("cannot be empty")
+    } else if group.chars().any(char::is_whitespace) {
+        Err("cannot contain whitespace")
+    } else {
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct GlobPatterns {
     patterns: Vec<String>,
@@ -682,6 +692,7 @@ pub(crate) struct RemoteHook {
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
     ///
     /// This is a project configuration field, not remote manifest metadata. If it
     /// appears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.
@@ -709,6 +720,7 @@ pub(crate) struct LocalHook {
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -729,6 +741,7 @@ pub(crate) struct MetaHook {
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -818,6 +831,7 @@ pub(crate) struct BuiltinHook {
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
     pub groups: Option<Vec<String>>,
     /// Common hook options.
     ///

@@ -8,9 +8,8 @@ use anstream::eprintln;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
 use prek_consts::env_vars::EnvVars;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::cli::{self, ExitStatus, RunArgs, flag};
 use crate::config::HookType;

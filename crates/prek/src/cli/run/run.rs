@@ -20,6 +20,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::diff::DiffTracker;
+use crate::cli::run::install::{InstallCache, install_hooks};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
     CollectOptions, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter, ProjectFiles,
@@ -35,8 +36,6 @@ use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
-
-use super::install::{InstallCache, install_hooks};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -87,7 +86,7 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let group_filters = GroupFilters::parse(&groups, &no_groups);
+    let group_filters = GroupFilters::parse(&groups, &no_groups)?;
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 

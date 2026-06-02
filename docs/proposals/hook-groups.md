@@ -61,6 +61,7 @@ repos:
 - **Default**: empty list
 - **Scope**: project configuration only
 - **Matching**: exact and case-sensitive
+- **Names**: non-empty strings without whitespace
 
 `groups` is a `prek`-only field. It is not part of upstream `pre-commit`, and it
 should not be treated as remote hook manifest metadata. Groups describe how the
@@ -250,8 +251,15 @@ groups: ["ci", "ci"]
 
 ### Invalid Group Names
 
-Group names should be non-empty strings after trimming surrounding whitespace.
-Empty and whitespace-only names should be rejected during config parsing.
+Group names should be non-empty strings and must not contain whitespace. Names
+are matched exactly, so implementations should not trim or normalize group
+names before validation.
+
+Invalid examples:
+
+```yaml
+groups: ["", "ci slow", " ci", "ci\nslow"]
+```
 
 No fixed vocabulary should be enforced. In particular, `ci`, `agent`, `slow`,
 `format`, and `lint` are examples, not reserved names.

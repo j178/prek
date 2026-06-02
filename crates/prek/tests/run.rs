@@ -645,6 +645,46 @@ fn run_unknown_group_warns_and_empty_selection_fails() {
 }
 
 #[test]
+fn run_group_selectors_reject_whitespace() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: lint
+                name: Lint
+                language: system
+                entry: python3 -c "print('lint')"
+                always_run: true
+                groups: [ci]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci slow"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid group selector: `--group=ci slow`
+      caused by: group name cannot contain whitespace
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--no-group").arg("ci slow"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid group selector: `--no-group=ci slow`
+      caused by: group name cannot contain whitespace
+    "#);
+}
+
+#[test]
 fn run_group_and_stage_filters_intersect() {
     let context = TestContext::new();
     context.init_project();

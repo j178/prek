@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::config::validate_group_name;
 use crate::hook::Hook;
 use crate::warn_user;
 
@@ -26,6 +27,13 @@ pub(crate) enum Error {
     #[error("Invalid project path: `{path}`")]
     InvalidPath {
         path: String,
+        #[source]
+        source: anyhow::Error,
+    },
+
+    #[error("Invalid group selector: `{selector}`")]
+    GroupSelector {
+        selector: String,
         #[source]
         source: anyhow::Error,
     },
@@ -327,25 +335,31 @@ pub(crate) struct GroupFilters {
 }
 
 impl GroupFilters {
-    pub(crate) fn parse(includes: &[String], excludes: &[String]) -> Self {
-        let parse_groups = |groups: &[String]| {
+    pub(crate) fn parse(includes: &[String], excludes: &[String]) -> Result<Self, Error> {
+        let parse_groups = |flag: &'static str, groups: &[String]| {
             let mut seen = FxHashSet::default();
             let mut names = Vec::new();
 
             for group in groups {
+                if let Err(reason) = validate_group_name(group) {
+                    return Err(Error::GroupSelector {
+                        selector: format!("{flag}={group}"),
+                        source: anyhow!("group name {reason}"),
+                    });
+                }
                 if seen.insert(group.as_str()) {
                     names.push(group.clone());
                 }
             }
 
-            names
+            Ok(names)
         };
 
-        Self {
-            includes: parse_groups(includes),
-            excludes: parse_groups(excludes),
+        Ok(Self {
+            includes: parse_groups("--group", includes)?,
+            excludes: parse_groups("--no-group", excludes)?,
             usage: Arc::default(),
-        }
+        })
     }
 
     pub(crate) fn is_active(&self) -> bool {

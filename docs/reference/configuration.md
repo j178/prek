@@ -1015,6 +1015,7 @@ Tag a hook with user-defined run groups.
 - Default: `[]`
 
 Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run--group) and [`prek run --no-group <group>`](cli.md#prek-run--no-group).
+Group names cannot be empty or contain whitespace.
 
 `groups` is a project configuration field. If it appears in a remote
 `.pre-commit-hooks.yaml` manifest, `prek` warns and ignores it.
