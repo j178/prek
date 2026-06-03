@@ -712,6 +712,7 @@ pub(crate) struct RemoteHook {
     /// This is a project configuration field, not remote manifest metadata. If it
     /// appears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.
     #[serde(default, deserialize_with = "deserialize_groups")]
+    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -738,6 +739,7 @@ pub(crate) struct LocalHook {
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
     #[serde(default, deserialize_with = "deserialize_groups")]
+    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,

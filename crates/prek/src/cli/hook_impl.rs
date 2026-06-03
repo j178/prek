@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::cli::{self, ExitStatus, RunArgs, flag};
+use crate::cli::{self, ExitStatus, RunOptions, flag};
 use crate::config::HookType;
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
@@ -245,8 +245,8 @@ async fn to_run_args(
     hook_type: HookType,
     args: &[OsString],
     stdin: &[u8],
-) -> Result<Option<RunArgs>> {
-    let mut run_args = RunArgs::default();
+) -> Result<Option<RunOptions>> {
+    let mut run_args = RunOptions::default();
 
     match hook_type {
         HookType::PrePush => {

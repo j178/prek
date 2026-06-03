@@ -9,8 +9,8 @@ use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::run::Selectors;
-use crate::cli::{ExitStatus, flag};
-use crate::config;
+use crate::cli::{ExitStatus, RunOptions, flag};
+use crate::config::{self, Stage};
 use crate::git;
 use crate::git::GIT_ROOT;
 use crate::printer::Printer;
@@ -163,7 +163,8 @@ pub(crate) async fn try_repo(
     config: Option<PathBuf>,
     repo: String,
     rev: Option<String>,
-    run_args: crate::cli::RunArgs,
+    run_args: RunOptions,
+    stage: Option<Stage>,
     refresh: bool,
     verbose: bool,
     printer: Printer,
@@ -211,9 +212,9 @@ pub(crate) async fn try_repo(
         Some(config_file),
         vec![],
         vec![],
-        run_args.groups,
-        run_args.no_groups,
-        run_args.stage,
+        vec![],
+        vec![],
+        stage,
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,
