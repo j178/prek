@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anstream::eprintln;
 use anyhow::Result;
@@ -14,10 +14,8 @@ use crate::fs::Simplified;
 use crate::git::{self, GIT, git_cmd};
 use crate::store::Store;
 
-static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);
-
-struct IntentToAddKeeper(Vec<PathBuf>);
-struct WorkingTreeKeeper {
+struct IntentToAddRestorer(Vec<PathBuf>);
+struct UnstagedChangesRestorer {
     root: PathBuf,
     patch: Option<PathBuf>,
 }
@@ -37,7 +35,7 @@ fn ensure_patches_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-impl IntentToAddKeeper {
+impl IntentToAddRestorer {
     async fn clean(root: &Path) -> Result<Self> {
         let files = git::intent_to_add_files(root).await?;
         if files.is_empty() {
@@ -76,7 +74,7 @@ impl IntentToAddKeeper {
     }
 }
 
-impl Drop for IntentToAddKeeper {
+impl Drop for IntentToAddRestorer {
     fn drop(&mut self) {
         if let Err(err) = self.restore() {
             eprintln!(
@@ -87,7 +85,7 @@ impl Drop for IntentToAddKeeper {
     }
 }
 
-impl WorkingTreeKeeper {
+impl UnstagedChangesRestorer {
     async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
         let tree = git::write_tree().await?;
 
@@ -222,7 +220,7 @@ impl WorkingTreeKeeper {
     }
 }
 
-impl Drop for WorkingTreeKeeper {
+impl Drop for UnstagedChangesRestorer {
     fn drop(&mut self) {
         if let Err(err) = self.restore() {
             eprintln!(
@@ -235,48 +233,41 @@ impl Drop for WorkingTreeKeeper {
 
 /// Clean Git intent-to-add files and working tree changes, and restore them when dropped.
 pub struct WorkTreeKeeper {
-    intent_to_add: Option<IntentToAddKeeper>,
-    working_tree: Option<WorkingTreeKeeper>,
+    state: Arc<Mutex<Option<WorkTreeState>>>,
 }
 
-#[derive(Default)]
-pub struct RestoreGuard {
-    _guard: (),
+struct WorkTreeState {
+    // Drop order matters: restore file contents before re-adding intent-to-add entries.
+    unstaged_changes: UnstagedChangesRestorer,
+    intent_to_add: IntentToAddRestorer,
 }
 
-impl Drop for RestoreGuard {
+impl Drop for WorkTreeKeeper {
     fn drop(&mut self) {
-        if let Some(mut keeper) = RESTORE_WORKTREE.lock().unwrap().take() {
-            keeper.restore();
-        }
+        let mut state = self.state.lock().unwrap();
+        drop(state.take());
     }
 }
 
 impl WorkTreeKeeper {
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
-    pub async fn clean(store: &Store, root: &Path) -> Result<RestoreGuard> {
-        let cleaner = Self {
-            intent_to_add: Some(IntentToAddKeeper::clean(root).await?),
-            working_tree: Some(WorkingTreeKeeper::clean(root, &store.patches_dir()).await?),
+    pub async fn clean(store: &Store, root: &Path) -> Result<Self> {
+        let intent_to_add = IntentToAddRestorer::clean(root).await?;
+        let unstaged_changes = UnstagedChangesRestorer::clean(root, &store.patches_dir()).await?;
+        let state = WorkTreeState {
+            unstaged_changes,
+            intent_to_add,
         };
-
-        // Set to the global for the cleanup hook.
-        *RESTORE_WORKTREE.lock().unwrap() = Some(cleaner);
+        let state = Arc::new(Mutex::new(Some(state)));
 
         // Make sure restoration when ctrl-c is pressed.
-        add_cleanup(|| {
-            if let Some(guard) = &mut *RESTORE_WORKTREE.lock().unwrap() {
-                guard.restore();
-            }
+        let cleanup_state = Arc::clone(&state);
+        add_cleanup(move || {
+            let mut state = cleanup_state.lock().unwrap();
+            drop(state.take());
         });
 
-        Ok(RestoreGuard::default())
-    }
-
-    /// Restore the intent-to-add changes and non-staged changes.
-    fn restore(&mut self) {
-        self.intent_to_add.take();
-        self.working_tree.take();
+        Ok(Self { state })
     }
 }

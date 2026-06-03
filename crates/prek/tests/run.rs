@@ -1491,6 +1491,72 @@ fn staged_files_only() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: rewrite-python
+                name: rewrite-python
+                language: system
+                entry: python3 -c 'open("test.py", "w").write("a = 1\n")'
+                files: ^test\.py$
+   "#});
+
+    let cwd = context.work_dir();
+    context.git_add(PRE_COMMIT_CONFIG_YAML);
+
+    cwd.child("intent.txt").write_str("preserve me\n")?;
+    git_cmd(cwd)
+        .arg("add")
+        .arg("--intent-to-add")
+        .arg("intent.txt")
+        .assert()
+        .success();
+
+    cwd.child("test.py").write_str("a=1\n")?;
+    context.git_add("test.py");
+    cwd.child("test.py").write_str("a=1\nb = 2\n")?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(r"/\d+-\d+.patch", "/[TIME]-[PID].patch")])
+        .collect();
+
+    cmd_snapshot!(filters, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    rewrite-python...........................................................Failed
+    - hook id: rewrite-python
+    - files were modified by this hook
+
+    ----- stderr -----
+    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
+    Stashed changes conflicted with changes made by hook, rolling back the hook changes
+    Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    assert_eq!(context.read("intent.txt"), "preserve me\n");
+    assert_eq!(context.read("test.py"), "a=1\nb = 2\n");
+
+    let output = git_cmd(cwd)
+        .arg("diff")
+        .arg("--diff-filter=A")
+        .arg("--name-only")
+        .arg("--")
+        .arg("intent.txt")
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8(output.stdout)?, "intent.txt\n");
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {
