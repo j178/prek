@@ -16,7 +16,7 @@ use tracing::trace;
 
 use crate::config::{
     self, BuiltinHook, Config, FilePattern, HookOptions, Language, LocalHook, ManifestHook,
-    MetaHook, PassFilenames, RemoteHook, Stages, read_manifest, validate_group_name,
+    MetaHook, PassFilenames, RemoteHook, Stages, read_manifest,
 };
 use crate::hook_entry::HookEntry;
 use crate::languages::version::LanguageRequest;
@@ -278,8 +278,6 @@ impl HookBuilder {
             shell,
             ..
         } = &self.hook_spec.options;
-        let groups = &self.hook_spec.groups;
-
         let additional_dependencies = additional_dependencies
             .as_ref()
             .map_or(&[][..], |deps| deps.as_slice());
@@ -305,17 +303,6 @@ impl HookBuilder {
                         language,
                     ),
                 });
-            }
-        }
-
-        if let Some(groups) = groups {
-            for group in groups {
-                if let Err(reason) = validate_group_name(group) {
-                    return Err(Error::Hook {
-                        hook: self.hook_spec.id.clone(),
-                        error: anyhow::anyhow!("Hook specified group `{group}` which {reason}"),
-                    });
-                }
             }
         }
 
@@ -1069,45 +1056,6 @@ mod tests {
             .await?;
 
         assert_eq!(hook.stages, Stages::from([Stage::Manual]));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn hook_builder_rejects_invalid_group_names() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
-        fs_err::write(&config_path, "repos: []\n")?;
-
-        let project = Arc::new(Project::from_config_file(
-            Cow::Borrowed(&config_path),
-            None,
-        )?);
-        let repo = Arc::new(Repo::Local { hooks: vec![] });
-
-        for (group, expected) in [
-            ("", "cannot be empty"),
-            ("ci slow", "cannot contain whitespace"),
-            ("ci\tslow", "cannot contain whitespace"),
-        ] {
-            let hook_spec = HookSpec {
-                id: "test-hook".to_string(),
-                name: "test-hook".to_string(),
-                entry: "python3 -c 'print(1)'".to_string(),
-                language: Language::Python,
-                priority: None,
-                groups: Some(vec![group.to_string()]),
-                options: HookOptions::default(),
-            };
-
-            let err = HookBuilder::new(project.clone(), repo.clone(), hook_spec, 0)
-                .build()
-                .await
-                .unwrap_err();
-
-            assert!(err.to_string().contains("Invalid hook `test-hook`"));
-            assert!(format!("{err:?}").contains(expected));
-        }
-
         Ok(())
     }
 

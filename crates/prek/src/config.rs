@@ -29,6 +29,21 @@ pub(crate) fn validate_group_name(group: &str) -> std::result::Result<(), &'stat
     }
 }
 
+fn deserialize_groups<'de, D>(deserializer: D) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let groups = Option::<Vec<String>>::deserialize(deserializer)?;
+    if let Some(groups) = &groups {
+        for group in groups {
+            if let Err(reason) = validate_group_name(group) {
+                return Err(D::Error::custom(format!("group name `{group}` {reason}")));
+            }
+        }
+    }
+    Ok(groups)
+}
+
 #[derive(Clone)]
 pub(crate) struct GlobPatterns {
     patterns: Vec<String>,
@@ -696,6 +711,7 @@ pub(crate) struct RemoteHook {
     ///
     /// This is a project configuration field, not remote manifest metadata. If it
     /// appears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.
+    #[serde(default, deserialize_with = "deserialize_groups")]
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -721,6 +737,7 @@ pub(crate) struct LocalHook {
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -742,6 +759,7 @@ pub(crate) struct MetaHook {
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
     pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -832,6 +850,7 @@ pub(crate) struct BuiltinHook {
     pub priority: Option<u32>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
     pub groups: Option<Vec<String>>,
     /// Common hook options.
     ///
@@ -1447,6 +1466,35 @@ mod tests {
         let parsed: Config = serde_saphyr::from_str("repos: []\n").expect("config should parse");
 
         assert_eq!(parsed.default_stages, None);
+    }
+
+    #[test]
+    fn hook_groups_reject_invalid_names_during_deserialize() {
+        for (groups, expected) in [
+            (r#"[""]"#, "group name `` cannot be empty"),
+            (
+                r#"["ci slow"]"#,
+                "group name `ci slow` cannot contain whitespace",
+            ),
+            (
+                r#"["ci\tslow"]"#,
+                "group name `ci\tslow` cannot contain whitespace",
+            ),
+        ] {
+            let yaml = indoc::formatdoc! {r"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: lint
+                        name: Lint
+                        language: system
+                        entry: echo lint
+                        groups: {groups}
+            "};
+            let err = serde_saphyr::from_str::<Config>(&yaml).unwrap_err();
+            let msg = err.to_string();
+            assert!(msg.contains(expected), "expected `{expected}` in `{msg}`");
+        }
     }
 
     #[test]
