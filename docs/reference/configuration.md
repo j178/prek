@@ -1018,7 +1018,7 @@ Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run
 Group names cannot be empty or contain whitespace.
 
 `groups` is a project configuration field. If it appears in a remote
-`.pre-commit-hooks.yaml` manifest, `prek` warns and ignores it.
+`.pre-commit-hooks.yaml` manifest, `prek` ignores it.
 
 Examples:
 
