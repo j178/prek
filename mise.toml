@@ -19,7 +19,8 @@ run = [
 
 [tasks.test-unit]
 description = "Run unit tests with insta review"
-run = "cargo insta test --review --bin prek -- {{arg(name='filter')}}"
+usage = 'arg <filter> help="Test filter"'
+run = "cargo insta test --review --bin prek -- {{ usage.filter }}"
 
 [tasks.test-all-unit]
 description = "Run all unit tests with insta review"
@@ -27,7 +28,11 @@ run = "cargo insta test --review --workspace --lib --bins"
 
 [tasks.test-integration]
 description = "Run specific integration test with insta review"
-run = "cargo insta test --review --test {{arg(name='test')}} -- {{arg(name='filter')}}"
+usage = '''
+arg <test> help="Integration test name"
+arg <filter> help="Additional test filter"
+'''
+run = "cargo insta test --review --test {{ usage.test }} -- {{ usage.filter }}"
 
 [tasks.test-all-integration]
 description = "Run all integration tests with insta review"

@@ -8,11 +8,10 @@ use anstream::eprintln;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use prek_consts::env_vars::EnvVars;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use prek_consts::env_vars::EnvVars;
-
-use crate::cli::{self, ExitStatus, RunArgs, flag};
+use crate::cli::{self, ExitStatus, RunOptions, flag};
 use crate::config::HookType;
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
@@ -125,6 +124,8 @@ pub(crate) async fn hook_impl(
         config,
         includes,
         skips,
+        vec![],
+        vec![],
         Some(hook_type.into()),
         run_args.from_ref,
         run_args.to_ref,
@@ -244,8 +245,8 @@ async fn to_run_args(
     hook_type: HookType,
     args: &[OsString],
     stdin: &[u8],
-) -> Result<Option<RunArgs>> {
-    let mut run_args = RunArgs::default();
+) -> Result<Option<RunOptions>> {
+    let mut run_args = RunOptions::default();
 
     match hook_type {
         HookType::PrePush => {

@@ -16,6 +16,7 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,

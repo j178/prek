@@ -468,7 +468,7 @@ pub(crate) struct RunExtraArgs {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default, Args)]
-pub(crate) struct RunArgs {
+pub(crate) struct RunOptions {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
@@ -546,15 +546,6 @@ pub(crate) struct RunArgs {
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
 
-    /// The stage during which the hook is fired.
-    ///
-    /// When specified, only hooks configured for that stage (for example `manual`,
-    /// `pre-commit`, or `pre-push`) will run.
-    /// Defaults to `pre-commit` if not specified.
-    /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
-    #[arg(long, value_enum, alias = "hook-stage")]
-    pub(crate) stage: Option<Stage>,
-
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]
     pub(crate) show_diff_on_failure: bool,
@@ -576,6 +567,37 @@ pub(crate) struct RunArgs {
 }
 
 #[derive(Debug, Clone, Default, Args)]
+pub(crate) struct RunArgs {
+    #[command(flatten)]
+    pub(crate) options: RunOptions,
+
+    /// The stage during which the hook is fired.
+    ///
+    /// When specified, only hooks configured for that stage (for example `manual`,
+    /// `pre-commit`, or `pre-push`) will run.
+    /// When not specified and no group filter is active, this command starts with
+    /// hooks eligible for `pre-commit`. If no hook is selected and the command
+    /// named hook IDs, those same IDs are matched again against hooks configured
+    /// for `manual`. With `--group` or `--no-group`, omitting the stage lets
+    /// hooks from any configured stage match, using the default file input mode;
+    /// hooks that only run at `commit-msg` or `prepare-commit-msg` are ignored.
+    #[arg(long, value_enum, alias = "hook-stage")]
+    pub(crate) stage: Option<Stage>,
+
+    /// Run hooks belonging to the specified group.
+    ///
+    /// Can be specified multiple times.
+    #[arg(long = "group", value_name = "GROUP")]
+    pub(crate) groups: Vec<String>,
+
+    /// Do not run hooks belonging to the specified group.
+    ///
+    /// Can be specified multiple times. Exclusion wins over inclusion.
+    #[arg(long = "no-group", value_name = "GROUP")]
+    pub(crate) no_groups: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Args)]
 pub(crate) struct TryRepoArgs {
     /// Repository to source hooks from.
     pub(crate) repo: String,
@@ -585,7 +607,17 @@ pub(crate) struct TryRepoArgs {
     pub(crate) rev: Option<String>,
 
     #[command(flatten)]
-    pub(crate) run_args: RunArgs,
+    pub(crate) run_args: RunOptions,
+
+    /// The stage during which the hook is fired.
+    ///
+    /// When specified, only hooks configured for that stage (for example `manual`,
+    /// `pre-commit`, or `pre-push`) will run.
+    /// When not specified, this command starts with hooks eligible for
+    /// `pre-commit`. If no hook is selected and the command named hook IDs,
+    /// those same IDs are matched again against hooks configured for `manual`.
+    #[arg(long, value_enum, alias = "hook-stage")]
+    pub(crate) stage: Option<Stage>,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default, Serialize, Deserialize)]

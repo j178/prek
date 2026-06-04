@@ -282,24 +282,28 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Command::Run(args) => {
             show_settings!(args);
+            let args = *args;
+            let options = args.options;
 
             cli::run(
                 &store,
                 cli.globals.config,
-                args.includes,
-                args.skips,
+                options.includes,
+                options.skips,
+                args.groups,
+                args.no_groups,
                 args.stage,
-                args.from_ref,
-                args.to_ref,
-                args.all_files,
-                args.files,
-                args.directory,
-                args.last_commit,
-                args.show_diff_on_failure,
-                flag(args.fail_fast, args.no_fail_fast),
-                args.dry_run,
+                options.from_ref,
+                options.to_ref,
+                options.all_files,
+                options.files,
+                options.directory,
+                options.last_commit,
+                options.show_diff_on_failure,
+                flag(options.fail_fast, options.no_fail_fast),
+                options.dry_run,
                 cli.globals.refresh,
-                args.extra,
+                options.extra,
                 cli.globals.verbose > 0,
                 printer,
             )
@@ -404,6 +408,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.repo,
                 args.rev,
                 args.run_args,
+                args.stage,
                 cli.globals.refresh,
                 cli.globals.verbose > 0,
                 printer,

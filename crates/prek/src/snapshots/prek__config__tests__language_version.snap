@@ -16,6 +16,7 @@ Ok(
                             entry: "echo hello world",
                             language: System,
                             priority: None,
+                            groups: None,
                             options: HookOptions {
                                 alias: None,
                                 files: None,
@@ -48,6 +49,7 @@ Ok(
                             entry: "echo hello world",
                             language: System,
                             priority: None,
+                            groups: None,
                             options: HookOptions {
                                 alias: None,
                                 files: None,
@@ -80,6 +82,7 @@ Ok(
                             entry: "echo hello world",
                             language: System,
                             priority: None,
+                            groups: None,
                             options: HookOptions {
                                 alias: None,
                                 files: None,

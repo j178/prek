@@ -5,9 +5,8 @@ use std::sync::{Arc, Mutex};
 use anstream::eprintln;
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use tracing::{debug, error, trace};
-
 use prek_consts::env_vars::EnvVars;
+use tracing::{debug, error, trace};
 
 use crate::cleanup::add_cleanup;
 use crate::fs::Simplified;

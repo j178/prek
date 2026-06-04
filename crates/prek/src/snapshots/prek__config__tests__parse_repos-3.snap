@@ -15,6 +15,7 @@ Config {
                         entry: "cargo fmt",
                         language: System,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,

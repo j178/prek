@@ -15,6 +15,7 @@ Config {
                         entry: "prek --help",
                         language: System,
                         priority: None,
+                        groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,

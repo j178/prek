@@ -220,6 +220,14 @@
           "type": "integer",
           "minimum": 0
         },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          }
+        },
         "alias": {
           "description": "Not documented in the official docs.",
           "type": "string"
@@ -477,6 +485,14 @@
           "type": "integer",
           "minimum": 0
         },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          }
+        },
         "alias": {
           "description": "Not documented in the official docs.",
           "type": "string"
@@ -639,6 +655,14 @@
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": "integer",
           "minimum": 0
+        },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          }
         },
         "alias": {
           "description": "Not documented in the official docs.",
@@ -807,6 +831,14 @@
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": "integer",
           "minimum": 0
+        },
+        "groups": {
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          }
         },
         "alias": {
           "description": "Not documented in the official docs.",

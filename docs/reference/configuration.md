@@ -1003,6 +1003,89 @@ Allowed values:
 
 When you run [`prek run --hook-stage <stage>`](cli.md#prek-run), only hooks configured for that stage are considered.
 
+### `groups`
+
+Tag a hook with user-defined run groups.
+
+!!! note "prek-only"
+
+    `groups` is a `prek` extension. Upstream `pre-commit` does not support selecting hooks by group.
+
+- Type: list of strings
+- Default: `[]`
+
+Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run--group) and [`prek run --no-group <group>`](cli.md#prek-run--no-group).
+Group names cannot be empty or contain whitespace.
+
+`groups` is a project configuration field. If it appears in a remote
+`.pre-commit-hooks.yaml` manifest, `prek` ignores it.
+
+Examples:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "format",
+        name = "Format Python",
+        language = "system",
+        entry = "ruff format",
+        groups = ["format", "ci"],
+      },
+      {
+        id = "lint",
+        name = "Lint Python",
+        language = "system",
+        entry = "ruff check",
+        groups = ["lint", "ci"],
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: format
+            name: Format Python
+            language: system
+            entry: ruff format
+            groups: [format, ci]
+
+          - id: lint
+            name: Lint Python
+            language: system
+            entry: ruff check
+            groups: [lint, ci]
+    ```
+
+Run only the `ci` group:
+
+```bash
+prek run --all-files --group ci
+```
+
+Run everything except formatters:
+
+```bash
+prek run --all-files --no-group format
+```
+
+If a hook matches both `--group` and `--no-group`, `--no-group` wins.
+
+When `--group` or `--no-group` is used without `--stage`, group filtering is
+not constrained by hook stage. `prek run` collects normal file input for the
+manual command and runs every matching hook that can use that input. Hooks
+configured only for `commit-msg` and/or `prepare-commit-msg` require Git's
+message file argument, so they are ignored unless run in the corresponding
+hook stage. If every matching hook is ignored this way, `prek run` warns and
+fails.
+
 ### `require_serial`
 
 Force a hook to run without parallel invocations (one in-flight process for that hook at a time).

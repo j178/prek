@@ -19,6 +19,31 @@ use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
 
+pub(crate) fn validate_group_name(group: &str) -> std::result::Result<(), &'static str> {
+    if group.is_empty() {
+        Err("cannot be empty")
+    } else if group.chars().any(char::is_whitespace) {
+        Err("cannot contain whitespace")
+    } else {
+        Ok(())
+    }
+}
+
+fn deserialize_groups<'de, D>(deserializer: D) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let groups = Option::<Vec<String>>::deserialize(deserializer)?;
+    if let Some(groups) = &groups {
+        for group in groups {
+            if let Err(reason) = validate_group_name(group) {
+                return Err(D::Error::custom(format!("group name `{group}` {reason}")));
+            }
+        }
+    }
+    Ok(groups)
+}
+
 #[derive(Clone)]
 pub(crate) struct GlobPatterns {
     patterns: Vec<String>,
@@ -369,18 +394,6 @@ impl Stage {
     fn from_index(index: u32) -> Self {
         Self::ORDER[index as usize]
     }
-
-    pub fn operate_on_files(self) -> bool {
-        matches!(
-            self,
-            Stage::Manual
-                | Stage::CommitMsg
-                | Stage::PreCommit
-                | Stage::PreMergeCommit
-                | Stage::PrePush
-                | Stage::PrepareCommitMsg
-        )
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -681,6 +694,11 @@ pub(crate) struct RemoteHook {
     /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
+    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
+    pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -703,6 +721,11 @@ pub(crate) struct LocalHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
+    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
+    pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -721,6 +744,10 @@ pub(crate) struct MetaHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
+    pub groups: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -783,6 +810,9 @@ impl TryFrom<RemoteHook> for MetaHook {
         if hook_options.priority.is_some() {
             meta_hook.priority = hook_options.priority;
         }
+        if hook_options.groups.is_some() {
+            meta_hook.groups = hook_options.groups;
+        }
         meta_hook.options.update(&hook_options.options);
 
         Ok(meta_hook)
@@ -805,6 +835,10 @@ pub(crate) struct BuiltinHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// User-defined hook groups used by `prek run --group` and `--no-group`.
+    /// Group names cannot be empty or contain whitespace.
+    #[serde(default, deserialize_with = "deserialize_groups")]
+    pub groups: Option<Vec<String>>,
     /// Common hook options.
     ///
     /// Builtin hooks allow the same set of options overrides as other hooks.
@@ -839,6 +873,9 @@ impl TryFrom<RemoteHook> for BuiltinHook {
         }
         if hook_options.priority.is_some() {
             builtin_hook.priority = hook_options.priority;
+        }
+        if hook_options.groups.is_some() {
+            builtin_hook.groups = hook_options.groups;
         }
         builtin_hook.options.update(&hook_options.options);
 
@@ -1094,6 +1131,7 @@ where
         entry: hook.entry.ok_or_else(|| E::missing_field("entry"))?,
         language: hook.language.ok_or_else(|| E::missing_field("language"))?,
         priority: hook.priority,
+        groups: hook.groups,
         options: hook.options,
     })
 }
@@ -1415,6 +1453,35 @@ mod tests {
         let parsed: Config = serde_saphyr::from_str("repos: []\n").expect("config should parse");
 
         assert_eq!(parsed.default_stages, None);
+    }
+
+    #[test]
+    fn hook_groups_reject_invalid_names_during_deserialize() {
+        for (groups, expected) in [
+            (r#"[""]"#, "group name `` cannot be empty"),
+            (
+                r#"["ci slow"]"#,
+                "group name `ci slow` cannot contain whitespace",
+            ),
+            (
+                r#"["ci\tslow"]"#,
+                "group name `ci\tslow` cannot contain whitespace",
+            ),
+        ] {
+            let yaml = indoc::formatdoc! {r"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: lint
+                        name: Lint
+                        language: system
+                        entry: echo lint
+                        groups: {groups}
+            "};
+            let err = serde_saphyr::from_str::<Config>(&yaml).unwrap_err();
+            let msg = err.to_string();
+            assert!(msg.contains(expected), "expected `{expected}` in `{msg}`");
+        }
     }
 
     #[test]

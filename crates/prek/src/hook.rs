@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -54,6 +55,7 @@ pub(crate) struct HookSpec {
     pub entry: String,
     pub language: Language,
     pub priority: Option<u32>,
+    pub groups: Option<Vec<String>>,
     pub options: HookOptions,
 }
 
@@ -70,6 +72,9 @@ impl HookSpec {
         }
         if let Some(priority) = config.priority {
             self.priority = Some(priority);
+        }
+        if config.groups.is_some() {
+            self.groups.clone_from(&config.groups);
         }
 
         self.options.update(&config.options);
@@ -103,6 +108,7 @@ impl From<ManifestHook> for HookSpec {
             entry: hook.entry,
             language: hook.language,
             priority: None,
+            groups: None,
             options: hook.options,
         }
     }
@@ -116,6 +122,7 @@ impl From<LocalHook> for HookSpec {
             entry: hook.entry,
             language: hook.language,
             priority: hook.priority,
+            groups: hook.groups,
             options: hook.options,
         }
     }
@@ -129,6 +136,7 @@ impl From<MetaHook> for HookSpec {
             entry: String::new(),
             language: Language::System,
             priority: hook.priority,
+            groups: hook.groups,
             options: hook.options,
         }
     }
@@ -142,6 +150,7 @@ impl From<BuiltinHook> for HookSpec {
             entry: hook.entry,
             language: Language::System,
             priority: hook.priority,
+            groups: hook.groups,
             options: hook.options,
         }
     }
@@ -269,7 +278,6 @@ impl HookBuilder {
             shell,
             ..
         } = &self.hook_spec.options;
-
         let additional_dependencies = additional_dependencies
             .as_ref()
             .map_or(&[][..], |deps| deps.as_slice());
@@ -351,6 +359,13 @@ impl HookBuilder {
 
         self.check()?;
 
+        let groups = self
+            .hook_spec
+            .groups
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
         let options = self.hook_spec.options;
         let language_version = options.language_version.unwrap_or_default();
         let alias = options.alias.unwrap_or_default();
@@ -371,7 +386,6 @@ impl HookBuilder {
             .unwrap_or_default()
             .into_iter()
             .collect::<FxHashSet<_>>();
-
         let language_request = LanguageRequest::parse(self.hook_spec.language, &language_version)
             .map_err(|e| Error::Hook {
             hook: self.hook_spec.id.clone(),
@@ -395,6 +409,7 @@ impl HookBuilder {
             language: self.hook_spec.language,
 
             priority,
+            groups,
             entry,
             stages,
             language_request,
@@ -464,6 +479,7 @@ pub(crate) struct Hook {
     pub verbose: bool,
     pub minimum_prek_version: Option<String>,
     pub priority: u32,
+    pub groups: BTreeSet<String>,
 }
 
 impl Display for Hook {
@@ -883,6 +899,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 env: Some(base_env),
                 shell: Some(Shell::Sh),
@@ -900,6 +917,7 @@ mod tests {
             entry: Some("python3 -c 'print(2)'".to_string()),
             language: None,
             priority: Some(42),
+            groups: Some(vec!["ci".to_string(), "format".to_string()]),
             options: HookOptions {
                 alias: Some("alias-1".to_string()),
                 types: Some(tags::TAG_SET_TEXT),
@@ -998,6 +1016,10 @@ mod tests {
             verbose: true,
             minimum_prek_version: None,
             priority: 42,
+            groups: {
+                "ci",
+                "format",
+            },
         }
         "#);
 
@@ -1022,6 +1044,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 stages: Some(Stages::from([])),
                 ..Default::default()
@@ -1046,6 +1069,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions::default(),
         };
 
@@ -1072,6 +1096,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions::default(),
         };
 
@@ -1101,6 +1126,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions::default(),
         };
 
@@ -1131,6 +1157,7 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 stages: Some(Stages::from([])),
                 ..Default::default()
@@ -1182,6 +1209,7 @@ mod tests {
             entry: "./hook.py".to_string(),
             language: Language::Python,
             priority: None,
+            groups: None,
             options: HookOptions {
                 language_version: language_version.map(str::to_string),
                 ..Default::default()

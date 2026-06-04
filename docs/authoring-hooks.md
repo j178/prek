@@ -67,8 +67,8 @@ manifest semantics. For the upstream reference, see:
 
 !!! note "Manifest fields only"
 
-    Project configuration-only fields, such as `priority`, are not manifest hook
-    fields.
+    Project configuration-only fields, such as `priority` and `groups`, are not
+    manifest hook fields.
 
 Example:
 
