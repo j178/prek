@@ -266,6 +266,8 @@ Allowed values:
 - `pre-rebase`
 - `prepare-commit-msg`
 
+See [Supported Git Hook Stages](#supported-git-hook-stages) for what each value means.
+
 ### `default_install_hook_types`
 
 Default Git shim name(s) installed by [`prek install`](cli.md#prek-install) when you don’t pass `--hook-type`.
@@ -603,6 +605,32 @@ For `repo: local`, the hook entry is a full definition and must include:
 For `repo: builtin` and `repo: meta`, the hook entry must include `id`.
 You can optionally provide `name` and normal hook options (filters, [`stages`](#stages), etc), but not `entry`.
 
+## Supported Git Hook Stages
+
+`prek` follows upstream [`pre-commit` behavior](https://pre-commit.com/#supported-git-hooks) for Git hook stages. The
+[`stages`](#stages) option controls which hooks are eligible to run; the selected
+stage controls what input the hook receives.
+
+Stages with no repository file input do not have candidate filenames for
+[`files`](#hook-files-exclude), [`exclude`](#hook-files-exclude),
+[`types`](#hook-types), [`types_or`](#hook-types), or
+[`exclude_types`](#hook-types). Hooks in those stages need
+[`always_run: true`](#always_run) to run automatically.
+
+| Stage | When it runs | Hook input |
+| -- | -- | -- |
+| `manual` | Only when selected explicitly, for example with `prek run --hook-stage manual`. | Repository file paths selected by the `prek run` file mode. |
+| `commit-msg` | During commit message validation. | Git's commit message file, not repository file paths. |
+| `post-checkout` | After a checkout has occurred. | No repository file input. |
+| `post-commit` | After a commit has already succeeded. | No repository file input. |
+| `post-merge` | After a successful merge. | No repository file input. |
+| `post-rewrite` | After a command rewrites history, such as amend or rebase. | No repository file input. |
+| `pre-commit` | Before a commit is finalized. | Repository file paths from the staged contents; unstaged changes are temporarily stashed while hooks run. |
+| `pre-merge-commit` | After a merge succeeds but before the merge commit is created. | Repository file paths from the staged merge result. |
+| `pre-push` | During `git push`. | Repository file paths changed in the push range. |
+| `pre-rebase` | Before a rebase starts. | No repository file input. |
+| `prepare-commit-msg` | Before the commit message editor opens or before the commit message is finalized. | Git's commit message file, not repository file paths. |
+
 ## Common hook options
 
 These keys can appear on hooks (remote/local/builtin/meta), subject to the restrictions above.
@@ -835,6 +863,8 @@ As a `prek` extension, you can also specify globs using `glob` or a glob list.
 
 See [Top-level `files`](#top-level-files) and [Top-level `exclude`](#top-level-exclude) for syntax notes and examples.
 
+<a id="hook-types"></a>
+
 ### `types` / `types_or` / `exclude_types`
 
 File-type filters based on [`identify`](https://pre-commit.com/#filtering-files-with-types) tags.
@@ -1000,6 +1030,9 @@ Allowed values:
 - `pre-push`
 - `pre-rebase`
 - `prepare-commit-msg`
+
+For behavior of each stage and whether it operates on repository files, see
+[Supported Git Hook Stages](#supported-git-hook-stages).
 
 When you run [`prek run --hook-stage <stage>`](cli.md#prek-run), only hooks configured for that stage are considered.
 
