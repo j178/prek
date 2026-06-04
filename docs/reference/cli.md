@@ -255,7 +255,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
 </dd><dt id="prek-run--stage"><a href="#prek-run--stage"><code>--stage</code></a>, <code>--hook-stage</code> <i>stage</i></dt><dd><p>The stage during which the hook is fired.</p>
-<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-push</code>) will run. When not specified and no group filter is active, this command starts with hooks eligible for <code>pre-commit</code>. If no hook is selected and the command named hook IDs, those same IDs are matched again against hooks configured for <code>manual</code>. With <code>--group</code> or <code>--no-group</code>, omitting the stage lets hooks from any configured stage match.</p>
+<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-push</code>) will run. When not specified and no group filter is active, this command starts with hooks eligible for <code>pre-commit</code>. If no hook is selected and the command named hook IDs, those same IDs are matched again against hooks configured for <code>manual</code>. With <code>--group</code> or <code>--no-group</code>, omitting the stage lets hooks from any configured stage match, using the default file input mode; hooks that only run at <code>commit-msg</code> or <code>prepare-commit-msg</code> are ignored.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>manual</code></li>

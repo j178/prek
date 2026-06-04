@@ -154,13 +154,22 @@ unchanged: omitting `--stage`/`--hook-stage` first selects hooks eligible for
 IDs are matched again against hooks configured for `manual`.
 
 When `--group` or `--no-group` is used without an explicit `--stage`, `prek run`
-should enter group selection mode:
+enters group selection mode:
 
-- Hooks from any stage can match.
+- Hooks from any configured stage can match.
 - The special second pass that checks named hook IDs against `manual` is not
   used.
-- Hook `stages` still matter when an installed Git hook invokes `prek`, and when
-  the user explicitly passes `--stage`/`--hook-stage`.
+- File input is collected with the normal manual `prek run` file mode: explicit
+  `--files`/`--directory`, `--all-files`, merge conflicts, or staged files.
+- Hooks configured only for `commit-msg` and/or `prepare-commit-msg` cannot run
+  in this mode because they require Git's message file argument, so they are
+  filtered out.
+
+This works because manual `prek run --group ...` has no Git hook payload. All
+non-message-file stages can be executed with file input or no filenames
+according to each hook's normal filters and `pass_filenames` setting; only the
+message-file stages need input that cannot be inferred and are not selected by
+stage-less group runs.
 
 When `--group` or `--no-group` is combined with explicit stage selection, the
 filters compose by intersection:
@@ -395,7 +404,8 @@ At a high level, implementation should:
 1. Add `groups` to config hook types and the built `Hook` type.
 2. Validate group names during config parsing or hook construction.
 3. Add repeatable `--group` and `--no-group` arguments to `prek run`.
-4. Apply group filtering before stage filtering and before install selection.
+4. Apply group filtering before explicit stage filtering and before install
+   selection.
 5. Skip default stage filtering when group mode is active and no explicit
    `--stage` was provided.
 6. Add schema, documentation, and CLI reference updates.

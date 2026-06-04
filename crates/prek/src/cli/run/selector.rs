@@ -362,7 +362,7 @@ impl GroupFilters {
         })
     }
 
-    pub(crate) fn is_active(&self) -> bool {
+    pub(crate) fn has_filters(&self) -> bool {
         !self.includes.is_empty() || !self.excludes.is_empty()
     }
 

@@ -579,7 +579,8 @@ pub(crate) struct RunArgs {
     /// hooks eligible for `pre-commit`. If no hook is selected and the command
     /// named hook IDs, those same IDs are matched again against hooks configured
     /// for `manual`. With `--group` or `--no-group`, omitting the stage lets
-    /// hooks from any configured stage match.
+    /// hooks from any configured stage match, using the default file input mode;
+    /// hooks that only run at `commit-msg` or `prepare-commit-msg` are ignored.
     #[arg(long, value_enum, alias = "hook-stage")]
     pub(crate) stage: Option<Stage>,
 

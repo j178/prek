@@ -1078,6 +1078,13 @@ prek run --all-files --no-group format
 
 If a hook matches both `--group` and `--no-group`, `--no-group` wins.
 
+When `--group` or `--no-group` is used without `--stage`, group filtering is
+not constrained by hook stage. `prek run` collects normal file input for the
+manual command and runs every matching hook that can use that input. Hooks
+configured only for `commit-msg` and/or `prepare-commit-msg` require Git's
+message file argument, so they are ignored unless run in the corresponding
+hook stage.
+
 ### `require_serial`
 
 Force a hook to run without parallel invocations (one in-flight process for that hook at a time).

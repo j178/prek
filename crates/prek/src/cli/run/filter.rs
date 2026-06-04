@@ -340,7 +340,7 @@ impl<'a> ProjectFiles<'a> {
 
 #[derive(Default)]
 pub(crate) struct CollectOptions {
-    pub(crate) hook_stage: Stage,
+    pub(crate) input_mode: RunInputMode,
     pub(crate) from_ref: Option<String>,
     pub(crate) to_ref: Option<String>,
     pub(crate) all_files: bool,
@@ -354,6 +354,30 @@ impl CollectOptions {
         Self {
             all_files: true,
             ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum RunInputMode {
+    #[default]
+    Files,
+    MessageFile,
+    NoFiles,
+}
+
+impl From<Stage> for RunInputMode {
+    fn from(stage: Stage) -> Self {
+        match stage {
+            Stage::CommitMsg | Stage::PrepareCommitMsg => Self::MessageFile,
+            Stage::Manual | Stage::PreCommit | Stage::PreMergeCommit | Stage::PrePush => {
+                Self::Files
+            }
+            Stage::PostCheckout
+            | Stage::PostCommit
+            | Stage::PostMerge
+            | Stage::PostRewrite
+            | Stage::PreRebase => Self::NoFiles,
         }
     }
 }
@@ -378,10 +402,10 @@ impl RunInput {
     }
 }
 
-/// Get hook input for the selected stage.
+/// Get hook input for the selected input mode.
 pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Result<RunInput> {
     let CollectOptions {
-        hook_stage,
+        input_mode,
         from_ref,
         to_ref,
         all_files,
@@ -390,12 +414,16 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         commit_msg_filename,
     } = opts;
 
-    if matches!(hook_stage, Stage::PrepareCommitMsg | Stage::CommitMsg) {
-        let path = commit_msg_filename.expect("commit_msg_filename should be set");
-        return Ok(RunInput::MessageFile(GIT_ROOT.as_ref()?.join(path)));
-    }
-
     let git_root = GIT_ROOT.as_ref()?;
+
+    match input_mode {
+        RunInputMode::Files => {}
+        RunInputMode::MessageFile => {
+            let path = commit_msg_filename.expect("commit_msg_filename should be set");
+            return Ok(RunInput::MessageFile(git_root.join(path)));
+        }
+        RunInputMode::NoFiles => return Ok(RunInput::Files(vec![])),
+    }
 
     // The workspace root relative to the git root.
     let relative_root = root.strip_prefix(git_root).with_context(|| {
@@ -409,7 +437,6 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
     let filenames = collect_files_from_args(
         git_root,
         root,
-        hook_stage,
         from_ref,
         to_ref,
         all_files,
@@ -448,17 +475,12 @@ fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::
 async fn collect_files_from_args(
     git_root: &Path,
     workspace_root: &Path,
-    hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
     all_files: bool,
     files: Vec<String>,
     directories: Vec<String>,
 ) -> Result<Vec<PathBuf>> {
-    if !hook_stage.operate_on_files() {
-        return Ok(vec![]);
-    }
-
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
         let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
         debug!(
@@ -531,6 +553,10 @@ async fn collect_files_from_args(
     debug!("Staged files: {}", files.len());
 
     Ok(files)
+}
+
+pub(super) const fn stage_uses_message_file_input(stage: Stage) -> bool {
+    matches!(stage, Stage::CommitMsg | Stage::PrepareCommitMsg)
 }
 
 #[cfg(test)]

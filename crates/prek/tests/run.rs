@@ -510,7 +510,7 @@ fn priorities_respected() {
 }
 
 #[test]
-fn run_group_selects_matching_hooks_and_ignores_stages() {
+fn run_group_without_stage_selects_hooks_across_stages() {
     let context = TestContext::new();
     context.init_project();
 
@@ -518,12 +518,33 @@ fn run_group_selects_matching_hooks_and_ignores_stages() {
         repos:
           - repo: local
             hooks:
+              - id: ci-files
+                name: CI Files
+                language: system
+                entry: python3 -c "print('ci-files')"
+                always_run: true
+                stages: [pre-commit]
+                groups: [ci]
               - id: ci-check
                 name: CI Check
                 language: system
                 entry: python3 -c "print('ci')"
                 always_run: true
                 stages: [pre-push]
+                groups: [ci]
+              - id: commit-msg-check
+                name: Commit Msg Check
+                language: system
+                entry: python3 -c "raise SystemExit('commit-msg hook should not run')"
+                always_run: true
+                stages: [commit-msg]
+                groups: [ci]
+              - id: prepare-commit-msg-check
+                name: Prepare Commit Msg Check
+                language: system
+                entry: python3 -c "raise SystemExit('prepare-commit-msg hook should not run')"
+                always_run: true
+                stages: [prepare-commit-msg]
                 groups: [ci]
               - id: local-check
                 name: Local Check
@@ -539,6 +560,7 @@ fn run_group_selects_matching_hooks_and_ignores_stages() {
     success: true
     exit_code: 0
     ----- stdout -----
+    CI Files.................................................................Passed
     CI Check.................................................................Passed
 
     ----- stderr -----
@@ -2754,12 +2776,12 @@ fn selectors_completion() -> Result<()> {
     --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
     --to-ref	The destination ref in a `from_ref...to_ref` diff expression. Defaults to `HEAD` if `from_ref` is specified
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
-    --stage	The stage during which the hook is fired
-    --group	Run hooks belonging to the specified group
-    --no-group	Do not run hooks belonging to the specified group
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
+    --stage	The stage during which the hook is fired
+    --group	Run hooks belonging to the specified group
+    --no-group	Do not run hooks belonging to the specified group
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output

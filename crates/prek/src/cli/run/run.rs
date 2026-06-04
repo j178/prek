@@ -20,6 +20,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::diff::DiffTracker;
+use crate::cli::run::filter::{RunInputMode, stage_uses_message_file_input};
 use crate::cli::run::install::{InstallCache, install_hooks};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
@@ -87,6 +88,7 @@ pub(crate) async fn run(
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
     let group_filters = GroupFilters::parse(&groups, &no_groups)?;
+    let has_group_filters = group_filters.has_filters();
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
@@ -133,35 +135,21 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    let (filtered_hooks, input_hook_stage) = if let Some(hook_stage) = hook_stage {
-        let hooks = selected_hooks
+    let (stage_filter, input_mode) =
+        infer_stage_and_input_mode(hook_stage, has_group_filters, &selected_hooks, &selectors);
+    let filtered_hooks: Vec<Arc<Hook>> = if let Some(stage_filter) = stage_filter {
+        selected_hooks
             .iter()
-            .filter(|h| h.stages.contains(hook_stage))
+            .filter(|h| h.stages.contains(stage_filter))
             .cloned()
-            .collect::<Vec<_>>();
-        (hooks, hook_stage)
-    } else if group_filters.is_active() {
-        // Group selection without an explicit stage has no stage selector. File
-        // collection still needs a mode, so keep the normal `prek run` input mode.
-        (selected_hooks, Stage::PreCommit)
+            .collect()
     } else {
-        // Try filtering by `pre-commit` stage first.
-        let mut input_hook_stage = Stage::PreCommit;
-        let mut hooks = selected_hooks
-            .iter()
-            .filter(|h| h.stages.contains(Stage::PreCommit))
-            .cloned()
-            .collect::<Vec<_>>();
-        if hooks.is_empty() && selectors.includes_only_hook_targets() {
-            // If no hooks found for `pre-commit` stage, try fallback to `manual` stage for hooks specified directly.
-            input_hook_stage = Stage::Manual;
-            hooks = selected_hooks
-                .iter()
-                .filter(|h| h.stages.contains(Stage::Manual))
-                .cloned()
-                .collect();
-        }
-        (hooks, input_hook_stage)
+        // Group selection without an explicit stage uses normal file input, so
+        // hooks that can only consume Git message files cannot run correctly.
+        selected_hooks
+            .into_iter()
+            .filter(|hook| !uses_only_message_file_input(hook))
+            .collect()
     };
 
     if filtered_hooks.is_empty() {
@@ -189,7 +177,7 @@ pub(crate) async fn run(
     let input = collect_run_input(
         workspace.root(),
         CollectOptions {
-            hook_stage: input_hook_stage,
+            input_mode,
             from_ref,
             to_ref,
             all_files,
@@ -238,6 +226,38 @@ pub(crate) async fn run(
         printer,
     )
     .await
+}
+
+fn infer_stage_and_input_mode(
+    explicit_stage: Option<Stage>,
+    has_group_filters: bool,
+    selected_hooks: &[Arc<Hook>],
+    selectors: &Selectors,
+) -> (Option<Stage>, RunInputMode) {
+    if let Some(stage) = explicit_stage {
+        return (Some(stage), RunInputMode::from(stage));
+    }
+
+    if has_group_filters {
+        return (None, RunInputMode::Files);
+    }
+
+    // Preserve legacy direct-hook execution: try `manual` only when the user
+    // named hooks directly and none of those hooks can run as `pre-commit`.
+    let stage = if selectors.includes_only_hook_targets()
+        && !selected_hooks
+            .iter()
+            .any(|hook| hook.stages.contains(Stage::PreCommit))
+    {
+        Stage::Manual
+    } else {
+        Stage::PreCommit
+    };
+    (Some(stage), RunInputMode::from(stage))
+}
+
+fn uses_only_message_file_input(hook: &Hook) -> bool {
+    !hook.stages.is_empty() && hook.stages.iter().all(stage_uses_message_file_input)
 }
 
 // `pre-commit` sets these environment variables for other git hooks.

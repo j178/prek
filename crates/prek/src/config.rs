@@ -394,18 +394,6 @@ impl Stage {
     fn from_index(index: u32) -> Self {
         Self::ORDER[index as usize]
     }
-
-    pub fn operate_on_files(self) -> bool {
-        matches!(
-            self,
-            Stage::Manual
-                | Stage::CommitMsg
-                | Stage::PreCommit
-                | Stage::PreMergeCommit
-                | Stage::PrePush
-                | Stage::PrepareCommitMsg
-        )
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
