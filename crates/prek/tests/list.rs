@@ -268,6 +268,123 @@ fn list_with_stage_filter() {
 }
 
 #[test]
+fn list_with_group_filter() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: fast-lint
+                name: Fast Lint
+                entry: fast-lint
+                language: system
+                types: [text]
+                groups: [ci]
+              - id: slow-lint
+                name: Slow Lint
+                entry: slow-lint
+                language: system
+                types: [text]
+                groups: [ci, slow]
+              - id: format
+                name: Format
+                entry: format
+                language: system
+                types: [text]
+                groups: [format]
+              - id: ungrouped
+                name: Ungrouped
+                entry: ungrouped
+                language: system
+                types: [text]
+    "});
+
+    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:fast-lint
+    .:slow-lint
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--no-group").arg("format"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:fast-lint
+    .:slow-lint
+    .:ungrouped
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci").arg("--no-group").arg("slow"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:fast-lint
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("missing"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: group selector `--group=missing` did not match any hooks
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci slow"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid group selector: `--group=ci slow`
+      caused by: group name cannot contain whitespace
+    ");
+}
+
+#[test]
+fn list_group_excluded_remote_repo_is_not_cloned() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                groups: [ci]
+
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: ruff-check
+                groups: [local]
+        "});
+    context.git_add(".");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.list().arg("--group").arg("ci"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:end-of-file-fixer
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
 fn list_with_aliases() {
     let context = TestContext::new();
     context.init_project();

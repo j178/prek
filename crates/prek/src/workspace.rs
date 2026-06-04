@@ -61,17 +61,13 @@ pub(crate) struct HookInitFilters<'a> {
 }
 
 impl<'a> HookInitFilters<'a> {
-    pub(crate) fn for_selectors(selectors: &'a Selectors) -> Self {
+    pub(crate) fn new(
+        selectors: Option<&'a Selectors>,
+        group_filters: Option<&'a GroupFilters>,
+    ) -> Self {
         Self {
-            selectors: Some(selectors),
-            group_filters: None,
-        }
-    }
-
-    pub(crate) fn for_run(selectors: &'a Selectors, group_filters: &'a GroupFilters) -> Self {
-        Self {
-            selectors: Some(selectors),
-            group_filters: Some(group_filters),
+            selectors,
+            group_filters,
         }
     }
 

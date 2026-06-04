@@ -317,6 +317,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cli.globals.config,
                 args.includes,
                 args.skips,
+                args.groups,
+                args.no_groups,
                 args.hook_stage,
                 args.language,
                 args.output_format,

@@ -677,6 +677,18 @@ pub(crate) struct ListArgs {
     #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
     pub(crate) skips: Vec<String>,
 
+    /// Show hooks belonging to the specified group.
+    ///
+    /// Can be specified multiple times.
+    #[arg(long = "group", value_name = "GROUP")]
+    pub(crate) groups: Vec<String>,
+
+    /// Do not show hooks belonging to the specified group.
+    ///
+    /// Can be specified multiple times. Exclusion wins over inclusion.
+    #[arg(long = "no-group", value_name = "GROUP")]
+    pub(crate) no_groups: Vec<String>,
+
     /// Show only hooks that has the specified stage.
     #[arg(long, value_enum)]
     pub(crate) hook_stage: Option<Stage>,
