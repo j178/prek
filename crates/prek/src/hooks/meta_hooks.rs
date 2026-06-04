@@ -14,7 +14,7 @@ use crate::cli::run::{
 use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
-use crate::workspace::Project;
+use crate::workspace::{HookInitFilters, Project};
 
 // For builtin hooks (meta hooks and builtin pre-commit-hooks), they are not run
 // in the project root like other hooks. Instead, they run in the workspace root.
@@ -118,7 +118,7 @@ pub(crate) async fn check_hooks_apply(
 
     for project in projects {
         let project_hooks = project
-            .init_hooks(store, None)
+            .init_hooks(store, None, HookInitFilters::none())
             .await
             .context("Failed to init hooks")?;
         let hooks = project_hooks
