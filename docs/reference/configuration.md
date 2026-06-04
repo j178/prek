@@ -1083,7 +1083,8 @@ not constrained by hook stage. `prek run` collects normal file input for the
 manual command and runs every matching hook that can use that input. Hooks
 configured only for `commit-msg` and/or `prepare-commit-msg` require Git's
 message file argument, so they are ignored unless run in the corresponding
-hook stage.
+hook stage. If every matching hook is ignored this way, `prek run` warns and
+fails.
 
 ### `require_serial`
 

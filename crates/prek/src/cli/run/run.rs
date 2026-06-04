@@ -153,7 +153,14 @@ pub(crate) async fn run(
     };
 
     if filtered_hooks.is_empty() {
-        debug!("No hooks found for stage after filtering, exit early");
+        if let Some(stage) = stage_filter {
+            debug!("No hooks found for stage {stage} after filtering, exit early");
+        } else {
+            warn_user!(
+                "all hooks selected by group filters require `commit-msg` or `prepare-commit-msg` stage and were not run; pass `--stage commit-msg` or `--stage prepare-commit-msg` to run them"
+            );
+            return Ok(ExitStatus::Failure);
+        }
         return Ok(ExitStatus::Success);
     }
 

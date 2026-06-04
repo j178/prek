@@ -165,6 +165,9 @@ enters group selection mode:
   in this mode because they require Git's message file argument, so they are
   filtered out.
 
+If this message-file filtering removes every hook matched by the group filters,
+`prek run` should warn and fail instead of silently succeeding.
+
 This works because manual `prek run --group ...` has no Git hook payload. All
 non-message-file stages can be executed with file input or no filenames
 according to each hook's normal filters and `pass_filenames` setting; only the
@@ -342,12 +345,13 @@ have made obviously cannot occur, and `prek` should not install or execute it.
 
 ### Try Repo
 
-`prek try-repo` embeds `RunArgs`, so it can accept `--group` and `--no-group`.
-The options should work when the temporary hook configuration includes
-`groups`.
+`prek try-repo` should not accept `--group` or `--no-group`.
 
-If the temporary configuration has no groups, `--group <name>` should match no
-hooks.
+`try-repo` builds a temporary project configuration from the remote hook
+manifest. That generated configuration contains hook ids, but it does not have
+project-local `groups` metadata. Accepting group filters would make the command
+appear to support group selection while every generated hook is effectively
+ungrouped. Instead, these flags should be rejected by the CLI.
 
 ### List Command
 
@@ -382,6 +386,7 @@ This proposal does not add:
 - Default-disabled hooks.
 - Environment variables for group selection.
 - `prek install --group`.
+- `prek try-repo --group` or `prek try-repo --no-group`.
 - Global group declarations or validation against a root-level list.
 
 ## Backward Compatibility
@@ -408,7 +413,8 @@ At a high level, implementation should:
    selection.
 5. Skip default stage filtering when group mode is active and no explicit
    `--stage` was provided.
-6. Add schema, documentation, and CLI reference updates.
-7. Add integration tests covering include, exclude, include-plus-exclude,
+6. Keep `--group` and `--no-group` unsupported for `prek try-repo`.
+7. Add schema, documentation, and CLI reference updates.
+8. Add integration tests covering include, exclude, include-plus-exclude,
    ungrouped hooks, explicit stage intersections, workspace selection, and
    install avoidance for excluded hooks.

@@ -221,7 +221,7 @@
           "minimum": 0
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.\n\nThis is a project configuration field, not remote manifest metadata. If it\nappears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
           "type": "array",
           "items": {
             "type": "string",
@@ -657,7 +657,7 @@
           "minimum": 0
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.\n\nThis is a project configuration field, not remote manifest metadata. If it\nappears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
           "type": "array",
           "items": {
             "type": "string",
@@ -833,7 +833,7 @@
           "minimum": 0
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.\n\nThis is a project configuration field, not remote manifest metadata. If it\nappears in a manifest (e.g. `.pre-commit-hooks.yaml`), prek warns and ignores it.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
           "type": "array",
           "items": {
             "type": "string",

@@ -568,6 +568,43 @@ fn run_group_without_stage_selects_hooks_across_stages() {
 }
 
 #[test]
+fn run_group_without_stage_warns_when_only_message_file_hooks_match() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: commit-msg-check
+                name: Commit Msg Check
+                language: system
+                entry: python3 -c "print('commit-msg')"
+                always_run: true
+                stages: [commit-msg]
+                groups: [ci]
+              - id: prepare-commit-msg-check
+                name: Prepare Commit Msg Check
+                language: system
+                entry: python3 -c "print('prepare-commit-msg')"
+                always_run: true
+                stages: [prepare-commit-msg]
+                groups: [ci]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: all hooks selected by group filters require `commit-msg` or `prepare-commit-msg` stage and were not run; pass `--stage commit-msg` or `--stage prepare-commit-msg` to run them
+    "#);
+}
+
+#[test]
 fn run_no_group_excludes_matching_hooks_and_keeps_ungrouped_hooks() {
     let context = TestContext::new();
     context.init_project();

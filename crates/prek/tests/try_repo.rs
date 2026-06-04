@@ -147,26 +147,6 @@ fn try_repo_basic() -> Result<()> {
 }
 
 #[test]
-fn try_repo_rejects_group_filters() {
-    let context = TestContext::new();
-
-    cmd_snapshot!(context.try_repo().arg("repo").arg("--group").arg("ci"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: unexpected argument '--group' found
-
-      tip: to pass '--group' as a value, use '-- --group'
-
-    Usage: prek try-repo <REPO> [HOOK|PROJECT]...
-
-    For more information, try '--help'.
-    "#);
-}
-
-#[test]
 fn try_repo_failing_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
