@@ -1,4 +1,4 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -281,11 +281,6 @@ impl Store {
 
     /// Returns the path to where a remote repo would be stored.
     pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
-        // TODO: remove legacy path support in next breaking release
-        if let Some(legacy_path) = self.legacy_repo_path(repo) {
-            return legacy_path;
-        }
-
         self.repos_dir().join(Self::repo_key(repo))
     }
 
@@ -295,18 +290,6 @@ impl Store {
         repo.repo.hash(&mut hasher);
         repo.rev.hash(&mut hasher);
         to_hex(hasher.finish())
-    }
-
-    fn legacy_repo_key(repo: &RemoteRepo) -> String {
-        let mut hasher = DefaultHasher::new();
-        repo.repo.hash(&mut hasher);
-        repo.rev.hash(&mut hasher);
-        to_hex(hasher.finish())
-    }
-
-    fn legacy_repo_path(&self, repo: &RemoteRepo) -> Option<PathBuf> {
-        let path = self.repos_dir().join(Self::legacy_repo_key(repo));
-        path.join(REPO_MARKER).is_file().then_some(path)
     }
 
     pub(crate) fn repos_dir(&self) -> PathBuf {
@@ -439,45 +422,4 @@ pub(crate) enum CacheBucket {
 /// Convert a u64 to a hex string.
 fn to_hex(num: u64) -> String {
     hex::encode(num.to_le_bytes())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn remote_repo() -> RemoteRepo {
-        RemoteRepo::new(
-            "https://github.com/pre-commit/pre-commit-hooks".to_string(),
-            "v6.0.0".to_string(),
-            vec![],
-        )
-    }
-
-    #[test]
-    fn repo_path_prefers_existing_legacy_repo_dir() {
-        let temp = tempfile::tempdir().expect("create temp dir");
-        let store = Store::from_path(temp.path()).init().expect("init store");
-        let repo = remote_repo();
-        let legacy_path = store.repos_dir().join(Store::legacy_repo_key(&repo));
-
-        fs_err::create_dir_all(&legacy_path).expect("create legacy repo dir");
-        fs_err::write(legacy_path.join(REPO_MARKER), "{}").expect("write repo marker");
-
-        assert_eq!(store.repo_path(&repo), legacy_path);
-    }
-
-    #[test]
-    fn repo_path_uses_stable_key_without_legacy_marker() {
-        let temp = tempfile::tempdir().expect("create temp dir");
-        let store = Store::from_path(temp.path()).init().expect("init store");
-        let repo = remote_repo();
-        let legacy_path = store.repos_dir().join(Store::legacy_repo_key(&repo));
-
-        fs_err::create_dir_all(&legacy_path).expect("create legacy repo dir");
-
-        assert_eq!(
-            store.repo_path(&repo),
-            store.repos_dir().join(Store::repo_key(&repo))
-        );
-    }
 }
