@@ -6,7 +6,9 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
+use prek_consts::{
+    PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
+};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -2103,6 +2105,69 @@ fn skipped_remote_repo_is_not_cloned() {
     ----- stderr -----
     "
     );
+}
+
+#[test]
+fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_repo = context.home_dir().child("duplicate-key-hook-repo");
+    hook_repo.create_dir_all()?;
+
+    git_cmd(&hook_repo)
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .assert()
+        .success();
+
+    hook_repo
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r"
+        - id: test-hook
+          name: Test Hook
+          entry: echo ok
+          language: system
+          always_run: true
+    "})?;
+
+    git_cmd(&hook_repo).arg("add").arg(".").assert().success();
+    git_cmd(&hook_repo)
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .assert()
+        .success();
+    git_cmd(&hook_repo)
+        .arg("tag")
+        .arg("v1.0.0")
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {repo}
+            rev: v1.0.0
+            hooks:
+              - id: missing-hook
+
+          - repo: {repo}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo = hook_repo.display()});
+    context.git_add(".");
+
+    context
+        .run()
+        .arg("--all-files")
+        .arg("--skip")
+        .arg("missing-hook")
+        .assert()
+        .success();
+
+    Ok(())
 }
 
 #[test]
