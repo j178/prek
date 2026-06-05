@@ -962,7 +962,6 @@ mod tests {
                     orphan: None,
                     _unused_keys: {},
                 },
-                repos: [],
                 ..
             },
             repo: Local {

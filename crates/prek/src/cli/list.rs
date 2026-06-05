@@ -42,16 +42,15 @@ pub(crate) async fn list(
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
     let group_filters = GroupFilters::parse(&groups, &no_groups)?;
-    let mut workspace =
-        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
     let hooks = workspace
         .init_hooks(
             store,
-            Some(&reporter),
             HookInitFilters::new(Some(&selectors), Some(&group_filters)),
+            Some(&reporter),
         )
         .await
         .context("Failed to init hooks")?;

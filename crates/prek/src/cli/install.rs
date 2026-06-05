@@ -136,8 +136,7 @@ pub(crate) async fn prepare_hooks(
 ) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace =
-        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     let reporter = HookInitReporter::new(printer);
     let _lock = store.lock_async().await?;
@@ -145,8 +144,8 @@ pub(crate) async fn prepare_hooks(
     let hooks = workspace
         .init_hooks(
             store,
-            Some(&reporter),
             HookInitFilters::new(Some(&selectors), None),
+            Some(&reporter),
         )
         .await
         .context("Failed to init hooks")?;

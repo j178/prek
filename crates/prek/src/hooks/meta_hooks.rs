@@ -118,7 +118,7 @@ pub(crate) async fn check_hooks_apply(
 
     for project in projects {
         let project_hooks = project
-            .init_hooks(store, None, HookInitFilters::none())
+            .init_hooks(store, HookInitFilters::none(), None)
             .await
             .context("Failed to init hooks")?;
         let hooks = project_hooks
