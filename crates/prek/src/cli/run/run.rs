@@ -89,8 +89,7 @@ pub(crate) async fn run(
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
     let group_filters = GroupFilters::parse(&groups, &no_groups)?;
     let has_group_filters = group_filters.has_filters();
-    let mut workspace =
-        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     if should_stash {
         workspace.check_configs_staged().await?;
@@ -99,13 +98,18 @@ pub(crate) async fn run(
     let reporter = HookInitReporter::new(printer);
     let hooks = {
         let _lock = store.lock_async().await?;
-        store.track_configs(workspace.projects().iter().map(|p| p.config_file()))?;
+        store.track_configs(
+            workspace
+                .projects()
+                .iter()
+                .map(|project| project.config_file()),
+        )?;
 
         workspace
             .init_hooks(
                 store,
-                Some(&reporter),
                 HookInitFilters::new(Some(&selectors), Some(&group_filters)),
+                Some(&reporter),
             )
             .await
             .context("Failed to init hooks")?
@@ -412,7 +416,7 @@ fn select_hooks_to_install<'paths>(
         match input {
             RunInput::Files(files) => {
                 let mut project_consumed_files = FxHashSet::default();
-                let Some(hooks) = project_to_hooks.remove(project) else {
+                let Some(hooks) = project_to_hooks.remove(project.as_ref()) else {
                     ProjectFiles::consume_for_project(
                         files.iter(),
                         project,
@@ -467,7 +471,7 @@ fn select_hooks_to_install<'paths>(
                 }
             }
             RunInput::MessageFile(_) => {
-                let Some(hooks) = project_to_hooks.remove(project) else {
+                let Some(hooks) = project_to_hooks.remove(project.as_ref()) else {
                     continue;
                 };
 
@@ -534,7 +538,7 @@ async fn run_hooks<'paths>(
         let mut project_runs = Vec::new();
 
         for project in projects {
-            let Some(mut hooks) = project_to_hooks.remove(project) else {
+            let Some(mut hooks) = project_to_hooks.remove(project.as_ref()) else {
                 if let RunInput::Files(files) = input {
                     ProjectFiles::consume_for_project(
                         files.iter(),
@@ -586,18 +590,18 @@ async fn run_hooks<'paths>(
 }
 
 struct ProjectDepthGroups<'a> {
-    projects: &'a [Project],
+    projects: &'a [Arc<Project>],
     idx: usize,
 }
 
 impl<'a> ProjectDepthGroups<'a> {
-    fn new(projects: &'a [Project]) -> Self {
+    fn new(projects: &'a [Arc<Project>]) -> Self {
         Self { projects, idx: 0 }
     }
 }
 
 impl<'a> Iterator for ProjectDepthGroups<'a> {
-    type Item = &'a [Project];
+    type Item = &'a [Arc<Project>];
 
     fn next(&mut self) -> Option<Self::Item> {
         let first = self.projects.get(self.idx)?;
