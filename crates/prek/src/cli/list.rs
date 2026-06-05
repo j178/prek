@@ -12,7 +12,7 @@ use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::store::Store;
-use crate::workspace::Workspace;
+use crate::workspace::{HookInitFilters, Workspace};
 
 #[derive(Serialize)]
 struct SerializableHook {
@@ -45,7 +45,11 @@ pub(crate) async fn list(
     let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
     let hooks = workspace
-        .init_hooks(store, Some(&reporter))
+        .init_hooks(
+            store,
+            Some(&reporter),
+            HookInitFilters::for_selectors(&selectors),
+        )
         .await
         .context("Failed to init hooks")?;
 

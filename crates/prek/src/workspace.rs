@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error, instrument, trace};
 
-use crate::cli::run::Selectors;
+use crate::cli::run::{ConfiguredHook, GroupFilters, Selectors};
 use crate::config::{self, Config, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
@@ -54,6 +54,124 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct HookInitFilters<'a> {
+    selectors: Option<&'a Selectors>,
+    group_filters: Option<&'a GroupFilters>,
+}
+
+impl<'a> HookInitFilters<'a> {
+    pub(crate) fn for_selectors(selectors: &'a Selectors) -> Self {
+        Self {
+            selectors: Some(selectors),
+            group_filters: None,
+        }
+    }
+
+    pub(crate) fn for_run(selectors: &'a Selectors, group_filters: &'a GroupFilters) -> Self {
+        Self {
+            selectors: Some(selectors),
+            group_filters: Some(group_filters),
+        }
+    }
+
+    pub(crate) fn none() -> Self {
+        Self::default()
+    }
+
+    fn keeps_remote_repo(self, project: &Project, repo: &config::RemoteRepo) -> bool {
+        repo.hooks.iter().any(|hook| {
+            let hook = ConfiguredHook::new(
+                project.relative_path(),
+                &hook.id,
+                hook.options.alias.as_deref(),
+                hook.groups.as_deref(),
+            );
+            self.keeps_configured_hook(&hook)
+        })
+    }
+
+    /// Return whether a configured remote hook can survive filters that are known before cloning.
+    fn keeps_configured_hook(self, hook: &ConfiguredHook<'_>) -> bool {
+        if self
+            .selectors
+            .is_some_and(|selectors| selectors.excludes_configured_hook(hook))
+        {
+            return false;
+        }
+
+        if let Some(group_filters) = self.group_filters {
+            return group_filters.matches_configured_hook(hook);
+        }
+
+        true
+    }
+}
+
+/// Plan per-config-entry initialization while collecting each kept remote key once for cloning.
+fn plan_project_repo_init<'a>(
+    project: &'a Project,
+    filters: HookInitFilters<'_>,
+    remote_keys_to_clone: &mut FxHashSet<config::RemoteRepoKey<'a>>,
+    remote_configs: &mut Vec<&'a config::RemoteRepo>,
+) -> Vec<bool> {
+    let mut repo_entries_to_init = Vec::with_capacity(project.config.repos.len());
+
+    for repo in &project.config.repos {
+        match repo {
+            config::Repo::Remote(repo) => {
+                let keep = filters.keeps_remote_repo(project, repo);
+                repo_entries_to_init.push(keep);
+
+                if keep && remote_keys_to_clone.insert(repo.key()) {
+                    remote_configs.push(repo);
+                }
+            }
+            config::Repo::Local(_) | config::Repo::Meta(_) | config::Repo::Builtin(_) => {
+                repo_entries_to_init.push(true);
+            }
+        }
+    }
+
+    repo_entries_to_init
+}
+
+fn build_project_repo_slots(
+    project: &Project,
+    repo_entries_to_init: Vec<bool>,
+    remote_repos: &FxHashMap<config::RemoteRepoKey<'_>, Arc<Repo>>,
+) -> Vec<Option<Arc<Repo>>> {
+    let mut repos = Vec::with_capacity(project.config.repos.len());
+
+    for (repo, keep) in zip_eq(&project.config.repos, repo_entries_to_init) {
+        match repo {
+            config::Repo::Remote(repo) => {
+                if !keep {
+                    repos.push(None);
+                    continue;
+                }
+                let key = repo.key();
+                let repo = remote_repos.get(&key).expect("repo not found");
+                repos.push(Some(repo.clone()));
+            }
+            config::Repo::Local(repo) => {
+                let repo = Repo::local(repo.hooks.clone());
+                repos.push(Some(Arc::new(repo)));
+            }
+            config::Repo::Meta(repo) => {
+                let repo = Repo::meta(repo.hooks.clone());
+                repos.push(Some(Arc::new(repo)));
+            }
+            config::Repo::Builtin(repo) => {
+                let repo = Repo::builtin(repo.hooks.clone());
+                repos.push(Some(Arc::new(repo)));
+            }
+        }
+    }
+
+    repos
+}
+
 #[derive(Clone)]
 pub(crate) struct Project {
     /// The absolute path of the project directory.
@@ -65,7 +183,9 @@ pub(crate) struct Project {
     // The order index of the project in the workspace.
     idx: usize,
     config: Config,
-    repos: Vec<Arc<Repo>>,
+    // One slot per configured repo. `None` means a remote repo was skipped because
+    // none of its configured hooks can survive pre-clone filters.
+    repos: Vec<Option<Arc<Repo>>>,
 }
 
 impl std::fmt::Debug for Project {
@@ -267,8 +387,9 @@ impl Project {
         mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
+        filters: HookInitFilters<'_>,
     ) -> Result<Vec<Hook>, Error> {
-        self.init_repos(store, reporter).await?;
+        self.init_repos(store, reporter, filters).await?;
         let project = Arc::new(self);
 
         let hooks = project.internal_init_hooks().await?;
@@ -281,17 +402,20 @@ impl Project {
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
+        filters: HookInitFilters<'_>,
     ) -> Result<(), Error> {
         let repos = {
-            let mut seen = FxHashSet::default();
+            let mut remote_keys_to_clone = FxHashSet::default();
+            let mut remote_configs = Vec::new();
+            let repo_entries_to_init = plan_project_repo_init(
+                self,
+                filters,
+                &mut remote_keys_to_clone,
+                &mut remote_configs,
+            );
 
             // Prepare remote repos in parallel.
-            let remotes_iter = self.config.repos.iter().filter_map(|repo| match repo {
-                // Deduplicate remote repos.
-                config::Repo::Remote(repo) if seen.insert(repo.key()) => Some(repo),
-                _ => None,
-            });
-            let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
+            let cloned_repos = store.clone_repos(remote_configs, reporter).await?;
             let mut remote_repos = FxHashMap::default();
             for (key, path) in cloned_repos {
                 let repo = Arc::new(Repo::remote(
@@ -302,31 +426,7 @@ impl Project {
                 remote_repos.insert(key, repo);
             }
 
-            let mut repos = Vec::with_capacity(self.config.repos.len());
-
-            for repo in &self.config.repos {
-                match repo {
-                    config::Repo::Remote(repo) => {
-                        let key = repo.key();
-                        let repo = remote_repos.get(&key).expect("repo not found");
-                        repos.push(repo.clone());
-                    }
-                    config::Repo::Local(repo) => {
-                        let repo = Repo::local(repo.hooks.clone());
-                        repos.push(Arc::new(repo));
-                    }
-                    config::Repo::Meta(repo) => {
-                        let repo = Repo::meta(repo.hooks.clone());
-                        repos.push(Arc::new(repo));
-                    }
-                    config::Repo::Builtin(repo) => {
-                        let repo = Repo::builtin(repo.hooks.clone());
-                        repos.push(Arc::new(repo));
-                    }
-                }
-            }
-
-            repos
+            build_project_repo_slots(self, repo_entries_to_init, &remote_repos)
         };
 
         self.repos = repos;
@@ -339,6 +439,9 @@ impl Project {
         let mut hooks = Vec::new();
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
+            let Some(repo) = repo else {
+                continue;
+            };
             match repo_config {
                 config::Repo::Remote(repo_config) => {
                     for hook_config in &repo_config.hooks {
@@ -901,22 +1004,26 @@ impl Workspace {
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
+        filters: HookInitFilters<'_>,
     ) -> Result<(), Error> {
         let project_repos = {
-            let mut seen = FxHashSet::default();
-
-            // Prepare remote repos in parallel.
-            let remotes_iter = self
+            let mut remote_keys_to_clone = FxHashSet::default();
+            let mut remote_configs = Vec::new();
+            let project_repo_entries_to_init = self
                 .projects
                 .iter()
-                .flat_map(|proj| proj.config.repos.iter())
-                .filter_map(|repo| match repo {
-                    // Deduplicate remote repos.
-                    config::Repo::Remote(repo) if seen.insert(repo.key()) => Some(repo),
-                    _ => None,
-                });
+                .map(|project| {
+                    plan_project_repo_init(
+                        project,
+                        filters,
+                        &mut remote_keys_to_clone,
+                        &mut remote_configs,
+                    )
+                })
+                .collect::<Vec<_>>();
 
-            let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
+            // Prepare remote repos in parallel.
+            let cloned_repos = store.clone_repos(remote_configs, reporter).await?;
 
             let mut remote_repos = FxHashMap::default();
             for (key, path) in cloned_repos {
@@ -930,32 +1037,13 @@ impl Workspace {
 
             self.projects
                 .iter()
-                .map(|project| {
-                    let mut repos = Vec::with_capacity(project.config.repos.len());
-
-                    for repo in &project.config.repos {
-                        match repo {
-                            config::Repo::Remote(repo) => {
-                                let key = repo.key();
-                                let repo = remote_repos.get(&key).expect("repo not found");
-                                repos.push(repo.clone());
-                            }
-                            config::Repo::Local(repo) => {
-                                let repo = Repo::local(repo.hooks.clone());
-                                repos.push(Arc::new(repo));
-                            }
-                            config::Repo::Meta(repo) => {
-                                let repo = Repo::meta(repo.hooks.clone());
-                                repos.push(Arc::new(repo));
-                            }
-                            config::Repo::Builtin(repo) => {
-                                let repo = Repo::builtin(repo.hooks.clone());
-                                repos.push(Arc::new(repo));
-                            }
-                        }
-                    }
-
-                    Ok(repos)
+                .zip(project_repo_entries_to_init)
+                .map(|(project, repo_entries_to_init)| {
+                    Ok(build_project_repo_slots(
+                        project,
+                        repo_entries_to_init,
+                        &remote_repos,
+                    ))
                 })
                 .collect::<Result<Vec<_>, Error>>()?
         };
@@ -972,8 +1060,9 @@ impl Workspace {
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
+        filters: HookInitFilters<'_>,
     ) -> Result<Vec<Hook>, Error> {
-        self.init_repos(store, reporter).await?;
+        self.init_repos(store, reporter, filters).await?;
 
         let mut hooks = Vec::new();
         for project in &self.projects {

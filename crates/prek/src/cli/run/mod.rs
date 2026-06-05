@@ -5,7 +5,7 @@ pub(crate) use filter::{
 pub(crate) use install::{InstallCache, install_hooks};
 pub(crate) use reporter::{HookRunReporter, project_status_marker};
 pub(crate) use run::run;
-pub(crate) use selector::{GroupFilters, SelectorSource, Selectors};
+pub(crate) use selector::{ConfiguredHook, GroupFilters, SelectorSource, Selectors};
 
 mod diff;
 mod filter;

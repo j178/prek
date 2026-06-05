@@ -6,7 +6,9 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
+use prek_consts::{
+    PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
+};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -2046,11 +2048,12 @@ fn init_nonexistent_repo() {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: ", "exit status: "),
+        .chain([
+            (r"exit code: ", "exit status: "),
             // Normalize Git error message to handle environment-specific variations
             (
                 r"fatal: unable to access 'https://notexistentatallnevergonnahappen\.com/nonexistent/repo/':.*",
-                r"fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]"
+                r"fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]",
             ),
         ])
         .collect::<Vec<_>>();
@@ -2071,6 +2074,184 @@ fn init_nonexistent_repo() {
     [stderr]
     fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]
     ");
+}
+
+#[test]
+fn skipped_remote_repo_is_not_cloned() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: ruff-check
+        "});
+    context.git_add(".");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.run().arg("--all-files").arg("--skip").arg("ruff-check"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix end of files.........................................................Passed
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
+fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_repo = context.home_dir().child("duplicate-key-hook-repo");
+    hook_repo.create_dir_all()?;
+
+    git_cmd(&hook_repo)
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .assert()
+        .success();
+
+    hook_repo
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r"
+        - id: test-hook
+          name: Test Hook
+          entry: echo ok
+          language: system
+          always_run: true
+    "})?;
+
+    git_cmd(&hook_repo).arg("add").arg(".").assert().success();
+    git_cmd(&hook_repo)
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .assert()
+        .success();
+    git_cmd(&hook_repo)
+        .arg("tag")
+        .arg("v1.0.0")
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {repo}
+            rev: v1.0.0
+            hooks:
+              - id: missing-hook
+
+          - repo: {repo}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo = hook_repo.display()});
+    context.git_add(".");
+
+    context
+        .run()
+        .arg("--all-files")
+        .arg("--skip")
+        .arg("missing-hook")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+#[test]
+fn group_excluded_remote_repo_is_not_cloned() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                groups: [ci]
+
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: ruff-check
+                groups: [local]
+        "});
+    context.git_add(".");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.run().arg("--all-files").arg("--group").arg("ci"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix end of files.........................................................Passed
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
+fn unmatched_skip_does_not_suppress_remote_clone() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: ruff-check
+        "});
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"exit code: ", "exit status: "),
+            // Normalize Git error message to handle environment-specific variations
+            (
+                r"fatal: unable to access 'https://notexistentatallnevergonnahappen\.com/nonexistent/repo/':.*",
+                r"fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]"
+            ),
+        ])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(
+        filters,
+        context.run().arg("--all-files").arg("--skip").arg("other-hook"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to init hooks
+      caused by: Failed to clone repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
+      caused by: Command `git full clone` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]
+    "
+    );
 }
 
 /// Test hooks that specifies `types: [directory]`.

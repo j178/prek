@@ -35,7 +35,7 @@ use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
-use crate::workspace::{Project, Workspace};
+use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -102,7 +102,11 @@ pub(crate) async fn run(
         store.track_configs(workspace.projects().iter().map(|p| p.config_file()))?;
 
         workspace
-            .init_hooks(store, Some(&reporter))
+            .init_hooks(
+                store,
+                Some(&reporter),
+                HookInitFilters::for_run(&selectors, &group_filters),
+            )
             .await
             .context("Failed to init hooks")?
     };

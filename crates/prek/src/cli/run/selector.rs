@@ -15,6 +15,30 @@ use tracing::trace;
 
 use crate::fs::PathClean;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConfiguredHook<'a> {
+    project_relative_path: &'a Path,
+    id: &'a str,
+    alias: Option<&'a str>,
+    groups: Option<&'a [String]>,
+}
+
+impl<'a> ConfiguredHook<'a> {
+    pub(crate) fn new(
+        project_relative_path: &'a Path,
+        id: &'a str,
+        alias: Option<&'a str>,
+        groups: Option<&'a [String]>,
+    ) -> Self {
+        Self {
+            project_relative_path,
+            id,
+            alias,
+            groups,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("Invalid selector: `{selector}`")]
@@ -138,6 +162,26 @@ impl Selector {
             }
         }
     }
+
+    fn matches_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
+        let matches_hook_id = |selector: &str| {
+            hook.id == selector || hook.alias.is_some_and(|alias| alias == selector)
+        };
+
+        match &self.expr {
+            SelectorExpr::HookId(selector) => matches_hook_id(selector),
+            SelectorExpr::ProjectPrefix(project_path) => {
+                hook.project_relative_path.starts_with(project_path)
+            }
+            SelectorExpr::ProjectHook {
+                project_path,
+                hook_id: selector_hook_id,
+            } => {
+                project_path.as_path() == hook.project_relative_path
+                    && matches_hook_id(selector_hook_id)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -249,6 +293,25 @@ impl Selectors {
             }
         }
         included
+    }
+
+    /// Return whether skip selectors rule out a hook from config alone.
+    ///
+    /// Include selectors are intentionally not applied here. Remote hook aliases
+    /// can select hooks, but those aliases are only known after cloning the repo.
+    /// A non-matching include selector is therefore not enough to rule out a clone
+    /// in this generic helper.
+    pub(crate) fn excludes_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
+        let mut usage = self.usage.lock().unwrap();
+
+        let mut skipped = false;
+        for (idx, skip) in self.skips.iter().enumerate() {
+            if skip.matches_configured_hook(hook) {
+                usage.use_exclude(idx);
+                skipped = true;
+            }
+        }
+        skipped
     }
 
     pub(crate) fn matches_hook_id(&self, hook_id: &str) -> bool {
@@ -384,6 +447,36 @@ impl GroupFilters {
         let mut included = false;
         for (idx, include) in self.includes.iter().enumerate() {
             if hook.groups.contains(include) {
+                usage.use_include(idx);
+                included = true;
+            }
+        }
+
+        included && !excluded
+    }
+
+    pub(crate) fn matches_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
+        let mut usage = self.usage.lock().unwrap();
+        let contains_group = |group: &str| {
+            hook.groups
+                .is_some_and(|groups| groups.iter().any(|hook_group| hook_group == group))
+        };
+
+        let mut excluded = false;
+        for (idx, exclude) in self.excludes.iter().enumerate() {
+            if contains_group(exclude) {
+                usage.use_exclude(idx);
+                excluded = true;
+            }
+        }
+
+        if self.includes.is_empty() {
+            return !excluded;
+        }
+
+        let mut included = false;
+        for (idx, include) in self.includes.iter().enumerate() {
+            if contains_group(include) {
                 usage.use_include(idx);
                 included = true;
             }
@@ -863,6 +956,92 @@ mod tests {
         assert_eq!(selector.to_string(), "src:lint:ruff");
 
         Ok(())
+    }
+
+    fn test_selector(expr: SelectorExpr) -> Selector {
+        Selector {
+            source: SelectorSource::CliArg,
+            original: "selector".to_string(),
+            expr,
+        }
+    }
+
+    fn configured_hook(
+        project_relative_path: &'static str,
+        id: &'static str,
+        alias: Option<&'static str>,
+    ) -> ConfiguredHook<'static> {
+        ConfiguredHook::new(Path::new(project_relative_path), id, alias, None)
+    }
+
+    #[test]
+    fn test_selector_matches_configured_hook() {
+        let cases = [
+            (
+                "hook id matches id",
+                test_selector(SelectorExpr::HookId("black".to_string())),
+                configured_hook("src", "black", None),
+                true,
+            ),
+            (
+                "hook id matches config alias",
+                test_selector(SelectorExpr::HookId("black".to_string())),
+                configured_hook("src", "ruff", Some("black")),
+                true,
+            ),
+            (
+                "project prefix matches nested project",
+                test_selector(SelectorExpr::ProjectPrefix(PathBuf::from("src"))),
+                configured_hook("src/backend", "black", None),
+                true,
+            ),
+            (
+                "project prefix rejects other project",
+                test_selector(SelectorExpr::ProjectPrefix(PathBuf::from("src"))),
+                configured_hook("tests", "black", None),
+                false,
+            ),
+            (
+                "project hook matches exact project and id",
+                test_selector(SelectorExpr::ProjectHook {
+                    project_path: PathBuf::from("src"),
+                    hook_id: "black".to_string(),
+                }),
+                configured_hook("src", "black", None),
+                true,
+            ),
+            (
+                "project hook matches exact project and config alias",
+                test_selector(SelectorExpr::ProjectHook {
+                    project_path: PathBuf::from("src"),
+                    hook_id: "black".to_string(),
+                }),
+                configured_hook("src", "ruff", Some("black")),
+                true,
+            ),
+            (
+                "project hook rejects nested project prefix",
+                test_selector(SelectorExpr::ProjectHook {
+                    project_path: PathBuf::from("src"),
+                    hook_id: "black".to_string(),
+                }),
+                configured_hook("src/backend", "black", None),
+                false,
+            ),
+            (
+                "project hook rejects other hook",
+                test_selector(SelectorExpr::ProjectHook {
+                    project_path: PathBuf::from("src"),
+                    hook_id: "black".to_string(),
+                }),
+                configured_hook("src", "ruff", Some("format")),
+                false,
+            ),
+        ];
+
+        for (name, selector, hook, expected) in cases {
+            assert_eq!(selector.matches_configured_hook(&hook), expected, "{name}");
+        }
     }
 
     #[test]
