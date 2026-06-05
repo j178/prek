@@ -105,7 +105,7 @@ pub(crate) async fn run(
             .init_hooks(
                 store,
                 Some(&reporter),
-                HookInitFilters::for_run(&selectors, &group_filters),
+                HookInitFilters::new(Some(&selectors), Some(&group_filters)),
             )
             .await
             .context("Failed to init hooks")?

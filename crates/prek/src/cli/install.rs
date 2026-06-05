@@ -146,7 +146,7 @@ pub(crate) async fn prepare_hooks(
         .init_hooks(
             store,
             Some(&reporter),
-            HookInitFilters::for_selectors(&selectors),
+            HookInitFilters::new(Some(&selectors), None),
         )
         .await
         .context("Failed to init hooks")?;

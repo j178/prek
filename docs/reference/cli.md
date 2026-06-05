@@ -312,6 +312,8 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-list--config"><a href="#prek-list--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-list--group"><a href="#prek-list--group"><code>--group</code></a> <i>group</i></dt><dd><p>Show hooks belonging to the specified group.</p>
+<p>Can be specified multiple times.</p>
 </dd><dt id="prek-list--help"><a href="#prek-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-list--hook-stage"><a href="#prek-list--hook-stage"><code>--hook-stage</code></a> <i>hook-stage</i></dt><dd><p>Show only hooks that has the specified stage</p>
 <p>Possible values:</p>
@@ -354,6 +356,8 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>swift</code></li>
 <li><code>system</code></li>
 </ul></dd><dt id="prek-list--log-file"><a href="#prek-list--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-list--no-group"><a href="#prek-list--no-group"><code>--no-group</code></a> <i>group</i></dt><dd><p>Do not show hooks belonging to the specified group.</p>
+<p>Can be specified multiple times. Exclusion wins over inclusion.</p>
 </dd><dt id="prek-list--no-progress"><a href="#prek-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-list--output-format"><a href="#prek-list--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format</p>
