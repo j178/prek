@@ -3,7 +3,6 @@ use std::path::Path;
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
-use rustc_hash::FxHashMap;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -12,7 +11,6 @@ use crate::run::CONCURRENCY;
 const CRLF: &[u8] = b"\r\n";
 const LF: &[u8] = b"\n";
 const CR: &[u8] = b"\r";
-const ALL_ENDINGS: [&[u8]; 3] = [CR, CRLF, LF];
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -41,6 +39,25 @@ enum FixMode {
     CR,
 }
 
+#[derive(Default)]
+struct LineEndingCounts {
+    cr: usize,
+    crlf: usize,
+    lf: usize,
+}
+
+impl LineEndingCounts {
+    fn kind_count(&self) -> usize {
+        usize::from(self.cr > 0) + usize::from(self.crlf > 0) + usize::from(self.lf > 0)
+    }
+
+    fn has_any_except(&self, ending: &[u8]) -> bool {
+        (ending != CR && self.cr > 0)
+            || (ending != CRLF && self.crlf > 0)
+            || (ending != LF && self.lf > 0)
+    }
+}
+
 pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
 
@@ -61,7 +78,7 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Resul
     }
 
     let counts = count_line_endings(&contents);
-    let has_mixed_endings = counts.len() > 1;
+    let has_mixed_endings = counts.kind_count() > 1;
 
     match fix_mode {
         FixMode::No => {
@@ -90,7 +107,7 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Resul
                 FixMode::CR => CR,
                 _ => unreachable!(),
             };
-            let needs_fixing = counts.keys().any(|&ending| ending != target_ending);
+            let needs_fixing = counts.has_any_except(target_ending);
 
             if needs_fixing {
                 apply_line_ending(&file_path, &contents, target_ending).await?;
@@ -102,22 +119,22 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Resul
     }
 }
 
-fn count_line_endings(contents: &[u8]) -> FxHashMap<&'static [u8], usize> {
-    let mut counts = FxHashMap::default();
+fn count_line_endings(contents: &[u8]) -> LineEndingCounts {
+    let mut counts = LineEndingCounts::default();
     let mut index = 0;
 
     while index < contents.len() {
         match contents[index] {
             b'\r' if contents.get(index + 1) == Some(&b'\n') => {
-                *counts.entry(CRLF).or_insert(0) += 1;
+                counts.crlf += 1;
                 index += 2;
             }
             b'\r' => {
-                *counts.entry(CR).or_insert(0) += 1;
+                counts.cr += 1;
                 index += 1;
             }
             b'\n' => {
-                *counts.entry(LF).or_insert(0) += 1;
+                counts.lf += 1;
                 index += 1;
             }
             _ => index += 1,
@@ -127,12 +144,15 @@ fn count_line_endings(contents: &[u8]) -> FxHashMap<&'static [u8], usize> {
     counts
 }
 
-fn find_most_common_ending(counts: &FxHashMap<&'static [u8], usize>) -> &'static [u8] {
-    ALL_ENDINGS
-        .iter()
-        .max_by_key(|&&ending| counts.get(ending).unwrap_or(&0))
-        .copied()
-        .unwrap_or(LF)
+fn find_most_common_ending(counts: &LineEndingCounts) -> &'static [u8] {
+    // Preserve the previous tie-break order from `[CR, CRLF, LF].max_by_key(...)`.
+    if counts.lf >= counts.crlf && counts.lf >= counts.cr {
+        LF
+    } else if counts.crlf >= counts.cr {
+        CRLF
+    } else {
+        CR
+    }
 }
 
 async fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> Result<()> {
