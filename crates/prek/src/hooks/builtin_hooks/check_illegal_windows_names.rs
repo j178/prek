@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 
 use crate::hook::Hook;
@@ -16,19 +17,21 @@ pub(crate) fn check_illegal_windows_names(_hook: &Hook, filenames: &[&Path]) -> 
         return (0, Vec::new());
     }
 
+    (1, illegal_windows_names_output(filenames))
+}
+
+fn illegal_windows_names_output(filenames: &[&Path]) -> Vec<u8> {
     let mut output = Vec::new();
     for filename in filenames {
-        output.extend_from_slice(
-            format!("{}: Illegal Windows filename\n", filename.display()).as_bytes(),
-        );
+        writeln!(output, "{}: Illegal Windows filename", filename.display())
+            .expect("writing to Vec should never fail");
     }
-
-    (1, output)
+    output
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ILLEGAL_WINDOWS_PATTERN;
+    use super::*;
     use fancy_regex::Regex;
 
     fn illegal_windows_re() -> Regex {
@@ -75,5 +78,15 @@ mod tests {
         assert!(re.is_match("file.").unwrap());
         assert!(re.is_match("file ").unwrap());
         assert!(re.is_match("dir/file./next").unwrap());
+    }
+
+    #[test]
+    fn test_output_lines() {
+        let filenames = [Path::new("CON.txt"), Path::new("bad:name.txt")];
+        let output = illegal_windows_names_output(&filenames);
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "CON.txt: Illegal Windows filename\nbad:name.txt: Illegal Windows filename\n"
+        );
     }
 }
