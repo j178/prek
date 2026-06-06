@@ -13,12 +13,15 @@ pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(
     .await
 }
 
-#[allow(clippy::unused_async)]
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let path = file_base.join(filename);
 
     // Check if it's a symlink and if it's broken
-    if path.is_symlink() && !path.exists() {
+    let Ok(metadata) = fs_err::tokio::symlink_metadata(&path).await else {
+        return Ok((0, Vec::new()));
+    };
+
+    if metadata.file_type().is_symlink() && fs_err::tokio::metadata(&path).await.is_err() {
         let error_message = format!("{}: Broken symlink\n", filename.display());
         return Ok((1, error_message.into_bytes()));
     }
