@@ -29,12 +29,11 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     reader.config_mut().check_end_names = true;
     reader.config_mut().expand_empty_elements = true;
 
-    let mut buf = Vec::new();
     let mut root_count = 0;
     let mut depth = 0;
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match reader.read_event() {
             Ok(quick_xml::events::Event::Eof) => break,
             Ok(quick_xml::events::Event::Start(_)) => {
                 if depth == 0 {
@@ -58,7 +57,6 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
             }
             Ok(_) => {}
         }
-        buf.clear();
     }
 
     Ok((0, Vec::new()))
