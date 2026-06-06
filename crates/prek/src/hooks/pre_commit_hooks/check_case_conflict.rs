@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -86,11 +87,11 @@ pub(crate) async fn check_case_conflict(
     conflicting_files.sort();
 
     for filename in conflicting_files {
-        let line = format!(
-            "Case-insensitivity conflict found: {}\n",
+        writeln!(
+            output,
+            "Case-insensitivity conflict found: {}",
             filename.display()
-        );
-        output.extend(line.into_bytes());
+        )?;
     }
 
     Ok((1, output))
