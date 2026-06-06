@@ -16,17 +16,17 @@ pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<
 
 async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
+    // If the file is empty, do nothing and avoid opening a write handle.
+    let file_size = fs_err::tokio::metadata(&file_path).await?.len();
+    if file_size == 0 {
+        return Ok((0, Vec::new()));
+    }
+
     let mut file = fs_err::tokio::OpenOptions::new()
         .read(true)
         .write(true)
         .open(file_path)
         .await?;
-
-    // If the file is empty, do nothing.
-    let file_size = file.metadata().await?.len();
-    if file_size == 0 {
-        return Ok((0, Vec::new()));
-    }
 
     match find_last_non_ending(&mut file).await? {
         (None, _) => {
