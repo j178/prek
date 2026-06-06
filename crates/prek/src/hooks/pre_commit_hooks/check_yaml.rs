@@ -2,6 +2,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
+use serde::de::IgnoredAny;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -53,14 +54,14 @@ async fn check_file(
     };
     if allow_multi_docs {
         if let Err(e) =
-            serde_saphyr::from_slice_multiple_with_options::<serde_json::Value>(&content, options)
+            serde_saphyr::from_slice_multiple_with_options::<IgnoredAny>(&content, options)
         {
             let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
             return Ok((1, error_message.into_bytes()));
         }
         Ok((0, Vec::new()))
     } else {
-        match serde_saphyr::from_slice_with_options::<serde_json::Value>(&content, options) {
+        match serde_saphyr::from_slice_with_options::<IgnoredAny>(&content, options) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
                 let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
