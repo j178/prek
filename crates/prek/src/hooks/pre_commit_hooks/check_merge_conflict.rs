@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -67,25 +68,26 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     let mut line_number = 1;
     let mut in_conflict = false;
 
-    let mut report_conflict = |line_number: usize, pattern: &str| {
-        output.extend(conflict_message(filename, line_number, pattern));
+    let mut report_conflict = |line_number: usize, pattern: &str| -> Result<()> {
+        write_conflict_message(&mut output, filename, line_number, pattern)?;
         code = 1;
+        Ok(())
     };
 
     while reader.read_until(b'\n', &mut line).await? != 0 {
         if line.starts_with(START_PATTERN) {
-            report_conflict(line_number, "<<<<<<< ");
+            report_conflict(line_number, "<<<<<<< ")?;
             in_conflict = true;
         } else if in_conflict && line.starts_with(ANCESTOR_PATTERN) {
-            report_conflict(line_number, "||||||| ");
+            report_conflict(line_number, "||||||| ")?;
         } else if in_conflict
             && SEPARATOR_PATTERNS
                 .iter()
                 .any(|pattern| line.starts_with(pattern))
         {
-            report_conflict(line_number, "=======");
+            report_conflict(line_number, "=======")?;
         } else if line.starts_with(END_PATTERN) {
-            report_conflict(line_number, ">>>>>>> ");
+            report_conflict(line_number, ">>>>>>> ")?;
             in_conflict = false;
         }
 
@@ -96,12 +98,17 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     Ok((code, output))
 }
 
-fn conflict_message(filename: &Path, line_number: usize, pattern: &str) -> Vec<u8> {
-    format!(
-        "{}:{line_number}: Merge conflict string {pattern:?} found\n",
+fn write_conflict_message(
+    output: &mut Vec<u8>,
+    filename: &Path,
+    line_number: usize,
+    pattern: &str,
+) -> std::io::Result<()> {
+    writeln!(
+        output,
+        "{}:{line_number}: Merge conflict string {pattern:?} found",
         filename.display(),
     )
-    .into_bytes()
 }
 
 #[cfg(test)]
