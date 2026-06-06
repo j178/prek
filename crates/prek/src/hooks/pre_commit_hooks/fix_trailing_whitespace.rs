@@ -101,13 +101,7 @@ async fn fix_file(
     force_markdown: bool,
     markdown_exts: &[String],
 ) -> Result<(i32, Vec<u8>)> {
-    let is_markdown = force_markdown || {
-        Path::new(filename)
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| format!(".{}", e.to_ascii_lowercase()))
-            .is_some_and(|e| markdown_exts.contains(&e))
-    };
+    let is_markdown = is_markdown_file(filename, force_markdown, markdown_exts);
 
     let file_path = file_base.join(filename);
     let content = fs_err::tokio::read(&file_path).await?;
@@ -145,6 +139,20 @@ async fn fix_file(
     } else {
         Ok((0, Vec::new()))
     }
+}
+
+fn is_markdown_file(filename: &Path, force_markdown: bool, markdown_exts: &[String]) -> bool {
+    if force_markdown {
+        return true;
+    }
+
+    let Some(extension) = filename.extension().and_then(|ext| ext.to_str()) else {
+        return false;
+    };
+
+    markdown_exts
+        .iter()
+        .any(|markdown_ext| extension.eq_ignore_ascii_case(markdown_ext.trim_start_matches('.')))
 }
 
 fn detect_line_ending(line: &[u8]) -> &[u8] {

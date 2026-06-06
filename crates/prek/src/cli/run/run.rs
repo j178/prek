@@ -1207,8 +1207,11 @@ impl<'a> ProjectHookInput<'a> {
     fn run_input_for_hook(&self, hook: &Hook, tag_cache: &FileTagCache<'a>) -> HookRunInput<'a> {
         match self {
             Self::Files(project_files) => match hook.pass_filenames {
-                // Always-run hooks without filename arguments run regardless of file matches.
-                PassFilenames::None if hook.always_run => HookRunInput::without_filenames(true),
+                PassFilenames::None if hook.always_run => {
+                    // The hook will run regardless of file matches, and this mode will not pass
+                    // filenames, so avoid scanning the project input just to compute `matched`.
+                    HookRunInput::without_filenames(true)
+                }
                 PassFilenames::None => HookRunInput::without_filenames(
                     project_files.has_matching_file(hook, tag_cache),
                 ),
