@@ -32,16 +32,8 @@ pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Resu
     for destroyed_link in &destroyed_links {
         writeln!(output, "- {}", destroyed_link.display())?;
     }
-    let destroyed_links_shell = destroyed_links
-        .iter()
-        .map(|path| path.to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
     writeln!(output, "You should unstage affected files:")?;
-    writeln!(
-        output,
-        "\tgit reset HEAD -- {}",
-        shlex::try_join(destroyed_links_shell.iter().map(String::as_str))?
-    )?;
+    write_reset_command(&mut output, &destroyed_links)?;
     writeln!(
         output,
         "And retry commit. As a long term solution you may try to explicitly tell git that your environment does not support symlinks:"
@@ -49,6 +41,16 @@ pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Resu
     writeln!(output, "\tgit config core.symlinks false")?;
 
     Ok((1, output))
+}
+
+fn write_reset_command(output: &mut Vec<u8>, destroyed_links: &[&Path]) -> Result<()> {
+    write!(output, "\tgit reset HEAD --")?;
+    for destroyed_link in destroyed_links {
+        let path = destroyed_link.to_string_lossy();
+        write!(output, " {}", shlex::try_quote(&path)?)?;
+    }
+    writeln!(output)?;
+    Ok(())
 }
 
 async fn git_status_output(work_dir: &Path) -> Result<Vec<u8>> {
@@ -230,6 +232,21 @@ mod tests {
         assert_eq!(entry.index_hash, "indexhash");
         assert_eq!(entry.path, Path::new("path with spaces.txt"));
 
+        Ok(())
+    }
+
+    #[test]
+    fn write_reset_command_quotes_paths() -> Result<()> {
+        let mut output = Vec::new();
+        write_reset_command(
+            &mut output,
+            &[Path::new("simple"), Path::new("path with spaces")],
+        )?;
+
+        assert_eq!(
+            String::from_utf8(output)?,
+            "\tgit reset HEAD -- simple 'path with spaces'\n"
+        );
         Ok(())
     }
 }
