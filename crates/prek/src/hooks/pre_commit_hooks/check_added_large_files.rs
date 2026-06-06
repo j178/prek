@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use clap::Parser;
 use rustc_hash::FxHashSet;
@@ -7,20 +7,6 @@ use crate::git::{get_added_files, get_lfs_files};
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
-
-enum FileFilter {
-    NoFilter,
-    Files(FxHashSet<PathBuf>),
-}
-
-impl FileFilter {
-    fn contains(&self, path: &Path) -> bool {
-        match self {
-            FileFilter::NoFilter => true,
-            FileFilter::Files(files) => files.contains(path),
-        }
-    }
-}
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -39,14 +25,20 @@ pub(crate) async fn check_added_large_files(
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
 
-    let filter = if args.enforce_all {
-        FileFilter::NoFilter
+    let candidate_filenames;
+    let filenames = if args.enforce_all {
+        filenames
     } else {
-        let add_files = get_added_files(hook.work_dir())
+        let added_files = get_added_files(hook.work_dir())
             .await?
             .into_iter()
             .collect::<FxHashSet<_>>();
-        FileFilter::Files(add_files)
+        candidate_filenames = filenames
+            .iter()
+            .copied()
+            .filter(|filename| added_files.contains(*filename))
+            .collect::<Vec<_>>();
+        candidate_filenames.as_slice()
     };
 
     // Builtin hooks receive project-relative filenames, so git attribute lookups need to run
@@ -56,7 +48,6 @@ pub(crate) async fn check_added_large_files(
     let filenames = filenames
         .iter()
         .copied()
-        .filter(|f| filter.contains(f))
         .filter(|f| !lfs_files.contains(*f));
 
     run_concurrent_file_checks(filenames, *CONCURRENCY, |filename| async move {
