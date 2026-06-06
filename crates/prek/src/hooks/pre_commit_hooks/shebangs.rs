@@ -47,20 +47,36 @@ fn parse_stage_entry<'a>(
     filenames: &FxHashSet<&Path>,
     executable: bool,
 ) -> Option<&'a Path> {
-    let entry = str::from_utf8(entry).ok()?;
     if entry.is_empty() {
         return None;
     }
 
-    let (metadata, file_name) = entry.split_once('\t')?;
-    let file_name = Path::new(file_name);
+    let tab_index = entry.iter().position(|&byte| byte == b'\t')?;
+    let (metadata, file_name) = entry.split_at(tab_index);
+    let file_name = Path::new(str::from_utf8(&file_name[1..]).ok()?);
     let file_name = file_name.strip_prefix(file_base).unwrap_or(file_name);
     if !filenames.contains(file_name) {
         return None;
     }
 
-    let mode_bits = u32::from_str_radix(metadata.split_whitespace().next()?, 8).ok()?;
+    let mode_bits = parse_mode_bits(metadata)?;
     (((mode_bits & 0o111) != 0) == executable).then_some(file_name)
+}
+
+fn parse_mode_bits(metadata: &[u8]) -> Option<u32> {
+    let mode = metadata.split(|&byte| byte == b' ').next()?;
+    if mode.is_empty() {
+        return None;
+    }
+
+    let mut mode_bits = 0;
+    for &byte in mode {
+        if !(b'0'..=b'7').contains(&byte) {
+            return None;
+        }
+        mode_bits = (mode_bits << 3) + u32::from(byte - b'0');
+    }
+    Some(mode_bits)
 }
 
 #[cfg(test)]
@@ -97,6 +113,14 @@ mod tests {
             parse_stage_entry(non_executable_entry, Path::new(""), &filenames, false),
             Some(Path::new("script.sh"))
         );
+    }
+
+    #[test]
+    fn parse_mode_bits_reads_octal_prefix() {
+        assert_eq!(parse_mode_bits(b"100755 abcdef 0"), Some(0o100_755));
+        assert_eq!(parse_mode_bits(b"100644"), Some(0o100_644));
+        assert_eq!(parse_mode_bits(b""), None);
+        assert_eq!(parse_mode_bits(b"100888 abcdef 0"), None);
     }
 
     #[tokio::test]
