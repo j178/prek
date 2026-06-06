@@ -57,7 +57,7 @@ fn sorted_contents(before: &[u8], ignore_case: bool, unique: bool) -> Vec<u8> {
         .collect::<Vec<_>>();
 
     if ignore_case {
-        lines.sort_by(|left, right| cmp_ignore_ascii_case(left, right));
+        lines.sort_by_cached_key(|line| line.to_ascii_lowercase());
     } else {
         lines.sort_unstable();
         if unique {
@@ -87,12 +87,6 @@ fn normalize_line(mut line: &[u8]) -> Option<&[u8]> {
     } else {
         Some(line)
     }
-}
-
-fn cmp_ignore_ascii_case(left: &[u8], right: &[u8]) -> std::cmp::Ordering {
-    left.iter()
-        .map(u8::to_ascii_lowercase)
-        .cmp(right.iter().map(u8::to_ascii_lowercase))
 }
 
 #[cfg(test)]
