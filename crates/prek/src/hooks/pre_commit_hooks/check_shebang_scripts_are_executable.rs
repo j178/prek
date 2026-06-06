@@ -15,6 +15,10 @@ pub(crate) async fn check_shebang_scripts_are_executable(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
+    if filenames.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+
     let file_base = hook.project().relative_path();
     let stdout = git_index_stage_output(file_base).await?;
     let filenames: FxHashSet<_> = filenames.iter().copied().collect();

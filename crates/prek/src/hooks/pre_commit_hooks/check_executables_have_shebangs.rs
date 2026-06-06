@@ -16,6 +16,10 @@ pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
+    if filenames.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+
     let stdout = git::git_cmd("get file file mode")?
         .arg("config")
         .arg("core.fileMode")
@@ -133,6 +137,14 @@ mod tests {
             String::from_utf8_lossy(&output)
                 .contains("marked executable but has no (or invalid) shebang!")
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_os_check_shebangs_empty_input() -> Result<(), anyhow::Error> {
+        let (code, output) = os_check_shebangs(Path::new(""), &[]).await?;
+        assert_eq!(code, 0);
+        assert!(output.is_empty());
         Ok(())
     }
 }
