@@ -55,7 +55,7 @@ pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Resu
 /// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let mut file = fs_err::tokio::File::open(file_base.join(filename)).await?;
-    let mut buf = vec![0u8; BUFFER_SIZE + CARRY_CAPACITY];
+    let mut buf = [0u8; BUFFER_SIZE + CARRY_CAPACITY];
     let mut carry_len = 0;
 
     loop {
