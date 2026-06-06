@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::check_json::JsonValue;
+use crate::hooks::pre_commit_hooks::check_json::JsonDuplicateKeyChecker;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
@@ -22,7 +22,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> anyhow::Result<(i32, V
         return Ok((0, Vec::new()));
     }
 
-    match json5::from_str::<JsonValue>(&content) {
+    match json5::from_str::<JsonDuplicateKeyChecker>(&content) {
         Ok(_) => Ok((0, Vec::new())),
         Err(e) => {
             let error_message = format!("{}: Failed to json5 decode ({})\n", filename.display(), e);
@@ -77,7 +77,7 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate_keys() -> anyhow::Result<()> {
         // JSON5 warns duplicate names are unpredictable; implementations may error or accept.
-        // Our JsonValue custom deserializer rejects duplicates.
+        // Our custom deserializer rejects duplicates.
         let dir = tempdir()?;
         let content = indoc::indoc! {r#"
         {
