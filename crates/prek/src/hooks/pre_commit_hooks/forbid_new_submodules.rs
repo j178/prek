@@ -1,7 +1,7 @@
 use std::borrow::Cow;
+use std::fmt::Write;
 use std::path::Path;
 
-use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
 
 use crate::git;
@@ -46,12 +46,13 @@ pub(crate) async fn forbid_new_submodules(
 }
 
 fn render_message(new_submodules: &[&str]) -> String {
-    let mut message = new_submodules
-        .iter()
-        .map(|filename| format!("{filename}: new submodule introduced"))
-        .join("\n");
+    let mut message = String::new();
+    for filename in new_submodules {
+        writeln!(message, "{filename}: new submodule introduced")
+            .expect("writing to String should never fail");
+    }
 
-    message.push_str("\n\n");
+    message.push('\n');
     message.push_str(indoc::indoc! {"
         This commit introduces new git submodules.
         Did you unintentionally `git add .`?
