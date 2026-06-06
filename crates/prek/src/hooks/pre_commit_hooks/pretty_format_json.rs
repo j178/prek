@@ -110,7 +110,9 @@ async fn check_file(
 
 fn prettify_json(json: &str, args: &PreparedArgs) -> Result<String> {
     let mut value: Value = serde_json::from_str(json)?;
-    reorder_keys(&mut value, &args.ordered_top_keys, args.sort_keys);
+    if args.sort_keys || !args.ordered_top_keys.is_empty() {
+        reorder_keys(&mut value, &args.ordered_top_keys, args.sort_keys);
+    }
 
     let mut buf = Vec::with_capacity(json.len());
     let formatter = JsonFormatter::with_indent(&args.indent_bytes, args.ensure_ascii);
