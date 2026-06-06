@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -33,15 +34,15 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     if errors.is_empty() {
         Ok((0, Vec::new()))
     } else {
-        let mut error_messages = Vec::new();
+        let mut output = Vec::new();
         for error in errors {
-            error_messages.push(format!(
+            writeln!(
+                output,
                 "{}: Failed to toml decode ({error})",
                 filename.display()
-            ));
+            )?;
         }
-        let combined_errors = error_messages.join("\n") + "\n";
-        Ok((1, combined_errors.into_bytes()))
+        Ok((1, output))
     }
 }
 
