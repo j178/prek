@@ -84,7 +84,7 @@ where
 
     let mut read_len = 0;
     let mut next_char = 0;
-    let mut buf = vec![0u8; MAX_SCAN_SIZE];
+    let mut buf = [0u8; MAX_SCAN_SIZE];
     let mut line_ending = None;
 
     while read_len < data_len {
