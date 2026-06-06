@@ -45,15 +45,22 @@ async fn is_in_merge() -> Result<bool> {
     let git_dir = get_git_dir().await?;
 
     // Check if MERGE_MSG exists
-    let merge_msg_exists = git_dir.join("MERGE_MSG").exists();
-    if !merge_msg_exists {
+    if !path_exists(git_dir.join("MERGE_MSG")).await {
         return Ok(false);
     }
 
     // Check if any of the merge state files exist
-    Ok(git_dir.join("MERGE_HEAD").exists()
-        || git_dir.join("rebase-apply").exists()
-        || git_dir.join("rebase-merge").exists())
+    let (merge_head_exists, rebase_apply_exists, rebase_merge_exists) = tokio::join!(
+        path_exists(git_dir.join("MERGE_HEAD")),
+        path_exists(git_dir.join("rebase-apply")),
+        path_exists(git_dir.join("rebase-merge")),
+    );
+
+    Ok(merge_head_exists || rebase_apply_exists || rebase_merge_exists)
+}
+
+async fn path_exists(path: impl AsRef<Path>) -> bool {
+    tokio::fs::try_exists(path).await.unwrap_or(false)
 }
 
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
