@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
+use rustc_hash::FxHashSet;
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::ser::{Formatter, PrettyFormatter};
@@ -51,8 +52,9 @@ impl From<&Args> for PreparedArgs {
         // Keep only the first occurrence of each key so reordering can follow
         // the same "first index wins" rule as Python's `top_keys.index(key)`.
         let mut ordered_top_keys = Vec::with_capacity(args.top_keys.len());
+        let mut seen_top_keys = FxHashSet::default();
         for top_key in &args.top_keys {
-            if !ordered_top_keys.contains(top_key) {
+            if seen_top_keys.insert(top_key.as_str()) {
                 ordered_top_keys.push(top_key.clone());
             }
         }
