@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Parser;
 use fancy_regex::{Regex, escape};
+use memchr::memmem;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::hook::Hook;
@@ -23,6 +24,7 @@ struct Args {
 #[derive(Debug)]
 struct GithubPermalinkMatcher {
     patterns: Vec<Regex>,
+    domain_url_prefixes: Vec<Vec<u8>>,
 }
 
 impl GithubPermalinkMatcher {
@@ -36,25 +38,41 @@ impl GithubPermalinkMatcher {
         let mut domains = BTreeSet::from([String::from("github.com")]);
         domains.extend(additional_domains);
 
-        let patterns = domains
-            .into_iter()
-            .map(|domain| {
-                let domain = escape(&domain);
-                let pattern = format!(
-                    r"https://{domain}/[^/ ]+/[^/ ]+/blob/(?![a-fA-F0-9]{{4,64}}/)([^/. ]+)/[^# ]+#L\d+"
-                );
-                Regex::new(&pattern).expect("vcs permalink regex must be valid")
-            })
-            .collect();
+        let mut patterns = Vec::with_capacity(domains.len());
+        let mut domain_url_prefixes = Vec::with_capacity(domains.len());
+        for domain in domains {
+            domain_url_prefixes.push(format!("https://{domain}/").into_bytes());
+            let domain = escape(&domain);
+            let pattern = format!(
+                r"https://{domain}/[^/ ]+/[^/ ]+/blob/(?![a-fA-F0-9]{{4,64}}/)([^/. ]+)/[^# ]+#L\d+"
+            );
+            patterns.push(Regex::new(&pattern).expect("vcs permalink regex must be valid"));
+        }
 
-        Self { patterns }
+        Self {
+            patterns,
+            domain_url_prefixes,
+        }
     }
 
     fn is_non_permalink(&self, line: &[u8]) -> bool {
+        if !self.could_contain_link(line) {
+            return false;
+        }
+
         let line = String::from_utf8_lossy(line);
         self.patterns
             .iter()
             .any(|pattern| pattern.is_match(&line).unwrap_or(false))
+    }
+
+    fn could_contain_link(&self, line: &[u8]) -> bool {
+        memmem::find(line, b"/blob/").is_some()
+            && memmem::find(line, b"#L").is_some()
+            && self
+                .domain_url_prefixes
+                .iter()
+                .any(|prefix| memmem::find(line, prefix).is_some())
     }
 }
 
@@ -141,6 +159,23 @@ mod tests {
         );
         assert!(
             matcher.is_non_permalink(b"https://github.com/owner/repo/blob/develop/README.md#L1")
+        );
+    }
+
+    #[test]
+    fn test_prefilter_rejects_lines_without_link_parts() {
+        let matcher = matcher(&[]);
+        assert!(!matcher.could_contain_link(b"plain text"));
+        assert!(!matcher.could_contain_link(b"https://github.com/owner/repo/blob/main/file.py"));
+        assert!(!matcher.could_contain_link(b"/blob/main/file.py#L10 without a github domain"));
+    }
+
+    #[test]
+    fn test_prefilter_accepts_configured_github_domains() {
+        let matcher = matcher(&["github.example.com"]);
+        assert!(
+            matcher
+                .could_contain_link(b"https://github.example.com/owner/repo/blob/main/file.py#L10")
         );
     }
 
