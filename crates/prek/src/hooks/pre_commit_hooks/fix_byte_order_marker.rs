@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{io::ErrorKind, path::Path};
 
 use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
@@ -28,23 +28,23 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         .write(true)
         .open(&file_path)
         .await?;
-    let file_len = file.seek(SeekFrom::End(0)).await?;
-    if file_len < UTF8_BOM.len() as u64 {
-        return Ok((0, Vec::new()));
-    }
 
     let mut bom_buffer = [0u8; 3];
-    file.seek(SeekFrom::Start(0)).await?;
-    file.read_exact(&mut bom_buffer).await?;
+    match file.read_exact(&mut bom_buffer).await {
+        Ok(_) => {}
+        Err(err) if err.kind() == ErrorKind::UnexpectedEof => return Ok((0, Vec::new())),
+        Err(err) => return Err(err.into()),
+    }
     if bom_buffer != UTF8_BOM {
         return Ok((0, Vec::new()));
     }
 
+    let file_len = file.seek(SeekFrom::End(0)).await?;
     if file_len == UTF8_BOM.len() as u64 {
         file.set_len(0).await?;
     } else {
         // Shift the payload in place so large files do not need a full second buffer.
-        shift_file_left(&mut file, UTF8_BOM.len() as u64).await?;
+        shift_file_left(&mut file, file_len, UTF8_BOM.len() as u64).await?;
     }
 
     Ok((
@@ -53,8 +53,7 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     ))
 }
 
-async fn shift_file_left(file: &mut fs_err::tokio::File, offset: u64) -> Result<()> {
-    let file_len = file.seek(SeekFrom::End(0)).await?;
+async fn shift_file_left(file: &mut fs_err::tokio::File, file_len: u64, offset: u64) -> Result<()> {
     let mut buf = vec![0u8; BUFFER_SIZE];
     let mut read_pos = offset;
     let mut write_pos = 0;
