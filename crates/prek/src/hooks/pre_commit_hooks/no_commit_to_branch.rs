@@ -26,16 +26,14 @@ impl Args {
             return Ok(false);
         }
 
-        let patterns = self
-            .patterns
-            .iter()
-            .map(|p| Regex::new(p))
-            .collect::<Result<Vec<Regex>, _>>()
-            .context("Failed to compile regex patterns")?;
+        for pattern in &self.patterns {
+            let pattern = Regex::new(pattern).context("Failed to compile regex patterns")?;
+            if pattern.is_match(branch).unwrap_or(false) {
+                return Ok(true);
+            }
+        }
 
-        Ok(patterns
-            .iter()
-            .any(|pattern| pattern.is_match(branch).unwrap_or(false)))
+        Ok(false)
     }
 }
 
