@@ -789,7 +789,7 @@ impl TryFrom<RemoteHook> for MetaHook {
         let mut meta_hook = MetaHook::from_id(&hook_options.id).map_err(|()| {
             PredefinedHookWireError::UnknownId {
                 kind: PredefinedHookKind::Meta,
-                id: hook_options.id.clone(),
+                id: hook_options.id,
             }
         })?;
 
@@ -853,7 +853,7 @@ impl TryFrom<RemoteHook> for BuiltinHook {
         let mut builtin_hook = BuiltinHook::from_id(&hook_options.id).map_err(|()| {
             PredefinedHookWireError::UnknownId {
                 kind: PredefinedHookKind::Builtin,
-                id: hook_options.id.clone(),
+                id: hook_options.id,
             }
         })?;
 
