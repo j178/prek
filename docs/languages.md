@@ -71,9 +71,37 @@ Tracking: [#52](https://github.com/j178/prek/issues/52)
 
 ### coursier
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#53](https://github.com/j178/prek/issues/53)
+prek runs Coursier hooks with a system-installed `cs` or `coursier` executable.
+It does not install Coursier itself or manage JVM toolchains.
+
+Hooks can provide applications in either of the ways supported by pre-commit:
+
+- A `.pre-commit-channel/` directory in the hook repository. Each descriptor
+  file name maps to an app name, and prek installs it with
+  `cs install --default-channels=false --channel .pre-commit-channel <app>`.
+- `additional_dependencies`, passed directly to `cs fetch` and `cs install`.
+
+Example:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: scalafmt
+        name: scalafmt
+        language: coursier
+        entry: scalafmt --version
+        additional_dependencies:
+          - scalafmt:3.6.1
+```
+
+#### `language_version`
+
+Coursier does not support managed toolchain installation today. It uses the
+system `cs` or `coursier` executable, and explicit version requests are
+rejected.
 
 ### dart
 

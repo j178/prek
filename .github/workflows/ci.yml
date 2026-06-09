@@ -578,6 +578,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: "Install Coursier"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' coursier ') }}
+        uses: coursier/setup-action@fd1707a76b027efdfb66ca79318b4d29b72e5a02 # v3.0.0
+        with:
+          apps: ""
+
       - name: "Install Deno"
         if: ${{ contains(format(' {0} ', matrix.languages), ' deno ') }}
         uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4

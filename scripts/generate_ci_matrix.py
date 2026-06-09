@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 LANGUAGE_FILTERS = {
     "bun": "test(bun::)",
+    "coursier": "test(coursier::)",
     "dart": "test(dart::)",
     "deno": "test(deno::)",
     "docker": "test(docker::) or test(docker_image::)",

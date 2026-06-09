@@ -87,6 +87,9 @@ impl EnvVars {
     // Dart related
     pub const PUB_CACHE: &'static str = "PUB_CACHE";
 
+    // Coursier related
+    pub const COURSIER_CACHE: &'static str = "COURSIER_CACHE";
+
     // Ruby related
     pub const PREK_RUBY_MIRROR: &'static str = "PREK_RUBY_MIRROR";
     pub const GEM_HOME: &'static str = "GEM_HOME";
