@@ -416,6 +416,7 @@ pub(crate) enum CacheBucket {
     Cargo,
     Deno,
     Npm,
+    Coursier,
     Prek,
 }
 
