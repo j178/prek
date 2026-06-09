@@ -60,17 +60,6 @@ async fn install_coursier_app(
     path_env: &OsStr,
     args: &[String],
 ) -> Result<()> {
-    Cmd::new(cs, "coursier fetch")
-        .current_dir(source_path)
-        .arg("fetch")
-        .args(args)
-        .env(EnvVars::PATH, path_env)
-        .env(EnvVars::COURSIER_CACHE, cache_path)
-        .check(true)
-        .output()
-        .await
-        .with_context(|| format!("Failed to fetch coursier app `{}`", args.join(" ")))?;
-
     Cmd::new(cs, "coursier install")
         .current_dir(source_path)
         .arg("install")
@@ -151,6 +140,18 @@ impl LanguageImpl for Coursier {
         }
 
         if !dependencies.is_empty() {
+            Cmd::new(&cs, "coursier fetch")
+                .current_dir(source_path)
+                .arg("fetch")
+                .args(&dependencies)
+                .env(EnvVars::PATH, &path_env)
+                .env(EnvVars::COURSIER_CACHE, &coursier_cache)
+                .check(true)
+                .output()
+                .await
+                .with_context(|| {
+                    format!("Failed to fetch coursier app `{}`", dependencies.join(" "))
+                })?;
             install_coursier_app(
                 &cs,
                 &info.env_path,
