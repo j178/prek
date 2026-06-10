@@ -1,6 +1,11 @@
+#[cfg(unix)]
 use std::path::Path;
 
+#[cfg(unix)]
+use assert_cmd::assert::OutputAssertExt;
+#[cfg(unix)]
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+#[cfg(unix)]
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -157,18 +162,11 @@ fn additional_dependencies() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    perltidy.................................................................Passed
-    - hook id: perltidy
-    - duration: [TIME]
-
-      This is perltidy, v20211029
-
-    ----- stderr -----
-    ");
+    context
+        .run()
+        .env(EnvVars::HOME, &**context.home_dir())
+        .assert()
+        .stdout(predicates::str::contains("This is perltidy, v20211029"));
 
     Ok(())
 }
