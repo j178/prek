@@ -6,7 +6,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
-use semver::Version;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -19,35 +18,6 @@ use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Perl;
-
-struct PerlInfo {
-    version: Version,
-    executable: PathBuf,
-}
-
-async fn query_perl_info() -> Result<PerlInfo> {
-    let executable = which::which("perl")
-        .context("Failed to locate perl executable. Is Perl installed and available in PATH?")?;
-
-    let stdout = Cmd::new(&executable, "get perl version")
-        .arg("-MConfig")
-        .arg("-e")
-        .arg("print $Config::Config{version}")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
-
-    let version = String::from_utf8_lossy(&stdout)
-        .trim()
-        .parse::<Version>()
-        .context("Failed to parse Perl version")?;
-
-    Ok(PerlInfo {
-        version,
-        executable,
-    })
-}
 
 impl LanguageImpl for Perl {
     async fn install(
@@ -66,9 +36,6 @@ impl LanguageImpl for Perl {
 
         debug!(%hook, target = %info.env_path.display(), "Installing Perl environment");
 
-        let perl_info = query_perl_info()
-            .await
-            .context("Failed to query Perl info")?;
         let cpan = which::which("cpan").context(
             "Failed to locate cpan executable. Is cpan installed and available in PATH?",
         )?;
@@ -86,8 +53,6 @@ impl LanguageImpl for Perl {
             .await
             .context("Failed to install Perl dependencies")?;
 
-        info.with_toolchain(perl_info.executable)
-            .with_language_version(perl_info.version);
         info.persist_env_path();
 
         reporter.on_install_complete(progress);
