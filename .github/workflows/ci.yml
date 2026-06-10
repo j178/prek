@@ -252,7 +252,7 @@ jobs:
           persist-credentials: false
 
       - name: Create Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+        run: ${{ github.workspace }}/.github/scripts/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
@@ -422,7 +422,7 @@ jobs:
           persist-credentials: false
 
       - name: Create Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+        run: ${{ github.workspace }}/.github/scripts/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
@@ -457,8 +457,6 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
@@ -522,8 +520,11 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
-        if: ${{ matrix.os == 'windows-latest' }}
+      # LuaRocks may compile native Lua modules, such as luafilesystem, on Windows.
+      - name: "Setup MSVC"
+        if: ${{ matrix.os == 'windows-latest' && contains(format(' {0} ', matrix.languages), ' lua ') }}
+        shell: pwsh
+        run: ./.github/scripts/setup-msvc.ps1
 
       - name: "Install uv"
         if: ${{ contains(format(' {0} ', matrix.languages), ' python ') }}

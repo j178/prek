@@ -132,19 +132,6 @@
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false
     },
-    // Disable updates for the msvc-dev-cmd action, the latest version does not work.
-    {
-      matchManagers: [
-        "github-actions"
-      ],
-      matchDepTypes: [
-        "action"
-      ],
-      matchDepNames: [
-        "ilammy/msvc-dev-cmd"
-      ],
-      enabled: false
-    },
     {
       matchManagers: ["custom.regex"],
       matchDepNames: ["rust"],
