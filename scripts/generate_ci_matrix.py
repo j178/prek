@@ -8,25 +8,35 @@ import argparse
 import json
 from dataclasses import dataclass
 
-LANGUAGE_FILTERS = {
-    "bun": "test(bun::)",
-    "coursier": "test(coursier::)",
-    "dart": "test(dart::)",
-    "deno": "test(deno::)",
-    "docker": "test(docker::) or test(docker_image::)",
-    "dotnet": "test(dotnet::)",
-    "golang": "test(golang::)",
-    "haskell": "test(haskell::)",
-    "julia": "test(julia::)",
-    "lua": "test(lua::)",
-    "node": "test(node::)",
-    "python": "test(python::)",
-    "ruby": "test(ruby::)",
-    "rust": "test(rust::)",
-    "swift": "test(swift::)",
+
+@dataclass(frozen=True)
+class LanguageTest:
+    filter: str
+    duration: int
+
+
+# Approximate CI cost in seconds, based on
+# https://github.com/j178/prek/actions/runs/27252262102?pr=2197.
+# These are relative weights for balancing groups, not timeout guarantees.
+LANGUAGE_TESTS = {
+    "bun": LanguageTest("test(bun::)", 35),
+    "coursier": LanguageTest("test(coursier::)", 35),
+    "dart": LanguageTest("test(dart::)", 40),
+    "deno": LanguageTest("test(deno::)", 40),
+    "docker": LanguageTest("test(docker::) or test(docker_image::)", 30),
+    "dotnet": LanguageTest("test(dotnet::)", 125),
+    "golang": LanguageTest("test(golang::)", 90),
+    "haskell": LanguageTest("test(haskell::)", 240),
+    "julia": LanguageTest("test(julia::)", 110),
+    "lua": LanguageTest("test(lua::)", 35),
+    "node": LanguageTest("test(node::)", 35),
+    "python": LanguageTest("test(python::)", 60),
+    "ruby": LanguageTest("test(ruby::)", 60),
+    "rust": LanguageTest("test(rust::)", 125),
+    "swift": LanguageTest("test(swift::)", 90),
 }
 
-LANGUAGES = tuple(LANGUAGE_FILTERS)
+LANGUAGES = tuple(LANGUAGE_TESTS)
 
 
 @dataclass(frozen=True)
@@ -50,12 +60,40 @@ PLATFORMS = (
 )
 
 
-def chunks(items: list[str], size: int) -> list[list[str]]:
-    return [items[index : index + size] for index in range(0, len(items), size)]
+def language_groups(languages: list[str], group_size: int) -> list[list[str]]:
+    group_count = (len(languages) + group_size - 1) // group_size
+    groups: list[list[str]] = [[] for _ in range(group_count)]
+    group_durations = [0] * group_count
+    language_order = {language: index for index, language in enumerate(LANGUAGES)}
+
+    # Keep the minimum number of groups allowed by group_size, then use the
+    # longest-processing-time heuristic to approximate bin packing: place each
+    # language, starting with the most expensive one, into the currently lightest
+    # group that still has capacity.
+    for language in sorted(
+        languages,
+        key=lambda language: (-LANGUAGE_TESTS[language].duration, language_order[language]),
+    ):
+        group_index = min(
+            (
+                index
+                for index, group in enumerate(groups)
+                if len(group) < group_size
+            ),
+            key=lambda index: (group_durations[index], len(groups[index]), index),
+        )
+        groups[group_index].append(language)
+        group_durations[group_index] += LANGUAGE_TESTS[language].duration
+
+    return [
+        sorted(group, key=lambda language: language_order[language])
+        for group in groups
+        if group
+    ]
 
 
 def language_filter(languages: list[str]) -> str:
-    return " or ".join(LANGUAGE_FILTERS[language] for language in languages)
+    return " or ".join(LANGUAGE_TESTS[language].filter for language in languages)
 
 
 def ci_core_filter() -> str:
@@ -63,7 +101,7 @@ def ci_core_filter() -> str:
     excluded_languages = language_filter(list(LANGUAGES))
 
     # Keep this as a deny-list so new language test modules run in ci-core until
-    # they are deliberately added to LANGUAGE_FILTERS and the language-test matrix.
+    # they are deliberately added to LANGUAGE_TESTS and the language-test matrix.
     return (
         "not binary_id(prek::languages) or "
         f"(binary_id(prek::languages) and not ({excluded_languages}))"
@@ -73,7 +111,10 @@ def ci_core_filter() -> str:
 def generate_language_test_matrix(group_size: int) -> dict[str, list[dict[str, str | int]]]:
     include = []
     for platform in PLATFORMS:
-        for group, languages in enumerate(chunks(platform.languages(), group_size), start=1):
+        for group, languages in enumerate(
+            language_groups(platform.languages(), group_size),
+            start=1,
+        ):
             include.append(
                 {
                     "os": platform.os,
