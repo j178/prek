@@ -563,7 +563,7 @@ jobs:
 
       - name: "Install LuaRocks"
         if: ${{ contains(format(' {0} ', matrix.languages), ' lua ') }}
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
+        uses: luarocks/gh-actions-luarocks@86ccbcad8c77b22e94c96a2a08632192e2bcd62b
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
