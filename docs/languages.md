@@ -321,9 +321,20 @@ Supported formats:
 
 ### perl
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#1447](https://github.com/j178/prek/issues/1447)
+prek installs Perl hook repositories with the system `cpan` command and runs
+the configured entry from the hook environment. The repository should be a CPAN
+installable distribution, for example one with `Makefile.PL` or `Build.PL`.
+`additional_dependencies` are appended to the `cpan -T .` install step.
+
+Perl hooks require system-installed `perl` and `cpan`; prek does not download a
+Perl toolchain.
+
+#### `language_version`
+
+Perl does not support managed toolchain installation today. It uses the system
+`perl` executable, and explicit Perl version requests are rejected.
 
 ### python
 

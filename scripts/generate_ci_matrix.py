@@ -30,6 +30,7 @@ LANGUAGE_TESTS = {
     "julia": LanguageTest("test(julia::)", 110),
     "lua": LanguageTest("test(lua::)", 35),
     "node": LanguageTest("test(node::)", 35),
+    "perl": LanguageTest("test(perl::)", 90),
     "python": LanguageTest("test(python::)", 60),
     "ruby": LanguageTest("test(ruby::)", 60),
     "rust": LanguageTest("test(rust::)", 125),

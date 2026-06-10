@@ -84,6 +84,11 @@ impl EnvVars {
     pub const LUA_PATH: &'static str = "LUA_PATH";
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
 
+    // Perl related
+    pub const PERL5LIB: &'static str = "PERL5LIB";
+    pub const PERL_MB_OPT: &'static str = "PERL_MB_OPT";
+    pub const PERL_MM_OPT: &'static str = "PERL_MM_OPT";
+
     // Dart related
     pub const PUB_CACHE: &'static str = "PUB_CACHE";
 

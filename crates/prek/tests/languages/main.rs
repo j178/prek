@@ -16,6 +16,7 @@ mod haskell;
 mod julia;
 mod lua;
 mod node;
+mod perl;
 mod pygrep;
 mod python;
 mod ruby;

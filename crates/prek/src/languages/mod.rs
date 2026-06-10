@@ -29,6 +29,7 @@ mod haskell;
 mod julia;
 mod lua;
 mod node;
+mod perl;
 mod pygrep;
 mod python;
 mod ruby;
@@ -51,6 +52,7 @@ static HASKELL: haskell::Haskell = haskell::Haskell;
 static JULIA: julia::Julia = julia::Julia;
 static LUA: lua::Lua = lua::Lua;
 static NODE: node::Node = node::Node;
+static PERL: perl::Perl = perl::Perl;
 static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
 static PYTHON: python::Python = python::Python;
 static RUBY: ruby::Ruby = ruby::Ruby;
@@ -155,6 +157,7 @@ impl Language {
             | Self::Julia
             | Self::Lua
             | Self::Node
+            | Self::Perl
             | Self::Pygrep
             | Self::Python
             | Self::Ruby
@@ -162,7 +165,7 @@ impl Language {
             | Self::Script
             | Self::Swift
             | Self::System => true,
-            Self::Conda | Self::Perl | Self::R => false,
+            Self::Conda | Self::R => false,
         }
     }
 
@@ -201,14 +204,13 @@ impl Language {
             | Self::Haskell
             | Self::Lua
             | Self::Node
+            | Self::Perl
             | Self::Python
             | Self::Ruby
             | Self::Script
             | Self::Swift
             | Self::System => ShellSupport::Supported,
-            Self::Conda | Self::Perl | Self::R => {
-                ShellSupport::Unsupported("no runner is implemented yet")
-            }
+            Self::Conda | Self::R => ShellSupport::Unsupported("no runner is implemented yet"),
             Self::Dart => ShellSupport::Unsupported(
                 "`--packages` injection requires the resolved argv to contain `dart` directly",
             ),
@@ -360,6 +362,7 @@ impl Language {
             Self::Julia => JULIA.install(hook, store, reporter).await,
             Self::Lua => LUA.install(hook, store, reporter).await,
             Self::Node => NODE.install(hook, store, reporter).await,
+            Self::Perl => PERL.install(hook, store, reporter).await,
             Self::Pygrep => PYGREP.install(hook, store, reporter).await,
             Self::Python => PYTHON.install(hook, store, reporter).await,
             Self::Ruby => RUBY.install(hook, store, reporter).await,
@@ -367,9 +370,7 @@ impl Language {
             Self::Script => SCRIPT.install(hook, store, reporter).await,
             Self::Swift => SWIFT.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
-            Self::Conda | Self::Perl | Self::R => {
-                UNIMPLEMENTED.install(hook, store, reporter).await
-            }
+            Self::Conda | Self::R => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
     }
 
@@ -388,6 +389,7 @@ impl Language {
             Self::Julia => JULIA.check_health(info).await,
             Self::Lua => LUA.check_health(info).await,
             Self::Node => NODE.check_health(info).await,
+            Self::Perl => PERL.check_health(info).await,
             Self::Pygrep => PYGREP.check_health(info).await,
             Self::Python => PYTHON.check_health(info).await,
             Self::Ruby => RUBY.check_health(info).await,
@@ -395,7 +397,7 @@ impl Language {
             Self::Script => SCRIPT.check_health(info).await,
             Self::Swift => SWIFT.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
-            Self::Conda | Self::Perl | Self::R => UNIMPLEMENTED.check_health(info).await,
+            Self::Conda | Self::R => UNIMPLEMENTED.check_health(info).await,
         }
     }
 
@@ -443,6 +445,7 @@ impl Language {
             Self::Julia => JULIA.run(hook, filenames, store, reporter).await,
             Self::Lua => LUA.run(hook, filenames, store, reporter).await,
             Self::Node => NODE.run(hook, filenames, store, reporter).await,
+            Self::Perl => PERL.run(hook, filenames, store, reporter).await,
             Self::Pygrep => PYGREP.run(hook, filenames, store, reporter).await,
             Self::Python => PYTHON.run(hook, filenames, store, reporter).await,
             Self::Ruby => RUBY.run(hook, filenames, store, reporter).await,
@@ -450,9 +453,7 @@ impl Language {
             Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
             Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
             Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
-            Self::Conda | Self::Perl | Self::R => {
-                UNIMPLEMENTED.run(hook, filenames, store, reporter).await
-            }
+            Self::Conda | Self::R => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
         }
     }
 }
