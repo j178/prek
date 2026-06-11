@@ -217,21 +217,33 @@ fn warn_unmatched_hook_stages(project: &Project, hook_types: &[HookType]) {
     );
 
     let config = project.config();
-    let unmatched: Vec<(&str, Stages)> = config
-        .repos
-        .iter()
-        .flat_map(Repo::iter_hooks)
-        .filter_map(|(id, options)| {
-            // `Stage::Manual` has no git shim, so it can never be "installed" and is ignored here.
-            let required = Stages::from(
+    let mut unmatched: Vec<(&str, Stages)> = Vec::new();
+    for repo in &config.repos {
+        // A remote hook may inherit `stages` from its manifest, which we can't see without
+        // fetching the repo, so only trust explicit config-level stages and skip the rest.
+        let is_remote = matches!(repo, Repo::Remote(_));
+        for (id, options) in repo.iter_hooks() {
+            let stages = if is_remote {
+                match options.stages {
+                    Some(stages) if !stages.is_empty() => stages,
+                    _ => continue,
+                }
+            } else {
                 Stages::resolve(options.stages, config.default_stages)
+            };
+
+            // `Stage::Manual` has no git shim, so it is ignored here.
+            let required = Stages::from(
+                stages
                     .iter()
                     .filter(|&stage| stage != Stage::Manual)
                     .collect::<Vec<_>>(),
             );
-            (!required.is_empty() && !required.intersects(installed)).then_some((id, required))
-        })
-        .collect();
+            if !required.is_empty() && !required.intersects(installed) {
+                unmatched.push((id, required));
+            }
+        }
+    }
 
     if unmatched.is_empty() {
         return;
