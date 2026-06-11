@@ -89,6 +89,11 @@ impl EnvVars {
     pub const PERL_MB_OPT: &'static str = "PERL_MB_OPT";
     pub const PERL_MM_OPT: &'static str = "PERL_MM_OPT";
 
+    // Conda related
+    pub const CONDA_PREFIX: &'static str = "CONDA_PREFIX";
+    pub const PRE_COMMIT_USE_MAMBA: &'static str = "PRE_COMMIT_USE_MAMBA";
+    pub const PRE_COMMIT_USE_MICROMAMBA: &'static str = "PRE_COMMIT_USE_MICROMAMBA";
+
     // Dart related
     pub const PUB_CACHE: &'static str = "PUB_CACHE";
 

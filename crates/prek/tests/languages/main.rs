@@ -2,6 +2,7 @@
 mod common;
 
 mod bun;
+mod conda;
 mod coursier;
 mod dart;
 mod deno;
