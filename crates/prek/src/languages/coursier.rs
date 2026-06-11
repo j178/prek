@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::Path;
 use std::process::Stdio;
@@ -52,30 +51,6 @@ fn collect_channel_apps(channel_dir: &Path) -> Result<Option<Vec<String>>> {
     Ok(Some(apps))
 }
 
-async fn install_coursier_app(
-    cs: &Path,
-    env_path: &Path,
-    cache_path: &Path,
-    source_path: &Path,
-    path_env: &OsStr,
-    args: &[String],
-) -> Result<()> {
-    Cmd::new(cs, "coursier install")
-        .current_dir(source_path)
-        .arg("install")
-        .arg("--dir")
-        .arg(env_path)
-        .args(args)
-        .env(EnvVars::PATH, path_env)
-        .env(EnvVars::COURSIER_CACHE, cache_path)
-        .check(true)
-        .output()
-        .await
-        .with_context(|| format!("Failed to install coursier app `{}`", args.join(" ")))?;
-
-    Ok(())
-}
-
 impl LanguageImpl for Coursier {
     async fn install(
         &self,
@@ -85,20 +60,12 @@ impl LanguageImpl for Coursier {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let source_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
-        let channel_dir = source_path.join(PRE_COMMIT_CHANNEL_DIR);
-        let channel_apps = collect_channel_apps(&channel_dir)?;
-
         let mut dependencies = hook
             .additional_dependencies
             .iter()
             .cloned()
             .collect::<Vec<_>>();
         dependencies.sort_unstable();
-
-        if channel_apps.is_none() && dependencies.is_empty() {
-            anyhow::bail!("expected .pre-commit-channel dir or additional_dependencies");
-        }
 
         let cs = which::which("cs")
             .or_else(|_| which::which("coursier"))
@@ -118,30 +85,33 @@ impl LanguageImpl for Coursier {
         fs_err::tokio::create_dir_all(&coursier_cache).await?;
 
         let path_env = prepend_paths(&[&info.env_path]).context("Failed to join PATH")?;
+        let mut has_channel_apps = false;
 
-        if let Some(channel_apps) = channel_apps {
-            for app in channel_apps {
-                let args = vec![
-                    "--default-channels=false".to_string(),
-                    "--channel".to_string(),
-                    channel_dir.to_string_lossy().into_owned(),
-                    app,
-                ];
-                install_coursier_app(
-                    &cs,
-                    &info.env_path,
-                    &coursier_cache,
-                    source_path,
-                    &path_env,
-                    &args,
-                )
-                .await?;
+        if let Some(repo_path) = hook.repo_path() {
+            let channel_dir = repo_path.join(PRE_COMMIT_CHANNEL_DIR);
+            if let Some(channel_apps) = collect_channel_apps(&channel_dir)? {
+                has_channel_apps = true;
+                for app in channel_apps {
+                    Cmd::new(&cs, "coursier install")
+                        .arg("install")
+                        .arg("--dir")
+                        .arg(&info.env_path)
+                        .arg("--default-channels=false")
+                        .arg("--channel")
+                        .arg(&channel_dir)
+                        .arg(&app)
+                        .env(EnvVars::PATH, &path_env)
+                        .env(EnvVars::COURSIER_CACHE, &coursier_cache)
+                        .check(true)
+                        .output()
+                        .await
+                        .with_context(|| format!("Failed to install coursier app `{app}`"))?;
+                }
             }
         }
 
         if !dependencies.is_empty() {
             Cmd::new(&cs, "coursier fetch")
-                .current_dir(source_path)
                 .arg("fetch")
                 .args(&dependencies)
                 .env(EnvVars::PATH, &path_env)
@@ -152,15 +122,24 @@ impl LanguageImpl for Coursier {
                 .with_context(|| {
                     format!("Failed to fetch coursier app `{}`", dependencies.join(" "))
                 })?;
-            install_coursier_app(
-                &cs,
-                &info.env_path,
-                &coursier_cache,
-                source_path,
-                &path_env,
-                &dependencies,
-            )
-            .await?;
+            Cmd::new(&cs, "coursier install")
+                .arg("install")
+                .arg("--dir")
+                .arg(&info.env_path)
+                .args(&dependencies)
+                .env(EnvVars::PATH, path_env)
+                .env(EnvVars::COURSIER_CACHE, &coursier_cache)
+                .check(true)
+                .output()
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to install coursier app `{}`",
+                        dependencies.join(" ")
+                    )
+                })?;
+        } else if !has_channel_apps {
+            anyhow::bail!("expected `.pre-commit-channel` directory or `additional_dependencies`");
         }
 
         info.with_toolchain(cs);

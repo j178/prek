@@ -1,4 +1,5 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -48,10 +49,20 @@ fn pre_commit_channel() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestContext::new();
-    context.init_project();
+    let hook_repo = TestContext::new();
+    hook_repo.init_project();
 
-    let channel_dir = context.work_dir().child(".pre-commit-channel");
+    hook_repo
+        .work_dir()
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r"
+            - id: echo-java
+              name: echo-java
+              language: coursier
+              entry: echo-java Hello World from coursier
+        "})?;
+
+    let channel_dir = hook_repo.work_dir().child(".pre-commit-channel");
     channel_dir.create_dir_all()?;
     channel_dir
         .child("echo-java.json")
@@ -62,18 +73,23 @@ fn pre_commit_channel() -> anyhow::Result<()> {
             }
         "#})?;
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    hook_repo.git_add(".");
+    hook_repo.git_commit("Add coursier hook");
+    hook_repo.git_tag("v1.0.0");
+
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
         repos:
-          - repo: local
+          - repo: {}
+            rev: v1.0.0
             hooks:
               - id: echo-java
-                name: echo-java
-                language: coursier
-                entry: echo-java Hello World from coursier
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
+    ", hook_repo.work_dir().display()});
 
     context.git_add(".");
 
@@ -94,9 +110,13 @@ fn pre_commit_channel() -> anyhow::Result<()> {
 }
 
 #[test]
-fn missing_channel_and_dependencies() {
+fn local_pre_commit_channel_is_ignored() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
+
+    let channel_dir = context.work_dir().child(".pre-commit-channel");
+    channel_dir.create_dir_all()?;
+    channel_dir.child("scalafmt.json").write_str("{}")?;
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -119,6 +139,8 @@ fn missing_channel_and_dependencies() {
 
     ----- stderr -----
     error: Failed to install hook `scalafmt`
-      caused by: expected .pre-commit-channel dir or additional_dependencies
+      caused by: expected `.pre-commit-channel` directory or `additional_dependencies`
     ");
+
+    Ok(())
 }
