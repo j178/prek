@@ -416,6 +416,7 @@ GitHub stars are current as of April 15, 2026.
 - [python-telegram-bot/python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot/pull/5142) <sub>29,025 stars</sub>
 - [python/cpython](https://github.com/python/cpython/issues/143148) <sub>72,330 stars</sub>
 - [simple-icons/simple-icons](https://github.com/simple-icons/simple-icons/pull/14245) <sub>24,873 stars</sub>
+- [openslide/openslide](https://github.com/openslide/openslide/pull/714) <sub>493 stars</sub>
 
 For a more comprehensive list of open-source projects using prek see the [list of dependents on github](https://github.com/j178/prek/network/dependents).
 
