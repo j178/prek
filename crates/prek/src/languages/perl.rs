@@ -53,7 +53,6 @@ impl LanguageImpl for Perl {
                 .context("Failed to install Perl dependencies")?;
         } else if !hook.additional_dependencies.is_empty() {
             Cmd::new(&cpan, "install perl dependencies")
-                .current_dir(&info.env_path)
                 .arg("-T")
                 .args(&hook.additional_dependencies)
                 .envs(perl_env(&info.env_path)?)

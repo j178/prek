@@ -60,11 +60,16 @@ impl LanguageImpl for Conda {
         }
 
         if !hook.additional_dependencies.is_empty() {
-            Cmd::new(conda, "install conda dependencies")
+            let mut install_cmd = Cmd::new(conda, "install conda dependencies");
+            install_cmd
                 .arg("install")
                 .arg("-p")
                 .arg(&info.env_path)
-                .args(&hook.additional_dependencies)
+                .args(&hook.additional_dependencies);
+            if let Some(repo_path) = hook.repo_path() {
+                install_cmd.current_dir(repo_path);
+            }
+            install_cmd
                 .check(true)
                 .output()
                 .await

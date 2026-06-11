@@ -93,6 +93,7 @@ impl LanguageImpl for Coursier {
                 has_channel_apps = true;
                 for app in channel_apps {
                     Cmd::new(&cs, "coursier install")
+                        .current_dir(repo_path)
                         .arg("install")
                         .arg("--dir")
                         .arg(&info.env_path)
@@ -111,33 +112,36 @@ impl LanguageImpl for Coursier {
         }
 
         if !dependencies.is_empty() {
-            Cmd::new(&cs, "coursier fetch")
+            let mut fetch_cmd = Cmd::new(&cs, "coursier fetch");
+            fetch_cmd
                 .arg("fetch")
                 .args(&dependencies)
                 .env(EnvVars::PATH, &path_env)
-                .env(EnvVars::COURSIER_CACHE, &coursier_cache)
-                .check(true)
-                .output()
-                .await
-                .with_context(|| {
-                    format!("Failed to fetch coursier app `{}`", dependencies.join(" "))
-                })?;
-            Cmd::new(&cs, "coursier install")
+                .env(EnvVars::COURSIER_CACHE, &coursier_cache);
+            if let Some(repo_path) = hook.repo_path() {
+                fetch_cmd.current_dir(repo_path);
+            }
+            fetch_cmd.check(true).output().await.with_context(|| {
+                format!("Failed to fetch coursier app `{}`", dependencies.join(" "))
+            })?;
+
+            let mut install_cmd = Cmd::new(&cs, "coursier install");
+            install_cmd
                 .arg("install")
                 .arg("--dir")
                 .arg(&info.env_path)
                 .args(&dependencies)
                 .env(EnvVars::PATH, path_env)
-                .env(EnvVars::COURSIER_CACHE, &coursier_cache)
-                .check(true)
-                .output()
-                .await
-                .with_context(|| {
-                    format!(
-                        "Failed to install coursier app `{}`",
-                        dependencies.join(" ")
-                    )
-                })?;
+                .env(EnvVars::COURSIER_CACHE, &coursier_cache);
+            if let Some(repo_path) = hook.repo_path() {
+                install_cmd.current_dir(repo_path);
+            }
+            install_cmd.check(true).output().await.with_context(|| {
+                format!(
+                    "Failed to install coursier app `{}`",
+                    dependencies.join(" ")
+                )
+            })?;
         } else if !has_channel_apps {
             anyhow::bail!("expected `.pre-commit-channel` directory or `additional_dependencies`");
         }

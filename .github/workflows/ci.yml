@@ -124,7 +124,7 @@ jobs:
         id: nextest
         shell: bash
         run: |
-          python3 scripts/generate-ci-matrix.py --group-size 4 --github-output >> "${GITHUB_OUTPUT}"
+          python3 scripts/generate-ci-matrix.py --group-size 5 --github-output >> "${GITHUB_OUTPUT}"
 
   lint:
     timeout-minutes: 10
