@@ -423,6 +423,19 @@ impl Stages {
     pub(crate) fn contains(self, stage: Stage) -> bool {
         (self.0 & stage.bit()) != 0
     }
+
+    pub(crate) fn intersects(self, other: Self) -> bool {
+        (self.0 & other.0) != 0
+    }
+
+    /// A hook with no `stages` (or an empty list) inherits `default_stages`,
+    /// which itself falls back to [`Stages::ALL`] when unset.
+    pub(crate) fn resolve(hook: Option<Self>, default: Option<Self>) -> Self {
+        match hook {
+            Some(stages) if !stages.is_empty() => stages,
+            _ => default.unwrap_or(Self::ALL),
+        }
+    }
 }
 
 impl Display for Stages {
@@ -1118,6 +1131,17 @@ impl<'de> Deserialize<'de> for Repo {
         }
 
         deserializer.deserialize_map(RepoVisitor)
+    }
+}
+
+impl Repo {
+    pub(crate) fn iter_hooks(&self) -> Box<dyn Iterator<Item = (&str, &HookOptions)> + '_> {
+        match self {
+            Repo::Remote(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
+            Repo::Local(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
+            Repo::Meta(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
+            Repo::Builtin(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
+        }
     }
 }
 
