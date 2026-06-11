@@ -89,14 +89,7 @@ impl HookSpec {
                 .and_then(|v| v.get(&language).cloned());
         }
 
-        if self
-            .options
-            .stages
-            .as_ref()
-            .is_none_or(|stages| stages.is_empty())
-        {
-            self.options.stages = Some(config.default_stages.unwrap_or(Stages::ALL));
-        }
+        self.options.stages = Some(Stages::resolve(self.options.stages, config.default_stages));
 
         if let Some(default_env) = &config.default_env {
             let mut env = default_env.clone();

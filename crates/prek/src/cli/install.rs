@@ -15,7 +15,7 @@ use crate::cli::run;
 use crate::cli::run::InstallCache;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::config::load_config;
+use crate::config::{Repo, Stage, Stages, load_config};
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
@@ -104,6 +104,10 @@ pub(crate) async fn install(
     } else {
         None
     };
+
+    if let Some(project) = &project {
+        warn_unmatched_hook_stages(project, &hook_types);
+    }
 
     for hook_type in hook_types {
         install_hook_script(
@@ -200,6 +204,50 @@ fn get_hook_types(
     }
 
     hook_types
+}
+
+/// Warn about configured hooks whose stages aren't covered by the hook types being installed,
+/// since their shims won't be installed and they won't run automatically.
+fn warn_unmatched_hook_stages(project: &Project, hook_types: &[HookType]) {
+    let installed = Stages::from(
+        hook_types
+            .iter()
+            .map(|&hook_type| Stage::from(hook_type))
+            .collect::<Vec<_>>(),
+    );
+
+    let config = project.config();
+    let unmatched: Vec<(&str, Stages)> = config
+        .repos
+        .iter()
+        .flat_map(Repo::iter_hooks)
+        .filter_map(|(id, options)| {
+            // `Stage::Manual` has no git shim, so it can never be "installed" and is ignored here.
+            let required = Stages::from(
+                Stages::resolve(options.stages, config.default_stages)
+                    .iter()
+                    .filter(|&stage| stage != Stage::Manual)
+                    .collect::<Vec<_>>(),
+            );
+            (!required.is_empty() && !required.intersects(installed)).then_some((id, required))
+        })
+        .collect();
+
+    if unmatched.is_empty() {
+        return;
+    }
+
+    let list = unmatched
+        .iter()
+        .map(|(id, stages)| format!("  - `{}` ({})", id.cyan(), stages.yellow()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    warn_user!(
+        "The following hooks won't run automatically because their stages aren't being installed:\n{list}\n{} install the missing hook type(s) with `{}`, or set `{}` in your config.",
+        "hint:".bold().yellow(),
+        "prek install --hook-type <type>".cyan(),
+        "default_install_hook_types".cyan(),
+    );
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
