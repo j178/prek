@@ -1912,3 +1912,57 @@ fn install_warns_on_unmatched_default_stages() {
     hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 }
+
+#[test]
+fn install_skips_remote_hook_without_config_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // A remote hook may set its stages in the manifest, so `default_stages` must not be
+    // assumed to apply here; the hook should not be reported.
+    context.write_pre_commit_config(indoc! {r"
+    default_stages: [pre-push]
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v5.0.0
+        hooks:
+          - id: trailing-whitespace
+    "});
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_warns_on_unmatched_remote_hook_with_config_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Explicit config-level stages override the manifest, so they can be trusted.
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v5.0.0
+        hooks:
+          - id: trailing-whitespace
+            stages: [pre-push]
+    "});
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    warning: The following hooks won't run automatically because their stages aren't being installed:
+      - `trailing-whitespace` (pre-push)
+    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    ");
+}
