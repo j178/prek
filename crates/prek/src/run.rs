@@ -93,6 +93,8 @@ fn arg_size<O: AsRef<OsStr>>(arg: O) -> usize {
 
 #[cfg(unix)]
 static ARG_MAX: LazyLock<usize> = LazyLock::new(|| {
+    // SAFETY: sysconf is a standard POSIX function and calling it with
+    // _SC_ARG_MAX is safe.
     let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
     if arg_max <= 0 {
         1 << 12
@@ -103,6 +105,8 @@ static ARG_MAX: LazyLock<usize> = LazyLock::new(|| {
 
 #[cfg(unix)]
 static PAGE_SIZE: LazyLock<usize> = LazyLock::new(|| {
+    // SAFETY: sysconf is a standard POSIX function and calling it with
+    // _SC_PAGE_SIZE is safe.
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
     if page_size < 4096 {
         4096

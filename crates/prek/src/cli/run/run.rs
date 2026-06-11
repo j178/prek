@@ -277,6 +277,8 @@ fn uses_only_message_file_input(hook: &Hook) -> bool {
 
 // `pre-commit` sets these environment variables for other git hooks.
 fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunExtraArgs) {
+    // SAFETY: We are in the initialization phase and there are no other
+    // threads running that could be concurrently accessing the environment.
     unsafe {
         std::env::set_var("PRE_COMMIT", "1");
 
