@@ -13,3 +13,8 @@ default-filter = "binary_id(prek::languages)"
 # LuaRocks can hit a race condition when multiple processes are installing the same package.
 filter = "test(lua::)"
 threads-required = "num-test-threads"
+
+[[profile.ci-language.overrides]]
+platform = 'cfg(windows)'
+filter = "test(perl::)"
+threads-required = "num-test-threads"
