@@ -20,6 +20,7 @@ class LanguageTest:
 # These are relative weights for balancing groups, not timeout guarantees.
 LANGUAGE_TESTS = {
     "bun": LanguageTest("test(bun::)", 35),
+    "conda": LanguageTest("test(conda::)", 30),
     "coursier": LanguageTest("test(coursier::)", 35),
     "dart": LanguageTest("test(dart::)", 40),
     "deno": LanguageTest("test(deno::)", 40),
@@ -30,7 +31,7 @@ LANGUAGE_TESTS = {
     "julia": LanguageTest("test(julia::)", 110),
     "lua": LanguageTest("test(lua::)", 35),
     "node": LanguageTest("test(node::)", 35),
-    "perl": LanguageTest("test(perl::)", 90),
+    "perl": LanguageTest("test(perl::)", 30),
     "python": LanguageTest("test(python::)", 60),
     "ruby": LanguageTest("test(ruby::)", 60),
     "rust": LanguageTest("test(rust::)", 125),
@@ -135,7 +136,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--group-size",
         type=int,
-        default=4,
+        default=5,
         help="maximum number of languages per language-test job",
     )
     parser.add_argument(

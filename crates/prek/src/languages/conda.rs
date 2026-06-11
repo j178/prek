@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -17,9 +16,9 @@ use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct Perl;
+pub(crate) struct Conda;
 
-impl LanguageImpl for Perl {
+impl LanguageImpl for Conda {
     async fn install(
         &self,
         hook: Arc<Hook>,
@@ -34,32 +33,47 @@ impl LanguageImpl for Perl {
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Perl environment");
-
-        let cpan = which::which("cpan").context(
-            "Failed to locate cpan executable. Is cpan installed and available in PATH?",
-        )?;
+        debug!(%hook, target = %info.env_path.display(), "Installing Conda environment");
+        let conda = conda_executable();
 
         if let Some(repo_path) = hook.repo_path() {
-            Cmd::new(&cpan, "install perl dependencies")
+            Cmd::new(conda, "create conda environment")
                 .current_dir(repo_path)
-                .arg("-T")
-                .arg(".")
-                .args(&hook.additional_dependencies)
-                .envs(perl_env(&info.env_path)?)
+                .arg("create")
+                .arg("-p")
+                .arg(&info.env_path)
+                .arg("--file")
+                .arg("environment.yml")
                 .check(true)
                 .output()
                 .await
-                .context("Failed to install Perl dependencies")?;
-        } else if !hook.additional_dependencies.is_empty() {
-            Cmd::new(&cpan, "install perl dependencies")
-                .arg("-T")
-                .args(&hook.additional_dependencies)
-                .envs(perl_env(&info.env_path)?)
+                .context("Failed to create Conda environment")?;
+        } else {
+            Cmd::new(conda, "create conda environment")
+                .arg("create")
+                .arg("-p")
+                .arg(&info.env_path)
                 .check(true)
                 .output()
                 .await
-                .context("Failed to install Perl dependencies")?;
+                .context("Failed to create Conda environment")?;
+        }
+
+        if !hook.additional_dependencies.is_empty() {
+            let mut install_cmd = Cmd::new(conda, "install conda dependencies");
+            install_cmd
+                .arg("install")
+                .arg("-p")
+                .arg(&info.env_path)
+                .args(&hook.additional_dependencies);
+            if let Some(repo_path) = hook.repo_path() {
+                install_cmd.current_dir(repo_path);
+            }
+            install_cmd
+                .check(true)
+                .output()
+                .await
+                .context("Failed to install Conda dependencies")?;
         }
 
         info.persist_env_path();
@@ -85,16 +99,18 @@ impl LanguageImpl for Perl {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let env_dir = hook.env_path().expect("Perl must have env path");
-        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
+        let env_dir = hook.env_path().expect("Conda must have env path");
+        let new_path = conda_path(env_dir).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run perl hook")
+            let mut output = Cmd::new(&entry[0], "run conda hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
-                .envs(perl_env(env_dir)?)
+                .env(EnvVars::CONDA_PREFIX, env_dir)
+                .env_remove(EnvVars::PYTHONHOME)
+                .env_remove(EnvVars::VIRTUAL_ENV)
                 .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
@@ -126,34 +142,31 @@ impl LanguageImpl for Perl {
     }
 }
 
-fn bin_dir(env_path: &Path) -> PathBuf {
-    env_path.join("bin")
+fn conda_executable() -> &'static str {
+    if EnvVars::is_set(EnvVars::PRE_COMMIT_USE_MICROMAMBA) {
+        "micromamba"
+    } else if EnvVars::is_set(EnvVars::PRE_COMMIT_USE_MAMBA) {
+        "mamba"
+    } else {
+        "conda"
+    }
 }
 
-fn perl_env(env_path: &Path) -> Result<[(&'static str, OsString); 3]> {
-    let env_path_str = env_path.to_string_lossy();
-    let quoted_env_path = shlex::try_quote(&env_path_str)
-        .context("Failed to quote Perl environment path")?
-        .into_owned();
+fn conda_path(env_path: &Path) -> Result<std::ffi::OsString, std::env::JoinPathsError> {
+    let paths = conda_path_dirs(env_path);
+    let paths = paths.iter().map(PathBuf::as_path).collect::<Vec<_>>();
+    prepend_paths(&paths)
+}
 
-    Ok([
-        (
-            // PERL5LIB makes Perl load modules installed into this hook env at runtime.
-            EnvVars::PERL5LIB,
-            env_path.join("lib").join("perl5").into_os_string(),
-        ),
-        (
-            // PERL_MB_OPT is consumed by Module::Build installers to install into this hook env.
-            EnvVars::PERL_MB_OPT,
-            format!("--install_base {quoted_env_path}").into(),
-        ),
-        (
-            // PERL_MM_OPT is consumed by ExtUtils::MakeMaker installers to install into this hook env.
-            EnvVars::PERL_MM_OPT,
-            format!(
-                "INSTALL_BASE={quoted_env_path} INSTALLSITEMAN1DIR=none INSTALLSITEMAN3DIR=none"
-            )
-            .into(),
-        ),
-    ])
+fn conda_path_dirs(env_path: &Path) -> Vec<PathBuf> {
+    if cfg!(windows) {
+        vec![
+            env_path.join("Library").join("bin"),
+            env_path.join("Scripts"),
+            env_path.to_path_buf(),
+            env_path.join("bin"),
+        ]
+    } else {
+        vec![env_path.join("bin")]
+    }
 }

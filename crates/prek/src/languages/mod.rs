@@ -17,6 +17,7 @@ use crate::hooks;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 mod bun;
+mod conda;
 mod coursier;
 mod dart;
 mod deno;
@@ -40,6 +41,7 @@ mod system;
 pub(crate) mod version;
 
 static BUN: bun::Bun = bun::Bun;
+static CONDA: conda::Conda = conda::Conda;
 static COURSIER: coursier::Coursier = coursier::Coursier;
 static DART: dart::Dart = dart::Dart;
 static DENO: deno::Deno = deno::Deno;
@@ -145,6 +147,7 @@ impl Language {
     pub(crate) fn supported(self) -> bool {
         match self {
             Self::Bun
+            | Self::Conda
             | Self::Coursier
             | Self::Dart
             | Self::Deno
@@ -165,7 +168,7 @@ impl Language {
             | Self::Script
             | Self::Swift
             | Self::System => true,
-            Self::Conda | Self::R => false,
+            Self::R => false,
         }
     }
 
@@ -197,6 +200,7 @@ impl Language {
     pub(crate) fn shell_support(self) -> ShellSupport {
         match self {
             Self::Bun
+            | Self::Conda
             | Self::Coursier
             | Self::Deno
             | Self::Dotnet
@@ -210,7 +214,7 @@ impl Language {
             | Self::Script
             | Self::Swift
             | Self::System => ShellSupport::Supported,
-            Self::Conda | Self::R => ShellSupport::Unsupported("no runner is implemented yet"),
+            Self::R => ShellSupport::Unsupported("no runner is implemented yet"),
             Self::Dart => ShellSupport::Unsupported(
                 "`--packages` injection requires the resolved argv to contain `dart` directly",
             ),
@@ -370,7 +374,8 @@ impl Language {
             Self::Script => SCRIPT.install(hook, store, reporter).await,
             Self::Swift => SWIFT.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
-            Self::Conda | Self::R => UNIMPLEMENTED.install(hook, store, reporter).await,
+            Self::Conda => CONDA.install(hook, store, reporter).await,
+            Self::R => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
     }
 
@@ -397,7 +402,8 @@ impl Language {
             Self::Script => SCRIPT.check_health(info).await,
             Self::Swift => SWIFT.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
-            Self::Conda | Self::R => UNIMPLEMENTED.check_health(info).await,
+            Self::Conda => CONDA.check_health(info).await,
+            Self::R => UNIMPLEMENTED.check_health(info).await,
         }
     }
 
@@ -453,7 +459,8 @@ impl Language {
             Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
             Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
             Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
-            Self::Conda | Self::R => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
+            Self::Conda => CONDA.run(hook, filenames, store, reporter).await,
+            Self::R => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
         }
     }
 }

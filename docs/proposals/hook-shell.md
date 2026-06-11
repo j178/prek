@@ -171,7 +171,7 @@ the hook command on the host.
     | `fail` | `entry` is the failure message body. |
     | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
     | `pygrep` | `entry` is the regex pattern. |
-    | `conda`, `r` | The language backend is not implemented yet. |
+    | `r` | The language backend is not implemented yet. |
 
     Predefined `repo: meta` and `repo: builtin` hooks should reject `shell` as
     well, because their entries are owned by prek.

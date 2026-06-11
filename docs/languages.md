@@ -65,9 +65,38 @@ Supported formats:
 
 ### conda
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#52](https://github.com/j178/prek/issues/52)
+For remote hooks, prek creates a Conda environment from the hook repository's
+`environment.yml` and runs the configured entry from that environment. For
+`repo: local` hooks, prek creates a minimal Conda environment and installs only
+the hook's `additional_dependencies`.
+
+By default, prek uses a system-installed `conda` executable. For compatibility
+with pre-commit, setting `PRE_COMMIT_USE_MAMBA` uses `mamba`, and setting
+`PRE_COMMIT_USE_MICROMAMBA` uses `micromamba`.
+
+`additional_dependencies` are installed into the created environment with
+`conda install -p <env> ...` using the selected Conda-compatible executable.
+
+Example:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: conda-hook
+        name: Conda hook
+        language: conda
+        entry: python -c "import colorama; print('ok')"
+        additional_dependencies: [colorama]
+```
+
+#### `language_version`
+
+Conda does not support managed toolchain installation today. The Python or
+package versions should be declared in `environment.yml`; explicit
+`language_version` requests are rejected.
 
 ### coursier
 
