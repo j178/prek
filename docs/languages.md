@@ -78,7 +78,7 @@ It does not install Coursier itself or manage JVM toolchains.
 
 Hooks can provide applications in either of the ways supported by pre-commit:
 
-- A `.pre-commit-channel/` directory in the hook repository. Each descriptor
+- A `.pre-commit-channel/` directory in a remote hook repository. Each descriptor
   file name maps to an app name, and prek installs it with
   `cs install --default-channels=false --channel .pre-commit-channel <app>`.
 - `additional_dependencies`, passed directly to `cs fetch` and `cs install`.
@@ -323,10 +323,12 @@ Supported formats:
 
 **Status in prek:** ✅ Supported.
 
-prek installs Perl hook repositories with the system `cpan` command and runs
-the configured entry from the hook environment. The repository should be a CPAN
-installable distribution, for example one with `Makefile.PL` or `Build.PL`.
-`additional_dependencies` are appended to the `cpan -T .` install step.
+prek installs remote Perl hook repositories with the system `cpan` command and
+runs the configured entry from the hook environment. Remote hook repositories
+should be CPAN installable distributions, for example with `Makefile.PL` or
+`Build.PL`. Local Perl hooks skip repository installation and install only
+their `additional_dependencies`, so simple entries such as `perl script.pl` do
+not require the project itself to be a CPAN distribution.
 
 Perl hooks require system-installed `perl` and `cpan`; prek does not download a
 Perl toolchain.

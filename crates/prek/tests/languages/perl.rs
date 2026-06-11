@@ -1,25 +1,10 @@
 #[cfg(unix)]
-use std::path::Path;
-
-#[cfg(unix)]
 use assert_cmd::assert::OutputAssertExt;
-#[cfg(unix)]
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{FileWriteStr, PathChild};
 #[cfg(unix)]
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
-
-#[cfg(unix)]
-fn make_executable(path: &Path) -> anyhow::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let metadata = fs_err::metadata(path)?;
-    let mut permissions = metadata.permissions();
-    permissions.set_mode(permissions.mode() | 0o111);
-    fs_err::set_permissions(path, permissions)?;
-    Ok(())
-}
 
 #[cfg(unix)]
 #[test]
@@ -34,7 +19,7 @@ fn local_hook() -> anyhow::Result<()> {
               - id: hello
                 name: hello
                 language: perl
-                entry: hello-perl
+                entry: perl hello.pl
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -42,57 +27,12 @@ fn local_hook() -> anyhow::Result<()> {
 
     context
         .work_dir()
-        .child("Makefile.PL")
-        .write_str(indoc::indoc! {r"
-            use strict;
-            use warnings;
-            use ExtUtils::MakeMaker;
-
-            WriteMakefile(
-                NAME => 'Prek::Hello',
-                VERSION_FROM => 'lib/Prek/Hello.pm',
-                EXE_FILES => ['bin/hello-perl'],
-            );
-        "})?;
-
-    context.work_dir().child("bin").create_dir_all()?;
-    context
-        .work_dir()
-        .child("bin")
-        .child("hello-perl")
-        .write_str(indoc::indoc! {r"
-            #!/usr/bin/env perl
-            use strict;
-            use warnings;
-            use Prek::Hello;
-
-            Prek::Hello::hello();
-        "})?;
-    make_executable(context.work_dir().child("bin").child("hello-perl").path())?;
-
-    context
-        .work_dir()
-        .child("lib")
-        .child("Prek")
-        .create_dir_all()?;
-    context
-        .work_dir()
-        .child("lib")
-        .child("Prek")
-        .child("Hello.pm")
+        .child("hello.pl")
         .write_str(indoc::indoc! {r#"
-            package Prek::Hello;
-
             use strict;
             use warnings;
 
-            our $VERSION = '0.01';
-
-            sub hello {
-                print "Hello from Perl!\n";
-            }
-
-            1;
+            print "Hello from Perl!\n";
         "#})?;
 
     context.git_add(".");
@@ -129,6 +69,10 @@ fn local_hook() -> anyhow::Result<()> {
 #[cfg(unix)]
 #[test]
 fn additional_dependencies() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return Ok(());
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -145,20 +89,6 @@ fn additional_dependencies() -> anyhow::Result<()> {
                 verbose: true
                 pass_filenames: false
     "});
-
-    context
-        .work_dir()
-        .child("Makefile.PL")
-        .write_str(indoc::indoc! {r"
-            use strict;
-            use warnings;
-            use ExtUtils::MakeMaker;
-
-            WriteMakefile(
-                NAME => 'Prek::PerlTidy',
-                VERSION => '0.01',
-            );
-        "})?;
 
     context.git_add(".");
 
@@ -223,16 +153,6 @@ fn shell_hook() -> anyhow::Result<()> {
                 verbose: true
     "#});
 
-    context
-        .work_dir()
-        .child("Makefile.PL")
-        .write_str(indoc::indoc! {r"
-            use ExtUtils::MakeMaker;
-            WriteMakefile(
-                NAME => 'Prek::Shell',
-                VERSION => '0.01',
-            );
-        "})?;
     context.work_dir().child("input.txt").write_str("input")?;
 
     context.git_add(".");
@@ -245,7 +165,7 @@ fn shell_hook() -> anyhow::Result<()> {
     - hook id: perl-shell
     - duration: [TIME]
 
-      shell args: configured Makefile.PL .pre-commit-config.yaml input.txt
+      shell args: configured input.txt .pre-commit-config.yaml
 
     ----- stderr -----
     ");

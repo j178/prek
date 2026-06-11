@@ -40,18 +40,28 @@ impl LanguageImpl for Perl {
             "Failed to locate cpan executable. Is cpan installed and available in PATH?",
         )?;
 
-        let source_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
-
-        Cmd::new(&cpan, "install perl dependencies")
-            .current_dir(source_path)
-            .arg("-T")
-            .arg(".")
-            .args(&hook.additional_dependencies)
-            .envs(perl_env(&info.env_path)?)
-            .check(true)
-            .output()
-            .await
-            .context("Failed to install Perl dependencies")?;
+        if let Some(repo_path) = hook.repo_path() {
+            Cmd::new(&cpan, "install perl dependencies")
+                .current_dir(repo_path)
+                .arg("-T")
+                .arg(".")
+                .args(&hook.additional_dependencies)
+                .envs(perl_env(&info.env_path)?)
+                .check(true)
+                .output()
+                .await
+                .context("Failed to install Perl dependencies")?;
+        } else if !hook.additional_dependencies.is_empty() {
+            Cmd::new(&cpan, "install perl dependencies")
+                .current_dir(&info.env_path)
+                .arg("-T")
+                .args(&hook.additional_dependencies)
+                .envs(perl_env(&info.env_path)?)
+                .check(true)
+                .output()
+                .await
+                .context("Failed to install Perl dependencies")?;
+        }
 
         info.persist_env_path();
 
