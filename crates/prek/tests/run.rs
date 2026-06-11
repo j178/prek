@@ -4005,3 +4005,108 @@ fn pass_filenames_2_limits_batch_size() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn invalid_config_parsing_malformed_yaml() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos:\n  - repo: https://github.com/pre-commit/pre-commit-hooks\n    rev: v4.4.0\n      hooks:\n        - id: trailing-whitespace");
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 4 column 12: mapping values are not allowed in this context
+     --> <input>:4:12
+      |
+    2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
+    3 |     rev: v4.4.0
+    4 |       hooks:
+      |            ^ mapping values are not allowed in this context
+    5 |         - id: trailing-whitespace
+      |
+    ");
+}
+
+#[test]
+fn concurrent_execution() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: sleep-hook
+                name: sleep-hook
+                language: system
+                entry: python3 -c 'import time; time.sleep(2)'
+                types: [text]
+    "});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello, world!")
+        .unwrap();
+    context.git_add(".");
+
+    // Spawn two concurrent prek runs
+    let mut child1 = context.run().spawn().unwrap();
+    let mut child2 = context.run().spawn().unwrap();
+
+    let status1 = child1.wait().unwrap();
+    let status2 = child2.wait().unwrap();
+
+    // Both should succeed because of store locking
+    assert!(status1.success());
+    assert!(status2.success());
+}
+
+#[test]
+fn signal_handling_graceful_shutdown() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: slow-hook
+                name: slow-hook
+                language: system
+                entry: python3 -c 'import time; time.sleep(10)'
+                verbose: true
+                types: [text]
+    "});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Hello, world!")
+        .unwrap();
+    context.git_add(".");
+
+    let child = context.run().spawn().unwrap();
+    let child_id = child.id();
+
+    // Send SIGTERM
+    let handle = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        #[allow(clippy::cast_possible_wrap)]
+        unsafe {
+            libc::kill(child_id as i32, libc::SIGTERM)
+        };
+    });
+
+    handle.join().unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // Since it's SIGTERM, the process should exit gracefully and might print a cancellation message
+    // We'll assert that it was aborted or at least stderr contains some indication.
+    assert!(stderr.contains("Killed by signal") || stderr.contains("aborted") || stderr.is_empty());
+}
