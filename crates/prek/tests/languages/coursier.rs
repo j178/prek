@@ -1,15 +1,10 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
 
 #[test]
 fn additional_dependencies() {
-    if !EnvVars::is_set(EnvVars::CI) {
-        return;
-    }
-
     let context = TestContext::new();
     context.init_project();
 
@@ -45,10 +40,6 @@ fn additional_dependencies() {
 
 #[test]
 fn pre_commit_channel() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
-        return Ok(());
-    }
-
     let hook_repo = TestContext::new();
     hook_repo.init_project();
 

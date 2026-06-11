@@ -22,10 +22,6 @@ impl Args {
             return Ok(true);
         }
 
-        if self.patterns.is_empty() {
-            return Ok(false);
-        }
-
         for pattern in &self.patterns {
             let pattern = Regex::new(pattern).context("Failed to compile regex patterns")?;
             if pattern.is_match(branch).unwrap_or(false) {

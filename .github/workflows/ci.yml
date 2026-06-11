@@ -616,6 +616,12 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: "Check Perl and CPAN"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' perl ') }}
+        run: |
+          perl -V:version
+          perl -MCPAN -e 'print "CPAN $CPAN::VERSION\n"'
+
       - name: "Run language tests"
         if: ${{ matrix.os != 'windows-latest' }}
         env:
