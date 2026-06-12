@@ -743,7 +743,7 @@ When `shell` is set, `entry` is treated as source for that shell. `prek` writes 
     | `fail` | `entry` is the failure message body. |
     | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
     | `pygrep` | `entry` is the regex pattern. |
-    | `r` | The language backend is not implemented yet. |
+    | `r` | `entry` must use the R backend's `Rscript -e <expr>` or `Rscript <file>` forms. |
 
 ### `language`
 
