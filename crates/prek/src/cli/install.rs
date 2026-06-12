@@ -105,8 +105,8 @@ pub(crate) async fn install(
         None
     };
 
-    if let Some(project) = &project {
-        warn_unmatched_hook_stages(project, &hook_types);
+    if project.is_some() {
+        warn_unmatched_hook_stages(store, config.as_deref(), refresh, &hook_types);
     }
 
     for hook_type in hook_types {
@@ -208,7 +208,12 @@ fn get_hook_types(
 
 /// Warn about configured hooks whose stages aren't covered by the hook types being installed,
 /// since their shims won't be installed and they won't run automatically.
-fn warn_unmatched_hook_stages(project: &Project, hook_types: &[HookType]) {
+fn warn_unmatched_hook_stages(
+    store: &Store,
+    config: Option<&Path>,
+    refresh: bool,
+    hook_types: &[HookType],
+) {
     let installed = Stages::from(
         hook_types
             .iter()
@@ -216,31 +221,43 @@ fn warn_unmatched_hook_stages(project: &Project, hook_types: &[HookType]) {
             .collect::<Vec<_>>(),
     );
 
-    let config = project.config();
-    let mut unmatched: Vec<(&str, Stages)> = Vec::new();
-    for repo in &config.repos {
-        // A remote hook may inherit `stages` from its manifest, which we can't see without
-        // fetching the repo, so only trust explicit config-level stages and skip the rest.
-        let is_remote = matches!(repo, Repo::Remote(_));
-        for (id, options) in repo.iter_hooks() {
-            let stages = if is_remote {
-                match options.stages {
-                    Some(stages) if !stages.is_empty() => stages,
-                    _ => continue,
-                }
-            } else {
-                Stages::resolve(options.stages, config.default_stages)
-            };
+    // A plain root install runs every workspace project, so scan them all, the same way `run` does.
+    let Ok(root) = Workspace::find_root(config, &CWD) else {
+        return;
+    };
+    let Ok(workspace) =
+        Workspace::discover(store, root, config.map(Path::to_path_buf), None, refresh)
+    else {
+        return;
+    };
 
-            // `Stage::Manual` has no git shim, so it is ignored here.
-            let required = Stages::from(
-                stages
-                    .iter()
-                    .filter(|&stage| stage != Stage::Manual)
-                    .collect::<Vec<_>>(),
-            );
-            if !required.is_empty() && !required.intersects(installed) {
-                unmatched.push((id, required));
+    let mut unmatched: Vec<(&str, Stages)> = Vec::new();
+    for project in workspace.projects() {
+        let config = project.config();
+        for repo in &config.repos {
+            // A remote hook may inherit `stages` from its manifest, which we can't see without
+            // fetching the repo, so only trust explicit config-level stages and skip the rest.
+            let is_remote = matches!(repo, Repo::Remote(_));
+            for (id, options) in repo.iter_hooks() {
+                let stages = if is_remote {
+                    match options.stages {
+                        Some(stages) if !stages.is_empty() => stages,
+                        _ => continue,
+                    }
+                } else {
+                    Stages::resolve(options.stages, config.default_stages)
+                };
+
+                // `Stage::Manual` has no git shim, so it is ignored here.
+                let required = Stages::from(
+                    stages
+                        .iter()
+                        .filter(|&stage| stage != Stage::Manual)
+                        .collect::<Vec<_>>(),
+                );
+                if !required.is_empty() && !required.intersects(installed) {
+                    unmatched.push((id, required));
+                }
             }
         }
     }
