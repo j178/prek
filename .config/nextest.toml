@@ -18,3 +18,8 @@ threads-required = "num-test-threads"
 platform = 'cfg(windows)'
 filter = "test(perl::)"
 threads-required = "num-test-threads"
+
+[[profile.ci-language.overrides]]
+# R package installs can share user-level cache and lock state.
+filter = "test(r::)"
+threads-required = "num-test-threads"

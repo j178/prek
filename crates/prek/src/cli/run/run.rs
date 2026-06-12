@@ -429,7 +429,6 @@ fn select_hooks_to_install<'paths>(
 
                 let mut candidates = hooks
                     .into_iter()
-                    .filter(|hook| hook.language.supported())
                     .map(|hook| {
                         let matches = hook.always_run;
                         (hook, matches)
@@ -476,7 +475,7 @@ fn select_hooks_to_install<'paths>(
                 };
 
                 let project_input = ProjectHookInput::new(input, project, None, None)?;
-                for hook in hooks.into_iter().filter(|hook| hook.language.supported()) {
+                for hook in hooks {
                     if hook.always_run || project_input.matches_hook(&hook, tag_cache) {
                         hooks_to_install.push(hook);
                     }
@@ -675,7 +674,6 @@ struct HookRunSession<'a> {
     verbose: bool,
     success: bool,
     file_modified: bool,
-    has_unimplemented: bool,
 }
 
 impl<'a> HookRunSession<'a> {
@@ -700,7 +698,6 @@ impl<'a> HookRunSession<'a> {
             verbose,
             success: true,
             file_modified: false,
-            has_unimplemented: false,
         }
     }
 
@@ -931,8 +928,6 @@ impl<'a> HookRunSession<'a> {
             .suspend(|| self.render_priority_group(&results, modified_files, hook_prefix))?;
 
         for RunResult { status, .. } in &results {
-            self.has_unimplemented |= status.is_unimplemented();
-
             let ok = if modified_files {
                 false
             } else {
@@ -998,7 +993,7 @@ impl<'a> HookRunSession<'a> {
             self.status_printer
                 .write(&result.hook.name, &prefix, status)?;
 
-            if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
+            if matches!(status, RunStatus::NoFiles) {
                 continue;
             }
 
@@ -1078,13 +1073,6 @@ impl<'a> HookRunSession<'a> {
         show_diff_on_failure: bool,
     ) -> Result<ExitStatus> {
         self.reporter.on_complete();
-
-        if self.has_unimplemented {
-            warn_user!(
-                "Some hooks were skipped because their languages are unimplemented.\nWe're working hard to support more languages. Check out current support status at {}.",
-                "https://prek.j178.dev/languages/".cyan().underline()
-            );
-        }
 
         if !self.success && show_diff_on_failure && self.file_modified {
             if EnvVars::is_under_ci() {
@@ -1300,23 +1288,15 @@ enum RunStatus {
     Failed,
     DryRun,
     NoFiles,
-    Unimplemented,
 }
 
 impl RunStatus {
     fn as_bool(self) -> bool {
-        matches!(
-            self,
-            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented
-        )
-    }
-
-    fn is_unimplemented(self) -> bool {
-        matches!(self, Self::Unimplemented)
+        matches!(self, Self::Success | Self::NoFiles | Self::DryRun)
     }
 
     fn is_skipped(self) -> bool {
-        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented)
+        matches!(self, Self::DryRun | Self::NoFiles)
     }
 }
 
@@ -1331,7 +1311,6 @@ impl StatusPrinter {
     const SKIPPED: &'static str = "Skipped";
     const DRY_RUN: &'static str = "Dry Run";
     const NO_FILES: &'static str = "(no files to check)";
-    const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
 
     fn for_hooks<T>(hooks: &[T], printer: Printer) -> Self
     where
@@ -1368,11 +1347,6 @@ impl StatusPrinter {
             RunStatus::NoFiles => (
                 Self::NO_FILES,
                 Self::SKIPPED.black().on_cyan().to_string(),
-                Self::SKIPPED.width(),
-            ),
-            RunStatus::Unimplemented => (
-                Self::UNIMPLEMENTED,
-                Self::SKIPPED.black().on_yellow().to_string(),
                 Self::SKIPPED.width(),
             ),
             RunStatus::DryRun => (
@@ -1453,10 +1427,6 @@ async fn run_hook(
     if !matched && !hook.always_run {
         return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
-    if !hook.language.supported() {
-        return Ok(RunResult::from_status(hook, RunStatus::Unimplemented));
-    }
-
     let start = std::time::Instant::now();
     input.shuffle();
 
