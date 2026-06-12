@@ -27,7 +27,7 @@ fn local_hook() {
     success: true
     exit_code: 0
     ----- stdout -----
-    r-local.................................................................Passed
+    r-local..................................................................Passed
     - hook id: r-local
     - duration: [TIME]
 
@@ -52,7 +52,7 @@ fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
                 name: r-local-dep
                 language: r
                 entry: Rscript -e 'localdep::hello()'
-                additional_dependencies: [localdep]
+                additional_dependencies: [./localdep]
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -64,7 +64,7 @@ fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    r-local-dep.............................................................Passed
+    r-local-dep..............................................................Passed
     - hook id: r-local-dep
     - duration: [TIME]
 
@@ -119,7 +119,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    r-remote................................................................Passed
+    r-remote.................................................................Passed
     - hook id: r-remote
     - duration: [TIME]
 
@@ -198,15 +198,22 @@ fn write_renv_project(context: &TestContext) -> anyhow::Result<()> {
         .write_str(indoc::indoc! {r#"
             {
               "R": {
-                "Version": "4.4.0",
+                "Version": "4.6.0",
                 "Repositories": [
                   {
                     "Name": "CRAN",
-                    "URL": "https://cloud.r-project.org"
+                    "URL": "https://cran.rstudio.com"
                   }
                 ]
               },
-              "Packages": {}
+              "Packages": {
+                "renv": {
+                  "Package": "renv",
+                  "Version": "1.2.3",
+                  "Source": "Repository",
+                  "Repository": "CRAN"
+                }
+              }
             }
         "#})?;
     let renv_dir = context.work_dir().child("renv");
@@ -216,8 +223,15 @@ fn write_renv_project(context: &TestContext) -> anyhow::Result<()> {
             dir.create(lib_dir, recursive = TRUE, showWarnings = FALSE)
             .libPaths(c(lib_dir, .libPaths()))
             if (!requireNamespace("renv", quietly = TRUE)) {
-              install.packages("renv", lib = lib_dir, repos = c(CRAN = "https://cran.rstudio.com"))
+              install.packages(
+                "renv",
+                lib = lib_dir,
+                repos = c(CRAN = "https://cran.rstudio.com"),
+                type = .Platform$pkgType
+              )
             }
+            renv::load(getwd(), quiet = TRUE)
         "#})?;
+
     Ok(())
 }

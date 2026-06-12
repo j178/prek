@@ -42,7 +42,7 @@ impl LanguageImpl for R {
         if let Some(repo_path) = hook.repo_path() {
             fs_err::tokio::copy(repo_path.join("renv.lock"), info.env_path.join("renv.lock"))
                 .await?;
-            copy_dir_all(&repo_path.join("renv"), &info.env_path.join("renv"))?;
+            copy_dir_all(repo_path.join("renv"), info.env_path.join("renv")).await?;
 
             // Remote R hooks carry a renv project. Let renv/activate.R bootstrap
             // renv and choose the project library instead of overriding .libPaths.
@@ -177,17 +177,24 @@ async fn run_r_code(
     args: &FxHashSet<String>,
     cwd: &Path,
 ) -> Result<()> {
-    Cmd::new(rscript, summary)
-        .current_dir(cwd)
-        .arg("--vanilla")
-        .arg("-e")
-        .arg(indoc::formatdoc! {r#"
+    let script_dir = tempfile::tempdir()?;
+    let script_path = script_dir.path().join("script.R");
+    fs_err::tokio::write(
+        &script_path,
+        indoc::formatdoc! {r#"
             options(
                 install.packages.compile.from.source = "never",
                 pkgType = "binary"
             )
             {code}
-        "#})
+        "#},
+    )
+    .await?;
+
+    Cmd::new(rscript, summary)
+        .current_dir(cwd)
+        .arg("--vanilla")
+        .arg(script_path)
         .args(args)
         .env_remove(EnvVars::RENV_PROJECT)
         .check(true)
@@ -237,7 +244,7 @@ fn additional_dependency_install_code(env_path: &Path) -> String {
             renv.consent = TRUE
         )
         if (!requireNamespace("renv", quietly = TRUE)) {{
-            install.packages("renv", lib = lib_dir)
+            install.packages("renv", lib = lib_dir, type = .Platform$pkgType)
         }}
 
         deps <- commandArgs(trailingOnly = TRUE)
@@ -306,7 +313,11 @@ fn r_path(path: &Path) -> String {
     serde_json::to_string(path.to_string_lossy().as_ref()).expect("path string must serialize")
 }
 
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
+async fn copy_dir_all(src: PathBuf, dst: PathBuf) -> Result<()> {
+    tokio::task::spawn_blocking(move || copy_dir_all_blocking(&src, &dst)).await?
+}
+
+fn copy_dir_all_blocking(src: &Path, dst: &Path) -> Result<()> {
     for entry in walkdir::WalkDir::new(src) {
         let entry = entry?;
         let target = dst.join(entry.path().strip_prefix(src)?);

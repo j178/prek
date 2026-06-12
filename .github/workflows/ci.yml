@@ -29,7 +29,7 @@ env:
   DOTNET_VERSION: "10.0"
   DENO_VERSION: "2"
   DART_VERSION: "3.10.4"
-  R_VERSION: "4.4.3"
+  R_VERSION: "4.6.0"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
