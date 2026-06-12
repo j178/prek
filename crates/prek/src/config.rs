@@ -1135,13 +1135,30 @@ impl<'de> Deserialize<'de> for Repo {
     }
 }
 
+/// The parts of a config hook entry shared by every repo type.
+pub(crate) struct ConfigHook<'a> {
+    pub id: &'a str,
+    pub groups: Option<&'a [String]>,
+    pub options: &'a HookOptions,
+}
+
 impl Repo {
-    pub(crate) fn iter_hooks(&self) -> Box<dyn Iterator<Item = (&str, &HookOptions)> + '_> {
+    pub(crate) fn iter_hooks(&self) -> Box<dyn Iterator<Item = ConfigHook<'_>> + '_> {
+        macro_rules! iter {
+            ($repo:expr) => {
+                Box::new($repo.hooks.iter().map(|h| ConfigHook {
+                    id: h.id.as_str(),
+                    groups: h.groups.as_deref(),
+                    options: &h.options,
+                }))
+            };
+        }
+
         match self {
-            Repo::Remote(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
-            Repo::Local(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
-            Repo::Meta(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
-            Repo::Builtin(repo) => Box::new(repo.hooks.iter().map(|h| (h.id.as_str(), &h.options))),
+            Repo::Remote(repo) => iter!(repo),
+            Repo::Local(repo) => iter!(repo),
+            Repo::Meta(repo) => iter!(repo),
+            Repo::Builtin(repo) => iter!(repo),
         }
     }
 }

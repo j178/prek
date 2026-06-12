@@ -13,7 +13,7 @@ use same_file::is_same_file;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::InstallCache;
-use crate::cli::run::{SelectorSource, Selectors};
+use crate::cli::run::{ConfiguredHook, SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::{Repo, Stage, Stages, load_config};
 use crate::fs::{CWD, Simplified};
@@ -106,7 +106,13 @@ pub(crate) async fn install(
     };
 
     if project.is_some() {
-        warn_unmatched_hook_stages(store, config.as_deref(), refresh, &hook_types);
+        warn_unmatched_hook_stages(
+            store,
+            config.as_deref(),
+            selectors.as_ref(),
+            refresh,
+            &hook_types,
+        );
     }
 
     for hook_type in hook_types {
@@ -206,11 +212,39 @@ fn get_hook_types(
     hook_types
 }
 
+/// Return whether the selectors persisted into the installed hook scripts will run this hook.
+///
+/// Mirrors `install_hook_script`: every include is persisted, but only CLI-flag skips are
+/// (env-var skips are ignored at install time). An include that only matches a remote hook
+/// through its manifest alias can't be recognized from the config alone, so such a hook is
+/// treated as not selected.
+fn shim_selects_hook(selectors: Option<&Selectors>, hook: &ConfiguredHook<'_>) -> bool {
+    let Some(selectors) = selectors else {
+        return true;
+    };
+
+    if selectors
+        .skips()
+        .iter()
+        .filter(|skip| matches!(skip.source(), SelectorSource::CliFlag(_)))
+        .any(|skip| skip.matches_configured_hook(hook))
+    {
+        return false;
+    }
+
+    let includes = selectors.includes();
+    includes.is_empty()
+        || includes
+            .iter()
+            .any(|include| include.matches_configured_hook(hook))
+}
+
 /// Warn about configured hooks whose stages aren't covered by the hook types being installed,
 /// since their shims won't be installed and they won't run automatically.
 fn warn_unmatched_hook_stages(
     store: &Store,
     config: Option<&Path>,
+    selectors: Option<&Selectors>,
     refresh: bool,
     hook_types: &[HookType],
 ) {
@@ -235,18 +269,26 @@ fn warn_unmatched_hook_stages(
     for project in workspace.projects() {
         let config = project.config();
         for repo in &config.repos {
-            // A remote hook may inherit `stages` from its manifest, which we can't see without
-            // fetching the repo, so only trust explicit config-level stages and skip the rest.
             let is_remote = matches!(repo, Repo::Remote(_));
-            for (id, options) in repo.iter_hooks() {
-                let stages = if is_remote {
-                    match options.stages {
-                        Some(stages) if !stages.is_empty() => stages,
-                        _ => continue,
-                    }
-                } else {
-                    Stages::resolve(options.stages, config.default_stages)
-                };
+            for hook in repo.iter_hooks() {
+                let configured = ConfiguredHook::new(
+                    project.relative_path(),
+                    hook.id,
+                    hook.options.alias.as_deref(),
+                    hook.groups,
+                );
+                if !shim_selects_hook(selectors, &configured) {
+                    continue;
+                }
+
+                // A remote hook that omits `stages` may inherit them from its manifest, which
+                // install never fetches, so skip it rather than risk a false positive. An explicit
+                // value (even an empty list) overrides the manifest and resolves through
+                // `default_stages`, the same way the hook builder does.
+                if is_remote && hook.options.stages.is_none() {
+                    continue;
+                }
+                let stages = Stages::resolve(hook.options.stages, config.default_stages);
 
                 // `Stage::Manual` has no git shim, so it is ignored here.
                 let required = Stages::from(
@@ -256,7 +298,7 @@ fn warn_unmatched_hook_stages(
                         .collect::<Vec<_>>(),
                 );
                 if !required.is_empty() && !required.intersects(installed) {
-                    unmatched.push((id, required));
+                    unmatched.push((hook.id, required));
                 }
             }
         }
