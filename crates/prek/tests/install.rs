@@ -1966,3 +1966,50 @@ fn install_warns_on_unmatched_remote_hook_with_config_stages() {
     hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 }
+
+#[test]
+fn install_warns_for_workspace_subproject_hooks() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: root-hook
+            name: Root hook
+            language: system
+            entry: echo root
+    "});
+
+    let nested = context.work_dir().child("nested");
+    nested.create_dir_all()?;
+    nested
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: nested-push-hook
+            name: Nested push hook
+            language: system
+            entry: echo nested
+            stages: [pre-push]
+    "})?;
+    context.git_add(".");
+
+    // A plain root install runs the nested project too, so its pre-push-only hook is reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    warning: The following hooks won't run automatically because their stages aren't being installed:
+      - `nested-push-hook` (pre-push)
+    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    ");
+
+    Ok(())
+}
