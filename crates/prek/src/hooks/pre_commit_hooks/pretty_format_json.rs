@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io;
 use std::path::Path;
 
@@ -86,14 +87,21 @@ async fn check_file(
 
     match prettify_json(&original_content, args) {
         Ok(prettified_json) => {
-            if original_content == prettified_json {
+            // Upstream Python reads files in text mode, so CRLF/CR are normalized
+            // to LF before comparison. Match that behavior without allocating in
+            // the common no-change path.
+            if matches_pretty_format(&original_content, &prettified_json) {
                 Ok((0, Vec::new()))
             } else if args.auto_fix {
-                fs_err::tokio::write(file_base.join(filename), prettified_json.as_bytes()).await?;
+                // Rust writes bytes exactly as provided. Preserve the file's
+                // existing newline style instead of forcing serde_json's LF.
+                let output = with_original_line_ending(&prettified_json, &original_content);
+                fs_err::tokio::write(file_base.join(filename), output.as_bytes()).await?;
                 let message = format!("Fixing file {}\n", filename.display());
                 Ok((1, message.into_bytes()))
             } else {
-                let diff = generate_diff(&original_content, &prettified_json, filename);
+                let normalized_content = normalize_newlines(&original_content);
+                let diff = generate_diff(normalized_content.as_ref(), &prettified_json, filename);
                 let message = format!("{}: not pretty-formatted.\n{diff}", filename.display());
                 Ok((1, message.into_bytes()))
             }
@@ -125,6 +133,110 @@ fn prettify_json(json: &str, args: &PreparedArgs) -> Result<String> {
         result.push('\n');
     }
     Ok(result)
+}
+
+/// Compare a file's original text to `serde_json`'s LF-formatted output.
+///
+/// Python's text-mode reads collapse `\r\n` and `\r` to `\n`, so upstream does
+/// not treat line-ending style alone as a formatting change. This function
+/// performs the same comparison as a byte walk to avoid allocating a normalized
+/// copy when the file is already pretty-formatted.
+fn matches_pretty_format(original: &str, pretty_lf: &str) -> bool {
+    let original = original.as_bytes();
+    let pretty_lf = pretty_lf.as_bytes();
+    let mut original_index = 0;
+    let mut pretty_index = 0;
+
+    while original_index < original.len() && pretty_index < pretty_lf.len() {
+        match original[original_index] {
+            b'\r' => {
+                if pretty_lf[pretty_index] != b'\n' {
+                    return false;
+                }
+                original_index += if original.get(original_index + 1) == Some(&b'\n') {
+                    2
+                } else {
+                    1
+                };
+                pretty_index += 1;
+            }
+            byte if byte == pretty_lf[pretty_index] => {
+                original_index += 1;
+                pretty_index += 1;
+            }
+            _ => return false,
+        }
+    }
+
+    original_index == original.len() && pretty_index == pretty_lf.len()
+}
+
+/// Return the first newline style present in the file.
+///
+/// When autofixing, we use the first style as the file's existing convention.
+/// Files without any newline default to LF, matching the formatter's canonical
+/// internal output.
+fn detect_line_ending(content: &str) -> &'static str {
+    let bytes = content.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\r' if bytes.get(index + 1) == Some(&b'\n') => return "\r\n",
+            b'\r' => return "\r",
+            b'\n' => return "\n",
+            _ => index += 1,
+        }
+    }
+
+    "\n"
+}
+
+/// Convert LF-formatted output back to the file's original newline style.
+///
+/// This keeps autofix stable on Windows working trees while still letting the
+/// JSON formatter operate on a single canonical newline representation.
+fn with_original_line_ending<'a>(content: &'a str, original: &str) -> Cow<'a, str> {
+    let line_ending = detect_line_ending(original);
+    if line_ending == "\n" {
+        Cow::Borrowed(content)
+    } else {
+        Cow::Owned(content.replace('\n', line_ending))
+    }
+}
+
+/// Normalize line endings only for diff generation.
+///
+/// The no-change path uses `matches_pretty_format` to avoid allocation. A diff
+/// needs complete line slices, so we build the normalized string only after a
+/// real formatting difference has been found.
+fn normalize_newlines(content: &str) -> Cow<'_, str> {
+    let bytes = content.as_bytes();
+    if !bytes.contains(&b'\r') {
+        return Cow::Borrowed(content);
+    }
+
+    let mut normalized = String::with_capacity(content.len());
+    let mut index = 0;
+    let mut chunk_start = 0;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\r' => {
+                normalized.push_str(&content[chunk_start..index]);
+                normalized.push('\n');
+                index += 1;
+                if bytes.get(index) == Some(&b'\n') {
+                    index += 1;
+                }
+                chunk_start = index;
+            }
+            _ => index += 1,
+        }
+    }
+
+    normalized.push_str(&content[chunk_start..]);
+    Cow::Owned(normalized)
 }
 
 struct JsonFormatter<'a> {
@@ -458,6 +570,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_pretty_crlf_json_file() -> Result<()> {
+        let dir = tempdir()?;
+        let pretty_crlf_json = PRETTY_JSON.replace('\n', "\r\n");
+        let file_path = create_test_file(&dir, "pretty.json", &pretty_crlf_json).await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
+
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+
+        assert_eq!(code, 0);
+        assert!(output.is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pretty_mixed_line_endings_do_not_need_fixing() -> Result<()> {
+        let dir = tempdir()?;
+        let pretty_mixed_json = PRETTY_JSON.replacen('\n', "\r\n", 3);
+        let file_path = create_test_file(&dir, "pretty.json", &pretty_mixed_json).await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
+
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+
+        assert_eq!(code, 0);
+        assert!(output.is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_unsorted_json_file() -> Result<()> {
         let dir = tempdir()?;
         create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
@@ -578,6 +732,30 @@ mod tests {
         // Verify the file was actually fixed
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         assert_eq!(result, PRETTY_JSON);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_autofix_preserves_crlf() -> Result<()> {
+        let dir = tempdir()?;
+        let unsorted_crlf_json = UNSORTED_JSON.replace('\n', "\r\n");
+        let file_path = create_test_file(&dir, "non_pretty.json", &unsorted_crlf_json).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
+
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+
+        assert_eq!(code, 1);
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+
+        let result = fs_err::tokio::read_to_string(&file_path).await?;
+        assert_eq!(result, PRETTY_JSON.replace('\n', "\r\n"));
 
         Ok(())
     }
