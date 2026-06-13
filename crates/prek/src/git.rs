@@ -390,9 +390,22 @@ pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
         .arg("--ignore-submodules")
         .arg("--")
         .arg(path)
-        .check(true)
+        // This diff is only used as a best-effort before/after snapshot of
+        // hook changes. Some CI environments keep enough of `.git` for
+        // `git ls-files` but omit blob objects needed by `git diff`; Git then
+        // exits 128 on stderr with empty stdout. Keep comparing stdout in that
+        // case so `run --all-files` can still run against the files Git can
+        // enumerate.
+        .check(false)
         .output()
         .await?;
+    if !output.status.success() {
+        debug!(
+            status = %output.status,
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "Continuing with git diff stdout despite non-zero exit status"
+        );
+    }
     Ok(output.stdout)
 }
 

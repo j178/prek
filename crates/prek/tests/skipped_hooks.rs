@@ -7,10 +7,12 @@
 //! Includes regression tests for #1335: when all hooks in a group are skipped,
 //! prek should not call `git diff` to check for file modifications.
 
+use std::time::{Duration, SystemTime};
+
 use anyhow::Result;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -20,6 +22,20 @@ fn hook_env_count(context: &TestContext) -> Result<usize> {
         return Ok(0);
     }
     Ok(hooks_dir.read_dir()?.count())
+}
+
+fn remove_loose_blob(cwd: &assert_fs::fixture::ChildPath, filename: &str) -> Result<()> {
+    let output = git_cmd(cwd).arg("hash-object").arg(filename).output()?;
+    assert!(output.status.success(), "git hash-object should succeed");
+    let blob = String::from_utf8(output.stdout)?;
+    let blob = blob.trim_ascii();
+    let object_path = cwd
+        .child(".git")
+        .child("objects")
+        .child(&blob[..2])
+        .child(&blob[2..]);
+    fs_err::remove_file(object_path.path())?;
+    Ok(())
 }
 
 /// All hooks skip when no staged files match their file patterns.
@@ -655,6 +671,70 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
         get_diff_calls, 2,
         "Expected a full before/after diff comparison for dirty `--all-files`, found {get_diff_calls}.\n\
          Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: noop
+                language: system
+                entry: python3 -c "pass"
+                pass_filenames: false
+    "#});
+
+    cwd.child("file.txt").write_str("original\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+
+    remove_loose_blob(cwd, "file.txt")?;
+
+    // Make the index stat data stale while keeping file content unchanged. A
+    // full `git diff` now exits non-zero because the blob is missing, but its
+    // stdout is still a usable best-effort before/after snapshot.
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(cwd.child("file.txt").path())?
+        .set_modified(SystemTime::now() + Duration::from_secs(10))?;
+
+    let output = context
+        .run()
+        .arg("--all-files")
+        .env("RUST_LOG", "prek::git=trace")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "`--all-files` should not require blob objects when hooks leave a clean tree.\n\
+         stdout:\n{}\n\
+         stderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let ignored_diff_errors = stderr
+        .matches("Continuing with git diff stdout despite non-zero exit status")
+        .count();
+    assert_eq!(
+        ignored_diff_errors, 2,
+        "Expected before/after git diff errors to be logged and ignored, found {ignored_diff_errors}.\n\
+         Trace output:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Command `git diff` exited with an error"),
+        "missing blobs should not turn hook modification detection into a fatal git diff error.\n\
+         stderr:\n{stderr}"
     );
 
     Ok(())
