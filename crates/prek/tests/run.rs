@@ -2824,15 +2824,16 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<(
     let context = TestContext::new();
     context.init_project();
 
-    // Repro for #1786 documenting the current behavior.
-    // `git commit -a` exports `GIT_INDEX_FILE=.git/index.lock` to the pre-commit hook
-    // process. If the hook inherits that env var and then runs a git command that writes
-    // to an index in a different repository, Git will write those entries into the parent
-    // repo's temporary index instead.
+    // Repro for #1786 documenting the current behavior. `git commit -a`
+    // exports `GIT_INDEX_FILE=.git/index.lock` to the hook process. If the
+    // hook inherits that env var and then runs a git command that writes to an
+    // index in a different repository, Git writes those entries into the
+    // parent repo's temporary index instead.
     //
     // The important detail is that the temp repo stages `file.txt`, matching a tracked
-    // path in the parent repo. That makes prek's post-hook `git diff` read the corrupted
-    // parent index entry and fail with `fatal: unable to read <hash>`.
+    // path in the parent repo. `prek` treats the post-hook diff as a best-effort
+    // snapshot, so the commit continues until Git tries to build trees from the
+    // corrupted temporary index and fails with `invalid object ... for 'file.txt'`.
     context
         .work_dir()
         .child("hook.sh")
@@ -2893,8 +2894,8 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<(
         .chain([
             (r"\[master \w{7}\]", r"[master COMMIT]"),
             (
-                r"fatal: unable to read [0-9a-f]{40}",
-                "fatal: unable to read [HASH]",
+                r"invalid object 100644 [0-9a-f]{40}",
+                "invalid object 100644 [HASH]",
             ),
         ])
         .collect::<Vec<_>>();
@@ -2905,13 +2906,11 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<(
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `git diff` exited with an error:
-
-    [status]
-    exit status: 128
-
-    [stderr]
-    fatal: unable to read [HASH]
+    write-temp-index.........................................................Passed
+    - hook id: write-temp-index
+    - duration: [TIME]
+    error: invalid object 100644 [HASH] for 'file.txt'
+    error: Error building trees
     "
     );
 
