@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.4.5
+
+Released on 2026-06-15.
+
+### ✨Highlights
+
+0.4.5 completes `prek`'s pre-commit language coverage. With R, Conda, Perl,
+and coursier now supported, `prek` supports every language available in
+pre-commit, plus `prek`-only modern languages such as Bun and Deno.
+
+This is full feature parity with pre-commit. The last major compatibility gap
+is closed, and `prek` is now on the path to 1.0.
+
+### 💚 Sponsorship
+
+If `prek` saves time for you or your team, please consider sponsoring the
+project on [GitHub Sponsors](https://github.com/sponsors/j178). It helps keep
+new features, performance work, and maintenance moving.
+
+### Enhancements
+
+- Add `Perl` language support ([#2201](https://github.com/j178/prek/pull/2201))
+- Add `R` language support ([#2206](https://github.com/j178/prek/pull/2206))
+- Add `Conda` language support ([#2203](https://github.com/j178/prek/pull/2203))
+- Add `coursier` language support ([#2194](https://github.com/j178/prek/pull/2194))
+- Add group filters to list ([#2152](https://github.com/j178/prek/pull/2152))
+- Remove legacy repo path support ([#2150](https://github.com/j178/prek/pull/2150))
+- Skip cloning fully filtered remote repos ([#2151](https://github.com/j178/prek/pull/2151))
+
+### Performance
+
+- Avoid building JSON trees in syntax hooks ([#2156](https://github.com/j178/prek/pull/2156))
+- Scan mixed line endings without line vector ([#2160](https://github.com/j178/prek/pull/2160))
+- Skip file scan for always-run no-filename hooks ([#2155](https://github.com/j178/prek/pull/2155))
+- Use fixed buffer for EOF scan ([#2163](https://github.com/j178/prek/pull/2163))
+- Use fixed buffer for private key scan ([#2164](https://github.com/j178/prek/pull/2164))
+
+### Bug fixes
+
+- Fix pretty-format-json CRLF handling ([#2210](https://github.com/j178/prek/pull/2210))
+- Handle missing blobs in diff snapshots ([#2211](https://github.com/j178/prek/pull/2211))
+- Ignore coursier channel from working repo ([#2202](https://github.com/j178/prek/pull/2202))
+
+### Contributors
+
+- @j178
+
 ## 0.4.4
 
 Released on 2026-06-04.
