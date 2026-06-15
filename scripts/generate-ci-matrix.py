@@ -33,6 +33,7 @@ LANGUAGE_TESTS = {
     "node": LanguageTest("test(node::)", 35),
     "perl": LanguageTest("test(perl::)", 30),
     "python": LanguageTest("test(python::)", 60),
+    "r": LanguageTest("test(/^r::/)", 90),
     "ruby": LanguageTest("test(ruby::)", 60),
     "rust": LanguageTest("test(rust::)", 125),
     "swift": LanguageTest("test(swift::)", 90),

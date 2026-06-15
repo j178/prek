@@ -29,6 +29,7 @@ env:
   DOTNET_VERSION: "10.0"
   DENO_VERSION: "2"
   DART_VERSION: "3.10.4"
+  R_VERSION: "4.6.0"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -622,6 +623,13 @@ jobs:
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: "Install R"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' r ') }}
+        uses: r-lib/actions/setup-r@a51a8012b0aab7c32ef9d19bf54da93f3254335e # v2
+        with:
+          r-version: ${{ env.R_VERSION }}
+          use-public-rspm: true
 
       - name: "Check Perl and CPAN"
         if: ${{ contains(format(' {0} ', matrix.languages), ' perl ') }}
