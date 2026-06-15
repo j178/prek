@@ -40,6 +40,20 @@ fn local_hook() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
+    // Run again to verify the `check_health` logic.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    r-local..................................................................Passed
+    - hook id: r-local
+    - duration: [TIME]
+
+      Hello from R!
+
+    ----- stderr -----
+    ");
+
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::str;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -37,6 +38,9 @@ impl LanguageImpl for R {
         debug!(%hook, target = %info.env_path.display(), "Installing R environment");
 
         let rscript = rscript_executable();
+        let r_version = query_r_version(&rscript)
+            .await
+            .context("Failed to query R version")?;
         fs_err::tokio::create_dir_all(&info.env_path).await?;
         let activate = info.env_path.join("activate.R");
 
@@ -94,7 +98,8 @@ impl LanguageImpl for R {
             fs_err::tokio::write(&activate, "").await?;
         }
 
-        info.with_toolchain(rscript);
+        info.with_language_version(r_version)
+            .with_toolchain(rscript);
         info.persist_env_path();
 
         reporter.on_install_complete(progress);
@@ -105,13 +110,19 @@ impl LanguageImpl for R {
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
-        Cmd::new(rscript_executable(), "check Rscript version")
-            .arg("--version")
-            .check(true)
-            .output()
+    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+        let current = query_r_version(&rscript_executable())
             .await
-            .context("Rscript is not available")?;
+            .context("Failed to query R version")?;
+
+        if info.language_version != current {
+            anyhow::bail!(
+                "Hooks were installed for R version {}, but current R executable has version {}",
+                info.language_version,
+                current
+            );
+        }
+
         Ok(())
     }
 
@@ -199,6 +210,21 @@ async fn run_r_code(
         .output()
         .await?;
     Ok(())
+}
+
+async fn query_r_version(rscript: &Path) -> Result<semver::Version> {
+    let output = Cmd::new(rscript, "get R version")
+        .arg("--vanilla")
+        .arg("-e")
+        .arg("cat(as.character(getRversion()))")
+        .env_remove(EnvVars::RENV_PROJECT)
+        .check(true)
+        .output()
+        .await?;
+    let version = str::from_utf8(&output.stdout)?;
+    let version = version.trim();
+    semver::Version::parse(version)
+        .with_context(|| format!("Failed to parse R version `{version}`"))
 }
 
 fn renv_project_install_code(repo_path: &Path) -> String {
