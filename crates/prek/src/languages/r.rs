@@ -38,6 +38,7 @@ impl LanguageImpl for R {
 
         let rscript = rscript_executable();
         fs_err::tokio::create_dir_all(&info.env_path).await?;
+        let activate = info.env_path.join("activate.R");
 
         if let Some(repo_path) = hook.repo_path() {
             fs_err::tokio::copy(repo_path.join("renv.lock"), info.env_path.join("renv.lock"))
@@ -58,7 +59,7 @@ impl LanguageImpl for R {
 
             let env_dir = r_path(&info.env_path);
             fs_err::tokio::write(
-                info.env_path.join("activate.R"),
+                &activate,
                 indoc::formatdoc! {r#"
                     suppressWarnings({{
                         old <- setwd({env_dir})
@@ -73,7 +74,8 @@ impl LanguageImpl for R {
             // Local hooks do not have a copied renv project to activate, and prek
             // intentionally avoids pre-commit's fake local project. Install deps
             // into a private library and expose it through R_PROFILE_USER.
-            fs_err::tokio::create_dir_all(info.env_path.join("library")).await?;
+            let lib_path = info.env_path.join("library");
+            fs_err::tokio::create_dir_all(&lib_path).await?;
 
             run_r_code(
                 &rscript,
@@ -85,12 +87,11 @@ impl LanguageImpl for R {
             .await
             .context("Failed to install R additional dependencies")?;
 
-            let lib_dir = r_path(&info.env_path.join("library"));
-            fs_err::tokio::write(
-                info.env_path.join("activate.R"),
-                format!(".libPaths(c({lib_dir}, .libPaths()))\n"),
-            )
-            .await?;
+            let lib_dir = r_path(&lib_path);
+            fs_err::tokio::write(&activate, format!(".libPaths(c({lib_dir}, .libPaths()))\n"))
+                .await?;
+        } else {
+            fs_err::tokio::write(&activate, "").await?;
         }
 
         info.with_toolchain(rscript);
@@ -123,20 +124,17 @@ impl LanguageImpl for R {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let entry = r_hook_entry(hook)?;
         let env_path = hook.env_path().expect("R must have env path");
+        let activate = env_path.join("activate.R");
+        let entry = r_hook_entry(hook)?;
 
         let run = async |batch: &[&Path]| {
             let mut cmd = Cmd::new(&entry[0], "run R hook");
             cmd.current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env_remove(EnvVars::RENV_PROJECT)
+                .env(EnvVars::R_PROFILE_USER, &activate)
                 .stdin(Stdio::null());
-
-            let activate = env_path.join("activate.R");
-            if activate.exists() {
-                cmd.env(EnvVars::R_PROFILE_USER, activate);
-            }
 
             cmd.envs(&hook.env)
                 .args(&hook.args)

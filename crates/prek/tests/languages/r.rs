@@ -4,9 +4,13 @@ use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use crate::common::{TestContext, cmd_snapshot};
 
 #[test]
-fn local_hook() {
+fn local_hook() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context
+        .work_dir()
+        .child(".Rprofile")
+        .write_str(r#"stop("project .Rprofile should not be loaded")"#)?;
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
@@ -35,6 +39,8 @@ fn local_hook() {
 
     ----- stderr -----
     ");
+
+    Ok(())
 }
 
 #[test]
@@ -93,7 +99,8 @@ fn remote_repo_install() -> anyhow::Result<()> {
     hook_repo
         .work_dir()
         .child("hello.R")
-        .write_str(r#"cat("Hello from remote R!\n")"#)?;
+        .write_str("localdep::hello()")?;
+    write_local_r_package(&hook_repo, "localdep")?;
     write_renv_project(&hook_repo)?;
 
     hook_repo.git_add(".");
@@ -108,6 +115,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
             rev: v1.0.0
             hooks:
               - id: r-remote
+                additional_dependencies: [./localdep]
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -123,7 +131,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
     - hook id: r-remote
     - duration: [TIME]
 
-      Hello from remote R!
+      Hello from local R dependency!
 
     ----- stderr -----
     ");
