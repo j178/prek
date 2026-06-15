@@ -27,7 +27,7 @@ jobs:
     name: "bloat check"
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -35,7 +35,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@e49978b799e49ff429d162b7a30601a569ab6538 # v2.81.1
+      - uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: cargo-bloat
 
@@ -118,7 +118,7 @@ jobs:
       HYPERFINE_HEAD_BINARY: prek-head
       HYPERFINE_BASE_BINARY: prek-base
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -152,7 +152,7 @@ jobs:
           cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
-        uses: taiki-e/install-action@e49978b799e49ff429d162b7a30601a569ab6538 # v2.81.1
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: hyperfine
 
