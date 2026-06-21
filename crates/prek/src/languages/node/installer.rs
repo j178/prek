@@ -11,8 +11,9 @@ use prek_consts::env_vars::EnvVars;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_and_extract};
+use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
 use crate::process::Cmd;
@@ -215,9 +216,10 @@ impl NodeInstaller {
 
         let filename = format!("node-v{}-{os}-{arch}.{ext}", version.version());
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());
+        let checksum = self.fetch_checksum(version, &filename).await?;
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&url, &filename, store, async |extracted| {
+        download_and_extract_with_checksum(&url, &filename, store, checksum, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing node");
                 fs_err::tokio::remove_dir_all(&target).await?;
@@ -233,6 +235,27 @@ impl NodeInstaller {
         .context("Failed to download and extract node")?;
 
         Ok(NodeResult::from_dir(&target).with_version(version.clone()))
+    }
+
+    async fn fetch_checksum(&self, version: &NodeVersion, filename: &str) -> Result<Sha256Digest> {
+        let url = format!(
+            "https://nodejs.org/dist/v{}/SHASUMS256.txt",
+            version.version()
+        );
+        let response = REQWEST_CLIENT
+            .get(&url)
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch Node.js checksums from {url}"))?;
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Failed to fetch Node.js checksums from {}: {}",
+                url,
+                response.status()
+            );
+        }
+        let checksums = response.text().await?;
+        digest_from_sha256sums(&checksums, filename)
     }
 
     /// Find a suitable system Node.js installation that matches the request.

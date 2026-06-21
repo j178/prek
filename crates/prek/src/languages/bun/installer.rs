@@ -10,9 +10,10 @@ use prek_consts::env_vars::EnvVars;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::download_and_extract;
+use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum};
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
 use crate::process::Cmd;
@@ -218,9 +219,10 @@ impl BunInstaller {
         let filename = format!("bun-{os}-{arch}.zip");
         let url =
             format!("https://github.com/oven-sh/bun/releases/download/bun-v{version}/{filename}");
+        let checksum = self.fetch_checksum(version, &filename).await?;
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&url, &filename, store, async |extracted| {
+        download_and_extract_with_checksum(&url, &filename, store, checksum, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing bun");
                 fs_err::tokio::remove_dir_all(&target).await?;
@@ -242,6 +244,26 @@ impl BunInstaller {
         .context("Failed to download and extract bun")?;
 
         Ok(BunResult::from_dir(&target).with_version(version.clone()))
+    }
+
+    async fn fetch_checksum(&self, version: &BunVersion, filename: &str) -> Result<Sha256Digest> {
+        let url = format!(
+            "https://github.com/oven-sh/bun/releases/download/bun-v{version}/SHASUMS256.txt"
+        );
+        let response = REQWEST_CLIENT
+            .get(&url)
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch Bun checksums from {url}"))?;
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Failed to fetch Bun checksums from {}: {}",
+                url,
+                response.status()
+            );
+        }
+        let checksums = response.text().await?;
+        digest_from_sha256sums(&checksums, filename)
     }
 
     /// Find a suitable system Bun installation that matches the request.

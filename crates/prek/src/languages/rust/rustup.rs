@@ -9,8 +9,9 @@ use semver::Version;
 use target_lexicon::HOST;
 use tracing::{debug, trace, warn};
 
+use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
-use crate::http::REQWEST_CLIENT;
+use crate::http::{REQWEST_CLIENT, download_to_temp_file_with_checksum};
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
 use crate::store::Store;
@@ -113,28 +114,10 @@ impl Rustup {
         let url = format!("https://static.rust-lang.org/rustup/dist/{triple}/{filename}");
         // Save "rustup-init" as "rustup", this is what "rustup-init" does when setting up.
         let target = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
+        let checksum = Self::fetch_checksum(&url).await?;
 
-        let temp_dir = tempfile::tempdir_in(store.scratch_path())?;
-        debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
-
-        let tmp_target = temp_dir.path().join(filename);
-        let response = REQWEST_CLIENT
-            .get(&url)
-            .send()
-            .await
-            .with_context(|| format!("Failed to download file from {url}"))?;
-        if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to download file from {}: {}",
-                url,
-                response.status()
-            );
-        }
-
-        let bytes = response.bytes().await?;
-        fs_err::tokio::write(&tmp_target, bytes).await?;
-
-        make_executable(&tmp_target)?;
+        let download = download_to_temp_file_with_checksum(&url, filename, store, checksum).await?;
+        make_executable(download.path())?;
 
         // Move to final location
         if target.exists() {
@@ -142,12 +125,34 @@ impl Rustup {
             fs_err::tokio::remove_file(&target).await?;
         }
         debug!(path = %target.display(), "Installing rustup");
-        fs_err::tokio::rename(&tmp_target, &target).await?;
+        fs_err::tokio::rename(download.path(), &target).await?;
 
         Ok(Self {
             bin: target,
             rustup_home: rustup_home.to_path_buf(),
         })
+    }
+
+    async fn fetch_checksum(url: &str) -> Result<Sha256Digest> {
+        let checksum_url = format!("{url}.sha256");
+        let response = REQWEST_CLIENT
+            .get(&checksum_url)
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch rustup checksum from {checksum_url}"))?;
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Failed to fetch rustup checksum from {}: {}",
+                checksum_url,
+                response.status()
+            );
+        }
+        let checksum = response.text().await?;
+        checksum
+            .split_whitespace()
+            .next()
+            .context("Missing rustup SHA256 checksum")?
+            .parse()
     }
 
     pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<PathBuf> {

@@ -7,12 +7,14 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
+use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::download_and_extract;
+use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
@@ -223,9 +225,10 @@ impl GoInstaller {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let filename = format!("go{version}.{os}-{arch}.{ext}");
         let url = format!("https://go.dev/dl/{filename}");
+        let checksum = self.fetch_checksum(version, &filename).await?;
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&url, &filename, store, async |extracted| {
+        download_and_extract_with_checksum(&url, &filename, store, checksum, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing go");
                 fs_err::tokio::remove_dir_all(&target).await?;
@@ -241,6 +244,42 @@ impl GoInstaller {
         .context("Failed to download and extract go")?;
 
         Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
+    }
+
+    async fn fetch_checksum(&self, version: &GoVersion, filename: &str) -> Result<Sha256Digest> {
+        #[derive(Deserialize)]
+        struct GoRelease {
+            version: String,
+            files: Vec<GoFile>,
+        }
+
+        #[derive(Deserialize)]
+        struct GoFile {
+            filename: String,
+            sha256: String,
+        }
+
+        let url = "https://go.dev/dl/?mode=json&include=all";
+        let releases: Vec<GoRelease> = REQWEST_CLIENT
+            .get(url)
+            .send()
+            .await
+            .context("Failed to fetch Go release metadata")?
+            .error_for_status()
+            .context("Failed to fetch Go release metadata")?
+            .json()
+            .await
+            .context("Failed to parse Go release metadata")?;
+        let release_name = format!("go{version}");
+        let digest = releases
+            .iter()
+            .find(|release| release.version == release_name)
+            .and_then(|release| release.files.iter().find(|file| file.filename == filename))
+            .with_context(|| format!("No SHA256 digest found for `{filename}`"))?
+            .sha256
+            .parse()?;
+
+        Ok(digest)
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
