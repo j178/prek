@@ -84,7 +84,7 @@ serde_json = { version = "1.0.132", features = [
   "unbounded_depth",
 ] }
 serde_stacker = { version = "0.1.12" }
-serde-saphyr = { version = "0.0.27", default-features = false, features = [
+serde-saphyr = { version = "0.0.28", default-features = false, features = [
   "deserialize",
   "serialize",
 ] }
