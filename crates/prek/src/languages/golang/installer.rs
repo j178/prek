@@ -43,6 +43,18 @@ static GO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
     }
 });
 
+#[derive(Deserialize)]
+struct GoRelease {
+    version: String,
+    files: Vec<GoFile>,
+}
+
+#[derive(Deserialize)]
+struct GoFile {
+    filename: String,
+    sha256: String,
+}
+
 impl GoResult {
     fn from_executable(path: PathBuf, from_system: bool) -> Self {
         Self {
@@ -247,18 +259,6 @@ impl GoInstaller {
     }
 
     async fn fetch_checksum(&self, version: &GoVersion, filename: &str) -> Result<Sha256Digest> {
-        #[derive(Deserialize)]
-        struct GoRelease {
-            version: String,
-            files: Vec<GoFile>,
-        }
-
-        #[derive(Deserialize)]
-        struct GoFile {
-            filename: String,
-            sha256: String,
-        }
-
         let url = "https://go.dev/dl/?mode=json&include=all";
         let releases: Vec<GoRelease> = REQWEST_CLIENT
             .get(url)
@@ -270,16 +270,7 @@ impl GoInstaller {
             .json()
             .await
             .context("Failed to parse Go release metadata")?;
-        let release_name = format!("go{version}");
-        let digest = releases
-            .iter()
-            .find(|release| release.version == release_name)
-            .and_then(|release| release.files.iter().find(|file| file.filename == filename))
-            .with_context(|| format!("No SHA256 digest found for `{filename}`"))?
-            .sha256
-            .parse()?;
-
-        Ok(digest)
+        digest_from_go_releases(&releases, version, filename)
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
@@ -321,14 +312,106 @@ impl GoInstaller {
     }
 }
 
-#[cfg(all(test, unix))]
-mod tests {
-    use std::os::unix::fs::PermissionsExt;
+fn digest_from_go_releases(
+    releases: &[GoRelease],
+    version: &GoVersion,
+    filename: &str,
+) -> Result<Sha256Digest> {
+    let release_name = format!("go{version}");
+    releases
+        .iter()
+        .find(|release| release.version == release_name)
+        .and_then(|release| release.files.iter().find(|file| file.filename == filename))
+        .with_context(|| format!("No SHA256 digest found for `{filename}`"))?
+        .sha256
+        .parse()
+}
 
+#[cfg(test)]
+mod tests {
     use super::*;
 
+    const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    #[test]
+    fn finds_go_checksum_for_release_file() -> Result<()> {
+        let releases = vec![
+            go_release(
+                "go1.23.0",
+                vec![go_file(
+                    "go1.23.0.linux-amd64.tar.gz",
+                    "0000000000000000000000000000000000000000000000000000000000000000",
+                )],
+            ),
+            go_release(
+                "go1.24.1",
+                vec![
+                    go_file("go1.24.1.darwin-arm64.tar.gz", EMPTY_SHA256),
+                    go_file(
+                        "go1.24.1.linux-amd64.tar.gz",
+                        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                    ),
+                ],
+            ),
+        ];
+
+        let digest = digest_from_go_releases(
+            &releases,
+            &GoVersion::from_str("1.24.1")?,
+            "go1.24.1.darwin-arm64.tar.gz",
+        )?;
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn errors_when_go_release_file_is_missing() -> Result<()> {
+        let releases = vec![go_release(
+            "go1.24.1",
+            vec![go_file("go1.24.1.linux-amd64.tar.gz", EMPTY_SHA256)],
+        )];
+
+        let err = digest_from_go_releases(
+            &releases,
+            &GoVersion::from_str("1.24.1")?,
+            "go1.24.1.darwin-arm64.tar.gz",
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("No SHA256 digest found for `go1.24.1.darwin-arm64.tar.gz`")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn errors_when_go_release_is_missing() -> Result<()> {
+        let releases = vec![go_release(
+            "go1.23.0",
+            vec![go_file("go1.23.0.linux-amd64.tar.gz", EMPTY_SHA256)],
+        )];
+
+        let err = digest_from_go_releases(
+            &releases,
+            &GoVersion::from_str("1.24.1")?,
+            "go1.24.1.linux-amd64.tar.gz",
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("No SHA256 digest found for `go1.24.1.linux-amd64.tar.gz`")
+        );
+        Ok(())
+    }
+
     #[tokio::test]
+    #[cfg(unix)]
     async fn fill_version_uses_local_gotoolchain() -> anyhow::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
         let temp_dir = tempfile::tempdir()?;
         let fake_go = temp_dir.path().join("go");
         fs_err::write(
@@ -358,5 +441,19 @@ mod tests {
 
         assert_eq!(go.version().to_string(), "1.24.13");
         Ok(())
+    }
+
+    fn go_release(version: &str, files: Vec<GoFile>) -> GoRelease {
+        GoRelease {
+            version: version.to_string(),
+            files,
+        }
+    }
+
+    fn go_file(filename: &str, sha256: &str) -> GoFile {
+        GoFile {
+            filename: filename.to_string(),
+            sha256: sha256.to_string(),
+        }
     }
 }

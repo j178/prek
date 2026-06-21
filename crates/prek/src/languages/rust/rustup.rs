@@ -148,11 +148,7 @@ impl Rustup {
             );
         }
         let checksum = response.text().await?;
-        checksum
-            .split_whitespace()
-            .next()
-            .context("Missing rustup SHA256 checksum")?
-            .parse()
+        digest_from_rustup_checksum(&checksum)
     }
 
     pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<PathBuf> {
@@ -261,6 +257,14 @@ impl Rustup {
     }
 }
 
+fn digest_from_rustup_checksum(contents: &str) -> Result<Sha256Digest> {
+    contents
+        .split_whitespace()
+        .next()
+        .context("Missing rustup SHA256 checksum")?
+        .parse()
+}
+
 fn parse_toolchain_line(line: &str) -> Option<(String, PathBuf)> {
     // Typical formats:
     // "stable-aarch64-apple-darwin (default) /Users/me/.rustup/toolchains/stable-aarch64-apple-darwin"
@@ -328,4 +332,34 @@ fn make_executable(path: &Path) -> std::io::Result<()> {
     }
 
     inner(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    #[test]
+    fn parses_plain_rustup_checksum() -> Result<()> {
+        let digest = digest_from_rustup_checksum(EMPTY_SHA256)?;
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn parses_rustup_checksum_with_filename() -> Result<()> {
+        let digest = digest_from_rustup_checksum(&format!("{EMPTY_SHA256}  rustup-init\n"))?;
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_empty_rustup_checksum() {
+        let err = digest_from_rustup_checksum("").unwrap_err();
+
+        assert!(err.to_string().contains("Missing rustup SHA256 checksum"));
+    }
 }
