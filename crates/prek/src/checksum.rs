@@ -1,24 +1,84 @@
 use std::fmt;
 use std::path::Path;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context as TaskContext, Poll};
 
 use anyhow::{Context, Result, bail};
 use aws_lc_rs::digest::{Context as Sha256Context, SHA256};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) struct Sha256Digest([u8; 32]);
 
+pub(crate) struct Sha256Hasher(Sha256Context);
+
+impl Sha256Hasher {
+    pub(crate) fn new() -> Self {
+        Self(Sha256Context::new(&SHA256))
+    }
+
+    pub(crate) fn update(&mut self, data: &[u8]) {
+        Sha256Context::update(&mut self.0, data);
+    }
+
+    pub(crate) fn finish(self) -> Sha256Digest {
+        let digest = self.0.finish();
+        Sha256Digest::from_bytes(digest.as_ref())
+    }
+}
+
+pub(crate) struct HashReader<R> {
+    inner: R,
+    hasher: Sha256Hasher,
+}
+
+impl<R> HashReader<R> {
+    pub(crate) fn new(inner: R) -> Self {
+        Self {
+            inner,
+            hasher: Sha256Hasher::new(),
+        }
+    }
+
+    pub(crate) fn finish(self) -> Sha256Digest {
+        self.hasher.finish()
+    }
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for HashReader<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        let filled_before = buf.filled().len();
+
+        match Pin::new(&mut this.inner).poll_read(cx, buf) {
+            Poll::Ready(Ok(())) => {
+                let filled = buf.filled();
+                if filled.len() > filled_before {
+                    this.hasher.update(&filled[filled_before..]);
+                }
+                Poll::Ready(Ok(()))
+            }
+            other => other,
+        }
+    }
+}
+
 impl Sha256Digest {
-    pub(crate) async fn verify_file(self, path: &Path) -> Result<()> {
-        let actual = Self::from_file(path).await?;
+    pub(crate) fn verify(self, actual: Self, subject: impl fmt::Display) -> Result<()> {
         if actual != self {
-            bail!(
-                "SHA256 checksum mismatch for `{}`: expected {self}, got {actual}",
-                path.display()
-            );
+            bail!("SHA256 checksum mismatch for `{subject}`: expected {self}, got {actual}");
         }
         Ok(())
+    }
+
+    pub(crate) async fn verify_file(self, path: &Path) -> Result<()> {
+        let actual = Self::from_file(path).await?;
+        self.verify(actual, path.display())
     }
 
     async fn from_file(path: &Path) -> Result<Self> {
@@ -45,9 +105,13 @@ impl Sha256Digest {
         }
 
         let digest = hasher.finish();
+        Ok(Self::from_bytes(digest.as_ref()))
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Self {
         let mut result = [0_u8; 32];
-        result.copy_from_slice(digest.as_ref());
-        Ok(Self(result))
+        result.copy_from_slice(bytes);
+        Self(result)
     }
 }
 

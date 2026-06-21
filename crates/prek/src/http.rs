@@ -10,7 +10,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 
 use crate::archive::ArchiveExtension;
-use crate::checksum::Sha256Digest;
+use crate::checksum::{HashReader, Sha256Digest};
 use crate::fs::Simplified;
 use crate::store::Store;
 use crate::{archive, warn_user};
@@ -174,25 +174,24 @@ pub(crate) async fn download_to_temp_file_with_checksum_and_request(
         );
     }
 
+    let stream = response
+        .bytes_stream()
+        .map_err(std::io::Error::other)
+        .into_async_read()
+        .compat();
+    let mut reader = HashReader::new(stream);
     let mut file = fs_err::tokio::File::create(&path)
         .await
         .with_context(|| format!("Failed to create temporary download `{}`", path.display()))?;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream
-        .try_next()
+    tokio::io::copy(&mut reader, &mut file)
         .await
-        .with_context(|| format!("Failed to download file from {url}"))?
-    {
-        file.write_all(&chunk)
-            .await
-            .with_context(|| format!("Failed to write temporary download `{}`", path.display()))?;
-    }
+        .with_context(|| format!("Failed to download file from {url} to `{}`", path.display()))?;
     file.flush()
         .await
         .with_context(|| format!("Failed to flush temporary download `{}`", path.display()))?;
     drop(file);
 
-    expected.verify_file(&path).await?;
+    expected.verify(reader.finish(), path.display())?;
 
     Ok(TempDownload {
         path,
@@ -361,6 +360,36 @@ YyRIHN8wfdVoOw==
         Ok((url, handle))
     }
 
+    async fn serve_chunked(
+        chunks: &'static [&'static [u8]],
+    ) -> Result<(String, JoinHandle<Result<()>>)> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let handle = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await?;
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).await?;
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+                )
+                .await?;
+            for chunk in chunks {
+                stream
+                    .write_all(format!("{:x}\r\n", chunk.len()).as_bytes())
+                    .await?;
+                stream.write_all(chunk).await?;
+                stream.write_all(b"\r\n").await?;
+                stream.flush().await?;
+                tokio::task::yield_now().await;
+            }
+            stream.write_all(b"0\r\n\r\n").await?;
+            Ok(())
+        });
+
+        Ok((url, handle))
+    }
+
     #[test]
     fn test_load_pem_certs_from_file() -> Result<()> {
         let temp_dir = tempfile::tempdir()?;
@@ -417,6 +446,25 @@ YyRIHN8wfdVoOw==
         let temp = tempfile::tempdir()?;
         let store = Store::from_path(temp.path()).init()?;
         let (url, server) = serve_once(b"data").await?;
+
+        let download = super::download_to_temp_file_with_checksum(
+            &url,
+            "archive.tar.gz",
+            &store,
+            Sha256Digest::from_str(DATA_SHA256)?,
+        )
+        .await?;
+
+        assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
+        server.await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn downloads_verified_chunked_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let store = Store::from_path(temp.path()).init()?;
+        let (url, server) = serve_chunked(&[b"da", b"ta"]).await?;
 
         let download = super::download_to_temp_file_with_checksum(
             &url,

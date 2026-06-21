@@ -39,7 +39,7 @@ When `prek` installs a managed runtime, it:
 1. Resolves the runtime version and archive name.
 2. Fetches the checksum metadata from the runtime's distribution source.
 3. Downloads the archive or installer into a temporary file under the prek cache scratch directory.
-4. Computes the SHA-256 digest of that temporary file.
+4. Computes the SHA-256 digest while writing the temporary file.
 5. Extracts or installs only after the computed digest matches the expected digest.
 
 Checksum sources are runtime-specific:
