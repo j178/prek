@@ -30,6 +30,31 @@ See the dedicated [Language Support](languages.md) page for a complete list of s
 
 Recent releases added support for more managed hook runtimes, including Bun, Julia, Deno, and experimental .NET support.
 
+## Managed runtime download verification
+
+For supported managed runtime downloads, `prek` verifies the downloaded archive or installer against the checksum published by the runtime's own distribution channel before extracting or installing it.
+
+When `prek` installs a managed runtime, it:
+
+1. Resolves the runtime version and archive name.
+2. Fetches the checksum metadata from the runtime's distribution source.
+3. Downloads the archive or installer into a temporary file under the prek cache scratch directory.
+4. Computes the SHA-256 digest of that temporary file.
+5. Extracts or installs only after the computed digest matches the expected digest.
+
+Checksum sources are runtime-specific:
+
+- Node uses `SHASUMS256.txt` from `nodejs.org`.
+- Bun uses `SHASUMS256.txt` from the Bun release.
+- Deno uses `.sha256sum` sidecars from Deno downloads.
+- Go uses the `sha256` value from Go release metadata.
+- Ruby uses `SHA256SUMS` from the same rv-ruby release download location as the archive.
+- Rustup uses `.sha256` sidecars from `static.rust-lang.org`.
+
+This helps catch corrupted or unexpectedly changed downloads before they are unpacked. It does not add an independent trust root: if an upstream release, mirror, or checksum file is compromised together with the archive, SHA-256 verification alone cannot detect that.
+
+`uv` downloads are not covered by this behavior yet.
+
 ## Command line interface
 
 For a compatibility-focused command mapping, see [Compatibility with pre-commit](compatibility.md).

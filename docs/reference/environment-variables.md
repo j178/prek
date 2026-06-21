@@ -82,6 +82,8 @@ Defaults to `120` characters of arguments; set a larger value to reduce truncati
 ### `PREK_RUBY_MIRROR`
 
 Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments).
+Mirrors must provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location.
+Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication.
 See [Ruby language support](../languages.md#ruby) for details.
 
 ### `PREK_RUST_PROFILE`
