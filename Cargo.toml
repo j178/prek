@@ -124,7 +124,7 @@ which = { version = "8.0.0" }
 assert_cmd = { version = "2.2.0" }
 assert_fs = { version = "1.1.2" }
 insta = { version = "1.40.0", features = ["filters"] }
-insta-cmd = { version = "0.6.0" }
+insta-cmd = { version = "0.7.0" }
 markdown = { version = "1.0.0" }
 predicates = { version = "3.1.2" }
 pretty_assertions = { version = "1.4.1" }
