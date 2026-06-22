@@ -31,7 +31,7 @@ repos:
           - mdformat-simple-breaks==0.1.0
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.37.2
+    rev: 0.37.3
     hooks:
       - id: check-metaschema
         files:
