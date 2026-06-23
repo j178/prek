@@ -76,8 +76,8 @@ Options:
 
 ### `PREK_DOCKER_NO_INIT`
 
-Disable passing `--init` to Docker and Podman when running `docker` and `docker_image` hooks.
-This is a compatibility escape hatch for container environments that cannot run Docker's init helper.
+Disable passing the runtime's `--init` flag when running `docker` and `docker_image` hooks.
+This is a compatibility escape hatch for container environments that cannot run the init helper.
 Disabling `--init` can leave containers running after Ctrl-C if the container's PID 1 does not handle forwarded signals.
 
 ### `PREK_LOG_TRUNCATE_LIMIT`
