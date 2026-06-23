@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Parser;
 use fancy_regex::{Regex, escape};
+use memchr::memmem;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::hook::Hook;
@@ -22,7 +23,13 @@ struct Args {
 
 #[derive(Debug)]
 struct GithubPermalinkMatcher {
-    patterns: Vec<Regex>,
+    checks: Vec<GithubPermalinkCheck>,
+}
+
+#[derive(Debug)]
+struct GithubPermalinkCheck {
+    needle: Vec<u8>,
+    pattern: Regex,
 }
 
 impl GithubPermalinkMatcher {
@@ -36,25 +43,34 @@ impl GithubPermalinkMatcher {
         let mut domains = BTreeSet::from([String::from("github.com")]);
         domains.extend(additional_domains);
 
-        let patterns = domains
+        let checks = domains
             .into_iter()
             .map(|domain| {
+                let needle = format!("https://{domain}/").into_bytes();
                 let domain = escape(&domain);
                 let pattern = format!(
                     r"https://{domain}/[^/ ]+/[^/ ]+/blob/(?![a-fA-F0-9]{{4,64}}/)([^/. ]+)/[^# ]+#L\d+"
                 );
-                Regex::new(&pattern).expect("vcs permalink regex must be valid")
+                GithubPermalinkCheck {
+                    needle,
+                    pattern: Regex::new(&pattern).expect("vcs permalink regex must be valid"),
+                }
             })
             .collect();
 
-        Self { patterns }
+        Self { checks }
     }
 
     fn is_non_permalink(&self, line: &[u8]) -> bool {
-        let line = String::from_utf8_lossy(line);
-        self.patterns
-            .iter()
-            .any(|pattern| pattern.is_match(&line).unwrap_or(false))
+        let mut line_text = None;
+        self.checks.iter().any(|check| {
+            if memmem::find(line, &check.needle).is_none() {
+                return false;
+            }
+
+            let line = line_text.get_or_insert_with(|| String::from_utf8_lossy(line));
+            check.pattern.is_match(line).unwrap_or(false)
+        })
     }
 }
 
@@ -166,7 +182,7 @@ mod tests {
             "github.com".to_string(),
             "github.example.com".to_string(),
         ]);
-        assert_eq!(matcher.patterns.len(), 2);
+        assert_eq!(matcher.checks.len(), 2);
     }
 
     #[tokio::test]
