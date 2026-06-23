@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -80,21 +81,21 @@ pub(super) fn collect_repo_sources<'a>(
             required_hook_ids.sort_unstable();
             required_hook_ids.dedup();
 
-            let target = repo_sources
-                .entry(remote_repo.repo.as_str())
-                .or_default()
-                .entry((
-                    remote_repo.rev.as_str(),
-                    required_hook_ids.clone(),
-                    cooldown_days,
-                ))
-                .or_insert_with(|| RepoTarget {
-                    repo: remote_repo.repo.as_str(),
-                    current_rev: remote_repo.rev.as_str(),
-                    cooldown_days,
-                    required_hook_ids,
-                    usages: Vec::new(),
-                });
+            let targets = repo_sources.entry(remote_repo.repo.as_str()).or_default();
+            let target_key = (remote_repo.rev.as_str(), required_hook_ids, cooldown_days);
+            let target = match targets.entry(target_key) {
+                Entry::Occupied(entry) => entry.into_mut(),
+                Entry::Vacant(entry) => {
+                    let required_hook_ids = entry.key().1.clone();
+                    entry.insert(RepoTarget {
+                        repo: remote_repo.repo.as_str(),
+                        current_rev: remote_repo.rev.as_str(),
+                        cooldown_days,
+                        required_hook_ids,
+                        usages: Vec::new(),
+                    })
+                }
+            };
             target.usages.push(RepoUsage {
                 project,
                 remote_count,
