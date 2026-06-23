@@ -417,7 +417,9 @@ impl Docker {
         };
         let volume = format!("{}:/src:rw{z}", work_dir.display());
 
-        if !CONTAINER_RUNTIME.is_apple_container() {
+        if !CONTAINER_RUNTIME.is_apple_container()
+            && !EnvVars::var_as_bool(EnvVars::PREK_DOCKER_NO_INIT).unwrap_or(false)
+        {
             // Run an init inside the container that forwards signals and reaps processes
             command.arg("--init");
         }
