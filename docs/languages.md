@@ -193,12 +193,14 @@ Runtime behavior:
 - The container is run with `--entrypoint` set to the hook `entry`, so the image’s default command is not used when filenames are passed.
 - Environment variables configured via `env` are passed using `-e`.
 - On Linux, prek tries to run as a non-root user and handles rootless Podman with `--userns=keep-id`.
+- For Docker and Podman, prek passes `--init` so signals are forwarded and child processes are reaped inside the container.
 
 Use `docker` when you need a language runtime that isn’t otherwise supported; the container provides the execution environment.
 
 !!! note "prek-only"
 
     prek auto-detects the container runtime (Docker, Podman, or [Container](https://github.com/apple/container)) and can be overridden with `PREK_CONTAINER_RUNTIME`.
+    Set `PREK_DOCKER_NO_INIT=1` to skip Docker's `--init` flag in container environments that cannot run the init helper. This is a compatibility escape hatch; disabling `--init` can leave containers running after Ctrl-C if the container's PID 1 does not handle forwarded signals.
     See [Environment Variable Reference](reference/environment-variables.md) for details.
 
 ### docker_image
@@ -209,6 +211,7 @@ Runtime behavior:
 
 - Uses the same bind-mount and `/src` working directory as `docker` hooks.
 - Environment variables configured via `env` are passed using `-e`.
+- Uses the same `--init` behavior as `docker` hooks.
 
 If the image already defines an `ENTRYPOINT`, you can omit `--entrypoint` in `entry`. Otherwise, specify it explicitly in `entry`.
 

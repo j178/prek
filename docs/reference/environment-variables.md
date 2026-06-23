@@ -74,6 +74,12 @@ Options:
 - `podman`
 - `container` (Apple's Container runtime on macOS, see [container](https://github.com/apple/container))
 
+### `PREK_DOCKER_NO_INIT`
+
+Disable passing `--init` to Docker and Podman when running `docker` and `docker_image` hooks.
+This is a compatibility escape hatch for container environments that cannot run Docker's init helper.
+Disabling `--init` can leave containers running after Ctrl-C if the container's PID 1 does not handle forwarded signals.
+
 ### `PREK_LOG_TRUNCATE_LIMIT`
 
 Control the truncation limit for command lines shown in trace logs (`Executing ...`).
