@@ -273,6 +273,9 @@ Supported formats:
 
 Pre-release strings (for example `go1.22rc1`) are not supported yet.
 
+For remote hook repositories, `language_version` may be inferred from the `go`
+and `toolchain` directives in the hook repository's `go.mod`.
+
 ### haskell
 
 prek installs Haskell hooks via Cabal and runs the configured entry. Please ensure the repository contains a `.cabal` file or configured `additional_dependencies` for proper dependency management.
@@ -359,6 +362,9 @@ Supported formats:
 
     prek uses `uv` for virtual environments and dependency installs, and can auto-install Python toolchains based on `language_version`.
 
+For remote hook repositories, `language_version` may be inferred from
+`[project].requires-python` in the hook repository's `pyproject.toml`.
+
 #### Dependency management with `uv`
 
 prek uses `uv` for creating virtual environments and installing dependencies:
@@ -409,7 +415,7 @@ main()
 
 - The first part of the `entry` field must be a path to a local Python script
 - If `additional_dependencies` is specified in `.pre-commit-config.yaml`, script metadata will be ignored
-- When both `language_version` (in config) and `requires-python` (in script) are set, `language_version` takes precedence
+- When both `language_version` (in config) and `requires-python` (in script) are set, script metadata takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
 
 ### r
