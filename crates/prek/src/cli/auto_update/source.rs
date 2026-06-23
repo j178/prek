@@ -154,9 +154,11 @@ async fn collect_frozen_mismatches<'a>(
         .iter()
         .filter_map(|usage| {
             let current_frozen = usage.current_frozen.as_deref()?;
-            let frozen_commit = resolved_frozen_refs.get(current_frozen).cloned().flatten();
+            let frozen_commit = resolved_frozen_refs
+                .get(current_frozen)
+                .and_then(|commit| commit.as_deref());
 
-            let reason = match frozen_commit.as_deref() {
+            let reason = match frozen_commit {
                 Some(frozen_commit) if frozen_commit.eq_ignore_ascii_case(target.current_rev) => {
                     return None;
                 }
