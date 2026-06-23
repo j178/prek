@@ -112,8 +112,8 @@ async fn fix_file(
     let file_path = file_base.join(filename);
     let content = fs_err::tokio::read(&file_path).await?;
 
-    let mut output = Vec::with_capacity(content.len());
-    let mut modified = false;
+    let mut output = None;
+    let mut copied_len = 0;
     for line in content.split_inclusive(|&b| b == b'\n') {
         let line_ending = detect_line_ending(line);
         let mut trimmed = &line[..line.len() - line_ending.len()];
@@ -129,17 +129,32 @@ async fn fix_file(
             trimmed = trimmed.trim_end_with(|c| chars.contains(&c));
         }
 
-        output.extend_from_slice(trimmed);
-        if markdown_end {
-            output.extend_from_slice(MARKDOWN_LINE_BREAK);
-            modified |= trimmed.len() + MARKDOWN_LINE_BREAK.len() + line_ending.len() != line.len();
+        let modified_len = if markdown_end {
+            trimmed.len() + MARKDOWN_LINE_BREAK.len() + line_ending.len()
         } else {
-            modified |= trimmed.len() + line_ending.len() != line.len();
+            trimmed.len() + line_ending.len()
+        };
+        let modified = modified_len != line.len();
+
+        if modified {
+            let output = output.get_or_insert_with(|| {
+                let mut output = Vec::with_capacity(content.len());
+                output.extend_from_slice(&content[..copied_len]);
+                output
+            });
+            output.extend_from_slice(trimmed);
+            if markdown_end {
+                output.extend_from_slice(MARKDOWN_LINE_BREAK);
+            }
+            output.extend_from_slice(line_ending);
+        } else if let Some(output) = output.as_mut() {
+            output.extend_from_slice(line);
         }
-        output.extend_from_slice(line_ending);
+
+        copied_len += line.len();
     }
 
-    if modified {
+    if let Some(output) = output {
         fs_err::tokio::write(&file_path, &output).await?;
         Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
     } else {
