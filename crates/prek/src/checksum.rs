@@ -146,7 +146,9 @@ pub(crate) fn digest_from_sha256sums(contents: &str, filename: &str) -> Result<S
         let Some((digest, name)) = line.split_once(char::is_whitespace) else {
             continue;
         };
-        let name = name.trim().trim_start_matches('*');
+        let name = name.trim();
+        // GNU-style checksum files may prefix binary-mode filenames with `*`.
+        let name = name.strip_prefix('*').unwrap_or(name);
         if name == filename {
             return digest.parse();
         }
@@ -188,6 +190,17 @@ mod tests {
                 0000000000000000000000000000000000000000000000000000000000000000  other.tar.gz
                 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *target.tar.gz
             "},
+            "target.tar.gz",
+        )?;
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn parses_sha256sums_binary_mode_marker() -> Result<()> {
+        let digest = digest_from_sha256sums(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *target.tar.gz",
             "target.tar.gz",
         )?;
 
