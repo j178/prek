@@ -311,7 +311,7 @@ pub(super) fn select_best_tag<'a>(
     allow_non_version_like: bool,
 ) -> Option<&'a str> {
     let has_version_like = tags.iter().any(|tag| tag.contains('.'));
-    let mut candidates = if has_version_like {
+    let candidates = if has_version_like {
         tags.iter()
             .filter(|tag| tag.contains('.'))
             .copied()
@@ -322,14 +322,16 @@ pub(super) fn select_best_tag<'a>(
         return None;
     };
 
-    candidates.sort_by(|tag_a, tag_b| {
-        levenshtein_distance(tag_a, current_ref)
-            .cmp(&levenshtein_distance(tag_b, current_ref))
-            .then_with(|| compare_tag_versions_desc(tag_a, tag_b))
-            .then_with(|| tag_a.cmp(tag_b))
-    });
-
-    candidates.into_iter().next()
+    candidates
+        .into_iter()
+        .map(|tag| (levenshtein_distance(tag, current_ref), tag))
+        .min_by(|(distance_a, tag_a), (distance_b, tag_b)| {
+            distance_a
+                .cmp(distance_b)
+                .then_with(|| compare_tag_versions_desc(tag_a, tag_b))
+                .then_with(|| tag_a.cmp(tag_b))
+        })
+        .map(|(_, tag)| tag)
 }
 
 fn levenshtein_distance(a: &str, b: &str) -> usize {
