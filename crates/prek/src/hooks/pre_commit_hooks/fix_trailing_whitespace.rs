@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -17,15 +16,9 @@ struct Chars(Vec<char>);
 
 impl FromStr for Chars {
     type Err = String;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Chars(s.chars().collect()))
-    }
-}
-
-impl Deref for Chars {
-    type Target = Vec<char>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
@@ -43,20 +36,17 @@ struct Args {
 }
 
 impl Args {
-    fn markdown_exts(&self) -> Result<Vec<String>> {
+    fn markdown_exts(&self) -> Result<Vec<&str>> {
         let markdown_exts = self
             .markdown_linebreak_ext
             .iter()
             .flat_map(|ext| ext.split(','))
-            .map(|ext| format!(".{}", ext.trim_start_matches('.')).to_ascii_lowercase())
+            .map(|ext| ext.trim_start_matches('.'))
             .collect::<Vec<_>>();
 
         // Validate extensions don't contain path separators
         for ext in &markdown_exts {
-            if ext[1..]
-                .chars()
-                .any(|c| matches!(c, '.' | '/' | '\\' | ':'))
-            {
+            if ext.chars().any(|c| matches!(c, '.' | '/' | '\\' | ':')) {
                 anyhow::bail!("bad `--markdown-linebreak-ext` argument '{ext}' (has . / \\ :)");
             }
         }
@@ -76,17 +66,16 @@ pub(crate) async fn fix_trailing_whitespace(
 
     let force_markdown = args.force_markdown();
     let markdown_exts = args.markdown_exts()?;
-    let chars = if let Some(chars) = args.chars {
-        chars.deref().to_owned()
-    } else {
-        Vec::new()
-    };
+    let chars = args
+        .chars
+        .as_ref()
+        .map_or(&[][..], |chars| chars.0.as_slice());
 
     run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
         fix_file(
             hook.project().relative_path(),
             filename,
-            &chars,
+            chars,
             force_markdown,
             &markdown_exts,
         )
@@ -99,15 +88,9 @@ async fn fix_file(
     filename: &Path,
     chars: &[char],
     force_markdown: bool,
-    markdown_exts: &[String],
+    markdown_exts: &[&str],
 ) -> Result<(i32, Vec<u8>)> {
-    let is_markdown = force_markdown || {
-        Path::new(filename)
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| format!(".{}", e.to_ascii_lowercase()))
-            .is_some_and(|e| markdown_exts.contains(&e))
-    };
+    let is_markdown = force_markdown || is_markdown_file(filename, markdown_exts);
 
     let file_path = file_base.join(filename);
     let content = fs_err::tokio::read(&file_path).await?;
@@ -162,6 +145,17 @@ async fn fix_file(
     }
 }
 
+fn is_markdown_file(filename: &Path, markdown_exts: &[&str]) -> bool {
+    filename
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|extension| {
+            markdown_exts
+                .iter()
+                .any(|markdown_ext| markdown_ext.eq_ignore_ascii_case(extension))
+        })
+}
+
 fn detect_line_ending(line: &[u8]) -> &[u8] {
     if line.ends_with(b"\r\n") {
         b"\r\n"
@@ -200,7 +194,7 @@ mod tests {
             create_test_file(&dir, "file.txt", b"keep this line\ntrim trailing    \n").await?;
 
         let chars = vec![' ', '\t'];
-        let md_exts = vec![".md".to_string()];
+        let md_exts = vec!["md"];
 
         let (code, msg) = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
 
@@ -228,7 +222,7 @@ mod tests {
         .await?;
 
         let chars = vec![' ', '\t'];
-        let md_exts = vec![".md".to_string()];
+        let md_exts = vec!["md"];
 
         let (code, _msg) = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
 
@@ -254,7 +248,7 @@ mod tests {
         .await?;
 
         let chars = vec![' ', '\t'];
-        let md_exts: Vec<String> = vec![]; // irrelevant because force_markdown = true
+        let md_exts = vec![]; // irrelevant because force_markdown = true
 
         let (code, _msg) = fix_file(Path::new(""), &file_path, &chars, true, &md_exts).await?;
 
@@ -273,7 +267,7 @@ mod tests {
         let dir = TempDir::new()?;
         let path = create_test_file(&dir, "ok.txt", b"already_trimmed\nline_two\n").await?;
         let chars = vec![' ', '\t'];
-        let md_exts = vec![".md".to_string()];
+        let md_exts = vec!["md"];
 
         // file already trimmed -> no changes
         let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
@@ -308,7 +302,7 @@ mod tests {
         // lines are only whitespace; markdown_end_flag should NOT trigger
         let path = create_test_file(&dir, "ws.txt", b"   \n\t\n  \n").await?;
         let chars = vec![' ', '\t'];
-        let md_exts = vec![".md".to_string()];
+        let md_exts = vec!["md"];
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
         // trimming whitespace-only lines will change them to empty lines -> modified true
@@ -345,7 +339,7 @@ mod tests {
         // CRLF content (use \r\n). Ensure trimming still works.
         let path = create_test_file(&dir, "crlf.txt", b"one  \r\ntwo   \r\n").await?;
         let chars = vec![' ', '\t'];
-        let md_exts = vec![".txt".to_string()]; // treat as markdown for this test
+        let md_exts = vec!["txt"]; // treat as markdown for this test
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
@@ -379,7 +373,7 @@ mod tests {
     #[tokio::test]
     async fn test_unicode_trim_char() -> Result<()> {
         let dir = TempDir::new()?;
-        // use a unicode char '。' and ideographic space '　' to trim
+        // use a Unicode char '。' and ideographic space '　' to trim
         let path = create_test_file(&dir, "uni.txt", "hello。　\n".as_bytes()).await?;
         let chars = vec!['。', '　'];
         let md_exts = vec![];
@@ -396,10 +390,10 @@ mod tests {
     #[tokio::test]
     async fn test_extension_case_insensitive_matching() -> Result<()> {
         let dir = TempDir::new()?;
-        // capital extension .MD should match .md in markdown_exts
+        // Capital extension .MD should match dotless `md`.
         let path = create_test_file(&dir, "Doc.MD", b"hi   \n").await?;
         let chars = vec![' ', '\t'];
-        let md_exts = vec![".md".to_string()];
+        let md_exts = vec!["md"];
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
@@ -452,7 +446,7 @@ mod tests {
         let content = b"foo  \nbar \nbaz    \n\t\n\n  ";
         let path = create_test_file(&dir, "wild.md", content).await?;
         let chars = vec![' ', '\t'];
-        let md_exts = vec!["*".to_string()];
+        let md_exts = vec!["*"];
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 1);
@@ -469,7 +463,7 @@ mod tests {
         let dir = TempDir::new()?;
         let path = create_test_file(&dir, "custom_charset.md", b"\ta \t   \n").await?;
         let chars = vec![' '];
-        let md_exts = vec!["*".to_string()];
+        let md_exts = vec!["*"];
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 1);
@@ -503,7 +497,7 @@ mod tests {
         let dir = TempDir::new()?;
         let path = create_test_file(&dir, "trim_markdown.md", b"axxx  \n").await?;
         let chars = vec!['x'];
-        let md_exts = vec!["md".to_string()];
+        let md_exts = vec!["md"];
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 1);
@@ -515,6 +509,15 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_markdown_extension_matching_uses_dotless_extensions() {
+        let md_exts = vec!["MD"];
+        assert!(is_markdown_file(Path::new("README.md"), &md_exts));
+
+        let md_exts = vec![".md"];
+        assert!(!is_markdown_file(Path::new("README.md"), &md_exts));
+    }
+
     #[tokio::test]
     async fn test_invalid_utf8_file_is_handled() -> Result<()> {
         let dir = TempDir::new()?;
@@ -522,7 +525,7 @@ mod tests {
         let content = b"valid line\ninvalid utf8 here:\xff\n";
         let path = create_test_file(&dir, "invalid_utf8.txt", content).await?;
         let chars = vec![' ', '\t'];
-        let md_exts: Vec<String> = vec![];
+        let md_exts = vec![];
 
         let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 0);
