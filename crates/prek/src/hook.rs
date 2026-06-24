@@ -958,6 +958,7 @@ mod tests {
                     files: None,
                     exclude: None,
                     fail_fast: None,
+                    require_frozen_revs: None,
                     minimum_prek_version: None,
                     orphan: None,
                     _unused_keys: {},

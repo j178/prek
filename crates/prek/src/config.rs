@@ -929,6 +929,11 @@ impl RemoteRepo {
     }
 }
 
+/// Check if a string looks like a frozen git revision.
+pub(crate) fn is_frozen_rev(s: &str) -> bool {
+    looks_like_sha(s)
+}
+
 impl Display for RemoteRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}@{}", self.repo, self.rev)
@@ -1175,6 +1180,9 @@ pub(crate) struct Config {
     /// Set to true to have prek stop running hooks after the first failure.
     /// Default is false.
     pub fail_fast: Option<bool>,
+    /// Set to true to require remote repository revisions to be pinned to commit SHAs.
+    /// Default is false.
+    pub require_frozen_revs: Option<bool>,
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
@@ -1187,6 +1195,19 @@ pub(crate) struct Config {
 
     #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
+}
+
+impl Config {
+    pub(crate) fn requires_frozen_revs(&self) -> bool {
+        self.require_frozen_revs.unwrap_or(false)
+    }
+
+    pub(crate) fn repos_with_unfrozen_revs(&self) -> impl Iterator<Item = &RemoteRepo> {
+        self.repos.iter().filter_map(|repo| match repo {
+            Repo::Remote(repo) if !is_frozen_rev(&repo.rev) => Some(repo),
+            Repo::Remote(_) | Repo::Local(_) | Repo::Meta(_) | Repo::Builtin(_) => None,
+        })
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

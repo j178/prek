@@ -116,6 +116,64 @@ fn run_does_not_rewrite_unchanged_config_tracking_file() -> Result<()> {
 }
 
 #[test]
+fn run_require_frozen_revs() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        require_frozen_revs: true
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Config contains non-frozen remote hook revisions
+      in `[TEMP_DIR]/.pre-commit-config.yaml`:
+        - https://github.com/pre-commit/pre-commit-hooks uses rev `v5.0.0`
+    hint: run `prek auto-update --freeze` to replace tags with commit SHAs
+    ");
+}
+
+#[test]
+fn run_require_frozen_revs_allows_local_repos() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        require_frozen_revs: true
+        repos:
+          - repo: local
+            hooks:
+              - id: local-hook
+                name: local-hook
+                entry: echo ok
+                language: system
+    "});
+    cwd.child("file.txt").write_str("Hello, world!\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-hook...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_glob_patterns_with_multiple_hooks() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

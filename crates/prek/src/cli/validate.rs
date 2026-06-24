@@ -7,9 +7,43 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use crate::cli::ExitStatus;
-use crate::config::{read_config, read_manifest};
+use crate::config::{Config, read_config, read_manifest};
 use crate::printer::Printer;
 use crate::warn_user;
+
+fn write_unfrozen_rev_error(
+    config: &Config,
+    config_path: &std::path::Path,
+    printer: Printer,
+) -> Result<bool> {
+    let repos = config.repos_with_unfrozen_revs().collect::<Vec<_>>();
+    if repos.is_empty() {
+        return Ok(false);
+    }
+
+    writeln!(
+        printer.stderr(),
+        "{}: Config `{}` contains non-frozen remote hook revisions",
+        "error".red().bold(),
+        config_path.display()
+    )?;
+    for repo in repos {
+        writeln!(
+            printer.stderr(),
+            "  - {} uses rev `{}`",
+            repo.repo.cyan(),
+            repo.rev.yellow()
+        )?;
+    }
+    writeln!(
+        printer.stderr(),
+        "{}: run `{}` to replace tags with commit SHAs",
+        "hint".yellow().bold(),
+        "prek auto-update --freeze".cyan()
+    )?;
+
+    Ok(true)
+}
 
 pub(crate) fn validate_configs(configs: Vec<PathBuf>, printer: Printer) -> Result<ExitStatus> {
     let mut status = ExitStatus::Success;
@@ -19,18 +53,27 @@ pub(crate) fn validate_configs(configs: Vec<PathBuf>, printer: Printer) -> Resul
         return Ok(ExitStatus::Success);
     }
 
-    for config in configs {
-        if let Err(err) = read_config(&config) {
-            writeln!(printer.stderr(), "{}: {}", "error".red().bold(), err)?;
-            for source in iter::successors(err.source(), |&err| err.source()) {
-                writeln!(
-                    printer.stderr(),
-                    "  {}: {}",
-                    "caused by".red().bold(),
-                    source
-                )?;
+    for config_path in configs {
+        match read_config(&config_path) {
+            Ok(config) => {
+                if config.requires_frozen_revs()
+                    && write_unfrozen_rev_error(&config, &config_path, printer)?
+                {
+                    status = ExitStatus::Failure;
+                }
             }
-            status = ExitStatus::Failure;
+            Err(err) => {
+                writeln!(printer.stderr(), "{}: {}", "error".red().bold(), err)?;
+                for source in iter::successors(err.source(), |&err| err.source()) {
+                    writeln!(
+                        printer.stderr(),
+                        "  {}: {}",
+                        "caused by".red().bold(),
+                        source
+                    )?;
+                }
+                status = ExitStatus::Failure;
+            }
         }
     }
 

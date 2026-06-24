@@ -66,6 +66,68 @@ fn validate_config() -> anyhow::Result<()> {
 }
 
 #[test]
+fn validate_config_require_frozen_revs() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        require_frozen_revs: true
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+          - repo: https://github.com/astral-sh/ruff-pre-commit
+            rev: 0123456789abcdef0123456789abcdef01234567
+            hooks:
+              - id: ruff
+          - repo: local
+            hooks:
+              - id: local-hook
+                name: local-hook
+                entry: echo ok
+                language: system
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Config `.pre-commit-config.yaml` contains non-frozen remote hook revisions
+      - https://github.com/pre-commit/pre-commit-hooks uses rev `v5.0.0`
+    hint: run `prek auto-update --freeze` to replace tags with commit SHAs
+    ");
+}
+
+#[test]
+fn validate_config_require_frozen_revs_allows_frozen_and_local_repos() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        require_frozen_revs: true
+        repos:
+          - repo: https://github.com/astral-sh/ruff-pre-commit
+            rev: 0123456789abcdef0123456789abcdef01234567
+            hooks:
+              - id: ruff
+          - repo: local
+            hooks:
+              - id: local-hook
+                name: local-hook
+                entry: echo ok
+                language: system
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    success: All configs are valid
+    ");
+}
+
+#[test]
 fn invalid_config_error() {
     let context = TestContext::new();
     context.write_pre_commit_config(indoc::indoc! {r"

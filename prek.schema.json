@@ -118,6 +118,10 @@
       "description": "Set to true to have prek stop running hooks after the first failure.\nDefault is false.",
       "type": "boolean"
     },
+    "require_frozen_revs": {
+      "description": "Set to true to require remote repository revisions to be pinned to commit SHAs.\nDefault is false.",
+      "type": "boolean"
+    },
     "minimum_prek_version": {
       "description": "The minimum version of prek required to run this configuration.",
       "type": "string"
