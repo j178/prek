@@ -239,6 +239,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-run--require-frozen-revs"><a href="#prek-run--require-frozen-revs"><code>--require-frozen-revs</code></a></dt><dd><p>Require remote repository revisions to be pinned to commit SHAs</p>
 </dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
@@ -468,6 +469,7 @@ prek validate-config [OPTIONS] [CONFIG]...
 </dd><dt id="prek-validate-config--quiet"><a href="#prek-validate-config--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-validate-config--refresh"><a href="#prek-validate-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-validate-config--require-frozen-revs"><a href="#prek-validate-config--require-frozen-revs"><code>--require-frozen-revs</code></a></dt><dd><p>Require remote repository revisions to be pinned to commit SHAs</p>
 </dd><dt id="prek-validate-config--verbose"><a href="#prek-validate-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-validate-config--version"><a href="#prek-validate-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -795,6 +797,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-try-repo--require-frozen-revs"><a href="#prek-try-repo--require-frozen-revs"><code>--require-frozen-revs</code></a></dt><dd><p>Require remote repository revisions to be pinned to commit SHAs</p>
 </dd><dt id="prek-try-repo--rev"><a href="#prek-try-repo--rev"><code>--rev</code></a>, <code>--ref</code> <i>rev</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
 </dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-try-repo--skip"><a href="#prek-try-repo--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>

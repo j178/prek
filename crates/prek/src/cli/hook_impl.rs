@@ -137,6 +137,7 @@ pub(crate) async fn hook_impl(
         flag(run_args.fail_fast, run_args.no_fail_fast),
         false,
         false,
+        false,
         run_args.extra,
         false,
         printer,

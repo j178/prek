@@ -302,6 +302,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 options.show_diff_on_failure,
                 flag(options.fail_fast, options.no_fail_fast),
                 options.dry_run,
+                options.require_frozen_revs,
                 cli.globals.refresh,
                 options.extra,
                 cli.globals.verbose > 0,
@@ -369,7 +370,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
-            cli::validate_configs(args.configs, printer)
+            cli::validate_configs(args.configs, args.require_frozen_revs, printer)
         }
         Command::ValidateManifest(args) => {
             show_settings!(args);

@@ -120,6 +120,62 @@ fn run_does_not_rewrite_unchanged_config_tracking_file() -> Result<()> {
 }
 
 #[test]
+fn run_require_frozen_revs() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+
+    cmd_snapshot!(context.filters(), context.run().arg("--require-frozen-revs"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Config contains non-frozen remote hook revisions
+      in `[TEMP_DIR]/.pre-commit-config.yaml`:
+        - https://github.com/pre-commit/pre-commit-hooks uses rev `v5.0.0`
+    hint: run `prek auto-update --freeze` to replace tags with commit SHAs
+    ");
+}
+
+#[test]
+fn run_require_frozen_revs_allows_local_repos() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-hook
+                name: local-hook
+                entry: echo ok
+                language: system
+    "});
+    cwd.child("file.txt").write_str("Hello, world!\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--require-frozen-revs").arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-hook...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_glob_patterns_with_multiple_hooks() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -1672,6 +1728,7 @@ fn global_path_options_expand_tilde() -> Result<()> {
             fail_fast: false,
             no_fail_fast: false,
             dry_run: false,
+            require_frozen_revs: false,
             extra: RunExtraArgs {
                 remote_branch: None,
                 local_branch: None,
@@ -3040,6 +3097,7 @@ fn selectors_completion() -> Result<()> {
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
+    --require-frozen-revs	Require remote repository revisions to be pinned to commit SHAs
     --stage	The stage during which the hook is fired
     --group	Run hooks belonging to the specified group
     --no-group	Do not run hooks belonging to the specified group
