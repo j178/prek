@@ -41,6 +41,10 @@ pub(crate) async fn check_added_large_files(
         candidate_filenames.as_slice()
     };
 
+    if filenames.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+
     // Builtin hooks receive project-relative filenames, so git attribute lookups need to run
     // from the project root for nested `.gitattributes` files to apply.
     let lfs_files = get_lfs_files(hook.work_dir(), filenames).await?;
