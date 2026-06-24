@@ -372,8 +372,13 @@ impl Store {
         config_paths: impl Iterator<Item = &'a Path>,
     ) -> Result<(), Error> {
         let mut tracked = self.tracked_configs()?;
+        let mut changed = false;
         for config_path in config_paths {
-            tracked.insert(config_path.to_path_buf());
+            changed |= tracked.insert(config_path.to_path_buf());
+        }
+
+        if !changed {
+            return Ok(());
         }
 
         let tracking_file = self.config_tracking_file();
