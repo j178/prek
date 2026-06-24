@@ -332,10 +332,21 @@ pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
 }
 
 fn digest_from_deno_checksum(contents: &str, filename: &str) -> Result<Sha256Digest> {
+    // Deno releases have shipped a per-artifact `.sha256sum` file since v2.0.1.
+    // Non-Windows artifacts use the regular sha256sums format handled by
+    // `digest_from_sha256sums`; Windows artifacts use this `Get-FileHash` shape:
+    //
+    // Algorithm : SHA256
+    // Hash      : D45377511968CB2DB7E57155257FF9A1400DB169256B5EAA16C6657F275E4D3B
+    // Path      : C:\a\deno\deno\target\release\deno-x86_64-pc-windows-msvc.zip
     if let Ok(digest) = digest_from_sha256sums(contents, filename) {
         return Ok(digest);
     }
+    digest_from_deno_windows_checksum(contents, filename)
+}
 
+fn digest_from_deno_windows_checksum(contents: &str, filename: &str) -> Result<Sha256Digest> {
+    let mut algorithm = None;
     let mut hash = None;
     let mut path = None;
     for line in contents.lines() {
@@ -343,18 +354,28 @@ fn digest_from_deno_checksum(contents: &str, filename: &str) -> Result<Sha256Dig
             continue;
         };
         match name.trim() {
+            "Algorithm" => algorithm = Some(value.trim()),
             "Hash" => hash = Some(value.trim()),
             "Path" => path = Some(value.trim()),
             _ => {}
         }
     }
 
+    let Some(algorithm) = algorithm else {
+        anyhow::bail!("No algorithm found in Deno checksum file");
+    };
+    if !algorithm.eq_ignore_ascii_case("SHA256") {
+        anyhow::bail!("Deno checksum file uses `{algorithm}` instead of `SHA256`");
+    }
+
     let Some(path) = path else {
         anyhow::bail!("No path found in Deno checksum file");
     };
-    let Some(found_filename) = path.rsplit(['/', '\\']).next() else {
-        anyhow::bail!("No filename found in Deno checksum path");
-    };
+    let found_filename = path
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .context("No filename found in Deno checksum path")?;
     if found_filename != filename {
         anyhow::bail!("Deno checksum file lists `{found_filename}` instead of `{filename}`");
     }
@@ -413,5 +434,35 @@ mod tests {
         );
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_deno_windows_checksum_with_different_algorithm() {
+        let result = digest_from_deno_checksum(
+            indoc::indoc! {r"
+                Algorithm : SHA512
+                Hash      : 1611FB54C3BB0A605A851530A359A48B34A8ABFD29D7091538D91B6E7F105380
+                Path      : C:\a\deno\deno\target\release\deno-x86_64-pc-windows-msvc.zip
+            "},
+            "deno-x86_64-pc-windows-msvc.zip",
+        );
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Deno checksum file uses `SHA512` instead of `SHA256`"
+        );
+    }
+
+    #[test]
+    fn preserves_sha256sums_error_for_non_windows_checksum() {
+        let result = digest_from_deno_checksum(
+            "f5b681529a0360e7f430688fc0ba3b25626b3933c370b053a0c27f39ef7a0f90  deno-x86_64-unknown-linux-gnu.zip",
+            "deno-aarch64-unknown-linux-gnu.zip",
+        );
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "No SHA256 digest found for `deno-aarch64-unknown-linux-gnu.zip`"
+        );
     }
 }
