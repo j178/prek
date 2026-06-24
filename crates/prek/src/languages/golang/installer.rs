@@ -14,7 +14,7 @@ use tracing::{debug, trace, warn};
 use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum};
+use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
@@ -237,35 +237,36 @@ impl GoInstaller {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let filename = format!("go{version}.{os}-{arch}.{ext}");
         let url = format!("https://go.dev/dl/{filename}");
-        let checksum = self.fetch_checksum(version, &filename).await?;
+        let checksum = Self::fetch_checksum(version, &filename).await?;
         let target = self.root.join(version.to_string());
 
-        download_and_extract_with_checksum(&url, &filename, store, checksum, async |extracted| {
-            if target.exists() {
-                debug!(target = %target.display(), "Removing existing go");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
-
-            debug!(?extracted, target = %target.display(), "Moving go to target");
-            // TODO: retry on Windows
-            fs_err::tokio::rename(extracted, &target).await?;
-
-            anyhow::Ok(())
-        })
+        let download = download_and_extract(
+            &url,
+            &filename,
+            store,
+            DownloadVerification::Sha256(checksum),
+        )
         .await
         .context("Failed to download and extract go")?;
+        if target.exists() {
+            debug!(target = %target.display(), "Removing existing go");
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+
+        debug!(extracted = ?download.path(), target = %target.display(), "Moving go to target");
+        // TODO: retry on Windows
+        fs_err::tokio::rename(download.path(), &target).await?;
 
         Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
     }
 
-    async fn fetch_checksum(&self, version: &GoVersion, filename: &str) -> Result<Sha256Digest> {
+    async fn fetch_checksum(version: &GoVersion, filename: &str) -> Result<Sha256Digest> {
         let url = "https://go.dev/dl/?mode=json&include=all";
         let releases: Vec<GoRelease> = REQWEST_CLIENT
             .get(url)
             .send()
             .await
-            .context("Failed to fetch Go release metadata")?
-            .error_for_status()
+            .and_then(reqwest::Response::error_for_status)
             .context("Failed to fetch Go release metadata")?
             .json()
             .await

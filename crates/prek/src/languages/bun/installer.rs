@@ -13,7 +13,7 @@ use tracing::{debug, trace, warn};
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum};
+use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
 use crate::process::Cmd;
@@ -219,34 +219,37 @@ impl BunInstaller {
         let filename = format!("bun-{os}-{arch}.zip");
         let url =
             format!("https://github.com/oven-sh/bun/releases/download/bun-v{version}/{filename}");
-        let checksum = self.fetch_checksum(version, &filename).await?;
+        let checksum = Self::fetch_checksum(version, &filename).await?;
         let target = self.root.join(version.to_string());
 
-        download_and_extract_with_checksum(&url, &filename, store, checksum, async |extracted| {
-            if target.exists() {
-                debug!(target = %target.display(), "Removing existing bun");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
-
-            // The ZIP extracts to bun-{os}-{arch}/bun, we need to move the contents
-            // to {version}/bin/bun
-            let extracted_binary = extracted.join("bun").with_extension(EXE_EXTENSION);
-            let target_bin_dir = bin_dir(&target);
-            fs_err::tokio::create_dir_all(&target_bin_dir).await?;
-
-            let target_binary = target_bin_dir.join("bun").with_extension(EXE_EXTENSION);
-            debug!(?extracted_binary, target = %target_binary.display(), "Moving bun to target");
-            fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
-
-            anyhow::Ok(())
-        })
+        let download = download_and_extract(
+            &url,
+            &filename,
+            store,
+            DownloadVerification::Sha256(checksum),
+        )
         .await
         .context("Failed to download and extract bun")?;
+        let extracted = download.path();
+        if target.exists() {
+            debug!(target = %target.display(), "Removing existing bun");
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+
+        // The ZIP extracts to bun-{os}-{arch}/bun, we need to move the contents
+        // to {version}/bin/bun
+        let extracted_binary = extracted.join("bun").with_extension(EXE_EXTENSION);
+        let target_bin_dir = bin_dir(&target);
+        fs_err::tokio::create_dir_all(&target_bin_dir).await?;
+
+        let target_binary = target_bin_dir.join("bun").with_extension(EXE_EXTENSION);
+        debug!(?extracted_binary, target = %target_binary.display(), "Moving bun to target");
+        fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
 
         Ok(BunResult::from_dir(&target).with_version(version.clone()))
     }
 
-    async fn fetch_checksum(&self, version: &BunVersion, filename: &str) -> Result<Sha256Digest> {
+    async fn fetch_checksum(version: &BunVersion, filename: &str) -> Result<Sha256Digest> {
         let url = format!(
             "https://github.com/oven-sh/bun/releases/download/bun-v{version}/SHASUMS256.txt"
         );
@@ -254,14 +257,8 @@ impl BunInstaller {
             .get(&url)
             .send()
             .await
+            .and_then(reqwest::Response::error_for_status)
             .with_context(|| format!("Failed to fetch Bun checksums from {url}"))?;
-        if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to fetch Bun checksums from {}: {}",
-                url,
-                response.status()
-            );
-        }
         let checksums = response.text().await?;
         digest_from_sha256sums(&checksums, filename)
     }

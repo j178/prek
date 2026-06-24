@@ -13,7 +13,7 @@ use tracing::{debug, trace, warn};
 
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum};
+use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::version::DenoVersion;
 use crate::process::Cmd;
@@ -224,30 +224,28 @@ impl DenoInstaller {
         let url = format!("https://dl.deno.land/release/v{version}/{filename}");
         let target = self.root.join(version.to_string());
 
-        let checksum = self.fetch_checksum(&url, &filename).await?;
-        download_and_extract_with_checksum(&url, &filename, store, checksum, async |extracted| {
-            Self::install_extracted(&target, extracted).await
-        })
+        let checksum = Self::fetch_checksum(&url, &filename).await?;
+        let download = download_and_extract(
+            &url,
+            &filename,
+            store,
+            DownloadVerification::Sha256(checksum),
+        )
         .await
         .context("Failed to download and extract deno")?;
+        Self::install_extracted(&target, download.path()).await?;
 
         Ok(DenoResult::from_dir(&target).with_version(version.clone()))
     }
 
-    async fn fetch_checksum(&self, url: &str, filename: &str) -> Result<Sha256Digest> {
+    async fn fetch_checksum(url: &str, filename: &str) -> Result<Sha256Digest> {
         let checksum_url = format!("{url}.sha256sum");
         let response = REQWEST_CLIENT
             .get(&checksum_url)
             .send()
             .await
+            .and_then(reqwest::Response::error_for_status)
             .with_context(|| format!("Failed to fetch Deno checksum from {checksum_url}"))?;
-        if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to fetch Deno checksum from {}: {}",
-                checksum_url,
-                response.status()
-            );
-        }
 
         let checksums = response.text().await?;
         digest_from_deno_checksum(&checksums, filename).with_context(|| {

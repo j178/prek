@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_and_extract_with_checksum_and_request};
+use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract_with};
 use crate::languages::ruby::RubyRequest;
 use crate::process::Cmd;
 use crate::store::Store;
@@ -336,39 +336,37 @@ impl RubyInstaller {
 
         debug!(url = %url, target = %target.display(), "Downloading Ruby {version}");
 
-        download_and_extract_with_checksum_and_request(
+        let download = download_and_extract_with(
             &url,
             &filename,
             store,
-            checksum,
+            DownloadVerification::Sha256(checksum),
             |req| maybe_add_github_auth(req, is_github),
-            async |extracted| {
-                // rv-ruby tarballs contain: rv-ruby@{version}/{version}/bin/ruby
-                // After strip_component, `extracted` is the rv-ruby@{version}/ directory.
-                // Move the inner {version}/ directory to our target.
-                let inner = extracted.join(&version_str);
-                if !inner.exists() {
-                    anyhow::bail!(
-                        "Expected directory '{}' inside rv-ruby archive, found: {:?}",
-                        version_str,
-                        fs_err::read_dir(extracted)?
-                            .flatten()
-                            .map(|e| e.file_name())
-                            .collect::<Vec<_>>()
-                    );
-                }
-
-                if target.exists() {
-                    debug!(target = %target.display(), "Removing existing Ruby");
-                    fs_err::tokio::remove_dir_all(&target).await?;
-                }
-
-                fs_err::tokio::rename(&inner, &target).await?;
-                Ok(())
-            },
         )
         .await
         .with_context(|| format!("Failed to download Ruby {version} from {url}"))?;
+        let extracted = download.path();
+        // rv-ruby tarballs contain: rv-ruby@{version}/{version}/bin/ruby
+        // After strip_component, `extracted` is the rv-ruby@{version}/ directory.
+        // Move the inner {version}/ directory to our target.
+        let inner = extracted.join(&version_str);
+        if !inner.exists() {
+            anyhow::bail!(
+                "Expected directory '{}' inside rv-ruby archive, found: {:?}",
+                version_str,
+                fs_err::read_dir(extracted)?
+                    .flatten()
+                    .map(|e| e.file_name())
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        if target.exists() {
+            debug!(target = %target.display(), "Removing existing Ruby");
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+
+        fs_err::tokio::rename(&inner, &target).await?;
 
         Ok(RubyResult {
             ruby_bin: target.join("bin").join("ruby"),
@@ -391,15 +389,13 @@ impl RubyInstaller {
         let response = req
             .send()
             .await
-            .with_context(|| format!("Failed to fetch rv-ruby checksums from {url}"))?;
-        if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to fetch required rv-ruby checksum file from {}: {}. \
-                 PREK_RUBY_MIRROR must provide SHA256SUMS alongside release assets.",
-                url,
-                response.status()
-            );
-        }
+            .and_then(reqwest::Response::error_for_status)
+            .with_context(|| {
+                format!(
+                    "Failed to fetch required rv-ruby checksum file from {url}. \
+                     PREK_RUBY_MIRROR must provide SHA256SUMS alongside release assets."
+                )
+            })?;
 
         let checksums = response.text().await?;
         rv_ruby_checksum_from_sha256sums(&checksums, &url, filename)

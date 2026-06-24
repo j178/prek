@@ -14,7 +14,7 @@ use tracing::{debug, trace, warn};
 use prek_consts::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_and_extract};
+use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::version;
@@ -196,18 +196,20 @@ impl InstallSource {
             "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/{archive_name}"
         );
 
-        download_and_extract(&download_url, &archive_name, store, async |extracted| {
-            let source = extracted.join("uv").with_extension(EXE_EXTENSION);
-            let target_path = target.join("uv").with_extension(EXE_EXTENSION);
-
-            debug!(?source, target = %target_path.display(), "Moving uv to target");
-            // TODO: retry on Windows
-            replace_uv_binary(&source, &target_path).await?;
-
-            anyhow::Ok(())
-        })
+        let download = download_and_extract(
+            &download_url,
+            &archive_name,
+            store,
+            DownloadVerification::None,
+        )
         .await
         .context("Failed to download and extract uv")?;
+        let source = download.path().join("uv").with_extension(EXE_EXTENSION);
+        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+
+        debug!(?source, target = %target_path.display(), "Moving uv to target");
+        // TODO: retry on Windows
+        replace_uv_binary(&source, &target_path).await?;
 
         Ok(())
     }
@@ -233,14 +235,9 @@ impl InstallSource {
             .get(&api_url)
             .header("Accept", "*/*")
             .send()
-            .await?;
-
-        if !response.status().is_success() {
-            bail!(
-                "Failed to fetch uv metadata from PyPI: {}",
-                response.status()
-            );
-        }
+            .await
+            .and_then(reqwest::Response::error_for_status)
+            .with_context(|| format!("Failed to fetch uv metadata from PyPI at {api_url}"))?;
 
         let metadata: serde_json::Value = response.json().await?;
         let files = metadata["urls"]
@@ -260,7 +257,7 @@ impl InstallSource {
             .as_str()
             .context("Missing download URL in PyPI response")?;
 
-        self.download_and_extract_wheel(store, target, &wheel_name, download_url)
+        self.install_from_wheel_url(store, target, &wheel_name, download_url)
             .await
     }
 
@@ -312,46 +309,46 @@ impl InstallSource {
             format!("{simple_url}{download_path}")
         };
 
-        self.download_and_extract_wheel(store, target, &wheel_name, &download_url)
+        self.install_from_wheel_url(store, target, &wheel_name, &download_url)
             .await
     }
 
-    async fn download_and_extract_wheel(
+    async fn install_from_wheel_url(
         &self,
         store: &Store,
         target: &Path,
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
-        download_and_extract(download_url, filename, store, async |extracted| {
-            // Find the uv binary in the extracted contents
-            let data_dir = format!("uv-{CUR_UV_VERSION}.data");
-            let extracted_uv = extracted
-                .join(data_dir)
-                .join("scripts")
-                .join("uv")
-                .with_extension(EXE_EXTENSION);
+        let download =
+            download_and_extract(download_url, filename, store, DownloadVerification::None)
+                .await
+                .context("Failed to download and extract uv wheel")?;
 
-            // Copy the binary to the target location
-            let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+        // Find the uv binary in the extracted contents
+        let data_dir = format!("uv-{CUR_UV_VERSION}.data");
+        let extracted_uv = download
+            .path()
+            .join(data_dir)
+            .join("scripts")
+            .join("uv")
+            .with_extension(EXE_EXTENSION);
 
-            debug!(?extracted_uv, target = %target_path.display(), "Moving uv to target");
-            replace_uv_binary(&extracted_uv, &target_path).await?;
+        // Copy the binary to the target location
+        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
-            // Set executable permissions on Unix
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let metadata = fs_err::tokio::metadata(&target_path).await?;
-                let mut perms = metadata.permissions();
-                perms.set_mode(0o755);
-                fs_err::tokio::set_permissions(&target_path, perms).await?;
-            }
+        debug!(?extracted_uv, target = %target_path.display(), "Moving uv to target");
+        replace_uv_binary(&extracted_uv, &target_path).await?;
 
-            Ok(())
-        })
-        .await
-        .context("Failed to download and extract uv wheel")?;
+        // Set executable permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs_err::tokio::metadata(&target_path).await?;
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o755);
+            fs_err::tokio::set_permissions(&target_path, perms).await?;
+        }
 
         Ok(())
     }

@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_to_temp_file_with_checksum};
+use crate::http::{DownloadVerification, REQWEST_CLIENT, download_artifact};
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
 use crate::store::Store;
@@ -116,7 +116,13 @@ impl Rustup {
         let target = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
         let checksum = Self::fetch_checksum(&url).await?;
 
-        let download = download_to_temp_file_with_checksum(&url, filename, store, checksum).await?;
+        let download = download_artifact(
+            &url,
+            filename,
+            store,
+            DownloadVerification::Sha256(checksum),
+        )
+        .await?;
         make_executable(download.path())?;
 
         // Move to final location
@@ -139,14 +145,8 @@ impl Rustup {
             .get(&checksum_url)
             .send()
             .await
+            .and_then(reqwest::Response::error_for_status)
             .with_context(|| format!("Failed to fetch rustup checksum from {checksum_url}"))?;
-        if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to fetch rustup checksum from {}: {}",
-                checksum_url,
-                response.status()
-            );
-        }
         let checksum = response.text().await?;
         digest_from_rustup_checksum(&checksum)
     }
