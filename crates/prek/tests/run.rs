@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::SystemTime;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -71,6 +72,49 @@ fn run_basic() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn run_does_not_rewrite_unchanged_config_tracking_file() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: Noop
+                language: system
+                entry: "true"
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    context.run().arg("--all-files").assert().success();
+
+    let tracking_file = context.home_dir().child("config-tracking.json");
+    tracking_file.assert(predicate::path::is_file());
+    let original_content = fs_err::read_to_string(tracking_file.path())?;
+
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(tracking_file.path())?
+        .set_modified(SystemTime::UNIX_EPOCH)?;
+    let original_modified = fs_err::metadata(tracking_file.path())?.modified()?;
+
+    context.run().arg("--all-files").assert().success();
+
+    assert_eq!(
+        fs_err::read_to_string(tracking_file.path())?,
+        original_content
+    );
+    assert_eq!(
+        fs_err::metadata(tracking_file.path())?.modified()?,
+        original_modified
+    );
 
     Ok(())
 }
