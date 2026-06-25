@@ -87,7 +87,10 @@ impl<R: AsyncRead + Unpin> AsyncRead for HashReader<R> {
     }
 }
 
-pub(crate) fn digest_from_sha256sums(contents: &str, filename: &str) -> Result<Sha256Digest> {
+pub(crate) fn digest_from_sha256sums(
+    contents: &str,
+    filename: &str,
+) -> Result<Option<Sha256Digest>> {
     for line in contents.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -101,11 +104,11 @@ pub(crate) fn digest_from_sha256sums(contents: &str, filename: &str) -> Result<S
         // GNU-style checksum files may prefix binary-mode filenames with `*`.
         let name = name.strip_prefix('*').unwrap_or(name);
         if name == filename {
-            return digest.parse();
+            return digest.parse().map(Some);
         }
     }
 
-    bail!("No SHA256 digest found for `{filename}`");
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -125,6 +128,7 @@ mod tests {
 
         assert_eq!(plain, prefixed);
         assert_eq!(plain.to_string(), EMPTY_SHA256);
+        assert!(plain.verify(prefixed, "test").is_ok());
     }
 
     #[test]
@@ -146,7 +150,8 @@ mod tests {
                 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *target.tar.gz
             "},
             "target.tar.gz",
-        )?;
+        )?
+        .context("expected target digest")?;
 
         assert_eq!(digest.to_string(), EMPTY_SHA256);
         Ok(())
@@ -157,9 +162,21 @@ mod tests {
         let digest = digest_from_sha256sums(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *target.tar.gz",
             "target.tar.gz",
-        )?;
+        )?
+        .context("expected target digest")?;
 
         assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn returns_none_for_missing_sha256sums_entry() -> Result<()> {
+        let digest = digest_from_sha256sums(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *other.tar.gz",
+            "target.tar.gz",
+        )?;
+
+        assert_eq!(digest, None);
         Ok(())
     }
 

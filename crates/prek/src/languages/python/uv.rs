@@ -13,8 +13,9 @@ use tracing::{debug, trace, warn};
 
 use prek_consts::env_vars::EnvVars;
 
+use crate::archive;
 use crate::fs::LockedFile;
-use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
+use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::version;
@@ -196,15 +197,20 @@ impl InstallSource {
             "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/{archive_name}"
         );
 
-        let download = download_and_extract(
+        let download = download_artifact_with(
             &download_url,
             &archive_name,
             store,
-            DownloadVerification::None,
+            DownloadChecksumPolicy::Disabled,
+            async || Ok(None),
+            |req| req,
         )
         .await
-        .context("Failed to download and extract uv")?;
-        let source = download.path().join("uv").with_extension(EXE_EXTENSION);
+        .context("Failed to download uv")?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .context("Failed to extract uv")?;
+        let source = extracted.join("uv").with_extension(EXE_EXTENSION);
         let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
         debug!(?source, target = %target_path.display(), "Moving uv to target");
@@ -320,15 +326,23 @@ impl InstallSource {
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
-        let download =
-            download_and_extract(download_url, filename, store, DownloadVerification::None)
-                .await
-                .context("Failed to download and extract uv wheel")?;
+        let download = download_artifact_with(
+            download_url,
+            filename,
+            store,
+            DownloadChecksumPolicy::Disabled,
+            async || Ok(None),
+            |req| req,
+        )
+        .await
+        .context("Failed to download uv wheel")?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .context("Failed to extract uv wheel")?;
 
         // Find the uv binary in the extracted contents
         let data_dir = format!("uv-{CUR_UV_VERSION}.data");
-        let extracted_uv = download
-            .path()
+        let extracted_uv = extracted
             .join(data_dir)
             .join("scripts")
             .join("uv")

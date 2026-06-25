@@ -10,10 +10,11 @@ use prek_consts::env_vars::EnvVars;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
+use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
 use crate::process::Cmd;
@@ -219,18 +220,19 @@ impl BunInstaller {
         let filename = format!("bun-{os}-{arch}.zip");
         let url =
             format!("https://github.com/oven-sh/bun/releases/download/bun-v{version}/{filename}");
-        let checksum = Self::fetch_checksum(version, &filename).await?;
+        let checksum_url = format!(
+            "https://github.com/oven-sh/bun/releases/download/bun-v{version}/SHASUMS256.txt"
+        );
         let target = self.root.join(version.to_string());
 
-        let download = download_and_extract(
-            &url,
-            &filename,
-            store,
-            DownloadVerification::Sha256(checksum),
-        )
+        let download = download_artifact(&url, &filename, store, async || {
+            Self::fetch_checksum(&checksum_url, &filename).await
+        })
         .await
-        .context("Failed to download and extract bun")?;
-        let extracted = download.path();
+        .context("Failed to download bun")?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .context("Failed to extract bun")?;
         if target.exists() {
             debug!(target = %target.display(), "Removing existing bun");
             fs_err::tokio::remove_dir_all(&target).await?;
@@ -249,17 +251,21 @@ impl BunInstaller {
         Ok(BunResult::from_dir(&target).with_version(version.clone()))
     }
 
-    async fn fetch_checksum(version: &BunVersion, filename: &str) -> Result<Sha256Digest> {
-        let url = format!(
-            "https://github.com/oven-sh/bun/releases/download/bun-v{version}/SHASUMS256.txt"
-        );
+    async fn fetch_checksum(url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
         let response = REQWEST_CLIENT
-            .get(&url)
+            .get(url)
             .send()
             .await
-            .and_then(reqwest::Response::error_for_status)
             .with_context(|| format!("Failed to fetch Bun checksums from {url}"))?;
-        let checksums = response.text().await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let checksums = response
+            .error_for_status()
+            .with_context(|| format!("Failed to fetch Bun checksums from {url}"))?
+            .text()
+            .await?;
         digest_from_sha256sums(&checksums, filename)
     }
 

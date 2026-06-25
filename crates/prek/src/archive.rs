@@ -126,6 +126,23 @@ pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
     }
 }
 
+/// Extract an archive file next to the archive and return the usable extracted path.
+pub async fn extract_archive(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
+    let path = path.as_ref();
+    let ext = ArchiveExtension::from_path(path)?;
+    let extract_dir = path.with_file_name("extract");
+    fs_err::tokio::create_dir_all(&extract_dir).await?;
+
+    let file = fs_err::tokio::File::open(path).await?;
+    unpack(file, ext, &extract_dir).await?;
+
+    match strip_component(&extract_dir) {
+        Ok(top_level) => Ok(top_level),
+        Err(Error::NonSingularArchive(_)) => Ok(extract_dir),
+        Err(err) => Err(err),
+    }
+}
+
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
@@ -318,5 +335,22 @@ pub async fn unpack<R: AsyncRead + Unpin>(
         ArchiveExtension::TarGz => untar_gz(reader, target).await,
         ArchiveExtension::TarXz => untar_xz(reader, target).await,
         _ => Err(Error::UnsupportedArchive(target.as_ref().to_path_buf())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    #[tokio::test]
+    async fn extract_archive_rejects_unsupported_archive() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let archive = temp.path().join("archive.rar");
+        fs_err::write(&archive, b"data")?;
+
+        let err = super::extract_archive(&archive).await.unwrap_err();
+
+        assert!(err.to_string().contains("Unsupported archive type"));
+        Ok(())
     }
 }

@@ -440,6 +440,61 @@ fn language_version() {
     );
 }
 
+/// Test checksum policy behavior for a Deno release without checksum sidecars.
+#[test]
+fn checksum_policy() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: deno-version
+                name: deno version check
+                language: deno
+                language_version: '1.46.3'
+                entry: deno eval 'console.log(`Deno ${Deno.version.deno}`)'
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"deno-[A-Za-z0-9_-]+\.zip", "deno-[TARGET].zip")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.run()
+        .env(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY, "required"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `deno-version`
+      caused by: Failed to install deno
+      caused by: Failed to download deno
+      caused by: Checksum verification is required for `deno-[TARGET].zip`, but no checksum was found
+    ");
+
+    cmd_snapshot!(filters, context.run()
+        .env(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY, "disabled"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deno version check.......................................................Passed
+    - hook id: deno-version
+    - duration: [TIME]
+
+      Deno 1.46.3
+
+    ----- stderr -----
+    ");
+}
+
 /// Test that deno hooks work without system deno in PATH.
 /// Regression test ensuring run-time resolution still finds the managed toolchain.
 #[test]

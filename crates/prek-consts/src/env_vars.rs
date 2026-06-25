@@ -27,6 +27,7 @@ impl EnvVars {
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
     pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
+    pub const PREK_DOWNLOAD_CHECKSUM_POLICY: &'static str = "PREK_DOWNLOAD_CHECKSUM_POLICY";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";

@@ -9,14 +9,13 @@ use serde::Deserialize;
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
+use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
-use crate::cli::reporter;
 use crate::fs::LockedFile;
-use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract_with};
+use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::languages::ruby::RubyRequest;
 use crate::process::Cmd;
 use crate::store::Store;
-use crate::warn_user;
 
 const RV_RUBY_DEFAULT_URL: &str = "https://github.com/spinel-coop/rv-ruby";
 
@@ -308,34 +307,30 @@ impl RubyInstaller {
         platform: &str,
     ) -> Result<RubyResult> {
         let filename = format!("ruby-{version}.{platform}.tar.gz");
-        let base_url = format!("{}/releases/latest/download", rv_ruby_base_url());
+        let base_url = rv_ruby_base_url();
         let is_github = github_repo_path(&base_url).is_some();
-        let url = format!("{base_url}/{filename}");
-        let checksum_url = format!("{base_url}/SHA256SUMS");
+        let download_base_url = format!("{base_url}/releases/latest/download");
+        let url = format!("{download_base_url}/{filename}");
+        let checksum_url = format!("{download_base_url}/SHA256SUMS");
 
-        let verification = match Self::fetch_checksum(&checksum_url, &filename, is_github).await {
-            Ok(checksum) => DownloadVerification::Sha256(checksum),
-            Err(err) => {
-                let filename = filename.clone();
-                reporter::suspend(move || {
-                    warn_user!(
-                        "Could not use rv-ruby checksum file at {checksum_url}: {err}. Skipping checksum verification for {filename}."
-                    );
-                });
-                DownloadVerification::None
-            }
-        };
         let version_str = version.to_string();
         let target = self.root.join(&version_str);
 
         debug!(url = %url, target = %target.display(), "Downloading Ruby {version}");
 
-        let download = download_and_extract_with(&url, &filename, store, verification, |req| {
-            maybe_add_github_auth(req, is_github)
-        })
+        let download = download_artifact_with(
+            &url,
+            &filename,
+            store,
+            DownloadChecksumPolicy::from_env()?,
+            async || Self::fetch_checksum(&checksum_url, &filename, is_github).await,
+            |req| maybe_add_github_auth(req, is_github),
+        )
         .await
         .with_context(|| format!("Failed to download Ruby {version} from {url}"))?;
-        let extracted = download.path();
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .with_context(|| format!("Failed to extract Ruby {version}"))?;
         // rv-ruby tarballs contain: rv-ruby@{version}/{version}/bin/ruby
         // After strip_component, `extracted` is the rv-ruby@{version}/ directory.
         // Move the inner {version}/ directory to our target.
@@ -368,24 +363,27 @@ impl RubyInstaller {
         checksum_url: &str,
         filename: &str,
         is_github: bool,
-    ) -> Result<Sha256Digest> {
+    ) -> Result<Option<Sha256Digest>> {
         let req = REQWEST_CLIENT
             .get(checksum_url)
             .header("Accept", "application/octet-stream");
         let req = maybe_add_github_auth(req, is_github);
 
-        let checksums = req
-            .send()
-            .await
-            .and_then(reqwest::Response::error_for_status)
+        let response = req.send().await.with_context(|| {
+            format!("Failed to fetch rv-ruby checksum file from {checksum_url}")
+        })?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let checksums = response
+            .error_for_status()
             .with_context(|| format!("Failed to fetch rv-ruby checksum file from {checksum_url}"))?
             .text()
             .await
             .with_context(|| format!("Failed to read rv-ruby checksum file from {checksum_url}"))?;
 
-        digest_from_sha256sums(&checksums, filename).with_context(|| {
-            format!("rv-ruby checksum file at {checksum_url} does not list `{filename}`")
-        })
+        digest_from_sha256sums(&checksums, filename)
     }
 
     /// Find Ruby in the system PATH

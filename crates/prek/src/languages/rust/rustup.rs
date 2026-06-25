@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
-use crate::http::{DownloadVerification, REQWEST_CLIENT, download_artifact};
+use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
 use crate::store::Store;
@@ -114,14 +114,11 @@ impl Rustup {
         let url = format!("https://static.rust-lang.org/rustup/dist/{triple}/{filename}");
         // Save "rustup-init" as "rustup", this is what "rustup-init" does when setting up.
         let target = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
-        let checksum = Self::fetch_checksum(&url).await?;
+        let checksum_url = format!("{url}.sha256");
 
-        let download = download_artifact(
-            &url,
-            filename,
-            store,
-            DownloadVerification::Sha256(checksum),
-        )
+        let download = download_artifact(&url, filename, store, async || {
+            Self::fetch_checksum(&checksum_url).await
+        })
         .await?;
         make_executable(download.path())?;
 
@@ -139,15 +136,21 @@ impl Rustup {
         })
     }
 
-    async fn fetch_checksum(url: &str) -> Result<Sha256Digest> {
-        let checksum_url = format!("{url}.sha256");
+    async fn fetch_checksum(checksum_url: &str) -> Result<Option<Sha256Digest>> {
         let response = REQWEST_CLIENT
-            .get(&checksum_url)
+            .get(checksum_url)
             .send()
             .await
-            .and_then(reqwest::Response::error_for_status)
             .with_context(|| format!("Failed to fetch rustup checksum from {checksum_url}"))?;
-        let checksum = response.text().await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let checksum = response
+            .error_for_status()
+            .with_context(|| format!("Failed to fetch rustup checksum from {checksum_url}"))?
+            .text()
+            .await?;
         digest_from_rustup_checksum(&checksum)
     }
 
@@ -257,12 +260,11 @@ impl Rustup {
     }
 }
 
-fn digest_from_rustup_checksum(contents: &str) -> Result<Sha256Digest> {
-    contents
-        .split_whitespace()
-        .next()
-        .context("Missing rustup SHA256 checksum")?
-        .parse()
+fn digest_from_rustup_checksum(contents: &str) -> Result<Option<Sha256Digest>> {
+    let Some(digest) = contents.split_whitespace().next() else {
+        return Ok(None);
+    };
+    digest.parse().map(Some)
 }
 
 fn parse_toolchain_line(line: &str) -> Option<(String, PathBuf)> {
@@ -341,25 +343,15 @@ mod tests {
     const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     #[test]
-    fn parses_plain_rustup_checksum() -> Result<()> {
+    fn parses_rustup_checksum() -> Result<()> {
         let digest = digest_from_rustup_checksum(EMPTY_SHA256)?;
+        assert_eq!(digest.unwrap().to_string(), EMPTY_SHA256);
 
-        assert_eq!(digest.to_string(), EMPTY_SHA256);
-        Ok(())
-    }
-
-    #[test]
-    fn parses_rustup_checksum_with_filename() -> Result<()> {
         let digest = digest_from_rustup_checksum(&format!("{EMPTY_SHA256}  rustup-init\n"))?;
+        assert_eq!(digest.unwrap().to_string(), EMPTY_SHA256);
 
-        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        let result = digest_from_rustup_checksum("")?;
+        assert!(result.is_none());
         Ok(())
-    }
-
-    #[test]
-    fn rejects_empty_rustup_checksum() {
-        let err = digest_from_rustup_checksum("").unwrap_err();
-
-        assert!(err.to_string().contains("Missing rustup SHA256 checksum"));
     }
 }

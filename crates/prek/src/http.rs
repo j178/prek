@@ -1,25 +1,41 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use futures::TryStreamExt;
 use prek_consts::env_vars::EnvVars;
 use reqwest::Certificate;
-use tokio::io::{AsyncRead, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
 
-use crate::archive::ArchiveExtension;
 use crate::checksum::{HashReader, Sha256Digest};
 use crate::fs::Simplified;
 use crate::store::Store;
-use crate::{archive, warn_user};
+use crate::warn_user;
 
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) enum DownloadVerification {
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default, strum::EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum DownloadChecksumPolicy {
     #[default]
-    None,
-    Sha256(Sha256Digest),
+    WarnMissing,
+    Required,
+    Disabled,
+}
+
+impl DownloadChecksumPolicy {
+    pub(crate) fn from_env() -> Result<Self> {
+        match EnvVars::var(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY) {
+            Ok(value) => Self::from_str(&value).with_context(|| {
+                format!(
+                    "Invalid {} value `{value}`; expected one of: warn-missing, required, disabled",
+                    EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY
+                )
+            }),
+            Err(_) => Ok(Self::default()),
+        }
+    }
 }
 
 pub(crate) struct TempDownload {
@@ -37,58 +53,59 @@ pub(crate) async fn download_artifact(
     url: &str,
     filename: &str,
     store: &Store,
-    verification: DownloadVerification,
+    fetch_checksum: impl AsyncFn() -> Result<Option<Sha256Digest>>,
 ) -> Result<TempDownload> {
-    download_to_temp_file(url, filename, store, verification, |req| req).await
+    download_artifact_with(
+        url,
+        filename,
+        store,
+        DownloadChecksumPolicy::from_env()?,
+        fetch_checksum,
+        |req| req,
+    )
+    .await
 }
 
-pub(crate) async fn download_and_extract(
+pub(crate) async fn download_artifact_with(
     url: &str,
     filename: &str,
     store: &Store,
-    verification: DownloadVerification,
-) -> Result<TempDownload> {
-    download_and_extract_with(url, filename, store, verification, |req| req).await
-}
-
-pub(crate) async fn download_and_extract_with(
-    url: &str,
-    filename: &str,
-    store: &Store,
-    verification: DownloadVerification,
+    checksum_policy: DownloadChecksumPolicy,
+    fetch_checksum: impl AsyncFn() -> Result<Option<Sha256Digest>>,
     customize_request: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
 ) -> Result<TempDownload> {
-    let mut download =
-        download_to_temp_file(url, filename, store, verification, customize_request).await?;
-    download.path = extract_download(&download, filename).await?;
+    if checksum_policy == DownloadChecksumPolicy::Disabled {
+        let (download, _computed_digest) =
+            download_to_temp_file(url, filename, store, customize_request).await?;
+        return Ok(download);
+    }
+
+    let (expected_digest, (download, computed_digest)) = tokio::try_join!(
+        fetch_checksum(),
+        download_to_temp_file(url, filename, store, customize_request)
+    )?;
+
+    if let Some(expected_digest) = expected_digest {
+        expected_digest.verify(computed_digest, download.path().display())?;
+    } else if checksum_policy == DownloadChecksumPolicy::WarnMissing {
+        warn_user!(
+            "No checksum found for `{filename}`; skipping checksum verification. \
+             Set `{}=required` to make missing checksums a hard error.",
+            EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY
+        );
+    } else {
+        bail!("Checksum verification is required for `{filename}`, but no checksum was found");
+    }
+
     Ok(download)
-}
-
-async fn extract_download(download: &TempDownload, filename: &str) -> Result<PathBuf> {
-    let ext = ArchiveExtension::from_path(filename)?;
-
-    let extract_dir = download.path().with_file_name("extract");
-    fs_err::tokio::create_dir_all(&extract_dir).await?;
-
-    let file = fs_err::tokio::File::open(download.path()).await?;
-    archive::unpack(file, ext, &extract_dir).await?;
-
-    let extracted = match archive::strip_component(&extract_dir) {
-        Ok(top_level) => top_level,
-        Err(archive::Error::NonSingularArchive(_)) => extract_dir,
-        Err(err) => return Err(err.into()),
-    };
-
-    Ok(extracted)
 }
 
 async fn download_to_temp_file(
     url: &str,
     filename: &str,
     store: &Store,
-    verification: DownloadVerification,
     customize_request: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
-) -> Result<TempDownload> {
+) -> Result<(TempDownload, Sha256Digest)> {
     let temp_dir = tempfile::tempdir_in(store.scratch_path())?;
     let path = temp_dir.path().join(filename);
     debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
@@ -99,44 +116,31 @@ async fn download_to_temp_file(
         .and_then(reqwest::Response::error_for_status)
         .with_context(|| format!("Failed to download file from {url}"))?;
 
-    let mut stream = response
+    let stream = response
         .bytes_stream()
         .map_err(std::io::Error::other)
         .into_async_read()
         .compat();
 
-    match verification {
-        DownloadVerification::None => {
-            write_download(&mut stream, &path, url).await?;
-        }
-        DownloadVerification::Sha256(required_digest) => {
-            let mut reader = HashReader::new(stream);
-            write_download(&mut reader, &path, url).await?;
-            required_digest.verify(reader.finish(), path.display())?;
-        }
-    }
-
-    Ok(TempDownload {
-        path,
-        _temp_dir: temp_dir,
-    })
-}
-
-async fn write_download(
-    reader: &mut (impl AsyncRead + Unpin),
-    path: &Path,
-    url: &str,
-) -> Result<()> {
-    let mut file = fs_err::tokio::File::create(path)
+    let mut reader = HashReader::new(stream);
+    let mut file = fs_err::tokio::File::create(&path)
         .await
         .with_context(|| format!("Failed to create temporary download `{}`", path.display()))?;
-    tokio::io::copy(reader, &mut file)
+    tokio::io::copy(&mut reader, &mut file)
         .await
         .with_context(|| format!("Failed to download file from {url} to `{}`", path.display()))?;
     file.flush()
         .await
         .with_context(|| format!("Failed to flush temporary download `{}`", path.display()))?;
-    Ok(())
+    let computed_digest = reader.finish();
+
+    Ok((
+        TempDownload {
+            path,
+            _temp_dir: temp_dir,
+        },
+        computed_digest,
+    ))
 }
 
 pub(crate) static REQWEST_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
@@ -254,7 +258,6 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::task::JoinHandle;
 
-    use super::DownloadVerification;
     use crate::checksum::Sha256Digest;
     use crate::store::Store;
 
@@ -388,14 +391,8 @@ YyRIHN8wfdVoOw==
         let store = Store::from_path(temp.path()).init()?;
         let (url, server) = serve_once(b"data").await?;
 
-        let download = super::download_to_temp_file(
-            &url,
-            "archive.tar.gz",
-            &store,
-            DownloadVerification::None,
-            |req| req,
-        )
-        .await?;
+        let (download, _computed_digest) =
+            super::download_to_temp_file(&url, "archive.tar.gz", &store, |req| req).await?;
 
         assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
         server.await??;
@@ -408,12 +405,9 @@ YyRIHN8wfdVoOw==
         let store = Store::from_path(temp.path()).init()?;
         let (url, server) = serve_once(b"data").await?;
 
-        let download = super::download_artifact(
-            &url,
-            "rustup-init",
-            &store,
-            DownloadVerification::Sha256(Sha256Digest::from_str(DATA_SHA256)?),
-        )
+        let download = super::download_artifact(&url, "rustup-init", &store, async || {
+            Ok(Some(Sha256Digest::from_str(DATA_SHA256)?))
+        })
         .await?;
 
         assert_eq!(
@@ -421,88 +415,55 @@ YyRIHN8wfdVoOw==
             Some("rustup-init")
         );
         assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
-        assert!(!download.path().with_file_name("extract").exists());
         server.await??;
         Ok(())
     }
 
     #[tokio::test]
-    async fn download_and_extract_artifact_rejects_unsupported_archive() -> Result<()> {
+    async fn download_artifact_rejects_mismatched_checksum() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let store = Store::from_path(temp.path()).init()?;
         let (url, server) = serve_once(b"data").await?;
 
-        let result =
-            super::download_and_extract(&url, "archive.rar", &store, DownloadVerification::None)
-                .await;
-
-        let Err(err) = result else {
-            panic!("expected unsupported archive error");
-        };
-        assert!(err.to_string().contains("Unsupported archive type"));
-        server.await??;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn downloads_verified_file() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
-        let (url, server) = serve_once(b"data").await?;
-
-        let download = super::download_to_temp_file(
-            &url,
-            "archive.tar.gz",
-            &store,
-            DownloadVerification::Sha256(Sha256Digest::from_str(DATA_SHA256)?),
-            |req| req,
-        )
-        .await?;
-
-        assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
-        server.await??;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn downloads_verified_chunked_file() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
-        let (url, server) = serve_chunked(&[b"da", b"ta"]).await?;
-
-        let download = super::download_to_temp_file(
-            &url,
-            "archive.tar.gz",
-            &store,
-            DownloadVerification::Sha256(Sha256Digest::from_str(DATA_SHA256)?),
-            |req| req,
-        )
-        .await?;
-
-        assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
-        server.await??;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rejects_downloaded_file_with_mismatched_checksum() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
-        let (url, server) = serve_once(b"data").await?;
-
-        let result = super::download_to_temp_file(
-            &url,
-            "archive.tar.gz",
-            &store,
-            DownloadVerification::Sha256(Sha256Digest::from_str(EMPTY_SHA256)?),
-            |req| req,
-        )
+        let result = super::download_artifact(&url, "archive.tar.gz", &store, async || {
+            Ok(Some(Sha256Digest::from_str(EMPTY_SHA256)?))
+        })
         .await;
 
         let Err(err) = result else {
             panic!("expected checksum mismatch");
         };
         assert!(err.to_string().contains("SHA256 checksum mismatch"));
+        server.await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn downloads_file_and_computes_checksum() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let store = Store::from_path(temp.path()).init()?;
+        let (url, server) = serve_once(b"data").await?;
+
+        let (download, sha256_digest) =
+            super::download_to_temp_file(&url, "archive.tar.gz", &store, |req| req).await?;
+
+        assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
+        assert_eq!(sha256_digest, Sha256Digest::from_str(DATA_SHA256)?);
+        server.await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn downloads_chunked_file_and_computes_checksum() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let store = Store::from_path(temp.path()).init()?;
+        let (url, server) = serve_chunked(&[b"da", b"ta"]).await?;
+
+        let (download, sha256_digest) =
+            super::download_to_temp_file(&url, "archive.tar.gz", &store, |req| req).await?;
+
+        assert_eq!(fs_err::tokio::read(download.path()).await?, b"data");
+        assert_eq!(sha256_digest, Sha256Digest::from_str(DATA_SHA256)?);
         server.await??;
         Ok(())
     }

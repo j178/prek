@@ -11,10 +11,11 @@ use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::archive;
 use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::{DownloadVerification, REQWEST_CLIENT, download_and_extract};
+use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
@@ -237,36 +238,42 @@ impl GoInstaller {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let filename = format!("go{version}.{os}-{arch}.{ext}");
         let url = format!("https://go.dev/dl/{filename}");
-        let checksum = Self::fetch_checksum(version, &filename).await?;
+        let checksum_version = version.to_string();
         let target = self.root.join(version.to_string());
 
-        let download = download_and_extract(
-            &url,
-            &filename,
-            store,
-            DownloadVerification::Sha256(checksum),
-        )
+        let download = download_artifact(&url, &filename, store, async || {
+            Self::fetch_checksum(&checksum_version, &filename).await
+        })
         .await
-        .context("Failed to download and extract go")?;
+        .context("Failed to download go")?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .context("Failed to extract go")?;
         if target.exists() {
             debug!(target = %target.display(), "Removing existing go");
             fs_err::tokio::remove_dir_all(&target).await?;
         }
 
-        debug!(extracted = ?download.path(), target = %target.display(), "Moving go to target");
+        debug!(?extracted, target = %target.display(), "Moving go to target");
         // TODO: retry on Windows
-        fs_err::tokio::rename(download.path(), &target).await?;
+        fs_err::tokio::rename(&extracted, &target).await?;
 
         Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
     }
 
-    async fn fetch_checksum(version: &GoVersion, filename: &str) -> Result<Sha256Digest> {
+    async fn fetch_checksum(version: &str, filename: &str) -> Result<Option<Sha256Digest>> {
         let url = "https://go.dev/dl/?mode=json&include=all";
-        let releases: Vec<GoRelease> = REQWEST_CLIENT
+        let response = REQWEST_CLIENT
             .get(url)
             .send()
             .await
-            .and_then(reqwest::Response::error_for_status)
+            .context("Failed to fetch Go release metadata")?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let releases: Vec<GoRelease> = response
+            .error_for_status()
             .context("Failed to fetch Go release metadata")?
             .json()
             .await
@@ -315,17 +322,18 @@ impl GoInstaller {
 
 fn digest_from_go_releases(
     releases: &[GoRelease],
-    version: &GoVersion,
+    version: &str,
     filename: &str,
-) -> Result<Sha256Digest> {
+) -> Result<Option<Sha256Digest>> {
     let release_name = format!("go{version}");
-    releases
+    let Some(file) = releases
         .iter()
         .find(|release| release.version == release_name)
         .and_then(|release| release.files.iter().find(|file| file.filename == filename))
-        .with_context(|| format!("No SHA256 digest found for `{filename}`"))?
-        .sha256
-        .parse()
+    else {
+        return Ok(None);
+    };
+    file.sha256.parse().map(Some)
 }
 
 #[cfg(test)]
@@ -356,55 +364,36 @@ mod tests {
             ),
         ];
 
-        let digest = digest_from_go_releases(
-            &releases,
-            &GoVersion::from_str("1.24.1")?,
-            "go1.24.1.darwin-arm64.tar.gz",
-        )?;
+        let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.darwin-arm64.tar.gz")?
+            .expect("expected checksum");
 
         assert_eq!(digest.to_string(), EMPTY_SHA256);
         Ok(())
     }
 
     #[test]
-    fn errors_when_go_release_file_is_missing() -> Result<()> {
+    fn returns_none_when_go_release_file_is_missing() -> Result<()> {
         let releases = vec![go_release(
             "go1.24.1",
             vec![go_file("go1.24.1.linux-amd64.tar.gz", EMPTY_SHA256)],
         )];
 
-        let err = digest_from_go_releases(
-            &releases,
-            &GoVersion::from_str("1.24.1")?,
-            "go1.24.1.darwin-arm64.tar.gz",
-        )
-        .unwrap_err();
+        let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.darwin-arm64.tar.gz")?;
 
-        assert!(
-            err.to_string()
-                .contains("No SHA256 digest found for `go1.24.1.darwin-arm64.tar.gz`")
-        );
+        assert!(digest.is_none());
         Ok(())
     }
 
     #[test]
-    fn errors_when_go_release_is_missing() -> Result<()> {
+    fn returns_none_when_go_release_is_missing() -> Result<()> {
         let releases = vec![go_release(
             "go1.23.0",
             vec![go_file("go1.23.0.linux-amd64.tar.gz", EMPTY_SHA256)],
         )];
 
-        let err = digest_from_go_releases(
-            &releases,
-            &GoVersion::from_str("1.24.1")?,
-            "go1.24.1.linux-amd64.tar.gz",
-        )
-        .unwrap_err();
+        let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.linux-amd64.tar.gz")?;
 
-        assert!(
-            err.to_string()
-                .contains("No SHA256 digest found for `go1.24.1.linux-amd64.tar.gz`")
-        );
+        assert!(digest.is_none());
         Ok(())
     }
 
