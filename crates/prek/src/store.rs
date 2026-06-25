@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use etcetera::BaseStrategy;
-use futures::StreamExt;
+use futures_util::StreamExt;
 use prek_consts::env_vars::EnvVars;
 use rustc_hash::{FxHashMap, FxHashSet};
 use seahash::SeaHasher;
@@ -161,7 +161,7 @@ impl Store {
         }
 
         let mut auth_failed = Vec::new();
-        let mut tasks = futures::stream::iter(pending)
+        let mut tasks = futures_util::stream::iter(pending)
             .map(async |pending| {
                 let progress =
                     reporter.map(|reporter| reporter.on_clone_start(&format!("{}", pending.repo)));

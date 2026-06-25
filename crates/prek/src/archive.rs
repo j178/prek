@@ -170,7 +170,7 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
     }
 
     let target = target.as_ref();
-    let mut reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat());
+    let mut reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader).compat();
     let mut zip = ZipFileReader::new(&mut reader);
 
     let mut directories = FxHashSet::default();

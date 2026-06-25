@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use rand::RngExt;
@@ -325,7 +325,7 @@ pub(crate) async fn install_gems(
         Ok(gems) if !gems.is_empty() => {
             debug!("Installing {} gems in parallel", gems.len());
 
-            let result = futures::stream::iter(gems)
+            let result = futures_util::stream::iter(gems)
                 .map(|gem| {
                     let key = gem.key();
                     let local_path = local_gem_map.get(key.as_str()).copied();

@@ -46,7 +46,9 @@ dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
 fancy-regex = { version = "0.18.0" }
 fs-err = { version = "3.3.0", features = ["tokio"] }
-futures = { version = "0.3.31" }
+futures-util = { version = "0.3.31", default-features = false, features = [
+  "alloc",
+] }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
 ignore = { version = "0.4.23" }
@@ -101,14 +103,17 @@ thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = [
   "fs",
   "io-std",
+  "io-util",
   "process",
   "rt",
   "sync",
   "macros",
   "net",
+  "time",
 ] }
 tokio-tar = { version = "0.6.0", package = "astral-tokio-tar" }
-tokio-util = { version = "0.7.13" }
+tokio-stream = { version = "0.1.18", default-features = false }
+tokio-util = { version = "0.7.13", features = ["compat", "io"] }
 toml = { version = "1.0.1", default-features = false, features = [
   "fast_hash",
   "parse",

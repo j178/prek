@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 use semver::Version;
 
@@ -401,7 +401,7 @@ pub(crate) async fn auto_update(
         (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
             && !exclude_repos.iter().any(|repo| repo == repo_source.repo)
     });
-    let outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
+    let outcomes: Vec<RepoUpdate<'_>> = futures_util::stream::iter(sources)
         .map(async |repo_source| {
             let progress = reporter.on_update_start(repo_source.repo);
             let result =

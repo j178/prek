@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
-use futures::{StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashMap;
 use tracing::trace;
@@ -278,7 +278,7 @@ where
     );
 
     #[allow(clippy::redundant_closure)]
-    let results: Vec<_> = futures::stream::iter(partitions)
+    let results: Vec<_> = futures_util::stream::iter(partitions)
         .map(|batch| run(batch))
         .buffered(concurrency)
         .try_collect()

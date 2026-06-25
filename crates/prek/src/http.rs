@@ -3,11 +3,11 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
-use futures::TryStreamExt;
+use futures_util::TryStreamExt;
 use prek_consts::env_vars::EnvVars;
 use reqwest::Certificate;
 use tokio::io::AsyncWriteExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use crate::checksum::{HashReader, Sha256Digest};
@@ -116,13 +116,9 @@ async fn download_to_temp_file(
         .and_then(reqwest::Response::error_for_status)
         .with_context(|| format!("Failed to download file from {url}"))?;
 
-    let stream = response
-        .bytes_stream()
-        .map_err(std::io::Error::other)
-        .into_async_read()
-        .compat();
+    let stream = response.bytes_stream().map_err(std::io::Error::other);
 
-    let mut reader = HashReader::new(stream);
+    let mut reader = HashReader::new(StreamReader::new(stream));
     let mut file = fs_err::tokio::File::create(&path)
         .await
         .with_context(|| format!("Failed to create temporary download `{}`", path.display()))?;
