@@ -83,9 +83,9 @@ where
     F: Fn(&'a Path) -> Fut,
     Fut: Future<Output = anyhow::Result<(i32, Vec<u8>)>>,
 {
-    use futures::StreamExt;
+    use futures_util::StreamExt;
 
-    let mut tasks = futures::stream::iter(filenames)
+    let mut tasks = futures_util::stream::iter(filenames)
         .map(check)
         .buffered(concurrency);
 

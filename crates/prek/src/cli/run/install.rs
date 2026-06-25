@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use mea::once::OnceCell;
 use mea::semaphore::Semaphore;
 use rustc_hash::FxHashMap;
@@ -266,7 +266,7 @@ impl InstallCache {
     async fn load_store_installed_hooks(store: &Store) -> Vec<CachedInstallInfo> {
         match fs_err::read_dir(store.hooks_dir()) {
             Ok(dirs) => {
-                let mut tasks = futures::stream::iter(dirs)
+                let mut tasks = futures_util::stream::iter(dirs)
                     .map(async |entry| {
                         let path = match entry {
                             Ok(entry) => entry.path(),

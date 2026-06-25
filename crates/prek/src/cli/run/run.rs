@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
