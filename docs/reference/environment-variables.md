@@ -64,6 +64,17 @@ If not set, prek automatically selects the best available source.
 
 Use the system trusted store instead of the bundled `webpki-roots` crate.
 
+### `PREK_DOWNLOAD_CHECKSUM_POLICY`
+
+Control checksum verification for managed toolchain downloads that use checksum sidecar files.
+Options:
+
+- `warn-missing` (default): verify downloads when a checksum is available; warn and continue when checksum metadata is missing
+- `required`: require the checksum sidecar to be available and valid
+- `disabled`: skip checksum fetching and verification
+
+Checksum mismatches are hard errors whenever verification is enabled.
+
 ### `PREK_CONTAINER_RUNTIME`
 
 Specify the container runtime to use for container-based hooks (e.g., `docker`, `docker_image`).
@@ -88,6 +99,8 @@ Defaults to `120` characters of arguments; set a larger value to reduce truncati
 ### `PREK_RUBY_MIRROR`
 
 Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments).
+Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location.
+Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication.
 See [Ruby language support](../languages.md#ruby) for details.
 
 ### `PREK_RUST_PROFILE`

@@ -73,6 +73,9 @@ reqwest = { version = "0.13.2", default-features = false, features = [
   "system-proxy",
   "socks",
 ] }
+aws-lc-rs = { version = "1.17.0", default-features = false, features = [
+  "aws-lc-sys",
+] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }

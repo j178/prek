@@ -353,17 +353,17 @@ fn language_version() {
                 verbose: true
                 pass_filenames: false
               - id: deno-version
-                name: deno version check (1.46 - will auto download)
+                name: deno version check (2.1 - will auto download)
                 language: deno
-                language_version: '1.46'
+                language_version: '2.1'
                 entry: deno eval 'console.log(`Deno ${Deno.version.deno}`)'
                 always_run: true
                 verbose: true
                 pass_filenames: false
               - id: deno-version
-                name: deno version check (deno@1.46)
+                name: deno version check (deno@2.1)
                 language: deno
-                language_version: deno@1.46
+                language_version: deno@2.1
                 entry: deno eval 'console.log(`Deno ${Deno.version.deno}`)'
                 always_run: true
                 verbose: true
@@ -375,14 +375,14 @@ fn language_version() {
     let deno_dir = context.home_dir().child("tools").child("deno");
     deno_dir.assert(predicates::path::missing());
 
-    // Use two filters: first masks minor+patch for Deno 2.x (major-only request),
-    // then masks only patch for specific minor versions like 1.46.x
+    // Use two filters: first masks only patch for specific minor versions,
+    // then masks minor+patch for Deno 2.x (major-only request).
     let filters = context
         .filters()
         .into_iter()
         .chain([
+            (r"Deno 2\.1\.\d+", "Deno 2.1.X"),
             (r"Deno 2\.\d+\.\d+", "Deno 2.X.X"),
-            (r"Deno (\d+\.\d+)\.\d+", "Deno $1.X"),
         ])
         .collect::<Vec<_>>();
 
@@ -400,21 +400,21 @@ fn language_version() {
     - duration: [TIME]
 
       Deno 2.X.X
-    deno version check (1.46 - will auto download)...........................Passed
+    deno version check (2.1 - will auto download)............................Passed
     - hook id: deno-version
     - duration: [TIME]
 
-      Deno 1.46.X
-    deno version check (deno@1.46)...........................................Passed
+      Deno 2.1.X
+    deno version check (deno@2.1)............................................Passed
     - hook id: deno-version
     - duration: [TIME]
 
-      Deno 1.46.X
+      Deno 2.1.X
 
     ----- stderr -----
     ");
 
-    // Check that only deno 1.46 is installed (2.x uses system).
+    // Check that only Deno 2.1 is installed (2.x uses system).
     let installed_versions = deno_dir
         .read_dir()
         .expect("Failed to read deno tools directory")
@@ -435,9 +435,64 @@ fn language_version() {
         "Expected only one Deno version to be installed, but found: {installed_versions:?}"
     );
     assert!(
-        installed_versions.iter().any(|v| v.contains("1.46")),
-        "Expected Deno 1.46 to be installed, but found: {installed_versions:?}"
+        installed_versions.iter().any(|v| v.contains("2.1")),
+        "Expected Deno 2.1 to be installed, but found: {installed_versions:?}"
     );
+}
+
+/// Test checksum policy behavior for a Deno release without checksum sidecars.
+#[test]
+fn checksum_policy() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: deno-version
+                name: deno version check
+                language: deno
+                language_version: '1.46.3'
+                entry: deno eval 'console.log(`Deno ${Deno.version.deno}`)'
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"deno-[A-Za-z0-9_-]+\.zip", "deno-[TARGET].zip")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.run()
+        .env(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY, "required"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `deno-version`
+      caused by: Failed to install deno
+      caused by: Failed to download deno
+      caused by: Checksum verification is required for `deno-[TARGET].zip`, but no checksum was found
+    ");
+
+    cmd_snapshot!(filters, context.run()
+        .env(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY, "disabled"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deno version check.......................................................Passed
+    - hook id: deno-version
+    - duration: [TIME]
+
+      Deno 1.46.3
+
+    ----- stderr -----
+    ");
 }
 
 /// Test that deno hooks work without system deno in PATH.

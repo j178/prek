@@ -2027,6 +2027,7 @@ dependencies = [
  "astral-tokio-tar",
  "astral_async_zip",
  "async-compression",
+ "aws-lc-rs",
  "axoupdater",
  "bstr",
  "cargo_metadata",

@@ -30,6 +30,7 @@ use crate::settings::FilesystemOptions;
 use crate::store::Store;
 
 mod archive;
+mod checksum;
 mod cleanup;
 mod cli;
 mod config;

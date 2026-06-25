@@ -11,8 +11,10 @@ use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::archive;
+use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_and_extract};
+use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::version::DenoVersion;
 use crate::process::Cmd;
@@ -221,44 +223,71 @@ impl DenoInstaller {
 
         let filename = format!("deno-{arch}-{os}.zip");
         let url = format!("https://dl.deno.land/release/v{version}/{filename}");
+        let checksum_url = format!("{url}.sha256sum");
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&url, &filename, store, async |extracted| {
-            if target.exists() {
-                debug!(target = %target.display(), "Removing existing deno");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
-
-            // Deno ZIP contains just the binary at the root level.
-            // After strip_component, `extracted` may be the binary itself (if singular)
-            // or a directory containing the binary.
-            let extracted_binary = if extracted.is_file() {
-                extracted.to_path_buf()
-            } else {
-                extracted.join("deno").with_extension(EXE_EXTENSION)
-            };
-
-            let target_bin_dir = bin_dir(&target);
-            fs_err::tokio::create_dir_all(&target_bin_dir).await?;
-
-            let target_binary = target_bin_dir.join("deno").with_extension(EXE_EXTENSION);
-            debug!(?extracted_binary, target = %target_binary.display(), "Moving deno to target");
-            fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
-
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let mut perms = fs_err::tokio::metadata(&target_binary).await?.permissions();
-                perms.set_mode(0o755);
-                fs_err::tokio::set_permissions(&target_binary, perms).await?;
-            }
-
-            anyhow::Ok(())
+        let download = download_artifact(&url, &filename, store, async || {
+            Self::fetch_checksum(&checksum_url, &filename).await
         })
         .await
-        .context("Failed to download and extract deno")?;
+        .context("Failed to download deno")?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .context("Failed to extract deno")?;
+        Self::install_extracted(&target, &extracted).await?;
 
         Ok(DenoResult::from_dir(&target).with_version(version.clone()))
+    }
+
+    async fn fetch_checksum(checksum_url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
+        let response = REQWEST_CLIENT
+            .get(checksum_url)
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch Deno checksum from {checksum_url}"))?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let checksums = response
+            .error_for_status()
+            .with_context(|| format!("Failed to fetch Deno checksum from {checksum_url}"))?
+            .text()
+            .await?;
+        digest_from_deno_checksum(&checksums, filename)
+    }
+
+    async fn install_extracted(target: &Path, extracted: &Path) -> Result<()> {
+        if target.exists() {
+            debug!(target = %target.display(), "Removing existing deno");
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+
+        // Deno ZIP contains just the binary at the root level.
+        // After strip_component, `extracted` may be the binary itself (if singular)
+        // or a directory containing the binary.
+        let extracted_binary = if extracted.is_file() {
+            extracted.to_path_buf()
+        } else {
+            extracted.join("deno").with_extension(EXE_EXTENSION)
+        };
+
+        let target_bin_dir = bin_dir(target);
+        fs_err::tokio::create_dir_all(&target_bin_dir).await?;
+
+        let target_binary = target_bin_dir.join("deno").with_extension(EXE_EXTENSION);
+        debug!(?extracted_binary, target = %target_binary.display(), "Moving deno to target");
+        fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs_err::tokio::metadata(&target_binary).await?.permissions();
+            perms.set_mode(0o755);
+            fs_err::tokio::set_permissions(&target_binary, perms).await?;
+        }
+
+        Ok(())
     }
 
     /// Find a suitable system Deno installation that matches the request.
@@ -304,4 +333,152 @@ impl DenoInstaller {
 
 pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
     prefix.join("bin")
+}
+
+fn digest_from_deno_checksum(contents: &str, filename: &str) -> Result<Option<Sha256Digest>> {
+    // Deno releases have shipped per-artifact `.sha256sum` assets since v2.0.0,
+    // while `dl.deno.land/release/v{version}/{filename}.sha256sum` starts at v2.0.1.
+    // Non-Windows artifacts use the regular sha256sums format handled by
+    // `digest_from_sha256sums`; Windows artifacts use this `Get-FileHash` shape:
+    //
+    // Algorithm : SHA256
+    // Hash      : D45377511968CB2DB7E57155257FF9A1400DB169256B5EAA16C6657F275E4D3B
+    // Path      : C:\a\deno\deno\target\release\deno-x86_64-pc-windows-msvc.zip
+    if let Some(digest) = digest_from_sha256sums(contents, filename)? {
+        return Ok(Some(digest));
+    }
+    digest_from_deno_windows_checksum(contents, filename)
+}
+
+fn digest_from_deno_windows_checksum(
+    contents: &str,
+    filename: &str,
+) -> Result<Option<Sha256Digest>> {
+    let mut algorithm = None;
+    let mut hash = None;
+    let mut path = None;
+    for line in contents.lines() {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        match name.trim() {
+            "Algorithm" => algorithm = Some(value.trim()),
+            "Hash" => hash = Some(value.trim()),
+            "Path" => path = Some(value.trim()),
+            _ => {}
+        }
+    }
+
+    if algorithm.is_none() && hash.is_none() && path.is_none() {
+        return Ok(None);
+    }
+
+    let Some(algorithm) = algorithm else {
+        anyhow::bail!("No algorithm found in Deno checksum file");
+    };
+    if !algorithm.eq_ignore_ascii_case("SHA256") {
+        anyhow::bail!("Deno checksum file uses `{algorithm}` instead of `SHA256`");
+    }
+
+    let Some(path) = path else {
+        anyhow::bail!("No path found in Deno checksum file");
+    };
+    let found_filename = path
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .context("No filename found in Deno checksum path")?;
+    if found_filename != filename {
+        return Ok(None);
+    }
+
+    let Some(hash) = hash else {
+        anyhow::bail!("No hash found in Deno checksum file");
+    };
+    hash.parse().map(Some)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_deno_sha256sum_format() -> Result<()> {
+        let digest = require_deno_checksum(
+            "f5b681529a0360e7f430688fc0ba3b25626b3933c370b053a0c27f39ef7a0f90  deno-x86_64-unknown-linux-gnu.zip",
+            "deno-x86_64-unknown-linux-gnu.zip",
+        )?;
+
+        assert_eq!(
+            digest.to_string(),
+            "f5b681529a0360e7f430688fc0ba3b25626b3933c370b053a0c27f39ef7a0f90"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parses_deno_windows_checksum_format() -> Result<()> {
+        let digest = require_deno_checksum(
+            indoc::indoc! {r"
+                Algorithm : SHA256
+                Hash      : 1611FB54C3BB0A605A851530A359A48B34A8ABFD29D7091538D91B6E7F105380
+                Path      : C:\a\deno\deno\target\release\deno-x86_64-pc-windows-msvc.zip
+            "},
+            "deno-x86_64-pc-windows-msvc.zip",
+        )?;
+
+        assert_eq!(
+            digest.to_string(),
+            "1611fb54c3bb0a605a851530a359a48b34a8abfd29d7091538d91b6e7f105380"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn returns_none_for_deno_windows_checksum_with_different_file() -> Result<()> {
+        let digest = digest_from_deno_checksum(
+            indoc::indoc! {r"
+                Algorithm : SHA256
+                Hash      : 1611FB54C3BB0A605A851530A359A48B34A8ABFD29D7091538D91B6E7F105380
+                Path      : C:\a\deno\deno\target\release\deno-x86_64-pc-windows-msvc.zip
+            "},
+            "deno-aarch64-pc-windows-msvc.zip",
+        )?;
+
+        assert_eq!(digest, None);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_deno_windows_checksum_with_different_algorithm() {
+        let result = digest_from_deno_checksum(
+            indoc::indoc! {r"
+                Algorithm : SHA512
+                Hash      : 1611FB54C3BB0A605A851530A359A48B34A8ABFD29D7091538D91B6E7F105380
+                Path      : C:\a\deno\deno\target\release\deno-x86_64-pc-windows-msvc.zip
+            "},
+            "deno-x86_64-pc-windows-msvc.zip",
+        );
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Deno checksum file uses `SHA512` instead of `SHA256`"
+        );
+    }
+
+    #[test]
+    fn returns_none_for_non_matching_sha256sums_file() -> Result<()> {
+        let digest = digest_from_deno_checksum(
+            "f5b681529a0360e7f430688fc0ba3b25626b3933c370b053a0c27f39ef7a0f90  deno-x86_64-unknown-linux-gnu.zip",
+            "deno-aarch64-unknown-linux-gnu.zip",
+        )?;
+
+        assert_eq!(digest, None);
+        Ok(())
+    }
+
+    fn require_deno_checksum(contents: &str, filename: &str) -> Result<Sha256Digest> {
+        digest_from_deno_checksum(contents, filename)?
+            .with_context(|| format!("No SHA256 digest found for `{filename}`"))
+    }
 }

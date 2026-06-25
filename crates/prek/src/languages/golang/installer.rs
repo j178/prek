@@ -7,12 +7,15 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
+use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
+use crate::archive;
+use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::download_and_extract;
+use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
@@ -40,6 +43,18 @@ static GO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
         "go".to_string()
     }
 });
+
+#[derive(Deserialize)]
+struct GoRelease {
+    version: String,
+    files: Vec<GoFile>,
+}
+
+#[derive(Deserialize)]
+struct GoFile {
+    filename: String,
+    sha256: String,
+}
 
 impl GoResult {
     fn from_executable(path: PathBuf, from_system: bool) -> Self {
@@ -223,24 +238,47 @@ impl GoInstaller {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let filename = format!("go{version}.{os}-{arch}.{ext}");
         let url = format!("https://go.dev/dl/{filename}");
+        let checksum_version = version.to_string();
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&url, &filename, store, async |extracted| {
-            if target.exists() {
-                debug!(target = %target.display(), "Removing existing go");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
-
-            debug!(?extracted, target = %target.display(), "Moving go to target");
-            // TODO: retry on Windows
-            fs_err::tokio::rename(extracted, &target).await?;
-
-            anyhow::Ok(())
+        let download = download_artifact(&url, &filename, store, async || {
+            Self::fetch_checksum(&checksum_version, &filename).await
         })
         .await
-        .context("Failed to download and extract go")?;
+        .context("Failed to download go")?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .context("Failed to extract go")?;
+        if target.exists() {
+            debug!(target = %target.display(), "Removing existing go");
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+
+        debug!(?extracted, target = %target.display(), "Moving go to target");
+        // TODO: retry on Windows
+        fs_err::tokio::rename(&extracted, &target).await?;
 
         Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
+    }
+
+    async fn fetch_checksum(version: &str, filename: &str) -> Result<Option<Sha256Digest>> {
+        let url = "https://go.dev/dl/?mode=json&include=all";
+        let response = REQWEST_CLIENT
+            .get(url)
+            .send()
+            .await
+            .context("Failed to fetch Go release metadata")?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let releases: Vec<GoRelease> = response
+            .error_for_status()
+            .context("Failed to fetch Go release metadata")?
+            .json()
+            .await
+            .context("Failed to parse Go release metadata")?;
+        digest_from_go_releases(&releases, version, filename)
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
@@ -282,14 +320,88 @@ impl GoInstaller {
     }
 }
 
-#[cfg(all(test, unix))]
-mod tests {
-    use std::os::unix::fs::PermissionsExt;
+fn digest_from_go_releases(
+    releases: &[GoRelease],
+    version: &str,
+    filename: &str,
+) -> Result<Option<Sha256Digest>> {
+    let release_name = format!("go{version}");
+    let Some(file) = releases
+        .iter()
+        .find(|release| release.version == release_name)
+        .and_then(|release| release.files.iter().find(|file| file.filename == filename))
+    else {
+        return Ok(None);
+    };
+    file.sha256.parse().map(Some)
+}
 
+#[cfg(test)]
+mod tests {
     use super::*;
 
+    const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    #[test]
+    fn finds_go_checksum_for_release_file() -> Result<()> {
+        let releases = vec![
+            go_release(
+                "go1.23.0",
+                vec![go_file(
+                    "go1.23.0.linux-amd64.tar.gz",
+                    "0000000000000000000000000000000000000000000000000000000000000000",
+                )],
+            ),
+            go_release(
+                "go1.24.1",
+                vec![
+                    go_file("go1.24.1.darwin-arm64.tar.gz", EMPTY_SHA256),
+                    go_file(
+                        "go1.24.1.linux-amd64.tar.gz",
+                        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                    ),
+                ],
+            ),
+        ];
+
+        let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.darwin-arm64.tar.gz")?
+            .expect("expected checksum");
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn returns_none_when_go_release_file_is_missing() -> Result<()> {
+        let releases = vec![go_release(
+            "go1.24.1",
+            vec![go_file("go1.24.1.linux-amd64.tar.gz", EMPTY_SHA256)],
+        )];
+
+        let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.darwin-arm64.tar.gz")?;
+
+        assert!(digest.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn returns_none_when_go_release_is_missing() -> Result<()> {
+        let releases = vec![go_release(
+            "go1.23.0",
+            vec![go_file("go1.23.0.linux-amd64.tar.gz", EMPTY_SHA256)],
+        )];
+
+        let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.linux-amd64.tar.gz")?;
+
+        assert!(digest.is_none());
+        Ok(())
+    }
+
     #[tokio::test]
+    #[cfg(unix)]
     async fn fill_version_uses_local_gotoolchain() -> anyhow::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
         let temp_dir = tempfile::tempdir()?;
         let fake_go = temp_dir.path().join("go");
         fs_err::write(
@@ -319,5 +431,19 @@ mod tests {
 
         assert_eq!(go.version().to_string(), "1.24.13");
         Ok(())
+    }
+
+    fn go_release(version: &str, files: Vec<GoFile>) -> GoRelease {
+        GoRelease {
+            version: version.to_string(),
+            files,
+        }
+    }
+
+    fn go_file(filename: &str, sha256: &str) -> GoFile {
+        GoFile {
+            filename: filename.to_string(),
+            sha256: sha256.to_string(),
+        }
     }
 }

@@ -4,26 +4,25 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
+use reqwest::Url;
 use serde::Deserialize;
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
+use crate::archive;
+use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_and_extract_with};
+use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::languages::ruby::RubyRequest;
 use crate::process::Cmd;
 use crate::store::Store;
 
 const RV_RUBY_DEFAULT_URL: &str = "https://github.com/spinel-coop/rv-ruby";
 
-/// Resolve the rv-ruby mirror base URL and whether it targets github.com.
-fn rv_ruby_mirror() -> (String, bool) {
+fn rv_ruby_base_url() -> String {
     match EnvVars::var(EnvVars::PREK_RUBY_MIRROR) {
-        Ok(mirror) => {
-            let is_github = is_github_https(&mirror);
-            (mirror, is_github)
-        }
-        Err(_) => (RV_RUBY_DEFAULT_URL.to_string(), true),
+        Ok(mirror) => mirror.trim_end_matches('/').to_string(),
+        Err(_) => RV_RUBY_DEFAULT_URL.to_string(),
     }
 }
 
@@ -35,33 +34,37 @@ fn rv_ruby_mirror() -> (String, bool) {
 /// `api.github.com` host (e.g. `https://github.com/org/repo` becomes
 /// `https://api.github.com/repos/org/repo/releases/latest`).
 fn rv_ruby_api_url() -> (String, bool) {
-    let (base, is_github) = rv_ruby_mirror();
-    let url = if is_github {
-        // Rewrite github.com web URL to API URL.
-        let path = base
-            .strip_prefix("https://github.com")
-            .expect("is_github_https should ensure this");
-        format!("https://api.github.com/repos{path}/releases/latest")
+    let base = rv_ruby_base_url();
+    if let Some(path) = github_repo_path(&base) {
+        (
+            format!("https://api.github.com/repos{path}/releases/latest"),
+            true,
+        )
     } else {
-        format!("{base}/releases/latest")
+        (format!("{base}/releases/latest"), false)
+    }
+}
+
+fn github_repo_path(url: &str) -> Option<String> {
+    let url = Url::parse(url).ok()?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("github.com")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !matches!(url.port(), None | Some(443))
+    {
+        return None;
+    }
+
+    let segments = url.path_segments()?.collect::<Vec<_>>();
+    let [owner, repo] = segments.as_slice() else {
+        return None;
     };
-    (url, is_github)
-}
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
 
-/// Check whether a URL is an HTTPS URL pointing to github.com.
-/// Only matches the exact host `github.com` over HTTPS, so won't send
-/// tokens to other hosts, subdomains, path-injection attempts,
-/// userinfo-based redirects, or plaintext HTTP.
-fn is_github_https(url: &str) -> bool {
-    (url.starts_with("https://github.com/") || url.starts_with("https://github.com:"))
-        && !url.contains('@')
-}
-
-/// Returns the base URL for downloading rv-ruby release assets, and whether
-/// the target host is github.com (for auth token decisions).
-fn rv_ruby_download_base() -> (String, bool) {
-    let (base, is_github) = rv_ruby_mirror();
-    (format!("{base}/releases/latest/download"), is_github)
+    Some(format!("/{owner}/{repo}"))
 }
 
 /// Conditionally add a GitHub auth token to a request builder.
@@ -69,7 +72,7 @@ fn rv_ruby_download_base() -> (String, bool) {
 fn maybe_add_github_auth(req: reqwest::RequestBuilder, is_github: bool) -> reqwest::RequestBuilder {
     if is_github {
         if let Ok(token) = EnvVars::var(EnvVars::GITHUB_TOKEN) {
-            return req.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
+            return req.bearer_auth(token);
         }
     }
     req
@@ -273,22 +276,11 @@ impl RubyInstaller {
             .header("Accept", "application/vnd.github+json");
         let req = maybe_add_github_auth(req, is_github);
 
-        let response = req
+        let release: GitHubRelease = req
             .send()
             .await
-            .with_context(|| format!("Failed to fetch rv-ruby releases from {api_url}"))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let hint = if matches!(status.as_u16(), 403 | 429) {
-                " (this may be a rate limit — try setting GITHUB_TOKEN)"
-            } else {
-                ""
-            };
-            anyhow::bail!("Failed to fetch rv-ruby releases from {api_url}: {status}{hint}");
-        }
-
-        let release: GitHubRelease = response
+            .and_then(reqwest::Response::error_for_status)
+            .with_context(|| format!("Failed to fetch rv-ruby releases from {api_url}"))?
             .json()
             .await
             .context("Failed to parse rv-ruby release JSON")?;
@@ -306,8 +298,8 @@ impl RubyInstaller {
 
     /// Download and extract a specific Ruby version from rv-ruby.
     ///
-    /// Uses `download_and_extract_with` to inject a `GITHUB_TOKEN` auth header
-    /// for GitHub-hosted mirrors (including private partial mirrors of rv-ruby).
+    /// Adds GitHub authentication only for GitHub-hosted sources; the download
+    /// helper verifies the archive checksum before extraction.
     async fn download(
         &self,
         store: &Store,
@@ -315,51 +307,83 @@ impl RubyInstaller {
         platform: &str,
     ) -> Result<RubyResult> {
         let filename = format!("ruby-{version}.{platform}.tar.gz");
-        let (base_url, is_github) = rv_ruby_download_base();
-        let url = format!("{base_url}/{filename}");
+        let base_url = rv_ruby_base_url();
+        let is_github = github_repo_path(&base_url).is_some();
+        let download_base_url = format!("{base_url}/releases/latest/download");
+        let url = format!("{download_base_url}/{filename}");
+        let checksum_url = format!("{download_base_url}/SHA256SUMS");
+
         let version_str = version.to_string();
         let target = self.root.join(&version_str);
 
         debug!(url = %url, target = %target.display(), "Downloading Ruby {version}");
 
-        download_and_extract_with(
+        let download = download_artifact_with(
             &url,
             &filename,
             store,
+            DownloadChecksumPolicy::from_env()?,
+            async || Self::fetch_checksum(&checksum_url, &filename, is_github).await,
             |req| maybe_add_github_auth(req, is_github),
-            async |extracted| {
-                // rv-ruby tarballs contain: rv-ruby@{version}/{version}/bin/ruby
-                // After strip_component, `extracted` is the rv-ruby@{version}/ directory.
-                // Move the inner {version}/ directory to our target.
-                let inner = extracted.join(&version_str);
-                if !inner.exists() {
-                    anyhow::bail!(
-                        "Expected directory '{}' inside rv-ruby archive, found: {:?}",
-                        version_str,
-                        fs_err::read_dir(extracted)?
-                            .flatten()
-                            .map(|e| e.file_name())
-                            .collect::<Vec<_>>()
-                    );
-                }
-
-                if target.exists() {
-                    debug!(target = %target.display(), "Removing existing Ruby");
-                    fs_err::tokio::remove_dir_all(&target).await?;
-                }
-
-                fs_err::tokio::rename(&inner, &target).await?;
-                Ok(())
-            },
         )
         .await
         .with_context(|| format!("Failed to download Ruby {version} from {url}"))?;
+        let extracted = archive::extract_archive(download.path())
+            .await
+            .with_context(|| format!("Failed to extract Ruby {version}"))?;
+        // rv-ruby tarballs contain: rv-ruby@{version}/{version}/bin/ruby
+        // After strip_component, `extracted` is the rv-ruby@{version}/ directory.
+        // Move the inner {version}/ directory to our target.
+        let inner = extracted.join(&version_str);
+        if !inner.exists() {
+            anyhow::bail!(
+                "Expected directory `{version_str}` inside rv-ruby archive, found: {:?}",
+                fs_err::read_dir(extracted)?
+                    .flatten()
+                    .map(|e| e.file_name())
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        if target.exists() {
+            debug!(target = %target.display(), "Removing existing Ruby");
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+
+        fs_err::tokio::rename(&inner, &target).await?;
 
         Ok(RubyResult {
             ruby_bin: target.join("bin").join("ruby"),
             version: version.clone(),
             engine: "ruby".to_string(),
         })
+    }
+
+    async fn fetch_checksum(
+        checksum_url: &str,
+        filename: &str,
+        is_github: bool,
+    ) -> Result<Option<Sha256Digest>> {
+        let req = REQWEST_CLIENT
+            .get(checksum_url)
+            .header("Accept", "application/octet-stream");
+        let req = maybe_add_github_auth(req, is_github);
+
+        let response = req.send().await.with_context(|| {
+            format!("Failed to fetch rv-ruby checksum file from {checksum_url}")
+        })?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let checksums = response
+            .error_for_status()
+            .with_context(|| format!("Failed to fetch rv-ruby checksum file from {checksum_url}"))?
+            .text()
+            .await
+            .with_context(|| format!("Failed to read rv-ruby checksum file from {checksum_url}"))?;
+
+        digest_from_sha256sums(&checksums, filename)
     }
 
     /// Find Ruby in the system PATH
@@ -560,41 +584,6 @@ mod tests {
     use target_lexicon::Triple;
     use tempfile::TempDir;
 
-    /// Mutex to serialize tests that mutate `PREK_RUBY_MIRROR`.
-    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    /// RAII guard that serializes env var access and restores the original value on drop.
-    /// Holds the `ENV_MUTEX` lock for its lifetime, so tests using this guard run
-    /// sequentially. Ensures cleanup even if a test panics.
-    struct EnvVarGuard {
-        key: &'static str,
-        saved: Option<String>,
-        _lock: std::sync::MutexGuard<'static, ()>,
-    }
-
-    impl EnvVarGuard {
-        fn new(key: &'static str) -> Self {
-            let lock = ENV_MUTEX
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let saved = EnvVars::var(key).ok();
-            Self {
-                key,
-                saved,
-                _lock: lock,
-            }
-        }
-    }
-
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            match &self.saved {
-                Some(v) => unsafe { std::env::set_var(self.key, v) },
-                None => unsafe { std::env::remove_var(self.key) },
-            }
-        }
-    }
-
     #[test]
     fn test_ruby_request_display() {
         assert_eq!(RubyRequest::Any.to_string(), "any");
@@ -663,78 +652,6 @@ mod tests {
         let error = ruby_not_found_error(&RubyRequest::Any, "Another reason.");
         assert!(error.contains("any"));
         assert!(error.contains("Another reason."));
-    }
-
-    #[test]
-    fn test_rv_ruby_urls_default() {
-        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
-        unsafe { std::env::remove_var(EnvVars::PREK_RUBY_MIRROR) };
-
-        let (api_url, api_is_github) = rv_ruby_api_url();
-        assert_eq!(
-            api_url,
-            "https://api.github.com/repos/spinel-coop/rv-ruby/releases/latest"
-        );
-        assert!(api_is_github);
-
-        let (dl_url, dl_is_github) = rv_ruby_download_base();
-        assert_eq!(
-            dl_url,
-            format!("{RV_RUBY_DEFAULT_URL}/releases/latest/download")
-        );
-        assert!(dl_is_github);
-    }
-
-    #[test]
-    fn test_rv_ruby_urls_github_mirror() {
-        // A github.com mirror: API URL is rewritten, download URL uses web URL.
-        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
-        unsafe {
-            std::env::set_var(
-                EnvVars::PREK_RUBY_MIRROR,
-                "https://github.com/myorg/vetted-rubies",
-            );
-        }
-
-        let (api_url, api_is_github) = rv_ruby_api_url();
-        assert_eq!(
-            api_url,
-            "https://api.github.com/repos/myorg/vetted-rubies/releases/latest"
-        );
-        assert!(api_is_github);
-
-        let (dl_url, dl_is_github) = rv_ruby_download_base();
-        assert_eq!(
-            dl_url,
-            "https://github.com/myorg/vetted-rubies/releases/latest/download"
-        );
-        assert!(dl_is_github);
-    }
-
-    #[test]
-    fn test_rv_ruby_urls_non_github_mirror() {
-        // A non-github mirror: both URLs use the mirror as-is, is_github is false.
-        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
-        unsafe {
-            std::env::set_var(
-                EnvVars::PREK_RUBY_MIRROR,
-                "https://my-mirror.example.com/rv-ruby",
-            );
-        }
-
-        let (api_url, api_is_github) = rv_ruby_api_url();
-        assert_eq!(
-            api_url,
-            "https://my-mirror.example.com/rv-ruby/releases/latest"
-        );
-        assert!(!api_is_github);
-
-        let (dl_url, dl_is_github) = rv_ruby_download_base();
-        assert_eq!(
-            dl_url,
-            "https://my-mirror.example.com/rv-ruby/releases/latest/download"
-        );
-        assert!(!dl_is_github);
     }
 
     #[test]
@@ -894,28 +811,28 @@ mod tests {
     }
 
     #[test]
-    fn test_is_github_https() {
-        // Exact match over HTTPS
-        assert!(is_github_https("https://github.com/spinel-coop/rv-ruby"));
-        assert!(is_github_https("https://github.com:443/org/repo"));
+    fn test_github_repo_path() {
+        assert_eq!(
+            github_repo_path("https://github.com/spinel-coop/rv-ruby").as_deref(),
+            Some("/spinel-coop/rv-ruby")
+        );
+        assert_eq!(
+            github_repo_path("https://github.com:443/org/repo").as_deref(),
+            Some("/org/repo")
+        );
 
-        // Plaintext HTTP — don't leak tokens
-        assert!(!is_github_https("http://github.com/org/repo"));
-        // Not github.com
-        assert!(!is_github_https("https://gitlab.com/org/repo"));
-        assert!(!is_github_https("https://my-mirror.example.com/rv-ruby"));
-        // Path injection — github.com in path, not host
-        assert!(!is_github_https("https://evil.com/github.com/rv"));
-        // Subdomain — not the same host
-        assert!(!is_github_https("https://api.github.com/repos/org/repo"));
-        // Userinfo-based redirect
-        assert!(!is_github_https("https://github.com@evil.com/org/repo"));
-        assert!(!is_github_https(
-            "https://github.com:password@evil.com/org/repo"
-        ));
-        assert!(!is_github_https("https://evil.com@github.com/org/repo"));
-        // Other schemes
-        assert!(!is_github_https("ftp://github.com/org/repo"));
+        assert!(github_repo_path("http://github.com/org/repo").is_none());
+        assert!(github_repo_path("https://gitlab.com/org/repo").is_none());
+        assert!(github_repo_path("https://my-mirror.example.com/rv-ruby").is_none());
+        assert!(github_repo_path("https://evil.com/github.com/rv").is_none());
+        assert!(github_repo_path("https://api.github.com/repos/org/repo").is_none());
+        assert!(github_repo_path("https://github.com@evil.com/org/repo").is_none());
+        assert!(github_repo_path("https://github.com:password@evil.com/org/repo").is_none());
+        assert!(github_repo_path("https://evil.com@github.com/org/repo").is_none());
+        assert!(github_repo_path("https://github.com:444/org/repo").is_none());
+        assert!(github_repo_path("https://github.com/org").is_none());
+        assert!(github_repo_path("https://github.com/org/repo/releases").is_none());
+        assert!(github_repo_path("ftp://github.com/org/repo").is_none());
     }
 
     #[test]

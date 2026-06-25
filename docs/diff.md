@@ -30,6 +30,14 @@ See the dedicated [Language Support](languages.md) page for a complete list of s
 
 Recent releases added support for more managed hook runtimes, including Bun, Julia, Deno, and experimental .NET support.
 
+## Managed runtime download verification
+
+For supported managed runtime downloads, `prek` verifies the downloaded archive or installer against the checksum published by the runtime's own distribution channel before extracting or installing it.
+
+This helps catch corrupted or unexpectedly changed downloads before they are unpacked. It does not add an independent trust root: if an upstream release, mirror, or checksum file is compromised together with the archive, SHA-256 verification alone cannot detect that.
+
+`uv` downloads are not covered by this behavior yet.
+
 ## Command line interface
 
 For a compatibility-focused command mapping, see [Compatibility with pre-commit](compatibility.md).
