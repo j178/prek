@@ -2025,7 +2025,6 @@ dependencies = [
  "textwrap",
  "thiserror",
  "tokio",
- "tokio-stream",
  "tokio-util",
  "toml",
  "toml_edit",
