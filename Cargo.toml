@@ -45,6 +45,7 @@ ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
 fancy-regex = { version = "0.18.0" }
+fastrand = { version = "2.4.1" }
 fs-err = { version = "3.3.0", features = ["tokio"] }
 futures-util = { version = "0.3.31", default-features = false, features = [
   "alloc",
@@ -66,7 +67,6 @@ owo-colors = { version = "4.1.0" }
 phf = { version = "0.13.1", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
 quick-xml = { version = "0.40" }
-rand = { version = "0.10.0" }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "http2",
   "stream",

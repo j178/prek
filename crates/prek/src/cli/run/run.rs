@@ -12,8 +12,6 @@ use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use prek_identify::{TagSet, tags_from_path};
-use rand::SeedableRng;
-use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::{debug, error, trace};
 use unicode_width::UnicodeWidthStr;
@@ -1276,8 +1274,8 @@ impl<'a> HookRunInput<'a> {
         // partitions, but do it deterministically in case a hook cares about ordering.
         const SEED: u64 = 1_542_676_187;
         if let Self::Filenames(filenames) = self {
-            let mut rng = StdRng::seed_from_u64(SEED);
-            filenames.shuffle(&mut rng);
+            let mut rng = fastrand::Rng::with_seed(SEED);
+            rng.shuffle(filenames);
         }
     }
 }

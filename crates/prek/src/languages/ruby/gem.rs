@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
-use rand::RngExt;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
 
@@ -337,7 +336,7 @@ pub(crate) async fn install_gems(
                                 // each other's partially-written gemspec files, causing
                                 // transient failures (especially on Windows/NTFS). Retry
                                 // once after a random delay to let the other process finish.
-                                let delay = rand::rng().random_range(50..=500);
+                                let delay = fastrand::u64(50..=500);
                                 debug!(
                                     "gem install {} failed, retrying in {delay}ms: {first_err:#}",
                                     gem.name

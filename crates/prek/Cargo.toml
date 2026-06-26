@@ -43,6 +43,7 @@ ctrlc = { workspace = true }
 dunce = { workspace = true }
 etcetera = { workspace = true }
 fancy-regex = { workspace = true }
+fastrand = { workspace = true }
 fs-err = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
@@ -60,7 +61,6 @@ mea = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 quick-xml = { workspace = true }
-rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 aws-lc-rs = { workspace = true }

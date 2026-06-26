@@ -23,7 +23,7 @@ pub(crate) fn finish_profiling(profiler_guard: Option<pprof::ProfilerGuard>) {
         .build()
     {
         Ok(report) => {
-            let random = rand::random::<u64>();
+            let random = fastrand::u64(..);
             let file = fs_err::File::create(format!(
                 "{}.{random}.flamegraph.svg",
                 env!("CARGO_PKG_NAME"),
