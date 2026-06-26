@@ -90,12 +90,6 @@
     }
   ],
   packageRules: [
-    // Keep deterministic filename shuffling on rand 0.9.
-    {
-      matchManagers: ['cargo'],
-      matchPackageNames: ['rand'],
-      allowedVersions: '<0.10',
-    },
     // Group all GitHub Actions updates together
     {
       groupName: 'GitHub Actions',

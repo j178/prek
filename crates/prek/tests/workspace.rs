@@ -755,14 +755,14 @@ fn skips() -> Result<()> {
       - duration: [TIME]
 
         [TEMP_DIR]/project3
-        ['project4/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project4/.pre-commit-config.yaml']
     ✓ <workspace>
       Show CWD...............................................................Passed
       - hook id: show-cwd
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
     "#);
@@ -785,14 +785,14 @@ fn skips() -> Result<()> {
       - duration: [TIME]
 
         [TEMP_DIR]/project3
-        ['project4/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project4/.pre-commit-config.yaml']
     ✓ <workspace>
       Show CWD...............................................................Passed
       - hook id: show-cwd
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
     "#);
@@ -815,14 +815,14 @@ fn skips() -> Result<()> {
       - duration: [TIME]
 
         [TEMP_DIR]/project3
-        ['project4/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project4/.pre-commit-config.yaml']
     ✓ <workspace>
       Show CWD...............................................................Passed
       - hook id: show-cwd
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
     "#);
@@ -845,14 +845,14 @@ fn skips() -> Result<()> {
       - duration: [TIME]
 
         [TEMP_DIR]/project3
-        ['project4/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project4/.pre-commit-config.yaml']
     ✓ <workspace>
       Show CWD...............................................................Passed
       - hook id: show-cwd
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
     "#);
@@ -875,14 +875,14 @@ fn skips() -> Result<()> {
       - duration: [TIME]
 
         [TEMP_DIR]/project3
-        ['project4/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project4/.pre-commit-config.yaml']
     ✓ <workspace>
       Show CWD...............................................................Passed
       - hook id: show-cwd
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
     "#);
@@ -897,7 +897,7 @@ fn skips() -> Result<()> {
     - duration: [TIME]
 
       [TEMP_DIR]/
-      ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+      ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
     warning: selector `PREK_SKIP=non-exist-hook` did not match any hooks
@@ -926,7 +926,9 @@ fn skips() -> Result<()> {
     ");
 
     // Should skip the invalid config
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project3/"), @r#"
+    let mut filters = context.filters();
+    filters.push((r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z", "[TIMESTAMP]"));
+    cmd_snapshot!(filters, context.run().arg("--skip").arg("project3/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -943,9 +945,10 @@ fn skips() -> Result<()> {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
 
     ----- stderr -----
+    [TIMESTAMP] ERROR Skipping project due to error: Failed to parse `project3/.pre-commit-config.yaml` path=project3
     "#);
 
     Ok(())
