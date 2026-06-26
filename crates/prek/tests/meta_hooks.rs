@@ -38,7 +38,7 @@ fn meta_hooks() -> anyhow::Result<()> {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -56,16 +56,16 @@ fn meta_hooks() -> anyhow::Result<()> {
     - hook id: identity
     - duration: [TIME]
 
-      file.txt
       .pre-commit-config.yaml
-      valid.json
-      invalid.json
+      file.txt
       main.py
+      invalid.json
+      valid.json
     match no files.......................................(no files to check)Skipped
     useless exclude..........................................................Passed
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -208,11 +208,11 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
       - hook id: identity
       - duration: [TIME]
 
-        file.txt
         .pre-commit-config.yaml
-        valid.json
-        invalid.json
+        file.txt
         main.py
+        invalid.json
+        valid.json
       match no files.....................................(no files to check)Skipped
       useless exclude........................................................Passed
 

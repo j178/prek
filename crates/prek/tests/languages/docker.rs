@@ -68,20 +68,20 @@ fn workspace_docker() -> anyhow::Result<()> {
       - hook id: hello-world
       - duration: [TIME]
 
-        project1.txt .pre-commit-config.yaml
+        .pre-commit-config.yaml project1.txt
     ✓ project2
       Hello World............................................................Passed
       - hook id: hello-world
       - duration: [TIME]
 
-        project2.txt .pre-commit-config.yaml
+        .pre-commit-config.yaml project2.txt
     ✓ <workspace>
       Hello World............................................................Passed
       - hook id: hello-world
       - duration: [TIME]
 
-        project1/.pre-commit-config.yaml .pre-commit-config.yaml project2/project2.txt project1/project1.txt
-        project2/.pre-commit-config.yaml
+        .pre-commit-config.yaml project1/.pre-commit-config.yaml project2/.pre-commit-config.yaml project1/project1.txt
+        project2/project2.txt
 
     ----- stderr -----
     "#);

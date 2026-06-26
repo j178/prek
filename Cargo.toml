@@ -45,7 +45,7 @@ ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
 fancy-regex = { version = "0.18.0" }
-fastrand = { version = "2.4.1" }
+fastrand = { version = "2.4.1", default-features = false }
 fs-err = { version = "3.3.0", features = ["tokio"] }
 futures-util = { version = "0.3.31", default-features = false, features = [
   "alloc",

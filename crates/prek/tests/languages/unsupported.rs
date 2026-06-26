@@ -31,7 +31,7 @@ fn unsupported_language() -> anyhow::Result<()> {
         "#})?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -39,7 +39,7 @@ fn unsupported_language() -> anyhow::Result<()> {
     - hook id: unsupported
     - duration: [TIME]
 
-      script.sh .pre-commit-config.yaml
+      .pre-commit-config.yaml script.sh
     unsupported-script.......................................................Passed
     - hook id: unsupported-script
     - duration: [TIME]
@@ -47,7 +47,7 @@ fn unsupported_language() -> anyhow::Result<()> {
       Hello, World!
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
