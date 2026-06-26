@@ -414,8 +414,7 @@ fn check_vcs_permalinks_builtin() -> Result<()> {
         .work_dir()
         .child("links.md")
         .write_str(indoc::indoc! {r"
-        https://github.com/owner/repo/blob/main/file.py#L10
-        https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
+        See https://github.com/owner/repo/blob/main/file.py#L10 and https://github.example.com/owner/repo/blob/master/src/lib.rs#L5 for context.
         https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/file.py#L10
     "})?;
 
@@ -429,11 +428,8 @@ fn check_vcs_permalinks_builtin() -> Result<()> {
     - hook id: check-vcs-permalinks
     - exit code: 1
 
-      links.md:1:https://github.com/owner/repo/blob/main/file.py#L10
-      links.md:2:https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
-
-      Non-permanent github link detected.
-      On any page on github press [y] to load a permalink.
+      Non-permanent github link detected: links.md:1:https://github.com/owner/repo/blob/main/file.py#L10
+      Non-permanent github link detected: links.md:1:https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
 
     ----- stderr -----
     ");
