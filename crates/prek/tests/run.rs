@@ -2152,6 +2152,101 @@ fn skipped_remote_repo_is_not_cloned() {
 }
 
 #[test]
+#[cfg(unix)]
+fn remote_repo_without_submodules_skips_submodule_update() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_repo = context.home_dir().child("no-submodules-hook-repo");
+    hook_repo.create_dir_all()?;
+
+    git_cmd(&hook_repo)
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .assert()
+        .success();
+
+    hook_repo
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
+        - id: noop
+          name: noop
+          entry: "true"
+          language: system
+          pass_filenames: false
+    "#})?;
+
+    git_cmd(&hook_repo).arg("add").arg(".").assert().success();
+    git_cmd(&hook_repo)
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .assert()
+        .success();
+    let rev = git_cmd(&hook_repo)
+        .arg("rev-parse")
+        .arg("HEAD")
+        .output()?
+        .stdout;
+    let rev = String::from_utf8_lossy(&rev).trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {repo}
+            rev: {rev}
+            hooks:
+              - id: noop
+    ", repo = hook_repo.display()});
+    context
+        .work_dir()
+        .child("tracked.txt")
+        .write_str("content\n")?;
+    context.git_add(".");
+
+    let fake_bin = context.home_dir().child("fake-git-bin");
+    fake_bin.create_dir_all()?;
+    let fake_git = fake_bin.child("git");
+    fake_git.write_str(indoc::indoc! {r#"
+        #!/bin/sh
+        case " $* " in
+          *" submodule update "*)
+            printf '%s\n' "$*" >> "$PREK_TEST_GIT_LOG"
+            ;;
+        esac
+        exec "$PREK_TEST_REAL_GIT" "$@"
+    "#})?;
+    fs_err::set_permissions(fake_git.path(), std::fs::Permissions::from_mode(0o755))?;
+
+    let original_path = EnvVars::var_os(EnvVars::PATH).expect("PATH must be set");
+    let new_path = std::env::join_paths(
+        std::iter::once(fake_bin.path().to_path_buf()).chain(std::env::split_paths(&original_path)),
+    )?;
+    let log_path = context.home_dir().child("git-wrapper.log");
+    let real_git = which::which("git")?;
+
+    context
+        .run()
+        .arg("--all-files")
+        .arg("noop")
+        .env(EnvVars::PATH, new_path)
+        .env("PREK_TEST_GIT_LOG", log_path.path())
+        .env("PREK_TEST_REAL_GIT", real_git)
+        .assert()
+        .success();
+
+    let submodule_updates = fs_err::read_to_string(log_path.path()).unwrap_or_default();
+    assert_eq!(
+        submodule_updates, "",
+        "repo without .gitmodules or gitlinks should not run git submodule update",
+    );
+
+    Ok(())
+}
+
+#[test]
 fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
