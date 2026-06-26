@@ -54,9 +54,6 @@ indoc = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 globset = { workspace = true }
-# Enable static linking for liblzma
-# This is required for the `xz` feature in `async-compression`
-liblzma = { workspace = true }
 mea = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }

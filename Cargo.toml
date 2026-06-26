@@ -58,9 +58,6 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 json5 = { version = "1.3.0" }
 libc = { version = "0.2.182" }
-# Enable static linking for liblzma
-# This is required for the `xz` feature in `async-compression`
-liblzma = { version = "0.4.5", features = ["static"] }
 mea = { version = "0.6.3" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
