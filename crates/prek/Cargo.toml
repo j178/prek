@@ -61,6 +61,7 @@ mea = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 quick-xml = { workspace = true }
+rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 aws-lc-rs = { workspace = true }

@@ -2004,6 +2004,7 @@ dependencies = [
  "prek-pty",
  "pretty_assertions",
  "quick-xml 0.40.1",
+ "rand",
  "regex",
  "reqwest",
  "rustc-hash",

@@ -67,6 +67,7 @@ owo-colors = { version = "4.1.0" }
 phf = { version = "0.13.1", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
 quick-xml = { version = "0.40" }
+rand = { version = "0.9.4", default-features = false, features = ["std_rng"] }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "http2",
   "stream",
