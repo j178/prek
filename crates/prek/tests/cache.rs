@@ -232,14 +232,14 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
               - id: check-yaml
     "});
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Removed 1 repo, 2 hook envs, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
-    ");
+    "#);
 
     home.child("repos/unused-repo")
         .assert(predicates::path::missing());
@@ -356,7 +356,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         .child(".prek-hook.json")
         .write_str(&serde_json::to_string_pretty(&marker_go)?)?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "--dry-run", "-v"]), @r"
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "--dry-run", "-v"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -377,9 +377,9 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
       path: [HOME]/tools/python/3.11.0
 
     ----- stderr -----
-    ");
+    "#);
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]), @r"
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -400,7 +400,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
       path: [HOME]/tools/python/3.11.0
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -541,14 +541,14 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
     // Add an obviously-unused entry to ensure GC does work.
     home.child("hooks/unused-hook-env").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Removed 1 hook env ([SIZE])
 
     ----- stderr -----
-    ");
+    "#);
 
     // The local hook env(s) should remain.
     for env in local_envs {
@@ -696,14 +696,14 @@ fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
     home.child("repos/deadbeef").create_dir_all()?;
     home.child("hooks/hook-env-dead").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Removed 1 repo, 1 hook env ([SIZE])
 
     ----- stderr -----
-    ");
+    "#);
 
     home.child("repos/deadbeef")
         .assert(predicates::path::missing());
@@ -737,14 +737,14 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     home.child("scratch/some-temp").create_dir_all()?;
     home.child("patches/some-patch").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Removed 1 repo, 1 hook env, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
-    ");
+    "#);
 
     // Tracking file should be updated to drop the missing config.
     let content = fs_err::read_to_string(home.child("config-tracking.json").path())?;
@@ -778,14 +778,14 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
     home.child("tools/node").create_dir_all()?;
     home.child("cache/go").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Removed 1 repo, 1 hook env, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
-    ");
+    "#);
 
     // Parse errors should not drop the config from tracking.
     let content = fs_err::read_to_string(home.child("config-tracking.json").path())?;
@@ -815,14 +815,14 @@ fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
     home.child("cache/go").create_dir_all()?;
     home.child("scratch/some-temp").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc").arg("--dry-run"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc").arg("--dry-run"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Would remove 1 repo, 1 hook env, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
-    ");
+    "#);
 
     // Nothing should be removed in dry-run mode.
     home.child("repos/unused-repo")

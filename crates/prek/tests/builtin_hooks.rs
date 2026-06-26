@@ -107,7 +107,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail and fix the files
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -116,14 +116,14 @@ fn end_of_file_fixer_hook() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
+      Fixing only_win_newlines.txt
+      Fixing multiple_lf.txt
+      Fixing no_newline.txt
       Fixing multiple_crlf.txt
       Fixing only_newlines.txt
-      Fixing only_win_newlines.txt
-      Fixing no_newline.txt
-      Fixing multiple_lf.txt
 
     ----- stderr -----
-    ");
+    "#);
 
     // Assert that the files have been corrected
     assert_snapshot!(context.read("correct_lf.txt"), @"Hello World");
@@ -608,7 +608,7 @@ fn mixed_line_ending_hook() -> Result<()> {
         .child("mixed.txt")
         .write_str("line1\nline2\r\n")?;
     context.git_add(".");
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -618,11 +618,11 @@ fn mixed_line_ending_hook() -> Result<()> {
     - files were modified by this hook
 
       Fixing .pre-commit-config.yaml
-      Fixing mixed.txt
       Fixing only_lf.txt
+      Fixing mixed.txt
 
     ----- stderr -----
-    ");
+    "#);
     assert_snapshot!(context.read("mixed.txt"), @r"
     line1
     line2
@@ -713,7 +713,7 @@ fn check_added_large_files_hook() -> Result<()> {
     "});
 
     // Second run: the hook should check all files even if not staged
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -721,11 +721,11 @@ fn check_added_large_files_hook() -> Result<()> {
     - hook id: check-added-large-files
     - exit code: 1
 
-      unstaged_large_file.txt (2 KB) exceeds 1 KB
       large_file.txt (2 KB) exceeds 1 KB
+      unstaged_large_file.txt (2 KB) exceeds 1 KB
 
     ----- stderr -----
-    ");
+    "#);
 
     context.git_rm("unstaged_large_file.txt");
     context.git_clean();
@@ -938,30 +938,30 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       - hook id: identity
       - duration: [TIME]
 
-        correct.txt
-        invalid.yaml
-        empty.json
-        duplicate.json
-        trailing_ws.txt
-        large.bin
-        eof_multiple_lf.txt
-        duplicate.yaml
-        empty.yaml
-        mixed.txt
         invalid.json
+        empty.yaml
+        eof_multiple_lf.txt
+        duplicate.json
+        empty.json
+        mixed.txt
+        duplicate.yaml
         .pre-commit-config.yaml
         eof_no_newline.txt
+        correct.txt
+        invalid.yaml
+        trailing_ws.txt
+        large.bin
       fix end of files.......................................................Failed
       - hook id: end-of-file-fixer
       - exit code: 1
       - files were modified by this hook
 
-        Fixing invalid.yaml
-        Fixing duplicate.json
-        Fixing eof_no_newline.txt
-        Fixing eof_multiple_lf.txt
-        Fixing duplicate.yaml
         Fixing invalid.json
+        Fixing eof_multiple_lf.txt
+        Fixing duplicate.json
+        Fixing duplicate.yaml
+        Fixing eof_no_newline.txt
+        Fixing invalid.yaml
       check yaml.............................................................Failed
       - hook id: check-yaml
       - exit code: 1
@@ -1005,19 +1005,19 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       - hook id: identity
       - duration: [TIME]
 
-        app/.pre-commit-config.yaml
-        app/invalid.json
-        app/duplicate.yaml
-        app/correct.txt
-        app/mixed.txt
-        app/invalid.yaml
-        app/empty.yaml
-        app/duplicate.json
-        app/empty.json
-        app/large.bin
         app/eof_no_newline.txt
+        app/empty.json
+        app/empty.yaml
+        app/correct.txt
+        app/duplicate.yaml
+        app/large.bin
+        app/duplicate.json
         .pre-commit-config.yaml
         app/eof_multiple_lf.txt
+        app/.pre-commit-config.yaml
+        app/invalid.json
+        app/mixed.txt
+        app/invalid.yaml
         app/trailing_ws.txt
 
     ----- stderr -----
@@ -1043,19 +1043,19 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       - hook id: identity
       - duration: [TIME]
 
-        correct.txt
-        invalid.yaml
-        empty.json
-        duplicate.json
-        trailing_ws.txt
-        large.bin
-        eof_multiple_lf.txt
-        duplicate.yaml
-        empty.yaml
-        mixed.txt
         invalid.json
+        empty.yaml
+        eof_multiple_lf.txt
+        duplicate.json
+        empty.json
+        mixed.txt
+        duplicate.yaml
         .pre-commit-config.yaml
         eof_no_newline.txt
+        correct.txt
+        invalid.yaml
+        trailing_ws.txt
+        large.bin
       fix end of files.......................................................Passed
       check yaml.............................................................Passed
       check json.............................................................Passed
@@ -1067,19 +1067,19 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       - hook id: identity
       - duration: [TIME]
 
-        app/.pre-commit-config.yaml
-        app/invalid.json
-        app/duplicate.yaml
-        app/correct.txt
-        app/mixed.txt
-        app/invalid.yaml
-        app/empty.yaml
-        app/duplicate.json
-        app/empty.json
-        app/large.bin
         app/eof_no_newline.txt
+        app/empty.json
+        app/empty.yaml
+        app/correct.txt
+        app/duplicate.yaml
+        app/large.bin
+        app/duplicate.json
         .pre-commit-config.yaml
         app/eof_multiple_lf.txt
+        app/.pre-commit-config.yaml
+        app/invalid.json
+        app/mixed.txt
+        app/invalid.yaml
         app/trailing_ws.txt
 
     ----- stderr -----
@@ -1210,11 +1210,11 @@ fn pretty_format_json_hook() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.
       Fixing file compact.json
-      Fixing file uppercase_unicode.json
-      invalid.json: invalid JSON (trailing comma at line 1 column 9). Consider using the `check-json` hook.
       Fixing file unsorted.json
+      invalid.json: invalid JSON (trailing comma at line 1 column 9). Consider using the `check-json` hook.
+      Fixing file uppercase_unicode.json
+      empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.
 
     ----- stderr -----
     "#);
@@ -1824,7 +1824,7 @@ fn detect_private_key_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail due to private keys
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1832,17 +1832,17 @@ fn detect_private_key_hook() -> Result<()> {
     - hook id: detect-private-key
     - exit code: 1
 
-      Private key found: doc.txt
-      Private key found: id_ecdsa
-      Private key found: key.ppk
-      Private key found: id_rsa
-      Private key found: id_dsa
-      Private key found: id_ed25519
-      Private key found: ta.key
       Private key found: private.asc
+      Private key found: id_ed25519
+      Private key found: id_rsa
+      Private key found: id_ecdsa
+      Private key found: ta.key
+      Private key found: id_dsa
+      Private key found: key.ppk
+      Private key found: doc.txt
 
     ----- stderr -----
-    ");
+    "#);
 
     // Remove all private keys
     context.git_rm("id_rsa");
@@ -1924,12 +1924,12 @@ fn check_merge_conflict_hook() -> Result<()> {
     - hook id: check-merge-conflict
     - exit code: 1
 
-      partial_separator_conflict.txt:2: Merge conflict string "<<<<<<< " found
-      partial_separator_conflict.txt:4: Merge conflict string "=======" found
+      partial_conflict.txt:2: Merge conflict string "<<<<<<< " found
       conflict.txt:2: Merge conflict string "<<<<<<< " found
       conflict.txt:4: Merge conflict string "=======" found
       conflict.txt:6: Merge conflict string ">>>>>>> " found
-      partial_conflict.txt:2: Merge conflict string "<<<<<<< " found
+      partial_separator_conflict.txt:2: Merge conflict string "<<<<<<< " found
+      partial_separator_conflict.txt:4: Merge conflict string "=======" found
 
     ----- stderr -----
     "#);
@@ -2124,7 +2124,7 @@ fn check_xml_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2132,13 +2132,13 @@ fn check_xml_hook() -> Result<()> {
     - hook id: check-xml
     - exit code: 1
 
-      invalid_mismatched.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</different>` was found)
       empty.xml: Failed to xml parse (no element found)
-      invalid_unclosed.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</root>` was found)
+      invalid_mismatched.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</different>` was found)
       multiple_roots.xml: Failed to xml parse (junk after document element)
+      invalid_unclosed.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</root>` was found)
 
     ----- stderr -----
-    ");
+    "#);
 
     // Fix the files
     cwd.child("invalid_unclosed.xml").write_str(
@@ -2703,7 +2703,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
     context.git_add(".");
 
     // Run: should fail for partial_shebang.sh, whitespace.sh, invalid_shebang.sh
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2711,13 +2711,13 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
     - hook id: check-executables-have-shebangs
     - exit code: 1
 
-      partial_shebang.sh marked executable but has no (or invalid) shebang!
-        If it isn't supposed to be executable, try: 'chmod -x partial_shebang.sh'
-        If on Windows, you may also need to: 'git add --chmod=-x partial_shebang.sh'
-        If it is supposed to be executable, double-check its shebang.
       invalid_shebang.sh marked executable but has no (or invalid) shebang!
         If it isn't supposed to be executable, try: 'chmod -x invalid_shebang.sh'
         If on Windows, you may also need to: 'git add --chmod=-x invalid_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+      partial_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x partial_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x partial_shebang.sh'
         If it is supposed to be executable, double-check its shebang.
       whitespace.sh marked executable but has no (or invalid) shebang!
         If it isn't supposed to be executable, try: 'chmod -x whitespace.sh'
@@ -2725,7 +2725,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
         If it is supposed to be executable, double-check its shebang.
 
     ----- stderr -----
-    ");
+    "#);
 
     // Fix the files: add valid shebangs or remove executable bit
     cwd.child("partial_shebang.sh")

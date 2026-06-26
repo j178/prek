@@ -39,7 +39,7 @@ fn run_basic() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -54,13 +54,13 @@ fn run_basic() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixing valid.json
-      Fixing invalid.json
       Fixing main.py
+      Fixing invalid.json
+      Fixing valid.json
     check json...............................................................Passed
 
     ----- stderr -----
-    ");
+    "#);
 
     context.git_add(".");
 
@@ -1387,7 +1387,7 @@ fn file_types() -> Result<()> {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1400,16 +1400,16 @@ fn file_types() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
 
-      ['main.py', 'json.json']
+      ['json.json', 'main.py']
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
 
-      ['file.txt', '.pre-commit-config.yaml', 'main.py']
+      ['.pre-commit-config.yaml', 'file.txt', 'main.py']
     trailing-whitespace..................................(no files to check)Skipped
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }
@@ -1855,7 +1855,7 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
         .chain([(r"/\d+-\d+.patch", "/[TIME]-[PID].patch")])
         .collect();
 
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(filters, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1867,7 +1867,7 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
     Stashed changes conflicted with changes made by hook, rolling back the hook changes
     Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
-    ");
+    "#);
 
     assert_eq!(context.read("intent.txt"), "preserve me\n");
     assert_eq!(context.read("test.py"), "a=1\nb = 2\n");
@@ -2102,7 +2102,7 @@ fn init_nonexistent_repo() {
         ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run(), @"
+    cmd_snapshot!(filters, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2117,7 +2117,7 @@ fn init_nonexistent_repo() {
 
     [stderr]
     fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]
-    ");
+    "#);
 }
 
 #[test]
@@ -2279,7 +2279,7 @@ fn unmatched_skip_does_not_suppress_remote_clone() {
     cmd_snapshot!(
         filters,
         context.run().arg("--all-files").arg("--skip").arg("other-hook"),
-        @"
+        @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2294,7 +2294,7 @@ fn unmatched_skip_does_not_suppress_remote_clone() {
 
     [stderr]
     fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]
-    "
+    "#
     );
 }
 
@@ -2461,7 +2461,7 @@ fn run_multiple_files() -> Result<()> {
     cwd.child("file2.txt").write_str("Hello, world!")?;
     context.git_add(".");
     // `--files` with multiple files
-    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2469,10 +2469,10 @@ fn run_multiple_files() -> Result<()> {
     - hook id: multiple-files
     - duration: [TIME]
 
-      file2.txt file1.txt
+      file1.txt file2.txt
 
     ----- stderr -----
-    ");
+    "#);
     Ok(())
 }
 
@@ -2559,7 +2559,7 @@ fn run_directory() -> Result<()> {
     ");
 
     // multiple `--directory`
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir2"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir2"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2567,10 +2567,10 @@ fn run_directory() -> Result<()> {
     - hook id: directory
     - duration: [TIME]
 
-      dir2/file.txt dir1/file.txt
+      dir1/file.txt dir2/file.txt
 
     ----- stderr -----
-    ");
+    "#);
 
     // non-existing directory
     cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r"
@@ -2595,7 +2595,7 @@ fn run_directory() -> Result<()> {
 
     ----- stderr -----
     ");
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir2/file.txt"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir2/file.txt"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2603,10 +2603,10 @@ fn run_directory() -> Result<()> {
     - hook id: directory
     - duration: [TIME]
 
-      dir2/file.txt dir1/file.txt
+      dir1/file.txt dir2/file.txt
 
     ----- stderr -----
-    ");
+    "#);
 
     // run `--directory` inside a subdirectory
     cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("dir1")).arg("--directory").arg("."), @r"

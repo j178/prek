@@ -169,6 +169,7 @@ impl TestContext {
             cmd.current_dir(self.work_dir());
             cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
             cmd.env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1");
+            cmd.env_remove("RUST_LOG");
             cmd
         };
 

@@ -160,7 +160,7 @@ fn script_with_files() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -168,13 +168,13 @@ fn script_with_files() -> anyhow::Result<()> {
     - hook id: lua
     - duration: [TIME]
 
-      Processing file:	script.lua
       Processing file:	.pre-commit-config.yaml
+      Processing file:	script.lua
       Processing file:	test2.lua
       Processing file:	test1.lua
 
     ----- stderr -----
-    ");
+    "#);
 
     Ok(())
 }

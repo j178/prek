@@ -126,8 +126,8 @@ fn script_with_files() -> anyhow::Result<()> {
     - hook id: dart
     - duration: [TIME]
 
-      Processing file: script.dart
       Processing file: .pre-commit-config.yaml
+      Processing file: script.dart
       Processing file: test2.dart
       Processing file: test1.dart
 
