@@ -573,6 +573,12 @@ mod tests {
         let tags = super::tags_from_filename(Path::new("data.json"));
         assert_tagset(&tags, &["json", "text"]);
 
+        let tags = super::tags_from_filename(Path::new("index.cts"));
+        assert_tagset(&tags, &["text", "ts"]);
+
+        let tags = super::tags_from_filename(Path::new("index.mts"));
+        assert_tagset(&tags, &["text", "ts"]);
+
         let tags = super::tags_from_filename(Path::new("build.props"));
         assert_tagset(&tags, &["msbuild", "text", "xml"]);
 
