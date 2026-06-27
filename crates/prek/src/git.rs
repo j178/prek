@@ -590,10 +590,8 @@ async fn update_submodules(
     }
 
     let mut cmd = git_cmd()?;
-    cmd.current_dir(path);
-    if shallow {
-        cmd.hidden_args(["-c", "protocol.version=2"]);
-    }
+    cmd.current_dir(path)
+        .hidden_args(["-c", "protocol.version=2"]);
     cmd.arg("submodule")
         .arg("update")
         .arg("--init")
@@ -612,7 +610,7 @@ async fn update_submodules(
 }
 
 async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
-    if path.join(".gitmodules").exists() {
+    if path.join(".gitmodules").try_exists()? {
         return Ok(true);
     }
 
