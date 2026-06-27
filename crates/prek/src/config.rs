@@ -928,6 +928,11 @@ impl RemoteRepo {
     }
 }
 
+/// Check if a string looks like a frozen git revision.
+pub(crate) fn is_frozen_rev(s: &str) -> bool {
+    looks_like_sha(s)
+}
+
 impl Display for RemoteRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}@{}", self.repo, self.rev)
@@ -1186,6 +1191,15 @@ pub(crate) struct Config {
 
     #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
+}
+
+impl Config {
+    pub(crate) fn repos_with_unfrozen_revs(&self) -> impl Iterator<Item = &RemoteRepo> {
+        self.repos.iter().filter_map(|repo| match repo {
+            Repo::Remote(repo) if !is_frozen_rev(&repo.rev) => Some(repo),
+            Repo::Remote(_) | Repo::Local(_) | Repo::Meta(_) | Repo::Builtin(_) => None,
+        })
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

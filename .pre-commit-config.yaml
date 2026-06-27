@@ -15,12 +15,12 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.47.2
+    rev: 37bb98842b0d8c4ffebdb75301a13db0267cef89  # frozen: v1.47.2
     hooks:
       - id: typos
 
   - repo: https://github.com/executablebooks/mdformat
-    rev: '1.0.0'
+    rev: '82912cdaea4fb830f751504486a7879c70526547'  # frozen: 1.0.0
     hooks:
       - id: mdformat
         language: python  # ensures that Renovate can update additional_dependencies
@@ -31,7 +31,7 @@ repos:
           - mdformat-simple-breaks==0.1.0
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.37.3
+    rev: 8ef330cbb7204d388aa7a620f9549bcea8009663  # frozen: 0.37.3
     hooks:
       - id: check-metaschema
         files:

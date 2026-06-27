@@ -562,6 +562,10 @@ pub(crate) struct RunOptions {
     #[arg(long)]
     pub(crate) dry_run: bool,
 
+    /// Require remote repository revisions to be pinned to commit SHAs.
+    #[arg(long)]
+    pub(crate) require_frozen_revs: bool,
+
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
 }
@@ -712,6 +716,10 @@ pub(crate) struct IdentifyArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ValidateConfigArgs {
+    /// Require remote repository revisions to be pinned to commit SHAs.
+    #[arg(long)]
+    pub(crate) require_frozen_revs: bool,
+
     /// The path to the configuration file.
     #[arg(value_name = "CONFIG")]
     pub(crate) configs: Vec<PathBuf>,
