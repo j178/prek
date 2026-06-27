@@ -78,7 +78,7 @@ pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock:
 
 pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?);
-    cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
+    cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"]);
 
     Ok(cmd)
 }
@@ -107,8 +107,7 @@ fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
 pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd()?
         .arg("diff")
-        .arg("--no-ext-diff")
-        .arg("--ignore-submodules")
+        .hidden_args(["--no-ext-diff", "--ignore-submodules"])
         .arg("--diff-filter=A")
         .arg("--name-only")
         .arg("-z")
@@ -148,7 +147,7 @@ pub(crate) async fn get_changed_files(
         cmd.arg("diff")
             .arg("--name-only")
             .arg("--diff-filter=ACMRT")
-            .arg("--no-ext-diff") // Disable external diff drivers
+            .hidden_args(["--no-ext-diff"])
             .arg("-z") // Use NUL as line terminator
             .arg(range)
             .arg("--")
@@ -256,7 +255,7 @@ pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error>
         .arg("--cached")
         .arg("--name-only")
         .arg("--diff-filter=ACMRTUXB") // Everything except for D
-        .arg("--no-ext-diff") // Disable external diff drivers
+        .hidden_args(["--no-ext-diff"])
         .arg("-z") // Use NUL as line terminator
         .check(true)
         .output()
@@ -269,7 +268,7 @@ pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<PathBuf>> {
         .arg("diff")
         .arg("--exit-code")
         .arg("--name-only")
-        .arg("--no-ext-diff")
+        .hidden_args(["--no-ext-diff"])
         .arg("-z") // Use NUL as line terminator
         .file_args(files)
         .check(false)
@@ -316,7 +315,7 @@ pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Er
     let output = git_cmd()?
         .arg("diff")
         .arg("--name-only")
-        .arg("--no-ext-diff") // Disable external diff drivers
+        .hidden_args(["--no-ext-diff"])
         .arg("-z") // Use NUL as line terminator
         .arg("-m") // Show diffs for merge commits in the default format.
         .arg(String::from_utf8_lossy(&tree.stdout).trim_ascii())
@@ -357,9 +356,7 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
     let status = cmd
         .arg("diff-files")
         .arg("--quiet")
-        .arg("--no-ext-diff")
-        .arg("--no-textconv")
-        .arg("--ignore-submodules")
+        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
         .arg("--")
         .arg(path)
         .check(false)
@@ -381,9 +378,7 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
 pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd()?
         .arg("diff")
-        .arg("--no-ext-diff") // Disable external diff drivers
-        .arg("--no-textconv")
-        .arg("--ignore-submodules")
+        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
         .arg("--")
         .arg(path)
         // This diff is only used as a best-effort before/after snapshot of
@@ -434,9 +429,7 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
         }));
     }
 
-    Ok(PathBuf::from(
-        String::from_utf8_lossy(&output.stdout).trim_ascii(),
-    ))
+    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
 }
 
 pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
@@ -528,8 +521,7 @@ async fn shallow_clone(
 ) -> Result<(), Error> {
     git_cmd()?
         .current_dir(path)
-        .arg("-c")
-        .arg("protocol.version=2")
+        .hidden_args(["-c", "protocol.version=2"])
         .arg("fetch")
         .arg("origin")
         .arg(rev)
@@ -555,8 +547,7 @@ async fn shallow_clone(
 
     git_cmd()?
         .current_dir(path)
-        .arg("-c")
-        .arg("protocol.version=2")
+        .hidden_args(["-c", "protocol.version=2"])
         .arg("submodule")
         .arg("update")
         .arg("--init")

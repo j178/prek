@@ -25,7 +25,7 @@ pub(crate) async fn forbid_new_submodules(
         .arg("diff")
         .arg("--relative")
         .arg("--diff-filter=A")
-        .arg("--no-ext-diff")
+        .hidden_args(["--no-ext-diff"])
         .arg("--raw")
         .arg("-z")
         .arg(diff_arg.as_ref())

@@ -27,6 +27,7 @@
 /// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
 use std::ffi::OsStr;
 use std::fmt::Display;
+use std::ops::Range;
 use std::path::Path;
 use std::process::Output;
 use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
@@ -34,9 +35,7 @@ use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
-use tracing::trace;
-
-use crate::git::GIT;
+use tracing::{enabled, trace};
 
 /// An error from executing a command.
 #[derive(Debug, Error)]
@@ -106,7 +105,8 @@ fn write_trimmed_output_section(
 pub struct Cmd {
     /// The inner command, in case you need to access it.
     pub inner: tokio::process::Command,
-    file_args_start: Option<usize>,
+    hidden_arg_ranges: Vec<Range<usize>>,
+    file_arg_boundary: usize,
     check_status: bool,
 }
 
@@ -126,7 +126,8 @@ impl Cmd {
         let inner = tokio::process::Command::new(command);
         Self {
             inner,
-            file_args_start: None,
+            hidden_arg_ranges: Vec::new(),
+            file_arg_boundary: usize::MAX,
             check_status: true,
         }
     }
@@ -184,8 +185,7 @@ impl Cmd {
             .output()
             .await
             .map_err(|cause| self.exec_error(cause))?;
-        self.maybe_check_output(&output)?;
-        Ok(output)
+        self.maybe_check_output(output)
     }
 
     /// Like [`Cmd::output`], but streams stdout and stderr chunks into `sink` as
@@ -249,8 +249,7 @@ impl Cmd {
             stderr: stderr_output,
         };
 
-        self.maybe_check_output(&output)?;
-        Ok(output)
+        self.maybe_check_output(output)
     }
 
     #[cfg(windows)]
@@ -348,8 +347,7 @@ impl Cmd {
             stderr: Vec::new(),
         };
 
-        self.maybe_check_output(&output)?;
-        Ok(output)
+        self.maybe_check_output(output)
     }
 
     /// Equivalent to [`std::process::Command::status`]
@@ -370,10 +368,6 @@ impl Cmd {
 impl Cmd {
     /// Forwards to [`std::process::Command::arg`].
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Self {
-        debug_assert!(
-            self.file_args_start.is_none(),
-            "regular arguments must be added before file-list arguments"
-        );
         self.inner.arg(arg);
         self
     }
@@ -384,22 +378,50 @@ impl Cmd {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        for arg in args {
-            self.arg(arg);
+        self.inner.args(args);
+        self
+    }
+
+    /// Append arguments without showing them in display and error messages.
+    pub fn hidden_args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let start = self.get_args().count();
+        self.inner.args(args);
+        let end = self.get_args().count();
+        if start < end {
+            if let Some(last) = self.hidden_arg_ranges.last_mut()
+                && last.end >= start
+            {
+                last.end = last.end.max(end);
+                return self;
+            }
+            self.hidden_arg_ranges.push(start..end);
         }
         self
     }
 
-    /// Append trailing file-list arguments without showing them in the display command.
+    /// Append trailing file-list arguments without showing them in display, error messages, or logs.
     pub fn file_args<I, S>(&mut self, args: I) -> &mut Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        if self.file_args_start.is_none() {
-            self.file_args_start = Some(self.get_args().count());
+        if self.file_arg_boundary != usize::MAX {
+            self.inner.args(args);
+            return self;
         }
+
+        let mut args = args.into_iter().peekable();
+        if args.peek().is_none() {
+            return self;
+        }
+
+        let start = self.get_args().count();
         self.inner.args(args);
+        self.file_arg_boundary = start;
         self
     }
 
@@ -492,15 +514,16 @@ impl Cmd {
 /// Diagnostic APIs used by execution methods and direct child-process callers.
 impl Cmd {
     fn exec_error(&self, cause: std::io::Error) -> Error {
-        Error::Exec {
-            command: self.display_command(),
-            cause,
-        }
+        let mut command = String::new();
+        let _ = write_command_line(&mut command, None, self.get_program(), self.display_args());
+        Error::Exec { command, cause }
     }
 
     fn status_error(&self, status: ExitStatus, output: Option<Output>) -> Error {
+        let mut command = String::new();
+        let _ = write_command_line(&mut command, None, self.get_program(), self.display_args());
         Error::Status {
-            command: self.display_command(),
+            command,
             error: StatusError { status, output },
         }
     }
@@ -515,11 +538,11 @@ impl Cmd {
     }
 
     /// Check `Output::status`, producing a contextual error if it's not successful.
-    pub fn check_output(&self, output: &Output) -> Result<(), Error> {
+    pub fn check_output(&self, output: Output) -> Result<Output, Error> {
         if output.status.success() {
-            Ok(())
+            Ok(output)
         } else {
-            Err(self.status_error(output.status, Some(output.clone())))
+            Err(self.status_error(output.status, Some(output)))
         }
     }
 
@@ -534,72 +557,64 @@ impl Cmd {
 
     /// Invoke [`Cmd::check_output`] if [`Cmd::check`] is `true`
     /// (defaults to `true`).
-    pub fn maybe_check_output(&self, output: &Output) -> Result<(), Error> {
+    pub fn maybe_check_output(&self, output: Output) -> Result<Output, Error> {
         if self.check_status {
-            self.check_output(output)?;
+            self.check_output(output)
+        } else {
+            Ok(output)
         }
-        Ok(())
     }
 
     /// Log the current command with [`tracing::trace!`].
     pub fn log_command(&self) {
-        trace!("Executing `{self}`");
-    }
-
-    fn display_arg_count(&self) -> usize {
-        self.file_args_start
-            .unwrap_or_else(|| self.get_args().count())
-    }
-
-    fn display_command(&self) -> String {
-        let mut command = String::new();
-        write_display_command(
-            &mut command,
-            None,
-            self.get_program(),
-            self.get_args().take(self.display_arg_count()),
-        )
-        .expect("writing to a string cannot fail");
-        command
-    }
-}
-
-/// Returns the number of arguments to skip.
-fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
-    if GIT.as_ref().is_ok_and(|git| cmd == git) {
-        if cur == "-c" {
-            if let Some(flag) = next {
-                let flag = flag.as_encoded_bytes();
-                if flag.starts_with(b"core.useBuiltinFSMonitor")
-                    || flag.starts_with(b"protocol.version")
-                {
-                    return 2;
-                }
-            }
-        } else if cur == "--no-ext-diff"
-            || cur == "--no-textconv"
-            || cur == "--ignore-submodules"
-            || cur == "--no-color"
-        {
-            return 1;
+        if !enabled!(tracing::Level::TRACE) {
+            return;
         }
+
+        let mut command = String::new();
+        let _ = write_command_line(
+            &mut command,
+            self.get_current_dir(),
+            self.get_program(),
+            self.non_file_args(),
+        );
+        trace!("Executing `{command}`");
     }
-    0
+
+    fn display_args(&self) -> impl Iterator<Item = &OsStr> {
+        self.non_file_args().enumerate().filter_map(|(index, arg)| {
+            if self.is_hidden_arg(index) {
+                None
+            } else {
+                Some(arg)
+            }
+        })
+    }
+
+    fn is_hidden_arg(&self, index: usize) -> bool {
+        self.hidden_arg_ranges
+            .iter()
+            .any(|range| range.contains(&index))
+    }
+
+    fn non_file_args(&self) -> impl Iterator<Item = &OsStr> {
+        self.get_args().take(self.file_arg_boundary)
+    }
 }
 
-/// Simplified command output, omitting trailing file-list arguments.
+/// Simplified command output, omitting hidden arguments and file-list arguments.
 impl Display for Cmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write_display_command(
+        write_command_line(
             f,
             self.get_current_dir(),
             self.get_program(),
-            self.get_args().take(self.display_arg_count()),
+            self.display_args(),
         )
     }
 }
 
-fn write_display_command<'a>(
+fn write_command_line<'a>(
     f: &mut impl std::fmt::Write,
     cwd: Option<&Path>,
     program: &OsStr,
@@ -616,15 +631,7 @@ fn write_display_command<'a>(
         args.next(); // Skip the program if it's repeated
     }
 
-    while let Some(arg) = args.next() {
-        let skip = skip_args(program, arg, args.peek());
-        if skip > 0 {
-            for _ in 1..skip {
-                args.next();
-            }
-            continue;
-        }
-
+    for arg in args {
         write!(f, " {}", arg.to_string_lossy())?;
     }
 
@@ -636,7 +643,7 @@ mod tests {
     use std::error::Error as _;
     use std::sync::{Arc, Mutex};
 
-    use super::{Cmd, OutputSink};
+    use super::{Cmd, OutputSink, write_command_line};
 
     #[derive(Default)]
     struct RecordingSink {
@@ -647,6 +654,17 @@ mod tests {
         fn write_chunk(&mut self, _chunk: &[u8]) {
             *self.chunks.lock().unwrap() += 1;
         }
+    }
+
+    fn command_log_string(cmd: &Cmd) -> String {
+        let mut command = String::new();
+        let _ = write_command_line(
+            &mut command,
+            cmd.get_current_dir(),
+            cmd.get_program(),
+            cmd.non_file_args(),
+        );
+        command
     }
 
     #[tokio::test]
@@ -665,20 +683,88 @@ mod tests {
     }
 
     #[test]
-    fn display_command_omits_file_args() {
+    fn display_and_log_commands_omit_file_args() {
         let mut cmd = Cmd::new("prek");
         cmd.arg("run")
             .arg("hook-id")
-            .file_args(["file-0.rs", "file-1.rs"]);
+            .file_args(["file-0.rs"])
+            .file_args(["file-1.rs"]);
 
-        assert_eq!(cmd.display_command(), "prek run hook-id");
         assert_eq!(cmd.to_string(), "prek run hook-id");
+        assert_eq!(command_log_string(&cmd), "prek run hook-id");
         assert_eq!(
             cmd.get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
                 .collect::<Vec<_>>(),
             ["run", "hook-id", "file-0.rs", "file-1.rs"]
         );
+        assert!(cmd.hidden_arg_ranges.is_empty());
+        assert_eq!(cmd.file_arg_boundary, 2);
+    }
+
+    #[test]
+    fn display_command_omits_hidden_args() {
+        let mut cmd = Cmd::new("git");
+        cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"])
+            .arg("diff")
+            .arg("--name-only")
+            .hidden_args(["--no-ext-diff", "--ignore-submodules"])
+            .arg("HEAD");
+
+        assert_eq!(cmd.to_string(), "git diff --name-only HEAD");
+        assert_eq!(
+            cmd.get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+            [
+                "-c",
+                "core.useBuiltinFSMonitor=false",
+                "diff",
+                "--name-only",
+                "--no-ext-diff",
+                "--ignore-submodules",
+                "HEAD"
+            ]
+        );
+    }
+
+    #[test]
+    fn command_log_includes_hidden_args() {
+        let mut cmd = Cmd::new("git");
+        cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"])
+            .arg("diff")
+            .arg("--name-only")
+            .hidden_args(["--no-ext-diff", "--ignore-submodules"])
+            .arg("HEAD");
+
+        assert_eq!(cmd.to_string(), "git diff --name-only HEAD");
+        assert_eq!(
+            command_log_string(&cmd),
+            "git -c core.useBuiltinFSMonitor=false diff --name-only --no-ext-diff --ignore-submodules HEAD"
+        );
+    }
+
+    #[test]
+    fn command_log_skips_repeated_program_arg() {
+        let mut cmd = Cmd::new("python");
+        cmd.arg("python").arg("-m").arg("module");
+
+        assert_eq!(cmd.to_string(), "python -m module");
+        assert_eq!(command_log_string(&cmd), "python -m module");
+    }
+
+    #[test]
+    fn hidden_args_merges_adjacent_ranges() {
+        let mut cmd = Cmd::new("uv");
+        cmd.arg("venv")
+            .arg("/tmp/python-abc")
+            .hidden_args(["--python-preference", "managed"])
+            .hidden_args(["--no-project"])
+            .hidden_args(["--project", "/"]);
+
+        assert_eq!(cmd.to_string(), "uv venv /tmp/python-abc");
+        assert_eq!(cmd.hidden_arg_ranges, vec![2..7]);
+        assert_eq!(cmd.file_arg_boundary, usize::MAX);
     }
 
     #[tokio::test]

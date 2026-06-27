@@ -334,13 +334,7 @@ impl Python {
         allow_downloads: bool,
     ) -> Cmd {
         let mut cmd = uv.cmd(store);
-        cmd.arg("venv")
-            .arg(&info.env_path)
-            .args(["--python-preference", "managed"])
-            // Avoid discovering a project or workspace
-            .arg("--no-project")
-            // Explicitly set project to root to avoid uv searching for project-level configs
-            .args(["--project", "/"]);
+        cmd.arg("venv").arg(&info.env_path);
         Self::remove_uv_python_override_envs(&mut cmd);
         if set_install_dir {
             cmd.env(
@@ -348,15 +342,27 @@ impl Python {
                 store.tools_path(ToolBucket::Python),
             );
         }
-        if allow_downloads {
-            cmd.arg("--allow-python-downloads");
-        } else {
-            cmd.arg("--no-python-downloads");
-        }
 
-        if let Some(python) = to_uv_python_request(python_request) {
-            cmd.arg("--python").arg(python);
+        let download_arg = if allow_downloads {
+            "--allow-python-downloads"
+        } else {
+            "--no-python-downloads"
+        };
+        let python = to_uv_python_request(python_request);
+        let mut hidden_args = vec![
+            "--python-preference",
+            "managed",
+            // Avoid discovering a project or workspace.
+            "--no-project",
+            // Explicitly set project to root to avoid uv searching for project-level configs.
+            "--project",
+            "/",
+            download_arg,
+        ];
+        if let Some(python) = &python {
+            hidden_args.extend(["--python", python.as_str()]);
         }
+        cmd.hidden_args(hidden_args);
 
         cmd
     }

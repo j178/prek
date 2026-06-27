@@ -91,11 +91,9 @@ impl UnstagedChangesRestorer {
         let mut cmd = git_cmd()?;
         let output = cmd
             .arg("diff-index")
-            .arg("--ignore-submodules")
             .arg("--binary")
             .arg("--exit-code")
-            .arg("--no-color")
-            .arg("--no-ext-diff")
+            .hidden_args(["--ignore-submodules", "--no-color", "--no-ext-diff"])
             .arg(tree)
             .arg("--")
             .arg(root)
