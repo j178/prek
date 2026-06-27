@@ -61,7 +61,7 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
     print(json.dumps(info))
     "#};
 
-    let stdout = Cmd::new(python, "python -c")
+    let stdout = Cmd::new(python)
         .arg("-I")
         .arg("-c")
         .arg(QUERY_PYTHON_INFO)
@@ -197,7 +197,7 @@ impl LanguageImpl for Python {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "python hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::VIRTUAL_ENV, env_dir)
@@ -205,7 +205,7 @@ impl LanguageImpl for Python {
                 .env_remove(EnvVars::PYTHONHOME)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
@@ -262,7 +262,7 @@ impl Python {
     }
 
     fn pip_install_command(uv: &Uv, store: &Store, env_path: &Path) -> Cmd {
-        let mut cmd = uv.cmd("uv pip", store);
+        let mut cmd = uv.cmd(store);
         cmd.arg("pip")
             .arg("install")
             // Explicitly set project to root to avoid uv searching for project-level configs.
@@ -333,7 +333,7 @@ impl Python {
         set_install_dir: bool,
         allow_downloads: bool,
     ) -> Cmd {
-        let mut cmd = uv.cmd("create venv", store);
+        let mut cmd = uv.cmd(store);
         cmd.arg("venv")
             .arg(&info.env_path)
             .args(["--python-preference", "managed"])

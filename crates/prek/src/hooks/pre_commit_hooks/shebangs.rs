@@ -14,7 +14,7 @@ pub(super) async fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error>
 }
 
 pub(super) async fn git_index_stage_output(file_base: &Path) -> Result<Vec<u8>, anyhow::Error> {
-    Ok(git::git_cmd("git ls-files")?
+    Ok(git::git_cmd()?
         .arg("ls-files")
         .arg("--stage")
         .arg("-z")

@@ -180,14 +180,14 @@ impl LanguageImpl for Dart {
         }
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run dart command")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::PUB_CACHE, env_dir)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
@@ -304,7 +304,7 @@ async fn compile_executables(
             output = output_path.display(),
         );
 
-        Cmd::new(dart, "dart compile exe")
+        Cmd::new(dart)
             .arg("compile")
             .arg("exe")
             .arg(format!("--packages={}", packages_path.display()))
@@ -372,7 +372,7 @@ async fn install_package_config(
     let pubspec_path = env_path.join(PUBSPEC_YAML);
     fs_err::tokio::write(&pubspec_path, pubspec_content).await?;
 
-    Cmd::new(dart, "dart pub get")
+    Cmd::new(dart)
         .current_dir(env_path)
         .env(EnvVars::PUB_CACHE, env_path)
         .arg("pub")

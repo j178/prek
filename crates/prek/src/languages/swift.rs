@@ -30,7 +30,7 @@ pub(crate) async fn query_swift_info() -> Result<SwiftInfo> {
 
     // macOS: "swift-driver version: X.Y.Z Apple Swift version X.Y.Z ..."
     // Linux/Windows: "Swift version X.Y.Z ..."
-    let stdout = Cmd::new("swift", "get swift version")
+    let stdout = Cmd::new("swift")
         .arg("--version")
         .check(true)
         .output()
@@ -111,7 +111,7 @@ impl LanguageImpl for Swift {
             if repo_path.join("Package.swift").exists() {
                 debug!(%hook, "Building Swift package");
                 let build_path = build_dir(&info.env_path);
-                Cmd::new("swift", "swift build")
+                Cmd::new("swift")
                     .arg("build")
                     .arg("-c")
                     .arg("release")
@@ -125,7 +125,7 @@ impl LanguageImpl for Swift {
                     .context("Failed to build Swift package")?;
 
                 // Get the actual bin path (includes target triple, e.g., .build/arm64-apple-macosx/release)
-                let bin_path_output = Cmd::new("swift", "get bin path")
+                let bin_path_output = Cmd::new("swift")
                     .arg("build")
                     .arg("-c")
                     .arg("release")
@@ -193,13 +193,13 @@ impl LanguageImpl for Swift {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "swift hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

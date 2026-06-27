@@ -19,7 +19,7 @@ use crate::{config, git};
 /// Initializes a temporary git repo and fetches the remote HEAD plus tags.
 pub(super) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
     git::init_repo(repo_url, repo_path).await?;
-    git::git_cmd("git fetch")?
+    git::git_cmd()?
         .arg("fetch")
         .arg("origin")
         .arg("HEAD")
@@ -38,7 +38,7 @@ pub(super) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Re
 
 /// Resolves any revision-like string to the underlying commit SHA.
 pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> Result<String> {
-    let output = git::git_cmd("git rev-parse")?
+    let output = git::git_cmd()?
         .arg("rev-parse")
         .arg(format!("{rev}^{{}}"))
         .check(true)
@@ -75,7 +75,7 @@ pub(super) async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<
         return Ok(CommitPresence::Unknown);
     }
 
-    let output = git::git_cmd("git cat-file")?
+    let output = git::git_cmd()?
         .arg("--no-lazy-fetch")
         .arg("cat-file")
         .arg("-e")
@@ -120,7 +120,7 @@ pub(super) fn get_tags_pointing_at_revision<'a>(
 
 /// Resolves the default branch tip to an exact tag when possible, otherwise to a commit SHA.
 pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
-    let output = git::git_cmd("git describe")?
+    let output = git::git_cmd()?
         .arg("describe")
         .arg("FETCH_HEAD")
         .arg("--tags")
@@ -134,7 +134,7 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
         debug!("No matching tag for `FETCH_HEAD`, using rev-parse instead");
-        let output = git::git_cmd("git rev-parse")?
+        let output = git::git_cmd()?
             .arg("rev-parse")
             .arg("FETCH_HEAD")
             .check(true)
@@ -154,7 +154,7 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
 /// Within groups of tags sharing the same timestamp, semver-parseable tags
 /// are sorted highest version first; non-semver tags sort after them.
 pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> {
-    let output = git::git_cmd("git for-each-ref")?
+    let output = git::git_cmd()?
         .arg("for-each-ref")
         .arg("--sort=-creatordate")
         .arg("--format=%(refname:lstrip=2)\t%(creatordate:unix)\t%(objectname)\t%(*objectname)")
@@ -376,7 +376,7 @@ pub(super) async fn checkout_and_validate_manifest(
     required_hook_ids: &[&str],
 ) -> Result<()> {
     if cfg!(windows) {
-        git::git_cmd("git show")?
+        git::git_cmd()?
             .arg("show")
             .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
             .current_dir(repo_path)
@@ -387,7 +387,7 @@ pub(super) async fn checkout_and_validate_manifest(
             .await?;
     }
 
-    git::git_cmd("git checkout")?
+    git::git_cmd()?
         .arg("checkout")
         .arg("--quiet")
         .arg(rev)
@@ -439,7 +439,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path();
 
-        git::git_cmd("git init")
+        git::git_cmd()
             .unwrap()
             .arg("init")
             .current_dir(repo)
@@ -448,7 +448,7 @@ mod tests {
             .await
             .unwrap();
 
-        git::git_cmd("git config")
+        git::git_cmd()
             .unwrap()
             .args(["config", "user.email", "test@test.com"])
             .current_dir(repo)
@@ -457,7 +457,7 @@ mod tests {
             .await
             .unwrap();
 
-        git::git_cmd("git config")
+        git::git_cmd()
             .unwrap()
             .args(["config", "user.name", "Test"])
             .current_dir(repo)
@@ -466,7 +466,7 @@ mod tests {
             .await
             .unwrap();
 
-        git::git_cmd("git commit")
+        git::git_cmd()
             .unwrap()
             .args([
                 "-c",
@@ -482,7 +482,7 @@ mod tests {
             .await
             .unwrap();
 
-        git::git_cmd("git branch")
+        git::git_cmd()
             .unwrap()
             .args(["branch", "-M", "trunk"])
             .current_dir(repo)
@@ -494,8 +494,8 @@ mod tests {
         tmp
     }
 
-    fn git_cmd(dir: impl AsRef<Path>, summary: &str) -> Cmd {
-        let mut cmd = git::git_cmd(summary).unwrap();
+    fn git_cmd(dir: impl AsRef<Path>) -> Cmd {
+        let mut cmd = git::git_cmd().unwrap();
         cmd.current_dir(dir)
             .args(["-c", "commit.gpgsign=false"])
             .args(["-c", "tag.gpgsign=false"]);
@@ -520,7 +520,7 @@ mod tests {
     }
 
     async fn create_commit(repo: &Path, message: &str) {
-        git_cmd(repo, "git commit")
+        git_cmd(repo)
             .args(["commit", "--allow-empty", "-m", message])
             .remove_git_envs()
             .output()
@@ -537,7 +537,7 @@ mod tests {
 
         let date_str = format!("{timestamp} +0000");
 
-        git_cmd(repo, "git commit")
+        git_cmd(repo)
             .args(["commit", "--allow-empty", "-m", message])
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
@@ -548,7 +548,7 @@ mod tests {
     }
 
     async fn create_lightweight_tag(repo: &Path, tag: &str) {
-        git_cmd(repo, "git tag")
+        git_cmd(repo)
             .arg("tag")
             .arg(tag)
             .remove_git_envs()
@@ -566,7 +566,7 @@ mod tests {
 
         let date_str = format!("{timestamp} +0000");
 
-        git_cmd(repo, "git tag")
+        git_cmd(repo)
             .arg("tag")
             .arg(tag)
             .arg("-m")
@@ -607,7 +607,7 @@ mod tests {
         create_commit(repo, "tagged").await;
         create_lightweight_tag(repo, "v1.2.3").await;
 
-        git::git_cmd("git fetch")
+        git::git_cmd()
             .unwrap()
             .args(["fetch", ".", "HEAD"])
             .current_dir(repo)
@@ -627,7 +627,7 @@ mod tests {
 
         create_commit(repo, "untagged").await;
 
-        git::git_cmd("git fetch")
+        git::git_cmd()
             .unwrap()
             .args(["fetch", ".", "HEAD"])
             .current_dir(repo)
@@ -638,7 +638,7 @@ mod tests {
 
         let rev = resolve_bleeding_edge(repo).await.unwrap();
 
-        let head = git::git_cmd("git rev-parse")
+        let head = git::git_cmd()
             .unwrap()
             .args(["rev-parse", "HEAD"])
             .current_dir(repo)

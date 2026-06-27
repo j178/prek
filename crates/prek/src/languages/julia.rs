@@ -65,7 +65,7 @@ impl LanguageImpl for Julia {
             end
         "};
 
-        Cmd::new("julia", "instantiate julia environment")
+        Cmd::new("julia")
             .current_dir(search_path)
             .arg("--startup-file=no")
             .arg(format!("--project={}", info.env_path.display()))
@@ -89,7 +89,7 @@ impl LanguageImpl for Julia {
     }
 
     async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
-        Cmd::new("julia", "check julia version")
+        Cmd::new("julia")
             .arg("--version")
             .check(true)
             .output()
@@ -118,14 +118,14 @@ impl LanguageImpl for Julia {
         }
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new("julia", "run julia hook")
+            let mut output = Cmd::new("julia")
                 .current_dir(hook.work_dir())
                 .arg("--startup-file=no")
                 .arg(format!("--project={}", env_dir.display()))
                 .args(&entry)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

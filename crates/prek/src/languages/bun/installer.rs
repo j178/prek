@@ -61,7 +61,7 @@ impl BunResult {
     }
 
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let output = Cmd::new(&self.bun, "bun --version")
+        let output = Cmd::new(&self.bun)
             .arg("--version")
             .check(true)
             .output()
@@ -175,7 +175,7 @@ impl BunInstaller {
 
     /// List all versions of Bun available on GitHub releases.
     async fn list_remote_versions(&self) -> Result<Vec<BunVersion>> {
-        let output = git::git_cmd("list bun tags")?
+        let output = git::git_cmd()?
             .arg("ls-remote")
             .arg("--tags")
             .arg("https://github.com/oven-sh/bun")

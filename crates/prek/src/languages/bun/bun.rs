@@ -79,7 +79,7 @@ impl LanguageImpl for Bun {
 
             // Use BUN_INSTALL to set where global packages are installed
             // This makes `bun install -g` install to our hook environment
-            Cmd::new(bun.bun(), "bun install")
+            Cmd::new(bun.bun())
                 .arg("install")
                 .arg("-g")
                 .args(&*deps)
@@ -133,14 +133,14 @@ impl LanguageImpl for Bun {
 
         let entry = hook.entry.resolve(Some(&new_path), store)?;
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "bun hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::BUN_INSTALL, env_dir)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
