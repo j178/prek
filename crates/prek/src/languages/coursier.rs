@@ -92,7 +92,7 @@ impl LanguageImpl for Coursier {
             if let Some(channel_apps) = collect_channel_apps(&channel_dir)? {
                 has_channel_apps = true;
                 for app in channel_apps {
-                    Cmd::new(&cs, "coursier install")
+                    Cmd::new(&cs)
                         .current_dir(repo_path)
                         .arg("install")
                         .arg("--dir")
@@ -112,7 +112,7 @@ impl LanguageImpl for Coursier {
         }
 
         if !dependencies.is_empty() {
-            let mut fetch_cmd = Cmd::new(&cs, "coursier fetch");
+            let mut fetch_cmd = Cmd::new(&cs);
             fetch_cmd
                 .arg("fetch")
                 .args(&dependencies)
@@ -125,7 +125,7 @@ impl LanguageImpl for Coursier {
                 format!("Failed to fetch coursier app `{}`", dependencies.join(" "))
             })?;
 
-            let mut install_cmd = Cmd::new(&cs, "coursier install");
+            let mut install_cmd = Cmd::new(&cs);
             install_cmd
                 .arg("install")
                 .arg("--dir")
@@ -176,12 +176,12 @@ impl LanguageImpl for Coursier {
         let entry = hook.entry.resolve(Some(&path_env), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run coursier hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .env(EnvVars::PATH, &path_env)

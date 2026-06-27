@@ -25,12 +25,7 @@ pub(crate) struct LuaInfo {
 }
 
 pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
-    let stdout = Cmd::new("lua", "get lua version")
-        .arg("-v")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
+    let stdout = Cmd::new("lua").arg("-v").check(true).output().await?.stdout;
     // Lua 5.4.8  Copyright (C) 1994-2025 Lua.org, PUC-Rio
     let version = String::from_utf8_lossy(&stdout)
         .split_whitespace()
@@ -39,7 +34,7 @@ pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
         .parse::<Version>()
         .context("Failed to parse Lua version")?;
 
-    let stdout = Cmd::new("luarocks", "get lua executable")
+    let stdout = Cmd::new("luarocks")
         .arg("config")
         .arg("variables.LUA")
         .check(true)
@@ -147,7 +142,7 @@ impl LanguageImpl for Lua {
         let lua_cpath = Lua::get_lua_cpath(env_dir, &version);
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run lua command")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
@@ -155,7 +150,7 @@ impl LanguageImpl for Lua {
                 .env(EnvVars::LUA_CPATH, &lua_cpath)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
@@ -186,7 +181,7 @@ impl LanguageImpl for Lua {
 
 impl Lua {
     async fn install_rockspec(env_path: &Path, root_path: &Path, rockspec: &Path) -> Result<()> {
-        Cmd::new("luarocks", "luarocks make rockspec")
+        Cmd::new("luarocks")
             .current_dir(root_path)
             .arg("--tree")
             .arg(env_path)
@@ -200,7 +195,7 @@ impl Lua {
     }
 
     async fn install_dependency(env_path: &Path, dependency: &str) -> Result<()> {
-        Cmd::new("luarocks", "luarocks install dependency")
+        Cmd::new("luarocks")
             .arg("--tree")
             .arg(env_path)
             .arg("install")

@@ -132,14 +132,14 @@ impl LanguageImpl for Dotnet {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run dotnet hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DOTNET_ROOT, &dotnet_root)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
@@ -181,7 +181,7 @@ async fn install_tool(dotnet: &Path, tool_dir: &Path, dependency: &str) -> Resul
         });
 
     let tool_cmd = |action: &str| {
-        let mut cmd = Cmd::new(dotnet, format!("dotnet tool {action}"));
+        let mut cmd = Cmd::new(dotnet);
         cmd.arg("tool")
             .arg(action)
             .arg("--tool-path")

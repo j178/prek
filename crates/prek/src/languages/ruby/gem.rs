@@ -58,7 +58,7 @@ async fn build_gemspec(ruby: &RubyResult, gemspec_path: &Path) -> Result<PathBuf
 
     // Use `ruby -S gem` instead of calling gem directly to work around Windows
     // issue where gem.cmd/.bat can't be executed directly (os error 193)
-    let output = Cmd::new(ruby.ruby_bin(), "gem build")
+    let output = Cmd::new(ruby.ruby_bin())
         .arg("-S")
         .arg("gem")
         .arg("build")
@@ -196,7 +196,7 @@ async fn resolve_gems(
     gem_files: &[PathBuf],
     additional_dependencies: &FxHashSet<String>,
 ) -> Result<Vec<ResolvedGem>> {
-    let mut cmd = Cmd::new(ruby.ruby_bin(), "gem install --explain");
+    let mut cmd = Cmd::new(ruby.ruby_bin());
     cmd.arg("-S")
         .arg("gem")
         .arg("install")
@@ -224,7 +224,7 @@ async fn install_single_gem(
     gem: &ResolvedGem,
     local_path: Option<&Path>,
 ) -> Result<()> {
-    let mut cmd = Cmd::new(ruby.ruby_bin(), format!("gem install {}", gem.name));
+    let mut cmd = Cmd::new(ruby.ruby_bin());
     cmd.arg("-S")
         .arg("gem")
         .arg("install")
@@ -259,7 +259,7 @@ async fn install_gems_sequential(
     gem_files: &[PathBuf],
     additional_dependencies: &FxHashSet<String>,
 ) -> Result<()> {
-    let mut cmd = Cmd::new(ruby.ruby_bin(), "gem install");
+    let mut cmd = Cmd::new(ruby.ruby_bin());
     cmd.arg("-S")
         .arg("gem")
         .arg("install")

@@ -53,7 +53,7 @@ impl LanguageImpl for DockerImage {
                 .args(&env_args)
                 .args(&entry[..])
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .output_with_sink(reporter.output_sink(progress))

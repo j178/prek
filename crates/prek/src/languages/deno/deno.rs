@@ -127,7 +127,7 @@ impl LanguageImpl for Deno {
         for spec in &hook.additional_dependencies {
             let (dep, name) = parse_install_dependency(spec);
 
-            let mut install_cmd = Cmd::new(deno.deno(), "deno install dependency");
+            let mut install_cmd = Cmd::new(deno.deno());
             install_cmd
                 .current_dir(install_dir)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
@@ -197,7 +197,7 @@ impl LanguageImpl for Deno {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut cmd = Cmd::new(&entry[0], "deno hook");
+            let mut cmd = Cmd::new(&entry[0]);
             let mut output = cmd
                 .current_dir(hook.work_dir())
                 .env(EnvVars::PATH, &new_path)
@@ -206,7 +206,7 @@ impl LanguageImpl for Deno {
                 .envs(&hook.env)
                 .args(&entry[1..])
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

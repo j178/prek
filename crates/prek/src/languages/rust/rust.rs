@@ -139,7 +139,7 @@ async fn find_package_dir(
 ) -> anyhow::Result<Option<(PathBuf, String, bool)>> {
     let cargo = cargo.unwrap_or(Path::new("cargo"));
 
-    let mut cmd = Cmd::new(cargo, "cargo metadata");
+    let mut cmd = Cmd::new(cargo);
     if let Some(new_path) = new_path {
         cmd.env(EnvVars::PATH, new_path);
     }
@@ -285,7 +285,7 @@ async fn install_local_project(
 
     if lib_deps.is_empty() {
         // For packages without lib deps, use `cargo install` directly
-        Cmd::new(cargo, "install local")
+        Cmd::new(cargo)
             .args(["install", "--bins", "--root"])
             .arg(&info.env_path)
             .args(["--path", ".", "--locked"])
@@ -333,7 +333,7 @@ async fn install_local_project(
         }
 
         // Run cargo add on the copied manifest
-        let mut cmd = Cmd::new(cargo, "add dependencies");
+        let mut cmd = Cmd::new(cargo);
         cmd.arg("add");
         for dep in lib_deps {
             cmd.arg(format_cargo_dependency(dep.as_str()));
@@ -349,7 +349,7 @@ async fn install_local_project(
         // Build using cargo build with --manifest-path pointing to modified manifest
         // but source files come from original package_dir
         let target_dir = info.env_path.join("target");
-        let mut cmd = Cmd::new(cargo, "build local with deps");
+        let mut cmd = Cmd::new(cargo);
         cmd.args(["build", "--bins", "--release"])
             .arg("--manifest-path")
             .arg(&dst_manifest)
@@ -389,7 +389,7 @@ async fn install_cli_dependency(
 ) -> anyhow::Result<()> {
     let dep = CargoCliDependency::from_str(cli_dep)?;
 
-    let mut cmd = Cmd::new(cargo, "install cli dep");
+    let mut cmd = Cmd::new(cargo);
     cmd.args(["install", "--bins", "--root"])
         .arg(&info.env_path)
         .args(dep.to_cargo_args())
@@ -529,7 +529,7 @@ impl LanguageImpl for Rust {
 
         let entry = hook.entry.resolve(Some(&new_path), store)?;
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "rust hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
@@ -537,7 +537,7 @@ impl LanguageImpl for Rust {
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

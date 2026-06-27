@@ -506,7 +506,7 @@ pub(crate) async fn init_template_dir(
     )
     .await?;
 
-    let output = git_cmd("git config")?
+    let output = git_cmd()?
         .arg("config")
         .arg("init.templateDir")
         .check(false)

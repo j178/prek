@@ -91,11 +91,6 @@ Disable passing the runtime's `--init` flag when running `docker` and `docker_im
 This is a compatibility escape hatch for container environments that cannot run the init helper.
 Disabling `--init` can leave containers running after Ctrl-C if the container's PID 1 does not handle forwarded signals.
 
-### `PREK_LOG_TRUNCATE_LIMIT`
-
-Control the truncation limit for command lines shown in trace logs (`Executing ...`).
-Defaults to `120` characters of arguments; set a larger value to reduce truncation.
-
 ### `PREK_RUBY_MIRROR`
 
 Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments).

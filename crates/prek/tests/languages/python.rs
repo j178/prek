@@ -195,10 +195,14 @@ fn can_not_download() {
     let mut filters = context
         .filters()
         .into_iter()
-        .chain([(
-            "managed installations, search path, or registry",
-            "managed installations or search path",
-        )])
+        .chain([
+            (
+                "managed installations, search path, or registry",
+                "managed installations or search path",
+            ),
+            (r"Command `[^`]*uv(?:\.exe)? venv", "Command `[UV] venv"),
+            (r"python-[[:alnum:]]{20}", "python-[HASH]"),
+        ])
         .collect::<Vec<_>>();
     if cfg!(windows) {
         // Unix uses "exit status", Windows uses "exit code"
@@ -213,7 +217,7 @@ fn can_not_download() {
     ----- stderr -----
     error: Failed to install hook `less-than-3.6`
       caused by: Failed to create Python virtual environment
-      caused by: Command `create venv` exited with an error:
+      caused by: Command `[UV] venv [HOME]/hooks/python-[HASH]` exited with an error:
 
     [status]
     exit status: 2

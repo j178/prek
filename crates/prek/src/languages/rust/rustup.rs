@@ -155,7 +155,7 @@ impl Rustup {
     }
 
     pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<PathBuf> {
-        let output = Cmd::new(&self.bin, "rustup toolchain install")
+        let output = Cmd::new(&self.bin)
             .env(EnvVars::RUSTUP_HOME, &self.rustup_home)
             .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
             .arg("toolchain")
@@ -194,7 +194,7 @@ impl Rustup {
 
     /// List installed toolchains managed by prek.
     pub(crate) async fn list_installed_toolchains(&self) -> Result<Vec<ToolchainInfo>> {
-        let output = Cmd::new(&self.bin, "rustup list toolchains")
+        let output = Cmd::new(&self.bin)
             .arg("toolchain")
             .arg("list")
             .arg("-v")
@@ -228,7 +228,7 @@ impl Rustup {
 
     /// List system-installed Rust toolchains.
     pub(crate) async fn list_system_toolchains(&self) -> Result<Vec<ToolchainInfo>> {
-        let output = Cmd::new(&self.bin, "rustup toolchain list")
+        let output = Cmd::new(&self.bin)
             .arg("toolchain")
             .arg("list")
             .arg("-v")
@@ -288,7 +288,7 @@ async fn toolchain_info(name: String, toolchain_dir: PathBuf) -> Result<Toolchai
         .join("rustc")
         .with_extension(EXE_EXTENSION);
 
-    let output = Cmd::new(&rustc, "rustc version")
+    let output = Cmd::new(&rustc)
         .arg("--version")
         .check(true)
         .output()

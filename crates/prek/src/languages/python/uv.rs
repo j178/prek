@@ -370,7 +370,7 @@ impl InstallSource {
     async fn install_from_pip(&self, target: &Path) -> Result<()> {
         // When running `pip install` in multiple threads, it can fail
         // without extracting files properly.
-        Cmd::new("python3", "pip install uv")
+        Cmd::new("python3")
             .arg("-m")
             .arg("pip")
             .arg("install")
@@ -415,8 +415,8 @@ impl Uv {
         Self { path }
     }
 
-    pub(crate) fn cmd(&self, summary: &str, store: &Store) -> Cmd {
-        let mut cmd = Cmd::new(&self.path, summary);
+    pub(crate) fn cmd(&self, store: &Store) -> Cmd {
+        let mut cmd = Cmd::new(&self.path);
         cmd.env(EnvVars::UV_CACHE_DIR, store.cache_path(CacheBucket::Uv));
         cmd
     }

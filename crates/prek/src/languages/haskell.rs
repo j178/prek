@@ -72,7 +72,7 @@ impl LanguageImpl for Haskell {
             // `cabal update` is slow, so only run it once per process.
             CABAL_UPDATE_ONCE
                 .get_or_try_init(async || {
-                    Cmd::new("cabal", "update cabal package database")
+                    Cmd::new("cabal")
                         .arg("update")
                         .check(true)
                         .output()
@@ -84,7 +84,7 @@ impl LanguageImpl for Haskell {
         }
 
         // cabal v2-install --installdir <bindir> <pkgs> (default install-method is copy)
-        Cmd::new("cabal", "install haskell dependencies")
+        Cmd::new("cabal")
             .current_dir(search_path)
             .arg("v2-install")
             .arg("--installdir")
@@ -125,13 +125,13 @@ impl LanguageImpl for Haskell {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run haskell hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

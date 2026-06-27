@@ -181,6 +181,10 @@ fn run_in_non_git_repo() {
 
     let mut filters = context.filters();
     filters.push((r"exit code: ", "exit status: "));
+    filters.push((
+        r"Command `[^`]*git(?:\.exe)? rev-parse --show-toplevel`",
+        "Command `[GIT] rev-parse --show-toplevel`",
+    ));
 
     cmd_snapshot!(filters, context.run(), @r"
     success: false
@@ -188,7 +192,7 @@ fn run_in_non_git_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `get git root` exited with an error:
+    error: Command `[GIT] rev-parse --show-toplevel` exited with an error:
 
     [status]
     exit status: 128
@@ -2094,6 +2098,10 @@ fn init_nonexistent_repo() {
         .into_iter()
         .chain([
             (r"exit code: ", "exit status: "),
+            (
+                r"Command `[^`]*git(?:\.exe)? fetch origin --tags`",
+                "Command `[GIT] fetch origin --tags`",
+            ),
             // Normalize Git error message to handle environment-specific variations
             (
                 r"fatal: unable to access 'https://notexistentatallnevergonnahappen\.com/nonexistent/repo/':.*",
@@ -2110,7 +2118,7 @@ fn init_nonexistent_repo() {
     ----- stderr -----
     error: Failed to init hooks
       caused by: Failed to clone repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
-      caused by: Command `git full clone` exited with an error:
+      caused by: Command `[GIT] fetch origin --tags` exited with an error:
 
     [status]
     exit status: 128
@@ -2362,7 +2370,12 @@ fn unmatched_skip_does_not_suppress_remote_clone() {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: ", "exit status: "),
+        .chain([
+            (r"exit code: ", "exit status: "),
+            (
+                r"Command `[^`]*git(?:\.exe)? fetch origin --tags`",
+                "Command `[GIT] fetch origin --tags`",
+            ),
             // Normalize Git error message to handle environment-specific variations
             (
                 r"fatal: unable to access 'https://notexistentatallnevergonnahappen\.com/nonexistent/repo/':.*",
@@ -2382,7 +2395,7 @@ fn unmatched_skip_does_not_suppress_remote_clone() {
     ----- stderr -----
     error: Failed to init hooks
       caused by: Failed to clone repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
-      caused by: Command `git full clone` exited with an error:
+      caused by: Command `[GIT] fetch origin --tags` exited with an error:
 
     [status]
     exit status: 128

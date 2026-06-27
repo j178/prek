@@ -342,7 +342,7 @@ impl Docker {
         };
 
         let tag = Self::docker_tag(install_info);
-        let mut cmd = Cmd::new(CONTAINER_RUNTIME.cmd(), "build docker image");
+        let mut cmd = Cmd::new(CONTAINER_RUNTIME.cmd());
         let cmd = cmd
             .arg("build")
             .arg("--tag")
@@ -371,7 +371,7 @@ impl Docker {
     }
 
     pub(crate) fn docker_run_cmd(work_dir: &Path) -> Cmd {
-        let mut command = Cmd::new(CONTAINER_RUNTIME.cmd(), "run container");
+        let mut command = Cmd::new(CONTAINER_RUNTIME.cmd());
         command.arg("run").arg("--rm");
 
         if *USE_COLOR {
@@ -491,7 +491,7 @@ impl LanguageImpl for Docker {
                 .arg(&docker_tag)
                 .args(&entry[1..])
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .output_with_sink(reporter.output_sink(progress))
