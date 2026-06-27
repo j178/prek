@@ -545,20 +545,7 @@ async fn shallow_clone(
         .output()
         .await?;
 
-    git_cmd()?
-        .current_dir(path)
-        .hidden_args(["-c", "protocol.version=2"])
-        .arg("submodule")
-        .arg("update")
-        .arg("--init")
-        .arg("--recursive")
-        .arg("--depth=1")
-        .remove_git_envs()
-        .env(EnvVars::LC_ALL, "C")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
-        .check(true)
-        .output()
-        .await?;
+    update_submodules(path, terminal_prompt, true).await?;
 
     Ok(())
 }
@@ -588,13 +575,31 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
         .output()
         .await?;
 
-    git_cmd()?
-        .current_dir(path)
-        .arg("submodule")
+    update_submodules(path, terminal_prompt, false).await?;
+
+    Ok(())
+}
+
+async fn update_submodules(
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+    shallow: bool,
+) -> Result<(), Error> {
+    if !should_update_submodules(path).await? {
+        return Ok(());
+    }
+
+    let mut cmd = git_cmd()?;
+    cmd.current_dir(path)
+        .hidden_args(["-c", "protocol.version=2"]);
+    cmd.arg("submodule")
         .arg("update")
         .arg("--init")
-        .arg("--recursive")
-        .remove_git_envs()
+        .arg("--recursive");
+    if shallow {
+        cmd.arg("--depth=1");
+    }
+    cmd.remove_git_envs()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -602,6 +607,28 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
         .await?;
 
     Ok(())
+}
+
+async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
+    if path.join(".gitmodules").try_exists()? {
+        return Ok(true);
+    }
+
+    let output = git_cmd()?
+        .current_dir(path)
+        .arg("ls-files")
+        .arg("-z")
+        .arg("-s")
+        .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .check(true)
+        .output()
+        .await?;
+
+    Ok(output
+        .stdout
+        .split(|&byte| byte == b'\0')
+        .any(|entry| entry.starts_with(b"160000 ")))
 }
 
 async fn clone_repo_attempt(
@@ -917,9 +944,103 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::shared_repository_file_mode;
     #[cfg(unix)]
     use super::zsplit;
+    use super::{
+        Error, GIT, TerminalPrompt, full_clone, init_repo, shared_repository_file_mode,
+        should_update_submodules, update_submodules,
+    };
+    use assert_cmd::assert::OutputAssertExt;
+    use std::path::Path;
+    use std::process::Command;
+
+    fn run_git(path: &Path, args: &[&str]) {
+        let mut command = Command::new(GIT.as_ref().unwrap());
+        command.current_dir(path).args(args);
+
+        command.assert().success();
+    }
+
+    #[tokio::test]
+    async fn should_update_submodules_when_gitmodules_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        run_git(tmp.path(), &["init"]);
+        fs_err::write(tmp.path().join(".gitmodules"), "").unwrap();
+
+        assert!(should_update_submodules(tmp.path()).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn full_clone_skips_submodule_update_when_repo_has_no_submodules() {
+        let remote = tempfile::tempdir().unwrap();
+        run_git(remote.path(), &["init"]);
+        fs_err::write(remote.path().join("file.txt"), "content\n").unwrap();
+        run_git(remote.path(), &["add", "."]);
+        run_git(
+            remote.path(),
+            &[
+                "-c",
+                "user.name=prek",
+                "-c",
+                "user.email=prek@example.com",
+                "commit",
+                "-m",
+                "initial commit",
+            ],
+        );
+        let output = Command::new(GIT.as_ref().unwrap())
+            .current_dir(remote.path())
+            .arg("rev-parse")
+            .arg("HEAD")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let rev = String::from_utf8_lossy(&output.stdout);
+
+        let clone = tempfile::tempdir().unwrap();
+        init_repo(remote.path().to_str().unwrap(), clone.path())
+            .await
+            .unwrap();
+
+        full_clone(rev.trim(), clone.path(), TerminalPrompt::Disabled)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn update_submodules_runs_when_gitlinks_exist_without_gitmodules() {
+        let tmp = tempfile::tempdir().unwrap();
+        run_git(tmp.path(), &["init"]);
+        run_git(
+            tmp.path(),
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "160000,1111111111111111111111111111111111111111,sub",
+            ],
+        );
+
+        assert!(should_update_submodules(tmp.path()).await.unwrap());
+
+        let err = update_submodules(tmp.path(), TerminalPrompt::Disabled, true)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::Command(_)));
+        let message = err.to_string();
+        assert!(message.contains("submodule update --init --recursive"));
+        assert!(message.contains("--depth=1"));
+
+        let err = update_submodules(tmp.path(), TerminalPrompt::Disabled, false)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::Command(_)));
+        let message = err.to_string();
+        assert!(message.contains("submodule update --init --recursive"));
+        assert!(!message.contains("--depth=1"));
+    }
 
     #[cfg(unix)]
     #[test]
