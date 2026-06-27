@@ -54,7 +54,7 @@ fn write_reset_command(output: &mut Vec<u8>, destroyed_links: &[&Path]) -> Resul
 }
 
 async fn git_status_output(work_dir: &Path) -> Result<Vec<u8>> {
-    Ok(git::git_cmd("git status")?
+    Ok(git::git_cmd()?
         .current_dir(work_dir)
         .arg("status")
         .arg("--porcelain=v2")
@@ -191,7 +191,7 @@ async fn is_destroyed_symlink(work_dir: &Path, entry: &OrdinaryChangedEntry<'_>)
 }
 
 async fn git_object_size(work_dir: &Path, object: &str) -> Result<u64> {
-    let output = git::git_cmd("git cat-file")?
+    let output = git::git_cmd()?
         .current_dir(work_dir)
         .arg("cat-file")
         .arg("-s")
@@ -204,7 +204,7 @@ async fn git_object_size(work_dir: &Path, object: &str) -> Result<u64> {
 }
 
 async fn git_object_content(work_dir: &Path, object: &str) -> Result<Vec<u8>> {
-    Ok(git::git_cmd("git cat-file")?
+    Ok(git::git_cmd()?
         .current_dir(work_dir)
         .arg("cat-file")
         .arg("-p")

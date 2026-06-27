@@ -53,7 +53,7 @@ impl RustResult {
             .join("rustc")
             .with_extension(std::env::consts::EXE_EXTENSION);
 
-        let output = Cmd::new(rustc, "rustc --version")
+        let output = Cmd::new(rustc)
             .arg("--version")
             .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
             .check(true)
@@ -168,7 +168,7 @@ impl RustInstaller {
             | RustRequest::MajorMinor(_, _)
             | RustRequest::MajorMinorPatch(_, _, _)
             | RustRequest::Range(_, _) => {
-                let output = crate::git::git_cmd("list rust tags")?
+                let output = crate::git::git_cmd()?
                     .arg("ls-remote")
                     .arg("--tags")
                     .arg("https://github.com/rust-lang/rust")

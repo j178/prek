@@ -69,13 +69,13 @@ impl LanguageImpl for Golang {
 
         let go_install_cmd = || {
             if go.is_from_system() {
-                let mut cmd = go.cmd("go install");
+                let mut cmd = go.cmd();
                 cmd.arg("install")
                     .env(EnvVars::GOTOOLCHAIN, "local")
                     .env(EnvVars::GOBIN, bin_dir(&info.env_path));
                 cmd
             } else {
-                let mut cmd = go.cmd("go install");
+                let mut cmd = go.cmd();
                 cmd.arg("install")
                     .env(EnvVars::GOTOOLCHAIN, "local")
                     .env(EnvVars::GOROOT, go_root)
@@ -145,7 +145,7 @@ impl LanguageImpl for Golang {
 
         let entry = hook.entry.resolve(Some(&new_path), store)?;
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "go hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
@@ -155,7 +155,7 @@ impl LanguageImpl for Golang {
                 .envs(go_envs.iter().copied())
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

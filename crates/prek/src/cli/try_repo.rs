@@ -18,7 +18,7 @@ use crate::store::Store;
 use crate::warn_user;
 
 async fn get_head_rev(repo: &Path) -> Result<String> {
-    let head_rev = git::git_cmd("get head rev")?
+    let head_rev = git::git_cmd()?
         .arg("rev-parse")
         .arg("HEAD")
         .current_dir(repo)
@@ -31,13 +31,13 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
 
 async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
     let shadow = tmp_dir.join("shadow-repo");
-    git::git_cmd("clone shadow repo")?
+    git::git_cmd()?
         .arg("clone")
         .arg(repo_path)
         .arg(&shadow)
         .output()
         .await?;
-    git::git_cmd("checkout shadow repo")?
+    git::git_cmd()?
         .arg("checkout")
         .arg(head_rev)
         .arg("-b")
@@ -51,10 +51,10 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
 
     let staged_files = git::get_staged_files(repo_path).await?;
     if !staged_files.is_empty() {
-        git::git_cmd("add staged files to shadow")?
+        git::git_cmd()?
             .arg("add")
             .arg("--")
-            .args(&staged_files)
+            .file_args(&staged_files)
             .current_dir(repo_path)
             .env("GIT_INDEX_FILE", &index_path)
             .env("GIT_OBJECT_DIRECTORY", &objects_path)
@@ -62,7 +62,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
             .await?;
     }
 
-    let mut add_u_cmd = git::git_cmd("add unstaged to shadow")?;
+    let mut add_u_cmd = git::git_cmd()?;
     add_u_cmd
         .arg("add")
         .arg("--update") // Update tracked files
@@ -72,7 +72,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .output()
         .await?;
 
-    git::git_cmd("git commit")?
+    git::git_cmd()?
         .arg("commit")
         .arg("-m")
         .arg("Temporary commit by prek try-repo")
@@ -108,7 +108,7 @@ async fn prepare_repo_and_rev<'a>(
         get_head_rev(repo_path).await?
     } else {
         // For remote repositories, use ls-remote
-        let head_rev = git::git_cmd("get head rev")?
+        let head_rev = git::git_cmd()?
             .arg("ls-remote")
             .arg("--exit-code")
             .arg(repo)

@@ -1098,10 +1098,10 @@ impl<'a> HookRunSession<'a> {
             } else {
                 "--color=never"
             };
-            git::git_cmd("git diff")?
+            git::git_cmd()?
                 .arg("--no-pager")
                 .arg("diff")
-                .arg("--no-ext-diff")
+                .hidden_args(["--no-ext-diff"])
                 .arg(color)
                 .arg("--")
                 .arg(workspace.root())

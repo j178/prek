@@ -107,7 +107,7 @@ impl LanguageImpl for Node {
             let new_path = prepend_paths(&[&bin_dir, node_bin]).context("Failed to join PATH")?;
             let npm_cache = store.cache_path(CacheBucket::Npm);
 
-            let mut cmd = Cmd::new(node.npm(), "npm install");
+            let mut cmd = Cmd::new(node.npm());
             cmd.arg("install")
                 .arg("-g")
                 .arg("--no-progress")
@@ -167,7 +167,7 @@ impl LanguageImpl for Node {
         let npm_cache = store.cache_path(CacheBucket::Npm);
 
         let run = async |batch: &[&Path]| {
-            let mut cmd = Cmd::new(&entry[0], "node hook");
+            let mut cmd = Cmd::new(&entry[0]);
             cmd.current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
@@ -176,7 +176,7 @@ impl LanguageImpl for Node {
             apply_npm_config_env(&mut cmd, env_dir, &npm_cache);
             let mut output = cmd
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

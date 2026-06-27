@@ -61,7 +61,7 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
     print(json.dumps(info))
     "#};
 
-    let stdout = Cmd::new(python, "python -c")
+    let stdout = Cmd::new(python)
         .arg("-I")
         .arg("-c")
         .arg(QUERY_PYTHON_INFO)
@@ -197,7 +197,7 @@ impl LanguageImpl for Python {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "python hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::VIRTUAL_ENV, env_dir)
@@ -205,7 +205,7 @@ impl LanguageImpl for Python {
                 .env_remove(EnvVars::PYTHONHOME)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
@@ -262,7 +262,7 @@ impl Python {
     }
 
     fn pip_install_command(uv: &Uv, store: &Store, env_path: &Path) -> Cmd {
-        let mut cmd = uv.cmd("uv pip", store);
+        let mut cmd = uv.cmd(store);
         cmd.arg("pip")
             .arg("install")
             // Explicitly set project to root to avoid uv searching for project-level configs.
@@ -333,14 +333,8 @@ impl Python {
         set_install_dir: bool,
         allow_downloads: bool,
     ) -> Cmd {
-        let mut cmd = uv.cmd("create venv", store);
-        cmd.arg("venv")
-            .arg(&info.env_path)
-            .args(["--python-preference", "managed"])
-            // Avoid discovering a project or workspace
-            .arg("--no-project")
-            // Explicitly set project to root to avoid uv searching for project-level configs
-            .args(["--project", "/"]);
+        let mut cmd = uv.cmd(store);
+        cmd.arg("venv").arg(&info.env_path);
         Self::remove_uv_python_override_envs(&mut cmd);
         if set_install_dir {
             cmd.env(
@@ -348,15 +342,27 @@ impl Python {
                 store.tools_path(ToolBucket::Python),
             );
         }
-        if allow_downloads {
-            cmd.arg("--allow-python-downloads");
-        } else {
-            cmd.arg("--no-python-downloads");
-        }
 
-        if let Some(python) = to_uv_python_request(python_request) {
-            cmd.arg("--python").arg(python);
+        let download_arg = if allow_downloads {
+            "--allow-python-downloads"
+        } else {
+            "--no-python-downloads"
+        };
+        let python = to_uv_python_request(python_request);
+        let mut hidden_args = vec![
+            "--python-preference",
+            "managed",
+            // Avoid discovering a project or workspace.
+            "--no-project",
+            // Explicitly set project to root to avoid uv searching for project-level configs.
+            "--project",
+            "/",
+            download_arg,
+        ];
+        if let Some(python) = &python {
+            hidden_args.extend(["--python", python.as_str()]);
         }
+        cmd.hidden_args(hidden_args);
 
         cmd
     }

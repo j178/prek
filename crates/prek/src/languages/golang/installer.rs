@@ -82,8 +82,8 @@ impl GoResult {
         self.from_system
     }
 
-    pub(crate) fn cmd(&self, summary: &str) -> Cmd {
-        Cmd::new(&self.path, summary)
+    pub(crate) fn cmd(&self) -> Cmd {
+        Cmd::new(&self.path)
     }
 
     pub(crate) fn with_version(mut self, version: GoVersion) -> Self {
@@ -93,7 +93,7 @@ impl GoResult {
 
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
         let output = self
-            .cmd("go version")
+            .cmd()
             .arg("version")
             .env(EnvVars::GOTOOLCHAIN, "local")
             .check(true)
@@ -191,7 +191,7 @@ impl GoInstaller {
     }
 
     async fn resolve_version(&self, req: &GoRequest) -> Result<GoVersion> {
-        let output = git::git_cmd("list go tags")?
+        let output = git::git_cmd()?
             .arg("ls-remote")
             .arg("--tags")
             .arg("https://github.com/golang/go")

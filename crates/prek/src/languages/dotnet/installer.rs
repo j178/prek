@@ -69,13 +69,13 @@ impl DotnetResult {
     }
 
     /// Builds a command that runs this `dotnet` executable.
-    pub(crate) fn cmd(&self, summary: &str) -> Cmd {
-        Cmd::new(&self.dotnet, summary)
+    pub(crate) fn cmd(&self) -> Cmd {
+        Cmd::new(&self.dotnet)
     }
 
     /// Fills the SDK version by running `dotnet --version`.
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let mut cmd = self.cmd("get dotnet version");
+        let mut cmd = self.cmd();
         if let Some(parent) = self.dotnet.parent() {
             cmd.current_dir(parent);
         }
@@ -271,7 +271,7 @@ impl DotnetInstaller {
         install_dir: &Path,
         request: &DotnetRequest,
     ) -> Result<()> {
-        let mut cmd = Cmd::new("bash", "dotnet-install.sh");
+        let mut cmd = Cmd::new("bash");
         cmd.arg(script_path)
             .arg("--no-path")
             .arg("--install-dir")
@@ -299,7 +299,7 @@ impl DotnetInstaller {
         install_dir: &Path,
         request: &DotnetRequest,
     ) -> Result<()> {
-        let mut cmd = Cmd::new("powershell.exe", "dotnet-install.ps1");
+        let mut cmd = Cmd::new("powershell.exe");
         cmd.arg("-NoProfile")
             .arg("-ExecutionPolicy")
             .arg("Bypass")

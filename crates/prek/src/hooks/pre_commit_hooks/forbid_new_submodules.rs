@@ -20,17 +20,17 @@ pub(crate) async fn forbid_new_submodules(
         Cow::Borrowed("--staged")
     };
 
-    let stdout = git::git_cmd("git diff")?
+    let stdout = git::git_cmd()?
         .current_dir(hook.work_dir())
         .arg("diff")
         .arg("--relative")
         .arg("--diff-filter=A")
-        .arg("--no-ext-diff")
+        .hidden_args(["--no-ext-diff"])
         .arg("--raw")
         .arg("-z")
         .arg(diff_arg.as_ref())
         .arg("--")
-        .args(filenames)
+        .file_args(filenames)
         .check(true)
         .output()
         .await?

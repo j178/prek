@@ -41,7 +41,7 @@ impl LanguageImpl for Perl {
         )?;
 
         if let Some(repo_path) = hook.repo_path() {
-            Cmd::new(&cpan, "install perl dependencies")
+            Cmd::new(&cpan)
                 .current_dir(repo_path)
                 .arg("-T")
                 .arg(".")
@@ -52,7 +52,7 @@ impl LanguageImpl for Perl {
                 .await
                 .context("Failed to install Perl dependencies")?;
         } else if !hook.additional_dependencies.is_empty() {
-            Cmd::new(&cpan, "install perl dependencies")
+            Cmd::new(&cpan)
                 .arg("-T")
                 .args(&hook.additional_dependencies)
                 .envs(perl_env(&info.env_path)?)
@@ -90,14 +90,14 @@ impl LanguageImpl for Perl {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "run perl hook")
+            let mut output = Cmd::new(&entry[0])
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .envs(perl_env(env_dir)?)
                 .envs(&hook.env)
                 .args(&hook.args)
-                .args(batch)
+                .file_args(batch)
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))

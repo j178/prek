@@ -20,7 +20,7 @@ pub(crate) async fn check_executables_have_shebangs(
         return Ok((0, Vec::new()));
     }
 
-    let stdout = git::git_cmd("get file file mode")?
+    let stdout = git::git_cmd()?
         .arg("config")
         .arg("core.fileMode")
         .check(true)

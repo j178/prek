@@ -42,11 +42,11 @@ impl IntentToAddRestorer {
         }
 
         // TODO: xargs
-        git_cmd("git rm")?
+        git_cmd()?
             .arg("rm")
             .arg("--cached")
             .arg("--")
-            .args(&files)
+            .file_args(&files)
             .check(true)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -88,14 +88,12 @@ impl UnstagedChangesRestorer {
     async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
         let tree = git::write_tree().await?;
 
-        let mut cmd = git_cmd("git diff-index")?;
+        let mut cmd = git_cmd()?;
         let output = cmd
             .arg("diff-index")
-            .arg("--ignore-submodules")
             .arg("--binary")
             .arg("--exit-code")
-            .arg("--no-color")
-            .arg("--no-ext-diff")
+            .hidden_args(["--ignore-submodules", "--no-color", "--no-ext-diff"])
             .arg(tree)
             .arg("--")
             .arg(root)
