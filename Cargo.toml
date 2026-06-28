@@ -30,10 +30,15 @@ axoupdater = { version = "0.10.0", default-features = false, features = [
 ] }
 bstr = { version = "1.11.0" }
 cargo_metadata = { version = "0.23.1" }
-clap = { version = "4.6.0", features = [
+clap = { version = "4.6.0", default-features = false, features = [
+  "color",
   "derive",
   "env",
+  "error-context",
+  "help",
+  "std",
   "string",
+  "usage",
   "wrap_help",
 ] }
 clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
