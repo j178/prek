@@ -210,6 +210,19 @@ nix-env -iA nixos.prek
 nix profile install nixpkgs#prek
 ```
 
+For the latest release (Nixpkgs may lag behind), use the flake in this repo:
+
+```bash
+# Run without installing
+nix run github:j178/prek
+
+# Install into your profile
+nix profile install github:j178/prek
+
+# Pin a specific release
+nix run github:j178/prek/v0.4.5
+```
+
 <!-- --8<-- [end: nix-install] -->
 
 </details>
