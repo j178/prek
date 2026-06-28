@@ -210,6 +210,22 @@ nix-env -iA nixos.prek
 nix profile install nixpkgs#prek
 ```
 
+For the latest release (Nixpkgs may lag behind), use the flake in this repo:
+
+```bash
+# Run without installing
+nix run github:j178/prek
+
+# Install into your profile
+nix profile install github:j178/prek
+```
+
+The flake tracks `master` and is auto-bumped to the latest release by a
+daily [workflow](.github/workflows/nix-release.yml), so `github:j178/prek`
+always serves the current release. (Release tags are cut before the bump
+lands, so `github:j178/prek/vX.Y.Z` is not a valid pin — use the nixpkgs
+package or a specific commit SHA if you need reproducibility.)
+
 <!-- --8<-- [end: nix-install] -->
 
 </details>
