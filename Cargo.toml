@@ -223,6 +223,8 @@ codegen-units = 16
 
 [profile.minimal-size]
 inherits = "release"
+# Optimize for binary size rather than release-profile throughput.
+opt-level = "z"
 # Enable Full LTO for the best optimizations
 lto = "fat"
 # Reduce codegen units to 1 for better optimizations
