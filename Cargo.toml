@@ -39,7 +39,6 @@ clap = { version = "4.6.0", default-features = false, features = [
   "std",
   "string",
   "usage",
-  "wrap_help",
 ] }
 clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
 console = { version = "0.16", default-features = false, features = [
