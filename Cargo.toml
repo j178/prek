@@ -67,8 +67,9 @@ owo-colors = { version = "4.1.0" }
 phf = { version = "0.13.1", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
 quick-xml = { version = "0.40" }
+# Downloads and update checks work over HTTP/1.1; keep HTTP/2 disabled to avoid
+# pulling in h2 and Hyper HTTP/2 code.
 reqwest = { version = "0.13.2", default-features = false, features = [
-  "http2",
   "stream",
   "json",
   "rustls",
