@@ -370,6 +370,7 @@ prek self update
 
 ### prek includes security-focused safeguards
 
+- For supported managed toolchain downloads, `prek` verifies the downloaded archive or installer checksum before extracting or installing it, helping ensure the integrity of downloaded toolchains.
 - [`prek auto-update`](https://prek.j178.dev/reference/cli/#prek-auto-update) supports `--cooldown-days`, so you can keep newly published releases on hold for a cooling-off period before adopting them.
 - [`prek auto-update`](https://prek.j178.dev/reference/cli/#prek-auto-update) validates pinned SHA revisions against the fetched upstream refs, including impostor-commit detection, and keeps `# frozen:` comments in sync with the configured commit.
 - [`prek auto-update --check`](https://prek.j178.dev/reference/cli/#prek-auto-update--check) is useful in CI when you want updates or frozen-reference mismatches to fail the job without rewriting the config.
