@@ -122,7 +122,11 @@ toml = { version = "1.0.1", default-features = false, features = [
 ] }
 toml_edit = { version = "0.25.1" }
 tracing = { version = "0.1.40" }
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.20", default-features = false, features = [
+  "ansi",
+  "env-filter",
+  "fmt",
+] }
 unicode-width = { version = "0.2.0", default-features = false }
 walkdir = { version = "2.5.0" }
 webpki-root-certs = { version = "1.0.6" }
