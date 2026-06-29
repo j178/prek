@@ -384,19 +384,30 @@ fn starts_with(slice: &[String], prefix: &[&str]) -> bool {
     slice.len() >= prefix.len() && slice.iter().zip(prefix.iter()).all(|(s, p)| s == p)
 }
 
+fn is_printable_shebang(line: &str) -> bool {
+    line.bytes()
+        .all(|b| (0x20..=0x7E).contains(&b) || (0x09..=0x0D).contains(&b))
+}
+
+fn nix_shebang_interpreter(tokens: &[String]) -> Option<&str> {
+    let (program, args) = tokens.split_first()?;
+    if program != "nix-shell" {
+        return None;
+    }
+
+    args.windows(2)
+        .find(|pair| pair[0] == "-i")
+        .map(|pair| pair[1].as_str())
+}
+
 /// Parse nix-shell shebangs, which may span multiple lines.
 /// See: <https://nixos.wiki/wiki/Nix-shell_shebang>
 /// Example:
 /// `#!nix-shell -i python3 -p python3` would return `["python3"]`
 fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<String> {
-    while let Ok(buf) = reader.fill_buf() {
-        if buf.len() < 2 || &buf[..2] != b"#!" {
-            break;
-        }
-
-        reader.consume(2);
-
-        let mut next_line = String::new();
+    let mut next_line = String::new();
+    loop {
+        next_line.clear();
         match reader.read_line(&mut next_line) {
             Ok(0) => break,
             Ok(_) => {}
@@ -408,20 +419,20 @@ fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<St
             }
         }
 
-        let trimmed = next_line.trim();
-        if trimmed.is_empty() {
-            continue;
+        let Some(line) = next_line.strip_prefix("#!") else {
+            break;
+        };
+        if !is_printable_shebang(line) {
+            return cmd;
         }
 
-        if let Some(line_tokens) = shlex::split(trimmed) {
-            for idx in 0..line_tokens.len().saturating_sub(1) {
-                if line_tokens[idx] == "-i" {
-                    if let Some(interpreter) = line_tokens.get(idx + 1) {
-                        cmd = vec![interpreter.clone()];
-                    }
-                }
-            }
-        }
+        let Some(line_tokens) = shlex::split(line.trim()) else {
+            continue;
+        };
+        let Some(interpreter) = nix_shebang_interpreter(&line_tokens) else {
+            continue;
+        };
+        cmd = vec![interpreter.to_owned()];
     }
 
     cmd
@@ -437,10 +448,7 @@ pub fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     }
 
     // Require only printable ASCII
-    if line
-        .bytes()
-        .any(|b| !(0x20..=0x7E).contains(&b) && !(0x09..=0x0D).contains(&b))
-    {
+    if !is_printable_shebang(&line) {
         return Err(ShebangError::NonPrintableChars);
     }
 
@@ -455,10 +463,8 @@ pub fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
         } else {
             tokens
         };
-    if cmd.is_empty() {
-        return Err(ShebangError::NoCommand);
-    }
-    if cmd[0] == "nix-shell" {
+
+    if cmd.first().is_some_and(|s| s == "nix-shell") {
         cmd = parse_nix_shebang(&mut reader, cmd);
     }
     if cmd.is_empty() {
@@ -737,20 +743,99 @@ mod tests {
     }
 
     #[test]
-    fn parse_shebang_nix_shell_without_interpreter() -> anyhow::Result<()> {
+    fn parse_shebang_nix_shell_stops_at_first_non_shebang_line() -> anyhow::Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         writeln!(
             file,
             indoc::indoc! {r"
-            #!/usr/bin/env nix-shell -p python3
-            #! nix-shell --pure -I nixpkgs=https://example.com
+            #!/usr/bin/env nix-shell
+            /*
+            #! nix-shell -i node --packages nodejs
+            */
+            console.log('hi')
+            "}
+        )?;
+        file.flush()?;
+
+        let cmd = super::parse_shebang(file.path())?;
+        assert_eq!(cmd, vec!["nix-shell"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_shebang_nix_shell_ignores_first_line_args() -> anyhow::Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        writeln!(
+            file,
+            indoc::indoc! {r"
+            #!/usr/bin/env -S nix-shell -i python3 -p python3
+            print('hi')
+            "}
+        )?;
+        file.flush()?;
+
+        let cmd = super::parse_shebang(file.path())?;
+        assert_eq!(cmd, vec!["nix-shell", "-i", "python3", "-p", "python3"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_shebang_nix_shell_env_s_args_reads_continuation() -> anyhow::Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        writeln!(
+            file,
+            indoc::indoc! {r"
+            #!/usr/bin/env -S nix-shell --pure
+            #!nix-shell -i python3
+            print('hi')
+            "}
+        )?;
+        file.flush()?;
+
+        let cmd = super::parse_shebang(file.path())?;
+        assert_eq!(cmd, vec!["python3"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_shebang_nix_shell_ignores_non_nix_directive() -> anyhow::Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        writeln!(
+            file,
+            indoc::indoc! {r"
+            #!/usr/bin/env nix-shell
+            #! -i python3
+            #! nix-shell -p python3
             echo hi
             "}
         )?;
         file.flush()?;
 
         let cmd = super::parse_shebang(file.path())?;
-        assert_eq!(cmd, vec!["nix-shell", "-p", "python3"]);
+        assert_eq!(cmd, vec!["nix-shell"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_shebang_nix_shell_without_interpreter() -> anyhow::Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        writeln!(
+            file,
+            indoc::indoc! {r"
+            #!/usr/bin/env nix-shell
+            #! nix-shell --pure -p python3
+            #! nix-shell -I nixpkgs=https://example.com
+            echo hi
+            "}
+        )?;
+        file.flush()?;
+
+        let cmd = super::parse_shebang(file.path())?;
+        assert_eq!(cmd, vec!["nix-shell"]);
 
         Ok(())
     }
