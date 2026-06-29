@@ -23,7 +23,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
   # renovate: datasource=github-releases depName=PyO3/maturin versioning=semver
-  MATURIN_VERSION: "v1.14.0"
+  MATURIN_VERSION: "v1.14.1"
 
 jobs:
   sdist:
