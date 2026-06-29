@@ -1,5 +1,7 @@
 use std::ffi::OsStr;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -82,6 +84,109 @@ trait LanguageImpl {
         store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)>;
+}
+
+type InstallFuture<'a> = Pin<Box<dyn Future<Output = Result<InstalledHook>> + 'a>>;
+type CheckHealthFuture<'a> = Pin<Box<dyn Future<Output = Result<()>> + 'a>>;
+type RunFuture<'a> = Pin<Box<dyn Future<Output = Result<(i32, Vec<u8>)>> + 'a>>;
+
+macro_rules! language_impl_match {
+    ($language:expr, $impl:ident => $body:expr) => {
+        match $language {
+            Self::Bun => {
+                let $impl = &BUN;
+                $body
+            }
+            Self::Conda => {
+                let $impl = &CONDA;
+                $body
+            }
+            Self::Coursier => {
+                let $impl = &COURSIER;
+                $body
+            }
+            Self::Dart => {
+                let $impl = &DART;
+                $body
+            }
+            Self::Deno => {
+                let $impl = &DENO;
+                $body
+            }
+            Self::Docker => {
+                let $impl = &DOCKER;
+                $body
+            }
+            Self::DockerImage => {
+                let $impl = &DOCKER_IMAGE;
+                $body
+            }
+            Self::Dotnet => {
+                let $impl = &DOTNET;
+                $body
+            }
+            Self::Fail => {
+                let $impl = &FAIL;
+                $body
+            }
+            Self::Golang => {
+                let $impl = &GOLANG;
+                $body
+            }
+            Self::Haskell => {
+                let $impl = &HASKELL;
+                $body
+            }
+            Self::Julia => {
+                let $impl = &JULIA;
+                $body
+            }
+            Self::Lua => {
+                let $impl = &LUA;
+                $body
+            }
+            Self::Node => {
+                let $impl = &NODE;
+                $body
+            }
+            Self::Perl => {
+                let $impl = &PERL;
+                $body
+            }
+            Self::Pygrep => {
+                let $impl = &PYGREP;
+                $body
+            }
+            Self::Python => {
+                let $impl = &PYTHON;
+                $body
+            }
+            Self::R => {
+                let $impl = &R;
+                $body
+            }
+            Self::Ruby => {
+                let $impl = &RUBY;
+                $body
+            }
+            Self::Rust => {
+                let $impl = &RUST;
+                $body
+            }
+            Self::Script => {
+                let $impl = &SCRIPT;
+                $body
+            }
+            Self::Swift => {
+                let $impl = &SWIFT;
+                $body
+            }
+            Self::System => {
+                let $impl = &SYSTEM;
+                $body
+            }
+        }
+    };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -296,59 +401,24 @@ impl Language {
         store: &Store,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
-        match self {
-            Self::Dart => DART.install(hook, store, reporter).await,
-            Self::Bun => BUN.install(hook, store, reporter).await,
-            Self::Coursier => COURSIER.install(hook, store, reporter).await,
-            Self::Deno => DENO.install(hook, store, reporter).await,
-            Self::Docker => DOCKER.install(hook, store, reporter).await,
-            Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
-            Self::Dotnet => DOTNET.install(hook, store, reporter).await,
-            Self::Fail => FAIL.install(hook, store, reporter).await,
-            Self::Golang => GOLANG.install(hook, store, reporter).await,
-            Self::Haskell => HASKELL.install(hook, store, reporter).await,
-            Self::Julia => JULIA.install(hook, store, reporter).await,
-            Self::Lua => LUA.install(hook, store, reporter).await,
-            Self::Node => NODE.install(hook, store, reporter).await,
-            Self::Perl => PERL.install(hook, store, reporter).await,
-            Self::Pygrep => PYGREP.install(hook, store, reporter).await,
-            Self::Python => PYTHON.install(hook, store, reporter).await,
-            Self::R => R.install(hook, store, reporter).await,
-            Self::Ruby => RUBY.install(hook, store, reporter).await,
-            Self::Rust => RUST.install(hook, store, reporter).await,
-            Self::Script => SCRIPT.install(hook, store, reporter).await,
-            Self::Swift => SWIFT.install(hook, store, reporter).await,
-            Self::System => SYSTEM.install(hook, store, reporter).await,
-            Self::Conda => CONDA.install(hook, store, reporter).await,
-        }
+        self.install_future(hook, store, reporter).await
+    }
+
+    fn install_future<'a>(
+        &'a self,
+        hook: Arc<Hook>,
+        store: &'a Store,
+        reporter: &'a HookInstallReporter,
+    ) -> InstallFuture<'a> {
+        language_impl_match!(self, language => Box::pin(language.install(hook, store, reporter)))
     }
 
     pub(crate) async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        match self {
-            Self::Dart => DART.check_health(info).await,
-            Self::Bun => BUN.check_health(info).await,
-            Self::Coursier => COURSIER.check_health(info).await,
-            Self::Deno => DENO.check_health(info).await,
-            Self::Docker => DOCKER.check_health(info).await,
-            Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
-            Self::Dotnet => DOTNET.check_health(info).await,
-            Self::Fail => FAIL.check_health(info).await,
-            Self::Golang => GOLANG.check_health(info).await,
-            Self::Haskell => HASKELL.check_health(info).await,
-            Self::Julia => JULIA.check_health(info).await,
-            Self::Lua => LUA.check_health(info).await,
-            Self::Node => NODE.check_health(info).await,
-            Self::Perl => PERL.check_health(info).await,
-            Self::Pygrep => PYGREP.check_health(info).await,
-            Self::Python => PYTHON.check_health(info).await,
-            Self::R => R.check_health(info).await,
-            Self::Ruby => RUBY.check_health(info).await,
-            Self::Rust => RUST.check_health(info).await,
-            Self::Script => SCRIPT.check_health(info).await,
-            Self::Swift => SWIFT.check_health(info).await,
-            Self::System => SYSTEM.check_health(info).await,
-            Self::Conda => CONDA.check_health(info).await,
-        }
+        self.check_health_future(info).await
+    }
+
+    fn check_health_future<'a>(&'a self, info: &'a InstallInfo) -> CheckHealthFuture<'a> {
+        language_impl_match!(self, language => Box::pin(language.check_health(info)))
     }
 
     #[instrument(level = "trace", skip_all, fields(hook_id = %hook.id, language = %hook.language))]
@@ -359,53 +429,47 @@ impl Language {
         store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
+        self.run_future(hook, filenames, store, reporter).await
+    }
+
+    fn run_future<'a, 'p>(
+        &'a self,
+        hook: &'a InstalledHook,
+        filenames: &'a [&'p Path],
+        store: &'a Store,
+        reporter: &'a HookRunReporter,
+    ) -> RunFuture<'a>
+    where
+        'p: 'a,
+    {
         match hook.repo() {
             Repo::Meta { .. } => {
-                return hooks::MetaHooks::from_str(&hook.id)
-                    .unwrap()
-                    .run(store, hook, filenames, reporter)
-                    .await;
+                return Box::pin(
+                    hooks::MetaHooks::from_str(&hook.id)
+                        .unwrap()
+                        .run(store, hook, filenames, reporter),
+                );
             }
             Repo::Builtin { .. } => {
-                return hooks::BuiltinHooks::from_str(&hook.id)
-                    .unwrap()
-                    .run(store, hook, filenames, reporter)
-                    .await;
+                return Box::pin(
+                    hooks::BuiltinHooks::from_str(&hook.id)
+                        .unwrap()
+                        .run(store, hook, filenames, reporter),
+                );
             }
             Repo::Remote { .. } => {
                 // Fast path for hooks implemented in Rust
                 if hooks::check_fast_path(hook) {
-                    return hooks::run_fast_path(store, hook, filenames, reporter).await;
+                    return Box::pin(hooks::run_fast_path(store, hook, filenames, reporter));
                 }
             }
             Repo::Local { .. } => {}
         }
 
-        match self {
-            Self::Dart => DART.run(hook, filenames, store, reporter).await,
-            Self::Bun => BUN.run(hook, filenames, store, reporter).await,
-            Self::Coursier => COURSIER.run(hook, filenames, store, reporter).await,
-            Self::Deno => DENO.run(hook, filenames, store, reporter).await,
-            Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
-            Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
-            Self::Dotnet => DOTNET.run(hook, filenames, store, reporter).await,
-            Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
-            Self::Golang => GOLANG.run(hook, filenames, store, reporter).await,
-            Self::Haskell => HASKELL.run(hook, filenames, store, reporter).await,
-            Self::Julia => JULIA.run(hook, filenames, store, reporter).await,
-            Self::Lua => LUA.run(hook, filenames, store, reporter).await,
-            Self::Node => NODE.run(hook, filenames, store, reporter).await,
-            Self::Perl => PERL.run(hook, filenames, store, reporter).await,
-            Self::Pygrep => PYGREP.run(hook, filenames, store, reporter).await,
-            Self::Python => PYTHON.run(hook, filenames, store, reporter).await,
-            Self::R => R.run(hook, filenames, store, reporter).await,
-            Self::Ruby => RUBY.run(hook, filenames, store, reporter).await,
-            Self::Rust => RUST.run(hook, filenames, store, reporter).await,
-            Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
-            Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
-            Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
-            Self::Conda => CONDA.run(hook, filenames, store, reporter).await,
-        }
+        language_impl_match!(
+            self,
+            language => Box::pin(language.run(hook, filenames, store, reporter))
+        )
     }
 }
 
