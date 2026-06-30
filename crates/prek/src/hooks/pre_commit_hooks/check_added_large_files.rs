@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use crate::git::{get_added_files, get_lfs_files};
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -54,7 +54,7 @@ pub(crate) async fn check_added_large_files(
         .copied()
         .filter(|f| !lfs_files.contains(*f));
 
-    run_concurrent_file_checks(filenames, *CONCURRENCY, |filename| async move {
+    run_concurrent_file_checks(filenames, *INTERNAL_CONCURRENCY, |filename| async move {
         let file_path = hook.project().relative_path().join(filename);
         let size = fs_err::tokio::metadata(file_path).await?.len() / 1024;
         if size > args.max_kb {

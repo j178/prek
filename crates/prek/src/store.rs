@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 use crate::config::{RemoteRepo, RemoteRepoKey};
 use crate::fs::{LockedFile, expand_tilde};
 use crate::git::{self, TerminalPrompt};
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 use crate::warn_user;
 use crate::workspace::{HookInitReporter, WorkspaceCache};
 
@@ -192,7 +192,7 @@ impl Store {
                     }),
                 }
             })
-            .buffer_unordered(*CONCURRENCY);
+            .buffer_unordered(*INTERNAL_CONCURRENCY);
 
         while let Some(result) = tasks.next().await {
             match result? {

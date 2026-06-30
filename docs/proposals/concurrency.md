@@ -33,7 +33,7 @@ Execution is driven purely by priority numbers:
 `priority` does **not** apply across *different* `.pre-commit-config.yaml` files (or separate `prek` runs with different configs). Each config file is scheduled independently.
 
 1. **Ordering**: Hooks run from the lowest priority value to the highest.
-2. **Concurrency**: Hooks that share the same priority execute concurrently, subject to the global concurrency limit (default: number of CPUs).
+2. **Concurrency**: Hooks that share the same priority execute concurrently, subject to `PREK_CONCURRENT_HOOKS` (default: number of CPUs).
 3. **Defaults**: Without explicit priorities, each hook receives a unique priority derived from its position, so execution remains sequential and backwards-compatible.
 4. **Conflicts**: If two hooks intentionally share a priority, they will be run in parallel. Users are responsible for assigning priorities that match their desired grouping.
 
@@ -41,7 +41,7 @@ Execution is driven purely by priority numbers:
 
 The existing `require_serial` configuration key often causes confusion. In this design, its meaning is strictly scoped:
 
-- **`require_serial: true`**: Controls **invocation concurrency for that hook**. When running a hook against files, `prek` limits that hook to a single in-flight invocation at a time. This effectively disables running multiple batches of the *same hook* concurrently.
+- **`require_serial: true`**: Controls **batch concurrency for that hook**. A batch is one hook command invocation over a subset of the matched filenames. When running a hook against files, `prek` limits that hook to a single in-flight batch at a time. This effectively disables running multiple batches of the *same hook* concurrently.
     - `prek` will still try to pass all files in one invocation, but may split into multiple invocations if the OS command-line length limit would be exceeded.
 - **It does NOT imply exclusive execution**. A hook with `require_serial: true` can still run in parallel with other hooks that share its `priority`.
 - If a hook *must* run alone (e.g., it modifies global state), it should be assigned a unique priority value that no other hook uses.

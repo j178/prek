@@ -9,7 +9,7 @@ use crate::hooks::pre_commit_hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 use rustc_hash::FxHashSet;
 
 pub(crate) async fn check_executables_have_shebangs(
@@ -47,16 +47,20 @@ async fn os_check_shebangs(
     file_base: &Path,
     paths: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    run_concurrent_file_checks(paths.iter().copied(), *CONCURRENCY, |file| async move {
-        let file_path = file_base.join(file);
-        let has_shebang = file_has_shebang(&file_path).await?;
-        if has_shebang {
-            anyhow::Ok((0, Vec::new()))
-        } else {
-            let msg = build_missing_shebang_warning(file)?;
-            Ok((1, msg.into_bytes()))
-        }
-    })
+    run_concurrent_file_checks(
+        paths.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |file| async move {
+            let file_path = file_base.join(file);
+            let has_shebang = file_has_shebang(&file_path).await?;
+            if has_shebang {
+                anyhow::Ok((0, Vec::new()))
+            } else {
+                let msg = build_missing_shebang_warning(file)?;
+                Ok((1, msg.into_bytes()))
+            }
+        },
+    )
     .await
 }
 
@@ -98,7 +102,7 @@ async fn git_check_shebangs(
     let filenames: FxHashSet<_> = filenames.iter().copied().collect();
     let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, &filenames, true);
 
-    run_concurrent_file_checks(entries, *CONCURRENCY, |file| async move {
+    run_concurrent_file_checks(entries, *INTERNAL_CONCURRENCY, |file| async move {
         let file_path = file_base.join(file);
         if file_has_shebang(&file_path).await? {
             Ok((0, Vec::new()))

@@ -102,7 +102,7 @@ Projects are executed from **deepest to shallowest**:
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
 
-Projects at the same depth can run concurrently because the file sets passed to their hooks do not overlap. Concurrency is still bounded by prek's global concurrency limit.
+Projects at the same depth can run concurrently because the file sets passed to their hooks do not overlap. Concurrency is still bounded by `PREK_CONCURRENT_HOOKS`.
 
 This concurrency assumes hooks only operate on their own project state and the files passed to them. Hooks that read from or write to shared resources outside their project directory (for example, sibling project files, shared caches, lockfiles, or other global state) may still contend and should be designed to avoid that.
 

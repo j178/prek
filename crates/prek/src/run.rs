@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use anstream::ColorChoice;
 use futures_util::{StreamExt, TryStreamExt};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
@@ -21,39 +21,43 @@ pub(crate) static USE_COLOR: LazyLock<bool> =
         ColorChoice::Auto => unreachable!(),
     });
 
-fn resolve_concurrency(no_concurrency: bool, max_concurrency: Option<&str>, cpu: usize) -> usize {
-    if no_concurrency {
+fn cpu_count() -> usize {
+    std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1)
+}
+
+fn resolve_concurrency(env_vars: &impl EnvVarsRead, primary_env_var: &str) -> usize {
+    if env_vars.is_set(EnvVars::PREK_NO_CONCURRENCY) {
         return 1;
     }
 
-    if let Some(v) = max_concurrency {
-        if let Ok(cap) = v.parse::<usize>() {
+    let primary = env_vars.var(primary_env_var).ok();
+    let legacy_max = env_vars.var(EnvVars::PREK_MAX_CONCURRENCY).ok();
+    let (name, value) = if let Some(primary) = primary.as_deref() {
+        (primary_env_var, Some(primary))
+    } else {
+        (EnvVars::PREK_MAX_CONCURRENCY, legacy_max.as_deref())
+    };
+
+    let cpu = cpu_count();
+    if let Some(value) = value {
+        if let Ok(cap) = value.parse::<usize>() {
             return cap.max(1);
         }
-        warn_user!(
-            "Invalid value for {}: {v:?}, using default ({cpu})",
-            EnvVars::PREK_MAX_CONCURRENCY,
-        );
+        warn_user!("Invalid value for {name}: {value:?}, using default ({cpu})");
     }
 
     cpu
 }
 
-pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
-    let cpu = std::thread::available_parallelism()
-        .map(std::num::NonZero::get)
-        .unwrap_or(1);
+pub(crate) static INTERNAL_CONCURRENCY: LazyLock<usize> = LazyLock::new(cpu_count);
 
-    resolve_concurrency(
-        EnvVars::is_set(EnvVars::PREK_NO_CONCURRENCY),
-        EnvVars::var(EnvVars::PREK_MAX_CONCURRENCY).ok().as_deref(),
-        cpu,
-    )
-});
+pub(crate) static HOOK_CONCURRENCY: LazyLock<usize> =
+    LazyLock::new(|| resolve_concurrency(&EnvVars, EnvVars::PREK_CONCURRENT_HOOKS));
 
-fn target_concurrency(serial: bool) -> usize {
-    if serial { 1 } else { *CONCURRENCY }
-}
+pub(crate) static BATCH_CONCURRENCY: LazyLock<usize> =
+    LazyLock::new(|| resolve_concurrency(&EnvVars, EnvVars::PREK_CONCURRENT_BATCHES));
 
 /// Iterator that yields partitions of filenames that fit within the maximum command line length.
 struct Partitions<'a> {
@@ -266,7 +270,11 @@ where
     F: for<'a> AsyncFn(&'a [&'a Path]) -> anyhow::Result<T>,
     T: Send + 'static,
 {
-    let concurrency = target_concurrency(hook.require_serial);
+    let concurrency = if hook.require_serial {
+        1
+    } else {
+        *BATCH_CONCURRENCY
+    };
 
     // Split files into batches
     let partitions = Partitions::split(hook, entry, filenames, concurrency)?;
@@ -291,6 +299,10 @@ where
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
+
+    fn resolve_concurrency_from_map(values: &[(&str, &str)], primary_env_var: &str) -> usize {
+        resolve_concurrency(&EnvVars::from_map(values), primary_env_var)
+    }
 
     /// Helper to create a Partitions iterator for testing.
     /// This bypasses the Hook requirement by directly constructing the struct.
@@ -379,42 +391,94 @@ mod tests {
 
     #[test]
     fn test_resolve_concurrency_defaults_to_cpu() {
-        assert_eq!(resolve_concurrency(false, None, 16), 16);
+        assert_eq!(
+            resolve_concurrency_from_map(&[], EnvVars::PREK_CONCURRENT_HOOKS),
+            cpu_count()
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_max_caps_value() {
-        assert_eq!(resolve_concurrency(false, Some("4"), 16), 4);
+    fn test_resolve_concurrency_uses_configured_limit() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[(EnvVars::PREK_CONCURRENT_HOOKS, "4")],
+                EnvVars::PREK_CONCURRENT_HOOKS,
+            ),
+            4
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_max_above_cpu() {
-        assert_eq!(resolve_concurrency(false, Some("32"), 8), 32);
+    fn test_resolve_concurrency_allows_above_cpu_limit() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[(EnvVars::PREK_CONCURRENT_HOOKS, "9999")],
+                EnvVars::PREK_CONCURRENT_HOOKS,
+            ),
+            9999
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_max_zero_floors_to_one() {
-        assert_eq!(resolve_concurrency(false, Some("0"), 16), 1);
+    fn test_resolve_concurrency_zero_floors_to_one() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[(EnvVars::PREK_CONCURRENT_HOOKS, "0")],
+                EnvVars::PREK_CONCURRENT_HOOKS,
+            ),
+            1
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_max_invalid_falls_back() {
-        assert_eq!(resolve_concurrency(false, Some("abc"), 16), 16);
+    fn test_resolve_concurrency_invalid_falls_back() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[(EnvVars::PREK_CONCURRENT_HOOKS, "abc")],
+                EnvVars::PREK_CONCURRENT_HOOKS,
+            ),
+            cpu_count()
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_max_empty_falls_back() {
-        assert_eq!(resolve_concurrency(false, Some(""), 16), 16);
+    fn test_resolve_concurrency_no_concurrency_overrides_limits() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[
+                    (EnvVars::PREK_NO_CONCURRENCY, "1"),
+                    (EnvVars::PREK_CONCURRENT_HOOKS, "8"),
+                    (EnvVars::PREK_MAX_CONCURRENCY, "4"),
+                ],
+                EnvVars::PREK_CONCURRENT_HOOKS,
+            ),
+            1
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_no_concurrency() {
-        assert_eq!(resolve_concurrency(true, None, 16), 1);
+    fn test_resolve_concurrency_uses_legacy_max() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[(EnvVars::PREK_MAX_CONCURRENCY, "4")],
+                EnvVars::PREK_CONCURRENT_HOOKS,
+            ),
+            4
+        );
     }
 
     #[test]
-    fn test_resolve_concurrency_no_concurrency_overrides_max() {
-        assert_eq!(resolve_concurrency(true, Some("8"), 16), 1);
+    fn test_resolve_concurrency_prefers_new_env_over_legacy_max() {
+        assert_eq!(
+            resolve_concurrency_from_map(
+                &[
+                    (EnvVars::PREK_CONCURRENT_BATCHES, "2"),
+                    (EnvVars::PREK_MAX_CONCURRENCY, "4"),
+                ],
+                EnvVars::PREK_CONCURRENT_BATCHES,
+            ),
+            2
+        );
     }
 
     #[test]

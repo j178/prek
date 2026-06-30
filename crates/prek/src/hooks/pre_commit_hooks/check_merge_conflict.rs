@@ -8,7 +8,7 @@ use tokio::io::AsyncBufReadExt;
 use crate::git::get_git_dir;
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 const START_PATTERN: &[u8] = b"<<<<<<< ";
 const ANCESTOR_PATTERN: &[u8] = b"||||||| ";
@@ -35,9 +35,11 @@ pub(crate) async fn check_merge_conflict(
         return Ok((0, Vec::new()));
     }
 
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(hook.project().relative_path(), filename)
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| check_file(hook.project().relative_path(), filename),
+    )
     .await
 }
 

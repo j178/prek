@@ -10,7 +10,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -86,9 +86,11 @@ pub(crate) async fn check_vcs_permalinks(
     let matcher = GithubNonPermalinkMatcher::new(args.additional_github_domains);
 
     let file_base = hook.project().relative_path();
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(file_base, filename, &matcher)
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| check_file(file_base, filename, &matcher),
+    )
     .await
 }
 

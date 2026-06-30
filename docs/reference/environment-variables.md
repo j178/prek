@@ -30,15 +30,21 @@ Allow running without a configuration file (useful for ad-hoc runs).
 
 ### `PREK_NO_CONCURRENCY`
 
-Disable parallelism for installs and runs.
-If set, force concurrency to 1.
+Disable hook and batch parallelism during `prek run`.
+If set, force `PREK_CONCURRENT_HOOKS` and `PREK_CONCURRENT_BATCHES` to 1.
 
-### `PREK_MAX_CONCURRENCY`
+### `PREK_CONCURRENT_HOOKS`
 
-Set the maximum number of concurrent hooks (minimum 1).
+Set the maximum number of hooks that can run at once during `prek run` (minimum 1).
 Defaults to the number of CPU cores when unset.
 Ignored when `PREK_NO_CONCURRENCY` is set.
-If you encounter "Too many open files" errors, lowering this value or raising the file descriptor limit with `ulimit -n` can help.
+
+### `PREK_CONCURRENT_BATCHES`
+
+Set the maximum number of batches that each hook can run at once during `prek run` (minimum 1).
+A batch is one hook command invocation over a subset of the matched filenames.
+Defaults to the number of CPU cores when unset.
+Ignored when `PREK_NO_CONCURRENCY` is set.
 
 ### `PREK_NO_FAST_PATH`
 
