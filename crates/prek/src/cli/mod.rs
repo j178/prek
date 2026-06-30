@@ -1005,7 +1005,7 @@ mod _gen {
     use anyhow::{Result, bail};
     use clap::{Command, CommandFactory};
     use itertools::Itertools;
-    use prek_consts::env_vars::EnvVars;
+    use prek_consts::env_vars::{EnvVars, EnvVarsRead};
     use pretty_assertions::StrComparison;
     use std::cmp::max;
     use std::path::PathBuf;
@@ -1283,7 +1283,7 @@ mod _gen {
 
     #[test]
     fn generate_cli_reference() -> Result<()> {
-        let mode = if EnvVars::is_set(EnvVars::PREK_GENERATE) {
+        let mode = if EnvVars.is_set(EnvVars::PREK_GENERATE) {
             Mode::Write
         } else {
             Mode::Check

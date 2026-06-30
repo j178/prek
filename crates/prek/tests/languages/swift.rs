@@ -1,13 +1,13 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test that a local Swift hook with a system command works.
 #[test]
 fn local_hook_system_command() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return;
     }
 
@@ -46,7 +46,7 @@ fn local_hook_system_command() {
 /// Test that `language_version` is rejected for Swift.
 #[test]
 fn language_version_rejected() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return;
     }
 
@@ -82,7 +82,7 @@ fn language_version_rejected() {
 /// Test that health check works after install.
 #[test]
 fn health_check() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return;
     }
 
@@ -136,7 +136,7 @@ fn health_check() {
 /// Test that a Swift Package.swift is built and the executable is available.
 #[test]
 fn local_package_build() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return Ok(());
     }
 

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::parse_shebang;
 use tracing::{instrument, trace};
 
@@ -441,7 +441,7 @@ pub(crate) async fn extract_metadata(hook: &mut Hook) -> Result<()> {
 /// Resolve the actual process invocation, honoring shebangs and PATH lookups.
 pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> Vec<String> {
     let env_path = if paths.is_none() {
-        EnvVars::var_os(EnvVars::PATH)
+        EnvVars.var_os(EnvVars::PATH)
     } else {
         None
     };

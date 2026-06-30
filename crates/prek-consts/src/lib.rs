@@ -3,7 +3,7 @@ pub mod env_vars;
 use std::ffi::OsString;
 use std::path::Path;
 
-use env_vars::EnvVars;
+use env_vars::{EnvVars, EnvVarsRead};
 
 pub const PRE_COMMIT_CONFIG_YAML: &str = ".pre-commit-config.yaml";
 pub const PRE_COMMIT_CONFIG_YML: &str = ".pre-commit-config.yml";
@@ -18,7 +18,8 @@ pub const CONFIG_FILENAMES: &[&str] = &[PREK_TOML, PRE_COMMIT_CONFIG_YAML, PRE_C
 pub fn prepend_paths(paths: &[&Path]) -> Result<OsString, std::env::JoinPathsError> {
     std::env::join_paths(
         paths.iter().map(|p| p.to_path_buf()).chain(
-            EnvVars::var_os(EnvVars::PATH)
+            EnvVars
+                .var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()
                 .flat_map(std::env::split_paths),

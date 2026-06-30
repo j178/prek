@@ -1,12 +1,12 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 #[test]
 fn language_version() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return;
     }
 
@@ -132,7 +132,7 @@ fn invalid_language_version() {
 /// `net10.0` is preinstalled in the CI, `net8.0` will be installed by the test.
 #[test]
 fn multiple_sdk_versions() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return Ok(());
     }
 
@@ -215,7 +215,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
 /// Test installing a specific version of a dotnet tool.
 #[test]
 fn additional_dependencies_with_version() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return;
     }
 
@@ -276,7 +276,7 @@ fn additional_dependencies_with_version() {
 /// Test that additional dependencies in a remote repo are installed correctly.
 #[test]
 fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return Ok(());
     }
 
@@ -339,7 +339,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 /// Ensure that stderr from hooks is captured and shown to the user.
 #[test]
 fn hook_stderr() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         return Ok(());
     }
 

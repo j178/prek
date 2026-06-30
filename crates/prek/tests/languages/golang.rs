@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
@@ -9,7 +9,7 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 /// We use `setup-go` action to install go 1.24 in CI, so go 1.23 will be auto downloaded.
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI, as we may have other go versions installed locally.
         return Ok(());
     }

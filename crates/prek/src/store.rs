@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use etcetera::BaseStrategy;
 use futures_util::StreamExt;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::{FxHashMap, FxHashSet};
 use seahash::SeaHasher;
 use thiserror::Error;
@@ -66,7 +66,7 @@ impl Store {
 
     /// Create a store from environment variables or default paths.
     pub(crate) fn from_settings() -> Result<Self, Error> {
-        let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
+        let path = if let Some(path) = EnvVars.var_os(EnvVars::PREK_HOME) {
             Some(expand_tilde(PathBuf::from(path)))
         } else {
             etcetera::choose_base_strategy()

@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use prek_identify::{TagSet, tags_from_path};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -68,7 +68,7 @@ pub(crate) async fn run(
 
     // Prevent recursive post-checkout hooks.
     if hook_stage == Some(Stage::PostCheckout)
-        && EnvVars::is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
+        && EnvVars.is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
     {
         return Ok(ExitStatus::Success);
     }

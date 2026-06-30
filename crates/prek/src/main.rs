@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use tracing::debug;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Directive;
@@ -208,7 +208,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // If `GIT_DIR` is not set, we let git discover `.git` after an optional `cd`.
     // See: https://www.spinics.net/lists/git/msg374197.html
     //      https://github.com/pre-commit/pre-commit/issues/2295
-    if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
+    if EnvVars.is_set(EnvVars::GIT_DIR) && !EnvVars.is_set(EnvVars::GIT_WORK_TREE) {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
         debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
         unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }

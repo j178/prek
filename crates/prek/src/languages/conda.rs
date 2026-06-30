@@ -3,7 +3,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use tracing::debug;
 
@@ -143,9 +143,9 @@ impl LanguageImpl for Conda {
 }
 
 fn conda_executable() -> &'static str {
-    if EnvVars::is_set(EnvVars::PRE_COMMIT_USE_MICROMAMBA) {
+    if EnvVars.is_set(EnvVars::PRE_COMMIT_USE_MICROMAMBA) {
         "micromamba"
-    } else if EnvVars::is_set(EnvVars::PRE_COMMIT_USE_MAMBA) {
+    } else if EnvVars.is_set(EnvVars::PRE_COMMIT_USE_MAMBA) {
         "mamba"
     } else {
         "conda"

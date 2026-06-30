@@ -1032,9 +1032,9 @@ fn process_files() -> anyhow::Result<()> {
 #[cfg(not(target_os = "windows"))]
 fn auto_download() -> anyhow::Result<()> {
     use assert_fs::assert::PathAssert;
-    use prek_consts::env_vars::EnvVars;
+    use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI: local environments may have
         // unexpected Ruby versions installed.
         return Ok(());

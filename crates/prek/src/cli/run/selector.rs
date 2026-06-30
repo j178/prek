@@ -9,7 +9,8 @@ use crate::warn_user;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-use prek_consts::env_vars::EnvVars;
+use owo_colors::OwoColorize;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
 use tracing::trace;
 
@@ -724,8 +725,8 @@ pub(crate) fn load_skips<FS: FileSystem>(
     workspace_root: &Path,
     fs: FS,
 ) -> Result<Vec<Selector>, Error> {
-    let prek_skip = EnvVars::var(EnvVars::PREK_SKIP);
-    let skip = EnvVars::var(EnvVars::SKIP);
+    let prek_skip = EnvVars.var(EnvVars::PREK_SKIP);
+    let skip = EnvVars.var(EnvVars::SKIP);
 
     let (skips, source) = if !cli_skips.is_empty() {
         (

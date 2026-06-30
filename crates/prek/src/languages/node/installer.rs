@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
@@ -36,7 +36,7 @@ impl Display for NodeResult {
 
 /// Override the Node binary name for testing.
 static NODE_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
-    if let Ok(name) = EnvVars::var(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME) {
+    if let Ok(name) = EnvVars.var(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME) {
         name
     } else {
         "node".to_string()

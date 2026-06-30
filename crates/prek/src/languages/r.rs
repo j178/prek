@@ -5,7 +5,7 @@ use std::str;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
@@ -321,7 +321,7 @@ fn validate_r_entry(entry: &[String]) -> Result<()> {
 }
 
 fn rscript_executable() -> PathBuf {
-    if let Some(r_home) = EnvVars::var_os(EnvVars::R_HOME) {
+    if let Some(r_home) = EnvVars.var_os(EnvVars::R_HOME) {
         PathBuf::from(r_home)
             .join("bin/Rscript")
             .with_extension(EXE_EXTENSION)

@@ -1,14 +1,14 @@
 use anyhow::Result;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot};
 
 /// Test `language_version` parsing and installation for Rust hooks.
 #[test]
 fn language_version() -> Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI, as we may have other rust versions installed locally.
         return Ok(());
     }

@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
@@ -324,7 +324,7 @@ fn additional_dependencies_local_file() {
 /// In CI, we ensure deno 2.x is installed via setup-deno action.
 #[test]
 fn language_version() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI, as we may have other deno versions installed locally.
         return;
     }
@@ -531,7 +531,7 @@ fn without_system_deno() {
 /// Test semver range version specification.
 #[test]
 fn version_range() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI.
         return;
     }
