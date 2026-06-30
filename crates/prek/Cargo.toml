@@ -108,6 +108,7 @@ etcetera = { workspace = true }
 insta = { workspace = true }
 insta-cmd = { workspace = true }
 markdown = { workspace = true }
+prek-consts = { workspace = true, features = ["test-utils"] }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }

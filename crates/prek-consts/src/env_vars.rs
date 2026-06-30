@@ -4,6 +4,54 @@ use tracing::info;
 
 pub struct EnvVars;
 
+pub trait EnvVarsRead {
+    fn var_os(&self, name: &str) -> Option<OsString>;
+
+    fn is_set(&self, name: &str) -> bool {
+        self.var_os(name).is_some()
+    }
+
+    fn var(&self, name: &str) -> Result<String, std::env::VarError> {
+        match self.var_os(name) {
+            Some(s) => s.into_string().map_err(std::env::VarError::NotUnicode),
+            None => Err(std::env::VarError::NotPresent),
+        }
+    }
+}
+
+impl EnvVarsRead for EnvVars {
+    fn var_os(&self, name: &str) -> Option<OsString> {
+        Self::var_os(name)
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+#[derive(Debug, Clone, Copy)]
+pub struct EnvVarsMap<'a> {
+    values: &'a [(&'a str, &'a str)],
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl EnvVarsMap<'_> {
+    fn direct_var_os(&self, name: &str) -> Option<OsString> {
+        self.values
+            .iter()
+            .find_map(|(key, value)| (*key == name).then(|| OsString::from(value)))
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl EnvVarsRead for EnvVarsMap<'_> {
+    fn var_os(&self, name: &str) -> Option<OsString> {
+        self.direct_var_os(name).or_else(|| {
+            let name = EnvVars::pre_commit_name(name)?;
+            let val = self.direct_var_os(name)?;
+            info!("Falling back to pre-commit environment variable for {name}");
+            Some(val)
+        })
+    }
+}
+
 impl EnvVars {
     pub const PATH: &'static str = "PATH";
     pub const HOME: &'static str = "HOME";
@@ -23,6 +71,8 @@ impl EnvVars {
     pub const PREK_SKIP: &'static str = "PREK_SKIP";
     pub const PREK_ALLOW_NO_CONFIG: &'static str = "PREK_ALLOW_NO_CONFIG";
     pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
+    pub const PREK_CONCURRENT_HOOKS: &'static str = "PREK_CONCURRENT_HOOKS";
+    pub const PREK_CONCURRENT_BATCHES: &'static str = "PREK_CONCURRENT_BATCHES";
     pub const PREK_MAX_CONCURRENCY: &'static str = "PREK_MAX_CONCURRENCY";
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
     pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
@@ -124,6 +174,13 @@ impl EnvVars {
     pub const DOTNET_ROOT: &'static str = "DOTNET_ROOT";
 }
 
+#[cfg(any(test, feature = "test-utils"))]
+impl EnvVars {
+    pub const fn from_map<'a>(values: &'a [(&'a str, &'a str)]) -> EnvVarsMap<'a> {
+        EnvVarsMap { values }
+    }
+}
+
 impl EnvVars {
     // Pre-commit environment variables that we support for compatibility
     pub const PRE_COMMIT_HOME: &'static str = "PRE_COMMIT_HOME";
@@ -205,7 +262,7 @@ impl EnvVars {
 
 #[cfg(test)]
 mod tests {
-    use super::EnvVars;
+    use super::{EnvVars, EnvVarsRead};
 
     #[test]
     fn test_parse_boolish() {
@@ -222,5 +279,29 @@ mod tests {
         assert_eq!(EnvVars::parse_boolish("maybe"), None);
         assert_eq!(EnvVars::parse_boolish(""), None);
         assert_eq!(EnvVars::parse_boolish("123"), None);
+    }
+
+    #[test]
+    fn test_env_vars_map_reads_values() {
+        let env_vars = EnvVars::from_map(&[(EnvVars::PREK_COLOR, "never")]);
+
+        assert_eq!(env_vars.var(EnvVars::PREK_COLOR).unwrap(), "never");
+    }
+
+    #[test]
+    fn test_env_vars_map_falls_back_to_pre_commit_name() {
+        let env_vars = EnvVars::from_map(&[(EnvVars::PRE_COMMIT_NO_CONCURRENCY, "1")]);
+
+        assert_eq!(env_vars.var(EnvVars::PREK_NO_CONCURRENCY).unwrap(), "1");
+    }
+
+    #[test]
+    fn test_env_vars_map_prefers_prek_name_over_pre_commit_name() {
+        let env_vars = EnvVars::from_map(&[
+            (EnvVars::PREK_NO_CONCURRENCY, "prek"),
+            (EnvVars::PRE_COMMIT_NO_CONCURRENCY, "pre-commit"),
+        ]);
+
+        assert_eq!(env_vars.var(EnvVars::PREK_NO_CONCURRENCY).unwrap(), "prek");
     }
 }

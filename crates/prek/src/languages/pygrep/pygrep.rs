@@ -13,7 +13,7 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::python::{Uv, python_exec, query_python_info_cached};
 use crate::process::Cmd;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 #[derive(Debug, Default)]
@@ -207,7 +207,7 @@ impl LanguageImpl for Pygrep {
             .arg("-B") // Don't write bytecode.
             .arg(py_script.path())
             .args(args.to_args())
-            .arg(CONCURRENCY.to_string())
+            .arg(INTERNAL_CONCURRENCY.to_string())
             .arg(hook.entry.expect_direct().raw())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

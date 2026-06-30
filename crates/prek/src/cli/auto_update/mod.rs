@@ -15,7 +15,7 @@ use crate::cli::run::Selectors;
 use crate::config::GlobPatterns;
 use crate::fs::CWD;
 use crate::printer::Printer;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -393,7 +393,11 @@ pub(crate) async fn auto_update(
 
     let tag_filters =
         TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
-    let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
+    let jobs = if jobs == 0 {
+        *INTERNAL_CONCURRENCY
+    } else {
+        jobs
+    };
     let reporter = AutoUpdateReporter::new(printer);
 
     let repo_sources = collect_repo_sources(&workspace, cooldown_days, filesystem.as_ref())?;

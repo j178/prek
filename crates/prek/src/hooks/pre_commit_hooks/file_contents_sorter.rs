@@ -6,7 +6,7 @@ use clap::Parser;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -26,9 +26,11 @@ pub(crate) async fn file_contents_sorter(
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
     let file_base = hook.project().relative_path();
 
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        sort_file(file_base, filename, args.ignore_case, args.unique)
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| sort_file(file_base, filename, args.ignore_case, args.unique),
+    )
     .await
 }
 

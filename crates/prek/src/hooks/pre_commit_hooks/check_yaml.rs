@@ -6,7 +6,7 @@ use serde::de::IgnoredAny;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -23,13 +23,17 @@ struct Args {
 pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
 
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(
-            hook.project().relative_path(),
-            filename,
-            args.allow_multiple_documents,
-        )
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| {
+            check_file(
+                hook.project().relative_path(),
+                filename,
+                args.allow_multiple_documents,
+            )
+        },
+    )
     .await
 }
 

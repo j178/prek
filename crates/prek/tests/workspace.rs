@@ -200,7 +200,7 @@ fn basic_discovery() -> Result<()> {
 }
 
 #[test]
-fn same_depth_projects_run_concurrently_with_stable_output() -> Result<()> {
+fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -230,7 +230,7 @@ fn same_depth_projects_run_concurrently_with_stable_output() -> Result<()> {
 
     let mut run = context.run();
     run.arg("--all-files")
-        .env(EnvVars::PREK_MAX_CONCURRENCY, "2");
+        .env(EnvVars::PREK_CONCURRENT_HOOKS, "2");
     cmd_snapshot!(context.filters(), run, @r#"
     success: true
     exit_code: 0
@@ -311,7 +311,7 @@ fn fail_fast_stops_after_current_project_level() -> Result<()> {
 
     let mut run = context.run();
     run.arg("--all-files")
-        .env(EnvVars::PREK_MAX_CONCURRENCY, "2");
+        .env(EnvVars::PREK_CONCURRENT_HOOKS, "2");
     cmd_snapshot!(context.filters(), run, @r#"
     success: false
     exit_code: 1

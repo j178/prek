@@ -11,7 +11,7 @@ use similar::TextDiff;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser, Debug)]
 #[command(disable_help_subcommand = true)]
@@ -72,9 +72,11 @@ pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Resu
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
     let prepared = PreparedArgs::from(&args);
 
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(hook.project().relative_path(), filename, &prepared)
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| check_file(hook.project().relative_path(), filename, &prepared),
+    )
     .await
 }
 

@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 const CRLF: &[u8] = b"\r\n";
 const LF: &[u8] = b"\n";
@@ -61,9 +61,11 @@ impl LineEndingCounts {
 pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
 
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        fix_file(hook.project().relative_path(), filename, args.fix)
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| fix_file(hook.project().relative_path(), filename, args.fix),
+    )
     .await
 }
 

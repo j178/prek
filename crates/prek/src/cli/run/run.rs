@@ -31,7 +31,7 @@ use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
-use crate::run::{CONCURRENCY, USE_COLOR};
+use crate::run::{HOOK_CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
@@ -729,7 +729,7 @@ impl<'a> HookRunSession<'a> {
         tag_cache: &FileTagCache<'paths>,
         clean_baseline: bool,
     ) -> Result<Vec<ProjectRunResult<'project, 'paths>>> {
-        let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
+        let semaphore = Rc::new(Semaphore::new(*HOOK_CONCURRENCY));
         let mut runs = FuturesUnordered::new();
         for (idx, project_run) in project_runs.into_iter().enumerate() {
             let semaphore = Rc::clone(&semaphore);
@@ -846,9 +846,8 @@ impl<'a> HookRunSession<'a> {
         semaphore: Rc<Semaphore>,
     ) -> Result<Vec<RunResult>> {
         debug!(
-            "Running priority group with priority {} with concurrency {}: {:?}",
+            "Running priority group with priority {}: {:?}",
             group_hooks[0].priority,
-            *CONCURRENCY,
             group_hooks.iter().map(|hook| &hook.id).collect::<Vec<_>>()
         );
 

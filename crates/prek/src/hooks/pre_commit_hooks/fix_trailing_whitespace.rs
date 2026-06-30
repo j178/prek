@@ -7,7 +7,7 @@ use clap::Parser;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 const MARKDOWN_LINE_BREAK: &[u8] = b"  ";
 
@@ -71,15 +71,19 @@ pub(crate) async fn fix_trailing_whitespace(
         .as_ref()
         .map_or(&[][..], |chars| chars.0.as_slice());
 
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        fix_file(
-            hook.project().relative_path(),
-            filename,
-            chars,
-            force_markdown,
-            &markdown_exts,
-        )
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| {
+            fix_file(
+                hook.project().relative_path(),
+                filename,
+                chars,
+                force_markdown,
+                &markdown_exts,
+            )
+        },
+    )
     .await
 }
 

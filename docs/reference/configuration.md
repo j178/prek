@@ -1002,7 +1002,7 @@ Controls whether `prek` appends the matching filenames to the command line.
 
 Set `pass_filenames: false` for hooks that don’t accept file arguments (or that discover files themselves).
 
-Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple invocations. Those invocations may run concurrently unless [`require_serial`](#require_serial) is `true`. This is useful for tools that can only process a limited number of files at once.
+Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple batches. A batch is one hook command invocation over a subset of the matched filenames. Batches may run concurrently up to `PREK_CONCURRENT_BATCHES` unless [`require_serial`](#require_serial) is `true`. This is useful for tools that can only process a limited number of files at once.
 
 Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
 
@@ -1121,7 +1121,7 @@ fails.
 
 ### `require_serial`
 
-Force a hook to run without parallel invocations (one in-flight process for that hook at a time).
+Force a hook to run without parallel batches (one in-flight process for that hook at a time).
 
 - Type: boolean
 - Default: `false`
@@ -1143,7 +1143,7 @@ Scope:
 - `priority` is evaluated **within a single configuration file** and is compared across **all hooks in that file**, even if they appear under different `repos:` entries.
 - `priority` does **not** coordinate across different config files. In workspace mode, each project’s config file is scheduled independently.
 
-Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to the global concurrency limit.
+Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to `PREK_CONCURRENT_HOOKS`.
 
 When `priority` is omitted, `prek` assigns an implicit value based on hook order to preserve sequential behavior.
 
@@ -1223,7 +1223,7 @@ Example:
 
 !!! note "`require_serial` is different"
 
-    [`require_serial`](#require_serial) set to `true` prevents concurrent invocations of the *same hook*.
+    [`require_serial`](#require_serial) set to `true` prevents concurrent batches of the *same hook*.
     It does not prevent other hooks from running alongside it; use a unique `priority` if you need exclusivity.
 
 ### `fail_fast`

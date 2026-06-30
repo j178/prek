@@ -3,15 +3,17 @@ use std::path::Path;
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks::check_json::JsonDuplicateKeyChecker;
 use crate::hooks::run_concurrent_file_checks;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 pub(crate) async fn check_json5(
     hook: &Hook,
     filenames: &[&Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(hook.project().relative_path(), filename)
-    })
+    run_concurrent_file_checks(
+        filenames.iter().copied(),
+        *INTERNAL_CONCURRENCY,
+        |filename| check_file(hook.project().relative_path(), filename),
+    )
     .await
 }
 

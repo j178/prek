@@ -11,7 +11,7 @@ use tracing::debug;
 
 use crate::languages::ruby::installer::RubyResult;
 use crate::process::Cmd;
-use crate::run::CONCURRENCY;
+use crate::run::INTERNAL_CONCURRENCY;
 
 /// Build a `PATH` value with the resolved Ruby's bin directory prepended.
 ///
@@ -115,7 +115,7 @@ fn gem_env<'a>(cmd: &'a mut Cmd, ruby: &RubyResult, gem_home: &Path) -> Result<&
     // Respect existing MAKEFLAGS if set (user may need to limit parallelism
     // in memory-constrained environments like Docker).
     if EnvVars::var_os("MAKEFLAGS").is_none() {
-        cmd.env("MAKEFLAGS", format!("-j{}", *CONCURRENCY));
+        cmd.env("MAKEFLAGS", format!("-j{}", *INTERNAL_CONCURRENCY));
     }
 
     Ok(cmd)
@@ -351,7 +351,7 @@ pub(crate) async fn install_gems(
                         }
                     }
                 })
-                .buffer_unordered(*CONCURRENCY)
+                .buffer_unordered(*INTERNAL_CONCURRENCY)
                 .try_collect::<Vec<()>>()
                 .await;
 
