@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use etcetera::BaseStrategy;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use serde::Deserialize;
 
 fn user_config_path() -> Option<PathBuf> {
-    if let Some(path) = EnvVars::var_os(EnvVars::PREK_INTERNAL__USER_CONFIG_PATH) {
+    if let Some(path) = EnvVars.var_os(EnvVars::PREK_INTERNAL__USER_CONFIG_PATH) {
         return Some(PathBuf::from(path));
     }
 

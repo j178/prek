@@ -4,7 +4,8 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
 use futures_util::TryStreamExt;
-use prek_consts::env_vars::EnvVars;
+use owo_colors::OwoColorize;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use reqwest::Certificate;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::StreamReader;
@@ -15,7 +16,7 @@ use crate::fs::Simplified;
 use crate::store::Store;
 use crate::warn_user;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Default, strum::EnumString)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default, strum::AsRefStr, strum::EnumString)]
 #[strum(serialize_all = "kebab-case")]
 pub(crate) enum DownloadChecksumPolicy {
     #[default]
@@ -25,15 +26,18 @@ pub(crate) enum DownloadChecksumPolicy {
 }
 
 impl DownloadChecksumPolicy {
-    pub(crate) fn from_env() -> Result<Self> {
-        match EnvVars::var(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY) {
-            Ok(value) => Self::from_str(&value).with_context(|| {
-                format!(
-                    "Invalid {} value `{value}`; expected one of: warn-missing, required, disabled",
-                    EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY
-                )
+    pub(crate) fn from_env(env_vars: &impl EnvVarsRead) -> Self {
+        match env_vars.var(EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY) {
+            Ok(value) => Self::from_str(&value).unwrap_or_else(|_| {
+                warn_user!(
+                    "Invalid value for {}: {:?}. Expected warn-missing, required, or disabled; using default ({:?})",
+                    EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY,
+                    value,
+                    Self::default().as_ref(),
+                );
+                Self::default()
             }),
-            Err(_) => Ok(Self::default()),
+            Err(_) => Self::default(),
         }
     }
 }
@@ -59,7 +63,7 @@ pub(crate) async fn download_artifact(
         url,
         filename,
         store,
-        DownloadChecksumPolicy::from_env()?,
+        DownloadChecksumPolicy::from_env(&EnvVars),
         fetch_checksum,
         |req| req,
     )
@@ -139,11 +143,25 @@ async fn download_to_temp_file(
     ))
 }
 
-pub(crate) static REQWEST_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    let native_tls = EnvVars::var_as_bool(EnvVars::PREK_NATIVE_TLS).unwrap_or(false);
+pub(crate) static REQWEST_CLIENT: LazyLock<reqwest::Client> =
+    LazyLock::new(|| reqwest_client_from_env(&EnvVars));
 
-    let cert_file = EnvVars::var_os(EnvVars::SSL_CERT_FILE).map(PathBuf::from);
-    let cert_dirs: Vec<_> = if let Some(cert_dirs) = EnvVars::var_os(EnvVars::SSL_CERT_DIR) {
+fn reqwest_client_from_env(env_vars: &impl EnvVarsRead) -> reqwest::Client {
+    let native_tls = env_vars
+        .var_as_bool(EnvVars::PREK_NATIVE_TLS)
+        .unwrap_or_else(|value| {
+            warn_user!(
+                "Invalid value for {}: {:?}. Expected a boolean value; using default ({:?})",
+                EnvVars::PREK_NATIVE_TLS,
+                value,
+                "false",
+            );
+            Some(false)
+        })
+        .unwrap_or(false);
+
+    let cert_file = env_vars.var_os(EnvVars::SSL_CERT_FILE).map(PathBuf::from);
+    let cert_dirs: Vec<_> = if let Some(cert_dirs) = env_vars.var_os(EnvVars::SSL_CERT_DIR) {
         std::env::split_paths(&cert_dirs).collect()
     } else {
         vec![]
@@ -151,7 +169,7 @@ pub(crate) static REQWEST_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 
     let certs = load_certs_from_paths(cert_file.as_deref(), &cert_dirs);
     create_reqwest_client(native_tls, certs)
-});
+}
 
 fn load_pem_certs_from_file(path: &Path) -> Result<Vec<Certificate>> {
     let cert_data = fs_err::read(path)?;
@@ -250,12 +268,15 @@ mod tests {
     use std::str::FromStr;
 
     use anyhow::Result;
+    use prek_consts::env_vars::EnvVars;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::task::JoinHandle;
 
     use crate::checksum::Sha256Digest;
     use crate::store::Store;
+
+    use super::DownloadChecksumPolicy;
 
     const DATA_SHA256: &str = "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7";
     const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -328,6 +349,35 @@ YyRIHN8wfdVoOw==
         });
 
         Ok((url, handle))
+    }
+
+    #[test]
+    fn download_checksum_policy_reads_env() {
+        assert_eq!(
+            DownloadChecksumPolicy::from_env(&EnvVars::from_map(&[])),
+            DownloadChecksumPolicy::WarnMissing
+        );
+        assert_eq!(
+            DownloadChecksumPolicy::from_env(&EnvVars::from_map(&[(
+                EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY,
+                "required",
+            )])),
+            DownloadChecksumPolicy::Required
+        );
+        assert_eq!(
+            DownloadChecksumPolicy::from_env(&EnvVars::from_map(&[(
+                EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY,
+                "disabled",
+            )])),
+            DownloadChecksumPolicy::Disabled
+        );
+        assert_eq!(
+            DownloadChecksumPolicy::from_env(&EnvVars::from_map(&[(
+                EnvVars::PREK_DOWNLOAD_CHECKSUM_POLICY,
+                "always",
+            )])),
+            DownloadChecksumPolicy::WarnMissing
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use semver::Version;
 use target_lexicon::HOST;
 use tracing::{debug, trace, warn};
@@ -30,11 +30,12 @@ pub(crate) struct ToolchainInfo {
 }
 
 static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
-    EnvVars::var(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME)
+    EnvVars
+        .var(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME)
         .unwrap_or_else(|_| "rustup".to_string())
 });
 
-#[derive(Clone, Copy, Default, strum::AsRefStr, strum::EnumString)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 enum RustupProfile {
     #[default]
@@ -43,15 +44,15 @@ enum RustupProfile {
     Complete,
 }
 
-fn rustup_profile() -> RustupProfile {
-    let Ok(value) = EnvVars::var(EnvVars::PREK_RUST_PROFILE) else {
+fn rustup_profile(env_vars: &impl EnvVarsRead) -> RustupProfile {
+    let Ok(value) = env_vars.var(EnvVars::PREK_RUST_PROFILE) else {
         return RustupProfile::default();
     };
 
     value.parse().unwrap_or_else(|_| {
         let default = RustupProfile::default();
         warn_user!(
-            "Invalid value for {}: {:?}. Expected one of `minimal`, `default`, or `complete`; falling back to `{}`",
+            "Invalid value for {}: {:?}. Expected minimal, default, or complete; using default ({:?})",
             EnvVars::PREK_RUST_PROFILE,
             value,
             default.as_ref(),
@@ -162,7 +163,7 @@ impl Rustup {
             .arg("install")
             .arg("--no-self-update")
             .arg("--profile")
-            .arg(rustup_profile().as_ref())
+            .arg(rustup_profile(&EnvVars).as_ref())
             .arg(toolchain)
             .check(true)
             .output()
@@ -353,5 +354,20 @@ mod tests {
         let result = digest_from_rustup_checksum("")?;
         assert!(result.is_none());
         Ok(())
+    }
+
+    #[test]
+    fn rustup_profile_reads_env() {
+        fn profile_with(value: &str) -> RustupProfile {
+            rustup_profile(&EnvVars::from_map(&[(EnvVars::PREK_RUST_PROFILE, value)]))
+        }
+
+        assert_eq!(
+            rustup_profile(&EnvVars::from_map(&[])),
+            RustupProfile::Minimal
+        );
+        assert_eq!(profile_with("default"), RustupProfile::Default);
+        assert_eq!(profile_with("complete"), RustupProfile::Complete);
+        assert_eq!(profile_with("invalid"), RustupProfile::Minimal);
     }
 }

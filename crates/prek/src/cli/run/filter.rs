@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use itertools::{Either, Itertools};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags_from_path};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
@@ -458,7 +458,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         .collect::<Vec<_>>();
 
     // Sort filenames if in tests to make the order consistent.
-    if EnvVars::is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
+    if EnvVars.is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
         filenames.sort_unstable();
     }
 

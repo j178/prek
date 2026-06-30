@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
@@ -35,7 +35,7 @@ impl Display for BunResult {
 
 /// Override the Bun binary name for testing.
 static BUN_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
-    if let Ok(name) = EnvVars::var(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME) {
+    if let Ok(name) = EnvVars.var(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME) {
         name
     } else {
         "bun".to_string()

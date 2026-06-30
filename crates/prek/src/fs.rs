@@ -32,8 +32,6 @@ use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, info, trace};
 
-use crate::cli::reporter;
-
 pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::current_dir()
         .map(|cwd| dunce::canonicalize(&cwd).unwrap_or(cwd))
@@ -156,20 +154,18 @@ impl LockedFile {
                 };
 
                 if !held_by_this_process {
-                    reporter::suspend(move || {
-                        #[cfg(test)]
-                        {
-                            LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path);
-                        }
+                    #[cfg(test)]
+                    {
+                        LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path);
+                    }
 
-                        #[cfg(not(test))]
-                        {
-                            crate::warn_user!(
-                                "Waiting to acquire lock at `{}`. Another prek process may still be running",
-                                warning_path.display()
-                            );
-                        }
-                    });
+                    #[cfg(not(test))]
+                    {
+                        crate::warn_user!(
+                            "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                            warning_path.display()
+                        );
+                    }
                 }
 
                 task.await??

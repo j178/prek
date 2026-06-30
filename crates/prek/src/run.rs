@@ -45,7 +45,9 @@ fn resolve_concurrency(env_vars: &impl EnvVarsRead, primary_env_var: &str) -> us
         if let Ok(cap) = value.parse::<usize>() {
             return cap.max(1);
         }
-        warn_user!("Invalid value for {name}: {value:?}, using default ({cpu})");
+        warn_user!(
+            "Invalid value for {name}: {value:?}. Expected a positive integer; using default ({cpu})"
+        );
     }
 
     cpu

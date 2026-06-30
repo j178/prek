@@ -404,7 +404,7 @@ impl schemars::JsonSchema for Repo {
 mod _gen {
     use crate::config::Config;
     use anyhow::bail;
-    use prek_consts::env_vars::EnvVars;
+    use prek_consts::env_vars::{EnvVars, EnvVarsRead};
     use pretty_assertions::StrComparison;
     use std::path::PathBuf;
 
@@ -432,7 +432,7 @@ mod _gen {
 
     #[test]
     fn generate_json_schema() -> anyhow::Result<()> {
-        let mode = if EnvVars::is_set(EnvVars::PREK_GENERATE) {
+        let mode = if EnvVars.is_set(EnvVars::PREK_GENERATE) {
             Mode::Write
         } else {
             Mode::Check

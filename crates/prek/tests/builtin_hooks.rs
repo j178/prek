@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -3240,7 +3240,7 @@ fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
     context.git_add(".");
 
     // Prepend the fake bin directory to PATH so the fake binary is found first.
-    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
+    let original_path = EnvVars.var_os(EnvVars::PATH).unwrap_or_default();
     let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
     new_path.push(":");
     new_path.push(&original_path);

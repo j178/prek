@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use reqwest::Url;
 use serde::Deserialize;
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
@@ -19,8 +19,8 @@ use crate::store::Store;
 
 const RV_RUBY_DEFAULT_URL: &str = "https://github.com/spinel-coop/rv-ruby";
 
-fn rv_ruby_base_url() -> String {
-    match EnvVars::var(EnvVars::PREK_RUBY_MIRROR) {
+fn rv_ruby_base_url(env_vars: &impl EnvVarsRead) -> String {
+    match env_vars.var(EnvVars::PREK_RUBY_MIRROR) {
         Ok(mirror) => mirror.trim_end_matches('/').to_string(),
         Err(_) => RV_RUBY_DEFAULT_URL.to_string(),
     }
@@ -33,8 +33,8 @@ fn rv_ruby_base_url() -> String {
 /// When the mirror is a `github.com` URL, the path is rewritten to use the
 /// `api.github.com` host (e.g. `https://github.com/org/repo` becomes
 /// `https://api.github.com/repos/org/repo/releases/latest`).
-fn rv_ruby_api_url() -> (String, bool) {
-    let base = rv_ruby_base_url();
+fn rv_ruby_api_url(env_vars: &impl EnvVarsRead) -> (String, bool) {
+    let base = rv_ruby_base_url(env_vars);
     if let Some(path) = github_repo_path(&base) {
         (
             format!("https://api.github.com/repos{path}/releases/latest"),
@@ -69,9 +69,13 @@ fn github_repo_path(url: &str) -> Option<String> {
 
 /// Conditionally add a GitHub auth token to a request builder.
 /// Only sends `GITHUB_TOKEN` when `is_github` is true.
-fn maybe_add_github_auth(req: reqwest::RequestBuilder, is_github: bool) -> reqwest::RequestBuilder {
+fn maybe_add_github_auth(
+    req: reqwest::RequestBuilder,
+    is_github: bool,
+    env_vars: &impl EnvVarsRead,
+) -> reqwest::RequestBuilder {
     if is_github {
-        if let Ok(token) = EnvVars::var(EnvVars::GITHUB_TOKEN) {
+        if let Ok(token) = env_vars.var(EnvVars::GITHUB_TOKEN) {
             return req.bearer_auth(token);
         }
     }
@@ -268,13 +272,13 @@ impl RubyInstaller {
 
     /// Fetch available Ruby versions from the rv-ruby GitHub release.
     async fn list_remote_versions(&self, platform: &str) -> Result<Vec<semver::Version>> {
-        let (api_url, is_github) = rv_ruby_api_url();
+        let (api_url, is_github) = rv_ruby_api_url(&EnvVars);
         let suffix = format!(".{platform}.tar.gz");
 
         let req = REQWEST_CLIENT
             .get(&api_url)
             .header("Accept", "application/vnd.github+json");
-        let req = maybe_add_github_auth(req, is_github);
+        let req = maybe_add_github_auth(req, is_github, &EnvVars);
 
         let release: GitHubRelease = req
             .send()
@@ -307,7 +311,7 @@ impl RubyInstaller {
         platform: &str,
     ) -> Result<RubyResult> {
         let filename = format!("ruby-{version}.{platform}.tar.gz");
-        let base_url = rv_ruby_base_url();
+        let base_url = rv_ruby_base_url(&EnvVars);
         let is_github = github_repo_path(&base_url).is_some();
         let download_base_url = format!("{base_url}/releases/latest/download");
         let url = format!("{download_base_url}/{filename}");
@@ -322,9 +326,9 @@ impl RubyInstaller {
             &url,
             &filename,
             store,
-            DownloadChecksumPolicy::from_env()?,
+            DownloadChecksumPolicy::from_env(&EnvVars),
             async || Self::fetch_checksum(&checksum_url, &filename, is_github).await,
-            |req| maybe_add_github_auth(req, is_github),
+            |req| maybe_add_github_auth(req, is_github, &EnvVars),
         )
         .await
         .with_context(|| format!("Failed to download Ruby {version} from {url}"))?;
@@ -367,7 +371,7 @@ impl RubyInstaller {
         let req = REQWEST_CLIENT
             .get(checksum_url)
             .header("Accept", "application/octet-stream");
-        let req = maybe_add_github_auth(req, is_github);
+        let req = maybe_add_github_auth(req, is_github, &EnvVars);
 
         let response = req.send().await.with_context(|| {
             format!("Failed to fetch rv-ruby checksum file from {checksum_url}")
@@ -440,7 +444,7 @@ async fn try_ruby_path(ruby_path: &Path, request: &RubyRequest) -> Option<RubyRe
 /// Search version manager directories for suitable Ruby installations
 #[cfg(not(target_os = "windows"))]
 async fn search_version_managers(request: &RubyRequest) -> Option<RubyResult> {
-    let home = EnvVars::var(EnvVars::HOME).ok()?;
+    let home = EnvVars.var(EnvVars::HOME).ok()?;
     let home_path = PathBuf::from(home);
 
     // Common version manager and Homebrew directories
@@ -833,6 +837,62 @@ mod tests {
         assert!(github_repo_path("https://github.com/org").is_none());
         assert!(github_repo_path("https://github.com/org/repo/releases").is_none());
         assert!(github_repo_path("ftp://github.com/org/repo").is_none());
+    }
+
+    #[test]
+    fn rv_ruby_env_overrides() {
+        assert_eq!(
+            rv_ruby_base_url(&EnvVars::from_map(&[])),
+            RV_RUBY_DEFAULT_URL
+        );
+        assert_eq!(
+            rv_ruby_base_url(&EnvVars::from_map(&[(
+                EnvVars::PREK_RUBY_MIRROR,
+                "https://example.com/rv-ruby/",
+            )])),
+            "https://example.com/rv-ruby"
+        );
+
+        assert_eq!(
+            rv_ruby_api_url(&EnvVars::from_map(&[])),
+            (
+                "https://api.github.com/repos/spinel-coop/rv-ruby/releases/latest".to_string(),
+                true,
+            )
+        );
+        assert_eq!(
+            rv_ruby_api_url(&EnvVars::from_map(&[(
+                EnvVars::PREK_RUBY_MIRROR,
+                "https://mirror.example.com/rv-ruby",
+            )])),
+            (
+                "https://mirror.example.com/rv-ruby/releases/latest".to_string(),
+                false,
+            )
+        );
+
+        let env_vars = EnvVars::from_map(&[(EnvVars::GITHUB_TOKEN, "secret-token")]);
+        let client = reqwest::Client::new();
+
+        let request = maybe_add_github_auth(client.get("https://example.com"), true, &env_vars)
+            .build()
+            .unwrap();
+        assert_eq!(
+            request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .unwrap(),
+            "Bearer secret-token"
+        );
+
+        let request = maybe_add_github_auth(client.get("https://example.com"), false, &env_vars)
+            .build()
+            .unwrap();
+        assert!(
+            !request
+                .headers()
+                .contains_key(reqwest::header::AUTHORIZATION)
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
@@ -35,7 +35,7 @@ impl Display for DenoResult {
 
 /// Override the Deno binary name for testing.
 static DENO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
-    if let Ok(name) = EnvVars::var(EnvVars::PREK_INTERNAL__DENO_BINARY_NAME) {
+    if let Ok(name) = EnvVars.var(EnvVars::PREK_INTERNAL__DENO_BINARY_NAME) {
         name
     } else {
         "deno".to_string()

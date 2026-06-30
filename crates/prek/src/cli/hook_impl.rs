@@ -8,7 +8,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::cli::{self, ExitStatus, RunOptions, flag};
@@ -48,7 +48,7 @@ pub(crate) async fn hook_impl(
     }
 
     let allow_missing_config =
-        skip_on_missing_config || EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG);
+        skip_on_missing_config || EnvVars.is_set(EnvVars::PREK_ALLOW_NO_CONFIG);
     let warn_for_no_config = || {
         eprintln!(
             "- To temporarily silence this, run `{}`",
@@ -182,7 +182,7 @@ async fn run_legacy(
     args: &[OsString],
     stdin: &[u8],
 ) -> Result<u8> {
-    if EnvVars::is_set(EnvVars::PREK_RUNNING_LEGACY) {
+    if EnvVars.is_set(EnvVars::PREK_RUNNING_LEGACY) {
         anyhow::bail!(
             "prek's Git shim is installed in migration mode\n\
             run `prek install -f --hook-type {hook_type}` to reinstall the shim"

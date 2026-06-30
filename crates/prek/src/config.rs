@@ -7,6 +7,7 @@ use anyhow::Result;
 use fancy_regex::Regex;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
 use serde::de::{DeserializeSeed, Error as DeError, MapAccess, Visitor};

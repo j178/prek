@@ -4,7 +4,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use mea::once::OnceCell;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use tracing::debug;
 
@@ -17,8 +17,11 @@ use crate::run::run_by_batch;
 use crate::store::Store;
 
 static CABAL_UPDATE_ONCE: OnceCell<()> = OnceCell::new();
-static SKIP_CABAL_UPDATE: LazyLock<bool> =
-    LazyLock::new(|| EnvVars::var(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE).is_ok());
+static SKIP_CABAL_UPDATE: LazyLock<bool> = LazyLock::new(|| {
+    EnvVars
+        .var(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE)
+        .is_ok()
+});
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Haskell;

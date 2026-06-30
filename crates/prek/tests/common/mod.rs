@@ -10,7 +10,7 @@ use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
     let mut cmd = Command::new("git");
@@ -77,7 +77,7 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
-        if let Some(current_exe) = EnvVars::var_os("NEXTEST_BIN_EXE_prek") {
+        if let Some(current_exe) = EnvVars.var_os("NEXTEST_BIN_EXE_prek") {
             filters.extend(
                 Self::path_patterns(current_exe)
                     .into_iter()
@@ -100,7 +100,8 @@ impl TestContext {
     }
 
     pub fn test_bucket_dir() -> PathBuf {
-        EnvVars::var(EnvVars::PREK_INTERNAL__TEST_DIR)
+        EnvVars
+            .var(EnvVars::PREK_INTERNAL__TEST_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()
@@ -153,7 +154,7 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        let mut cmd = if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
+        let mut cmd = if EnvVars.is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
             // Run the original pre-commit to check compatibility.
             let mut cmd = Command::new("pre-commit");
             cmd.current_dir(self.work_dir());
@@ -162,7 +163,8 @@ impl TestContext {
         } else {
             // The absolute path to a binary target's executable. This is only set when running an integration test or benchmark.
             // When reusing builds from an archive, this is set to the remapped path within the target directory.
-            let bin = EnvVars::var_os("NEXTEST_BIN_EXE_prek")
+            let bin = EnvVars
+                .var_os("NEXTEST_BIN_EXE_prek")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from(assert_cmd::cargo::cargo_bin!("prek")));
             let mut cmd = Command::new(bin);
@@ -464,7 +466,7 @@ macro_rules! cmd_snapshot {
 pub(crate) use cmd_snapshot;
 
 pub(crate) fn remove_bin_from_path(bin: &str, path: Option<OsString>) -> anyhow::Result<OsString> {
-    let path = path.unwrap_or(EnvVars::var_os(EnvVars::PATH).expect("Path must be set"));
+    let path = path.unwrap_or(EnvVars.var_os(EnvVars::PATH).expect("Path must be set"));
     let Ok(dirs) = which::which_all(bin) else {
         return Ok(path);
     };

@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -10,7 +10,7 @@ use crate::common::{TestContext, cmd_snapshot};
 /// Other versions may need to be downloaded while running the tests.
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI, as we may have other Python versions installed locally.
         return Ok(());
     }

@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use regex::Regex;
 use tracing::{trace, warn};
 
@@ -19,6 +19,7 @@ use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::{USE_COLOR, run_by_batch};
 use crate::store::Store;
+use crate::warn_user;
 
 static CGROUP_V2_CONTAINER_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
@@ -217,7 +218,7 @@ impl ContainerRuntimeInfo {
     /// Detect container runtime provider, prioritise docker over podman if
     /// both are on the path, unless `PREK_CONTAINER_RUNTIME` is set to override detection.
     fn resolve_runtime_kind<DF, PF, CF>(
-        env_override: Option<String>,
+        env_vars: &impl EnvVarsRead,
         docker_available: DF,
         podman_available: PF,
         apple_container_available: CF,
@@ -227,25 +228,23 @@ impl ContainerRuntimeInfo {
         PF: Fn() -> bool,
         CF: Fn() -> bool,
     {
-        if let Some(val) = env_override {
-            match RuntimeKind::from_str(&val) {
-                Ok(runtime) => {
-                    if runtime != RuntimeKind::Auto {
-                        trace!(
-                            "Container runtime overridden by {}={}",
-                            EnvVars::PREK_CONTAINER_RUNTIME,
-                            val
-                        );
-                        return runtime;
-                    }
-                }
-                Err(_) => {
-                    warn!(
-                        "Invalid value for {}: {}, falling back to auto detection",
+        if let Ok(val) = env_vars.var(EnvVars::PREK_CONTAINER_RUNTIME) {
+            if let Ok(runtime) = RuntimeKind::from_str(&val) {
+                if runtime != RuntimeKind::Auto {
+                    trace!(
+                        "Container runtime overridden by {}={}",
                         EnvVars::PREK_CONTAINER_RUNTIME,
                         val
                     );
+                    return runtime;
                 }
+            } else {
+                warn_user!(
+                    "Invalid value for {}: {:?}. Expected container, docker, podman, or auto; using default ({:?})",
+                    EnvVars::PREK_CONTAINER_RUNTIME,
+                    val,
+                    "auto",
+                );
             }
         }
 
@@ -265,7 +264,7 @@ impl ContainerRuntimeInfo {
 
     fn detect_runtime() -> Self {
         let runtime = Self::resolve_runtime_kind(
-            EnvVars::var(EnvVars::PREK_CONTAINER_RUNTIME).ok(),
+            &EnvVars,
             || which::which("docker").is_ok(),
             || which::which("podman").is_ok(),
             || which::which("container").is_ok(),
@@ -371,6 +370,10 @@ impl Docker {
     }
 
     pub(crate) fn docker_run_cmd(work_dir: &Path) -> Cmd {
+        Self::docker_run_cmd_with_env(work_dir, &EnvVars)
+    }
+
+    fn docker_run_cmd_with_env(work_dir: &Path, env_vars: &impl EnvVarsRead) -> Cmd {
         let mut command = Cmd::new(CONTAINER_RUNTIME.cmd());
         command.arg("run").arg("--rm");
 
@@ -408,7 +411,7 @@ impl Docker {
         let work_dir = CONTAINER_RUNTIME.map_to_host_path(work_dir);
         let volume = format!("{}:/src:rw,Z", work_dir.display());
 
-        if !EnvVars::var_as_bool(EnvVars::PREK_DOCKER_NO_INIT).unwrap_or(false) {
+        if Self::should_add_init(env_vars) {
             // Run an init inside the container that forwards signals and reaps processes
             command.arg("--init");
         }
@@ -419,6 +422,22 @@ impl Docker {
             .arg("/src");
 
         command
+    }
+
+    fn should_add_init(env_vars: &impl EnvVarsRead) -> bool {
+        let no_init = env_vars
+            .var_as_bool(EnvVars::PREK_DOCKER_NO_INIT)
+            .unwrap_or_else(|value| {
+                warn_user!(
+                    "Invalid value for {}: {:?}. Expected a boolean value; using default ({:?})",
+                    EnvVars::PREK_DOCKER_NO_INIT,
+                    value,
+                    "false",
+                );
+                Some(false)
+            })
+            .unwrap_or(false);
+        !no_init
     }
 }
 
@@ -690,76 +709,104 @@ mod tests {
     #[test]
     fn test_detect_container_runtime() {
         fn runtime_with(
-            env_override: Option<&str>,
+            env_vars: &[(&str, &str)],
             docker_available: bool,
             podman_available: bool,
             apple_container_available: bool,
         ) -> RuntimeKind {
             ContainerRuntimeInfo::resolve_runtime_kind(
-                env_override.map(ToString::to_string),
+                &EnvVars::from_map(env_vars),
                 || docker_available,
                 || podman_available,
                 || apple_container_available,
             )
         }
 
-        assert_eq!(runtime_with(None, true, false, false), RuntimeKind::Docker);
-        assert_eq!(runtime_with(None, false, true, false), RuntimeKind::Podman);
+        fn runtime_with_override(
+            env_override: &str,
+            docker_available: bool,
+            podman_available: bool,
+            apple_container_available: bool,
+        ) -> RuntimeKind {
+            runtime_with(
+                &[(EnvVars::PREK_CONTAINER_RUNTIME, env_override)],
+                docker_available,
+                podman_available,
+                apple_container_available,
+            )
+        }
+
+        assert_eq!(runtime_with(&[], true, false, false), RuntimeKind::Docker);
+        assert_eq!(runtime_with(&[], false, true, false), RuntimeKind::Podman);
         assert_eq!(
-            runtime_with(None, false, false, true),
+            runtime_with(&[], false, false, true),
             RuntimeKind::AppleContainer
         );
-        assert_eq!(runtime_with(None, false, false, false), RuntimeKind::Docker);
+        assert_eq!(runtime_with(&[], false, false, false), RuntimeKind::Docker);
 
         assert_eq!(
-            runtime_with(Some("auto"), true, false, false),
+            runtime_with_override("auto", true, false, false),
             RuntimeKind::Docker
         );
         assert_eq!(
-            runtime_with(Some("auto"), false, true, false),
+            runtime_with_override("auto", false, true, false),
             RuntimeKind::Podman
         );
         assert_eq!(
-            runtime_with(Some("auto"), false, false, true),
+            runtime_with_override("auto", false, false, true),
             RuntimeKind::AppleContainer
         );
         assert_eq!(
-            runtime_with(Some("auto"), false, false, false),
+            runtime_with_override("auto", false, false, false),
             RuntimeKind::Docker
-        );
-
-        assert_eq!(
-            runtime_with(Some("docker"), true, false, false),
-            RuntimeKind::Docker
-        );
-        assert_eq!(
-            runtime_with(Some("docker"), false, true, false),
-            RuntimeKind::Docker
-        );
-        assert_eq!(
-            runtime_with(Some("DOCKER"), false, false, false),
-            RuntimeKind::Docker
-        );
-        assert_eq!(
-            runtime_with(Some("podman"), true, false, false),
-            RuntimeKind::Podman
-        );
-        assert_eq!(
-            runtime_with(Some("podman"), false, true, false),
-            RuntimeKind::Podman
-        );
-        assert_eq!(
-            runtime_with(Some("podman"), false, false, false),
-            RuntimeKind::Podman
-        );
-        assert_eq!(
-            runtime_with(Some("container"), true, true, false),
-            RuntimeKind::AppleContainer
         );
 
         assert_eq!(
-            runtime_with(Some("invalid"), false, false, false),
+            runtime_with_override("docker", true, false, false),
             RuntimeKind::Docker
         );
+        assert_eq!(
+            runtime_with_override("docker", false, true, false),
+            RuntimeKind::Docker
+        );
+        assert_eq!(
+            runtime_with_override("DOCKER", false, false, false),
+            RuntimeKind::Docker
+        );
+        assert_eq!(
+            runtime_with_override("podman", true, false, false),
+            RuntimeKind::Podman
+        );
+        assert_eq!(
+            runtime_with_override("podman", false, true, false),
+            RuntimeKind::Podman
+        );
+        assert_eq!(
+            runtime_with_override("podman", false, false, false),
+            RuntimeKind::Podman
+        );
+        assert_eq!(
+            runtime_with_override("container", true, true, false),
+            RuntimeKind::AppleContainer
+        );
+
+        assert_eq!(
+            runtime_with_override("invalid", false, false, false),
+            RuntimeKind::Docker
+        );
+
+        assert!(Docker::should_add_init(&EnvVars::from_map(&[])));
+        assert!(!Docker::should_add_init(&EnvVars::from_map(&[(
+            EnvVars::PREK_DOCKER_NO_INIT,
+            "1",
+        )])));
+        assert!(Docker::should_add_init(&EnvVars::from_map(&[(
+            EnvVars::PREK_DOCKER_NO_INIT,
+            "0",
+        )])));
+        assert!(Docker::should_add_init(&EnvVars::from_map(&[(
+            EnvVars::PREK_DOCKER_NO_INIT,
+            "maybe",
+        )])));
     }
 }

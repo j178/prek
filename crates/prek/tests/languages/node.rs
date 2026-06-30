@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
@@ -8,7 +8,7 @@ use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 /// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI, as we may have other node versions installed locally.
         return Ok(());
     }

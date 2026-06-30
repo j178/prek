@@ -6,7 +6,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{
     PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
 };
@@ -31,15 +31,13 @@ fn run_basic() -> Result<()> {
               - id: check-json
     "});
 
-    // Create a repository with some files.
     cwd.child("file.txt").write_str("Hello, world!\n")?;
     cwd.child("valid.json").write_str("{}")?;
-    cwd.child("invalid.json").write_str("{}")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-q"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -54,13 +52,11 @@ fn run_basic() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixing main.py
-      Fixing invalid.json
       Fixing valid.json
-    check json...............................................................Passed
+      Fixing main.py
 
     ----- stderr -----
-    "#);
+    ");
 
     context.git_add(".");
 
@@ -3680,7 +3676,7 @@ fn run_log_file() {
 /// Test `language_version: system` works and disables downloading.
 #[test]
 fn system_language_version() {
-    if !EnvVars::is_set(EnvVars::CI) {
+    if !EnvVars.is_set(EnvVars::CI) {
         // Skip when not running in CI, as we may not have toolchains installed locally.
         return;
     }

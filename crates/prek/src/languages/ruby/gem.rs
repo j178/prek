@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
@@ -114,7 +114,7 @@ fn gem_env<'a>(cmd: &'a mut Cmd, ruby: &RubyResult, gem_home: &Path) -> Result<&
     // Parallelize native extension compilation (e.g. prism's C code).
     // Respect existing MAKEFLAGS if set (user may need to limit parallelism
     // in memory-constrained environments like Docker).
-    if EnvVars::var_os("MAKEFLAGS").is_none() {
+    if EnvVars.var_os("MAKEFLAGS").is_none() {
         cmd.env("MAKEFLAGS", format!("-j{}", *INTERNAL_CONCURRENCY));
     }
 

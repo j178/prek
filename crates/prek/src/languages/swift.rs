@@ -3,7 +3,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use semver::Version;
 use tracing::debug;
@@ -187,7 +187,7 @@ impl LanguageImpl for Swift {
             if let Some(bin_path) = hook.install_info().and_then(|i| i.get_extra(BIN_PATH_KEY)) {
                 prepend_paths(&[Path::new(bin_path)]).context("Failed to join PATH")?
             } else {
-                EnvVars::var_os(EnvVars::PATH).unwrap_or_default()
+                EnvVars.var_os(EnvVars::PATH).unwrap_or_default()
             };
 
         let entry = hook.entry.resolve(Some(&new_path), store)?;
