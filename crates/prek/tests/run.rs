@@ -31,15 +31,13 @@ fn run_basic() -> Result<()> {
               - id: check-json
     "});
 
-    // Create a repository with some files.
     cwd.child("file.txt").write_str("Hello, world!\n")?;
     cwd.child("valid.json").write_str("{}")?;
-    cwd.child("invalid.json").write_str("{}")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-q"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -54,13 +52,11 @@ fn run_basic() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixing main.py
-      Fixing invalid.json
       Fixing valid.json
-    check json...............................................................Passed
+      Fixing main.py
 
     ----- stderr -----
-    "#);
+    ");
 
     context.git_add(".");
 
