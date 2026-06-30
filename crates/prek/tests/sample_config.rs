@@ -12,10 +12,9 @@ fn sample_config() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    # See https://pre-commit.com for more information
-    # See https://pre-commit.com/hooks.html for more hooks
+    # See https://prek.j178.dev for more information.
     repos:
-      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+      - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace
@@ -35,18 +34,17 @@ fn sample_config() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    insta::assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r##"
-    # See https://pre-commit.com for more information
-    # See https://pre-commit.com/hooks.html for more hooks
+    insta::assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+    # See https://prek.j178.dev for more information.
     repos:
-      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+      - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace
           - id: end-of-file-fixer
           - id: check-yaml
           - id: check-added-large-files
-    "##);
+    ");
 
     cmd_snapshot!(context.filters(), context.sample_config().arg("-f").arg("sample.yaml"), @r#"
     success: true
@@ -57,18 +55,17 @@ fn sample_config() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    insta::assert_snapshot!(context.read("sample.yaml"), @r##"
-    # See https://pre-commit.com for more information
-    # See https://pre-commit.com/hooks.html for more hooks
+    insta::assert_snapshot!(context.read("sample.yaml"), @"
+    # See https://prek.j178.dev for more information.
     repos:
-      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+      - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace
           - id: end-of-file-fixer
           - id: check-yaml
           - id: check-added-large-files
-    "##);
+    ");
 
     let child = context.work_dir().join("child");
     fs_err::create_dir(&child)?;
@@ -81,18 +78,17 @@ fn sample_config() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-    insta::assert_snapshot!(context.read("child/sample.yaml"), @r##"
-    # See https://pre-commit.com for more information
-    # See https://pre-commit.com/hooks.html for more hooks
+    insta::assert_snapshot!(context.read("child/sample.yaml"), @"
+    # See https://prek.j178.dev for more information.
     repos:
-      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+      - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace
           - id: end-of-file-fixer
           - id: check-yaml
           - id: check-added-large-files
-    "##);
+    ");
 
     Ok(())
 }
@@ -152,10 +148,9 @@ fn sample_config_format() {
     success: true
     exit_code: 0
     ----- stdout -----
-    # See https://pre-commit.com for more information
-    # See https://pre-commit.com/hooks.html for more hooks
+    # See https://prek.j178.dev for more information.
     repos:
-      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+      - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace
@@ -194,10 +189,9 @@ fn respect_format() {
     ");
 
     insta::assert_snapshot!(context.read("prek.toml"), @"
-    # See https://pre-commit.com for more information
-    # See https://pre-commit.com/hooks.html for more hooks
+    # See https://prek.j178.dev for more information.
     repos:
-      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+      - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace

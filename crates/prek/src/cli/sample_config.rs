@@ -11,10 +11,9 @@ use crate::fs::Simplified;
 use crate::printer::Printer;
 
 static SAMPLE_CONFIG_YAML: &str = indoc::indoc! {"
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
+# See https://prek.j178.dev for more information.
 repos:
-  - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
