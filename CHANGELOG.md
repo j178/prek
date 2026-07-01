@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.6
+
+Released on 2026-07-01.
+
+### Enhancements
+
+- Verify managed toolchain downloads before installation ([#2229](https://github.com/j178/prek/pull/2229))
+- Add `PREK_DOCKER_NO_INIT` to opt-out Docker `--init` ([#2242](https://github.com/j178/prek/pull/2242))
+- Improve subprocess error messages ([#2257](https://github.com/j178/prek/pull/2257))
+- Split run concurrency knobs: `PREK_CONCURRENT_HOOKS` and `PREK_CONCURRENT_BATCHES` ([#2276](https://github.com/j178/prek/pull/2276))
+
+### Performance
+
+- Avoid allocating markdown extensions per file ([#2245](https://github.com/j178/prek/pull/2245))
+- Avoid unchanged config tracking writes ([#2247](https://github.com/j178/prek/pull/2247))
+- Delay trailing whitespace output buffer ([#2244](https://github.com/j178/prek/pull/2244))
+- Prefilter VCS permalink lines ([#2253](https://github.com/j178/prek/pull/2253))
+- Skip unnecessary submodule updates during hook repo clone ([#2255](https://github.com/j178/prek/pull/2255))
+
+### Documentation
+
+- Document `language_version` inferring for Python and Go ([#2241](https://github.com/j178/prek/pull/2241))
+
+### Other changes
+
+- Refactor env var handling ([#2277](https://github.com/j178/prek/pull/2277))
+- Use `serde-saphyr` for YAML string quoting ([#2228](https://github.com/j178/prek/pull/2228))
+
+### Contributors
+
+- @shaanmajid
+- @j178
+
 ## 0.4.5
 
 Released on 2026-06-15.
