@@ -47,7 +47,7 @@ python-source = "python"
 [tool.rooster]
 version-format = "cargo"
 version_tag_prefix = "v"
-major_labels = [] # We do not use the major version number yet
+major_labels = []  # We do not use the major version number yet
 minor_labels = ["breaking"]
 changelog_ignore_labels = ["internal", "ci", "testing"]
 changelog_sections.breaking = "Breaking changes"
