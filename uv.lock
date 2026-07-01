@@ -560,7 +560,7 @@ docs = [
 [package.metadata]
 
 [package.metadata.requires-dev]
-dev = [{ name = "rooster", marker = "python_full_version >= '3.12'", git = "https://github.com/j178/rooster?rev=747d16f" }]
+dev = [{ name = "rooster", marker = "python_full_version >= '3.12'", git = "https://github.com/j178/rooster?rev=747d16f415e151f019b3645d982549db61e12b98" }]
 docs = [
     { name = "llmstxt-standalone", marker = "python_full_version >= '3.12'", specifier = ">=0.2.0" },
     { name = "zensical", marker = "python_full_version >= '3.12'", specifier = ">=0.0.24" },
@@ -904,7 +904,7 @@ wheels = [
 [[package]]
 name = "rooster"
 version = "0.0.0"
-source = { git = "https://github.com/j178/rooster?rev=747d16f#747d16f415e151f019b3645d982549db61e12b98" }
+source = { git = "https://github.com/j178/rooster?rev=747d16f415e151f019b3645d982549db61e12b98#747d16f415e151f019b3645d982549db61e12b98" }
 dependencies = [
     { name = "hishel", marker = "python_full_version >= '3.12'" },
     { name = "httpx", marker = "python_full_version >= '3.12'" },

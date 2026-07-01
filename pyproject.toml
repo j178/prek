@@ -32,7 +32,7 @@ dev = ["rooster"]
 docs = ["llmstxt-standalone>=0.2.0", "zensical>=0.0.24"]
 
 [tool.uv.sources]
-rooster = { git = "https://github.com/j178/rooster", rev = "747d16f" }
+rooster = { git = "https://github.com/j178/rooster", rev = "747d16f415e151f019b3645d982549db61e12b98" }
 
 [tool.uv.dependency-groups]
 dev = { requires-python = ">=3.12" }
