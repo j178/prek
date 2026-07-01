@@ -14,6 +14,11 @@ repos:
       - id: check-toml
       - id: end-of-file-fixer
 
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 73c2d77a42a113aee9e4b748c24937f09557b82d  # frozen: 0.11.24
+    hooks:
+      - id: uv-lock
+
   - repo: https://github.com/crate-ci/typos
     rev: 37bb98842b0d8c4ffebdb75301a13db0267cef89  # frozen: v1.47.2
     hooks:
