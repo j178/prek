@@ -1,0 +1,15 @@
+[lint.rules]
+dotted-keys-out-of-order = "off"
+tables-out-of-order = "off"
+
+[[schemas]]
+path = "tombi://www.schemastore.org/cargo.json"
+include = ["Cargo.toml"]
+format.rules.array-values-order.enabled = false
+format.rules.table-keys-order.enabled = false
+
+[[schemas]]
+path = "tombi://www.schemastore.org/pyproject.json"
+include = ["pyproject.toml"]
+format.rules.array-values-order.enabled = false
+format.rules.table-keys-order.enabled = false

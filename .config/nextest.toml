@@ -15,7 +15,7 @@ filter = "test(lua::)"
 threads-required = "num-test-threads"
 
 [[profile.ci-language.overrides]]
-platform = 'cfg(windows)'
+platform = "cfg(windows)"
 filter = "test(perl::)"
 threads-required = "num-test-threads"
 

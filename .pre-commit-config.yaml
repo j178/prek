@@ -40,14 +40,12 @@ repos:
       - id: check-renovate
         additional_dependencies: ['json5']
 
-  - repo: local
+  - repo: https://github.com/tombi-toml/tombi-pre-commit
+    rev: 63b8dbce992ca0fa201239acde684c053bf05fd1  # frozen: v1.1.5
     hooks:
-      - id: taplo-fmt
-        name: taplo fmt
-        entry: taplo fmt --config .config/taplo.toml
-        language: python
-        additional_dependencies: ["taplo==0.9.3"]
-        types: [toml]
+      - id: tombi-format
+        args: ["--offline"]
+        files: \.toml$
 
   - repo: local
     hooks:
