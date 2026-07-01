@@ -1,5 +1,6 @@
 ---
 source: crates/prek/src/config.rs
+assertion_line: 1959
 expression: result
 ---
 Ok(
@@ -120,6 +121,7 @@ Ok(
         files: None,
         exclude: None,
         fail_fast: None,
+        require_frozen_revs: None,
         minimum_prek_version: None,
         orphan: None,
         _unused_keys: {},

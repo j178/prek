@@ -1,5 +1,6 @@
 ---
 source: crates/prek/src/config.rs
+assertion_line: 1965
 expression: config
 ---
 Config {
@@ -318,6 +319,7 @@ Config {
     fail_fast: Some(
         true,
     ),
+    require_frozen_revs: None,
     minimum_prek_version: None,
     orphan: None,
     _unused_keys: {},

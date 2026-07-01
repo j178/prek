@@ -89,6 +89,10 @@ pub(crate) async fn run(
     let has_group_filters = group_filters.has_filters();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
+    if report_unfrozen_revs(&workspace, printer)? {
+        return Ok(ExitStatus::Failure);
+    }
+
     if should_stash {
         workspace.check_configs_staged().await?;
     }
@@ -239,6 +243,54 @@ pub(crate) async fn run(
         printer,
     )
     .await
+}
+
+fn report_unfrozen_revs(workspace: &Workspace, printer: Printer) -> Result<bool> {
+    let projects = workspace
+        .projects()
+        .iter()
+        .filter(|project| project.config().requires_frozen_revs())
+        .filter_map(|project| {
+            let repos = project
+                .config()
+                .repos_with_unfrozen_revs()
+                .collect::<Vec<_>>();
+            (!repos.is_empty()).then_some((project, repos))
+        })
+        .collect::<Vec<_>>();
+
+    if projects.is_empty() {
+        return Ok(false);
+    }
+
+    writeln!(
+        printer.stderr(),
+        "{}: Config contains non-frozen remote hook revisions",
+        "error".red().bold()
+    )?;
+    for (project, repos) in projects {
+        writeln!(
+            printer.stderr(),
+            "  in `{}`:",
+            project.config_file().display()
+        )?;
+        for repo in repos {
+            writeln!(
+                printer.stderr(),
+                "    - {} uses rev `{}`",
+                repo.repo.cyan(),
+                repo.rev.yellow()
+            )?;
+        }
+    }
+    writeln!(
+        printer.stderr(),
+        "{}: run `{}` to replace tags with commit SHAs",
+        "hint".yellow().bold(),
+        "prek auto-update --freeze".cyan()
+    )?;
+
+    Ok(true)
 }
 
 fn infer_stage_and_input_mode(

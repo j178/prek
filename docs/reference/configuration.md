@@ -52,6 +52,29 @@ Each entry is one of:
 
 See [Repo entries](#repo-entries).
 
+### `require_frozen_revs`
+
+Require every remote repository [`rev`](#rev) in this config file to be pinned to a commit SHA.
+
+- Type: boolean
+- Default: `false`
+
+When enabled, [`prek run`](cli.md#prek-run) and [`prek validate-config`](cli.md#prek-validate-config) fail before hook initialization if any remote hook repository uses a tag or branch name. Run [`prek auto-update --freeze`](cli.md#prek-auto-update--freeze) to replace tag names with commit SHAs.
+
+In workspace mode, this setting is scoped to the config file that defines it. It applies only to that project and is not inherited by nested projects.
+
+=== "prek.toml"
+
+    ```toml
+    require_frozen_revs = true
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    require_frozen_revs: true
+    ```
+
 <a id="top-level-files"></a>
 
 ### `files`
