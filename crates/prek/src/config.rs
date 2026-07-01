@@ -424,6 +424,19 @@ impl Stages {
     pub(crate) fn contains(self, stage: Stage) -> bool {
         (self.0 & stage.bit()) != 0
     }
+
+    pub(crate) fn intersects(self, other: Self) -> bool {
+        (self.0 & other.0) != 0
+    }
+
+    /// A hook with no `stages` (or an empty list) inherits `default_stages`,
+    /// which itself falls back to [`Stages::ALL`] when unset.
+    pub(crate) fn resolve(hook: Option<Self>, default: Option<Self>) -> Self {
+        match hook {
+            Some(stages) if !stages.is_empty() => stages,
+            _ => default.unwrap_or(Self::ALL),
+        }
+    }
 }
 
 impl Display for Stages {
@@ -1119,6 +1132,34 @@ impl<'de> Deserialize<'de> for Repo {
         }
 
         deserializer.deserialize_map(RepoVisitor)
+    }
+}
+
+/// The parts of a config hook entry shared by every repo type.
+pub(crate) struct ConfigHook<'a> {
+    pub id: &'a str,
+    pub groups: Option<&'a [String]>,
+    pub options: &'a HookOptions,
+}
+
+impl Repo {
+    pub(crate) fn iter_hooks(&self) -> Box<dyn Iterator<Item = ConfigHook<'_>> + '_> {
+        macro_rules! iter {
+            ($repo:expr) => {
+                Box::new($repo.hooks.iter().map(|h| ConfigHook {
+                    id: h.id.as_str(),
+                    groups: h.groups.as_deref(),
+                    options: &h.options,
+                }))
+            };
+        }
+
+        match self {
+            Repo::Remote(repo) => iter!(repo),
+            Repo::Local(repo) => iter!(repo),
+            Repo::Meta(repo) => iter!(repo),
+            Repo::Builtin(repo) => iter!(repo),
+        }
     }
 }
 

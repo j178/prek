@@ -13,9 +13,9 @@ use same_file::is_same_file;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::InstallCache;
-use crate::cli::run::{SelectorSource, Selectors};
+use crate::cli::run::{ConfiguredHook, SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::config::load_config;
+use crate::config::{Repo, Stage, Stages, load_config};
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
@@ -104,6 +104,16 @@ pub(crate) async fn install(
     } else {
         None
     };
+
+    if project.is_some() {
+        warn_unmatched_hook_stages(
+            store,
+            config.as_deref(),
+            selectors.as_ref(),
+            refresh,
+            &hook_types,
+        );
+    }
 
     for hook_type in hook_types {
         install_hook_script(
@@ -200,6 +210,115 @@ fn get_hook_types(
     }
 
     hook_types
+}
+
+/// Return whether the selectors persisted into the installed hook scripts will run this hook.
+///
+/// Mirrors `install_hook_script`: every include is persisted, but only CLI-flag skips are
+/// (env-var skips are ignored at install time). An include that only matches a remote hook
+/// through its manifest alias can't be recognized from the config alone, so such a hook is
+/// treated as not selected.
+fn shim_selects_hook(selectors: Option<&Selectors>, hook: &ConfiguredHook<'_>) -> bool {
+    let Some(selectors) = selectors else {
+        return true;
+    };
+
+    if selectors
+        .skips()
+        .iter()
+        .filter(|skip| matches!(skip.source(), SelectorSource::CliFlag(_)))
+        .any(|skip| skip.matches_configured_hook(hook))
+    {
+        return false;
+    }
+
+    let includes = selectors.includes();
+    includes.is_empty()
+        || includes
+            .iter()
+            .any(|include| include.matches_configured_hook(hook))
+}
+
+/// Warn about configured hooks whose stages aren't covered by the hook types being installed,
+/// since their shims won't be installed and they won't run automatically.
+fn warn_unmatched_hook_stages(
+    store: &Store,
+    config: Option<&Path>,
+    selectors: Option<&Selectors>,
+    refresh: bool,
+    hook_types: &[HookType],
+) {
+    let installed = Stages::from(
+        hook_types
+            .iter()
+            .map(|&hook_type| Stage::from(hook_type))
+            .collect::<Vec<_>>(),
+    );
+
+    // A plain root install runs every workspace project, so scan them all, the same way `run` does.
+    let Ok(root) = Workspace::find_root(config, &CWD) else {
+        return;
+    };
+    let Ok(workspace) =
+        Workspace::discover(store, root, config.map(Path::to_path_buf), None, refresh)
+    else {
+        return;
+    };
+
+    let mut unmatched: Vec<(&str, Stages)> = Vec::new();
+    for project in workspace.projects() {
+        let config = project.config();
+        for repo in &config.repos {
+            let is_remote = matches!(repo, Repo::Remote(_));
+            for hook in repo.iter_hooks() {
+                let configured = ConfiguredHook::new(
+                    project.relative_path(),
+                    hook.id,
+                    hook.options.alias.as_deref(),
+                    hook.groups,
+                );
+                if !shim_selects_hook(selectors, &configured) {
+                    continue;
+                }
+
+                // A remote hook that omits `stages` may inherit them from its manifest, which
+                // install never fetches, so skip it rather than risk a false positive. An explicit
+                // value (even an empty list) overrides the manifest and resolves through
+                // `default_stages`, the same way the hook builder does.
+                if is_remote && hook.options.stages.is_none() {
+                    continue;
+                }
+                let stages = Stages::resolve(hook.options.stages, config.default_stages);
+
+                // `Stage::Manual` has no git shim, so it is ignored here.
+                let required = Stages::from(
+                    stages
+                        .iter()
+                        .filter(|&stage| stage != Stage::Manual)
+                        .collect::<Vec<_>>(),
+                );
+                if !required.is_empty() && !required.intersects(installed) {
+                    unmatched.push((hook.id, required));
+                }
+            }
+        }
+    }
+
+    if unmatched.is_empty() {
+        return;
+    }
+
+    let list = unmatched
+        .iter()
+        .map(|(id, stages)| format!("  - `{}` ({})", id.cyan(), stages.yellow()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    warn_user!(
+        "The following hooks won't run automatically because their stages aren't being installed:\n{list}\n{} install the missing hook type(s) with `{}`, or set `{}` in your config.",
+        "hint:".bold().yellow(),
+        "prek install --hook-type <type>".cyan(),
+        "default_install_hook_types".cyan(),
+    );
 }
 
 #[allow(clippy::fn_params_excessive_bools)]

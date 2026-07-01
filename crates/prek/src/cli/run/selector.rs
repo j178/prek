@@ -164,7 +164,7 @@ impl Selector {
         }
     }
 
-    fn matches_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
+    pub(crate) fn matches_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
         let matches_hook_id = |selector: &str| {
             hook.id == selector || hook.alias.is_some_and(|alias| alias == selector)
         };
