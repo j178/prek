@@ -125,6 +125,10 @@
     "orphan": {
       "description": "Set to true to isolate this project from parent configurations in workspace mode.\nWhen true, files in this project are \"consumed\" by this project and will not be processed\nby parent projects.\nWhen false (default), files in subprojects are processed by both the subproject and\nany parent projects that contain them.",
       "type": "boolean"
+    },
+    "auto_update": {
+      "description": "Compatibility alias for `update`. Prefer `update` in new configs.",
+      "$ref": "#/definitions/UpdateOptions"
     }
   },
   "required": [

@@ -120,6 +120,32 @@ fn strip_null_acceptance(schema: &mut schemars::Schema) {
     }
 }
 
+fn add_compatibility_aliases(schema: &mut schemars::Schema) {
+    use serde_json::Value;
+
+    let Some(properties) = schema
+        .as_object_mut()
+        .and_then(|schema| schema.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+
+    let Some(update_schema) = properties.get("update").cloned() else {
+        return;
+    };
+    let mut auto_update_schema = update_schema;
+    if let Some(obj) = auto_update_schema.as_object_mut() {
+        obj.insert(
+            "description".to_string(),
+            Value::String(
+                "Compatibility alias for `update`. Prefer `update` in new configs.".to_string(),
+            ),
+        );
+    }
+    properties.insert("auto_update".to_string(), auto_update_schema);
+}
+
 impl schemars::JsonSchema for Stages {
     fn inline_schema() -> bool {
         true
@@ -426,7 +452,8 @@ mod _gen {
             .with_transform(schemars::transform::RestrictFormats::default())
             .with_transform(super::RemoveNullTypes);
         let generator = schemars::SchemaGenerator::new(settings);
-        let schema = generator.into_root_schema_for::<Config>();
+        let mut schema = generator.into_root_schema_for::<Config>();
+        super::add_compatibility_aliases(&mut schema);
         serde_json::to_string_pretty(&schema).unwrap() + "\n"
     }
 

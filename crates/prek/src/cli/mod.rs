@@ -269,7 +269,7 @@ pub(crate) enum Command {
     /// Produce a sample configuration file (prek.toml or .pre-commit-config.yaml).
     SampleConfig(SampleConfigArgs),
     /// Update the `rev` field of repositories in the config file to the latest version.
-    #[command(name = "update", alias = "auto-update", alias = "autoupdate")]
+    #[command(name = "update", aliases = ["auto-update", "autoupdate"])]
     Update(UpdateArgs),
     /// Manage the prek cache.
     Cache(CacheNamespace),
