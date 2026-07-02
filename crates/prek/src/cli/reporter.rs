@@ -183,11 +183,11 @@ impl HookInstallReporter {
 }
 
 #[derive(Clone)]
-pub(crate) struct AutoUpdateReporter {
+pub(crate) struct UpdateReporter {
     reporter: Arc<ProgressReporter>,
 }
 
-impl AutoUpdateReporter {
+impl UpdateReporter {
     pub(crate) fn new(printer: Printer) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         set_current_reporter(Some(&reporter));
@@ -195,7 +195,7 @@ impl AutoUpdateReporter {
     }
 }
 
-impl AutoUpdateReporter {
+impl UpdateReporter {
     pub fn on_update_start(&self, repo: &str) -> usize {
         self.reporter.set_root_prefix("Updating repos...");
 

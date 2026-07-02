@@ -78,23 +78,24 @@ impl Deref for FilesystemOptions {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
 pub(crate) struct Options {
-    auto_update: Option<AutoUpdateOptions>,
+    #[serde(alias = "auto_update")]
+    update: Option<UpdateOptions>,
 }
 
-/// Options for the `auto-update` command.
+/// Options for the `update` command.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
-struct AutoUpdateOptions {
+struct UpdateOptions {
     cooldown_days: Option<u8>,
 }
 
-/// Resolved settings for the `auto-update` command.
+/// Resolved settings for the `update` command.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct AutoUpdateSettings {
+pub(crate) struct UpdateSettings {
     pub(crate) cooldown_days: u8,
 }
 
-impl AutoUpdateSettings {
+impl UpdateSettings {
     pub(crate) fn resolve(
         cli_cooldown_days: Option<u8>,
         filesystem: Option<&FilesystemOptions>,
@@ -105,10 +106,47 @@ impl AutoUpdateSettings {
                 .or(project_cooldown_days)
                 .or_else(|| {
                     filesystem
-                        .and_then(|fs| fs.auto_update.as_ref())
+                        .and_then(|fs| fs.update.as_ref())
                         .and_then(|options| options.cooldown_days)
                 })
                 .unwrap_or_default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Options;
+
+    #[test]
+    fn options_deserializes_update_settings() {
+        let options: Options = toml::from_str(
+            r"
+            [update]
+            cooldown_days = 7
+            ",
+        )
+        .unwrap();
+
+        assert_eq!(
+            options.update.and_then(|options| options.cooldown_days),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn options_deserializes_legacy_update_key_alias() {
+        let options: Options = toml::from_str(
+            r"
+            [auto_update]
+            cooldown_days = 7
+            ",
+        )
+        .unwrap();
+
+        assert_eq!(
+            options.update.and_then(|options| options.cooldown_days),
+            Some(7)
+        );
     }
 }

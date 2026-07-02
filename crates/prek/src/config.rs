@@ -1137,11 +1137,11 @@ where
     })
 }
 
-/// Controls how `prek auto-update` selects eligible releases.
+/// Controls how `prek update` selects eligible releases.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub(crate) struct AutoUpdateOptions {
+pub(crate) struct UpdateOptions {
     pub(crate) cooldown_days: Option<u8>,
 }
 
@@ -1157,8 +1157,9 @@ pub(crate) struct AutoUpdateOptions {
     schemars(extend("x-tombi-toml-version" = "v1.1.0")),
 )]
 pub(crate) struct Config {
-    /// Default settings for `prek auto-update` in this project.
-    pub auto_update: Option<AutoUpdateOptions>,
+    /// Default settings for `prek update` in this project.
+    #[serde(alias = "auto_update")]
+    pub update: Option<UpdateOptions>,
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
     /// Default is `[pre-commit]`.
@@ -1361,7 +1362,7 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
             {}
             Mutable references are never updated after first install and are not supported.
             See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-            hint: `prek auto-update` often fixes this",
+            hint: `prek update` often fixes this",
             "#,
             msg
             }
@@ -1936,6 +1937,36 @@ mod tests {
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn parse_update_options() {
+        let yaml = indoc::indoc! {r"
+            update:
+              cooldown_days: 7
+            repos: []
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+
+        assert_eq!(
+            result.update.and_then(|options| options.cooldown_days),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn parse_legacy_update_key_alias() {
+        let yaml = indoc::indoc! {r"
+            auto_update:
+              cooldown_days: 7
+            repos: []
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+
+        assert_eq!(
+            result.update.and_then(|options| options.cooldown_days),
+            Some(7)
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@ expression: result
 ---
 Ok(
     Config {
-        auto_update: None,
+        update: None,
         repos: [
             Local(
                 LocalRepo {

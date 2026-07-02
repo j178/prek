@@ -11,16 +11,16 @@ This page documents the configuration keys that `prek` understands.
 
 This file stores user-level `prek` settings and does not define project hooks.
 
-### Global `auto_update.cooldown_days`
+### Global `update.cooldown_days`
 
-Default cooldown for [`prek auto-update`](cli.md#prek-auto-update).
+Default cooldown for [`prek update`](cli.md#prek-update).
 
 - Type: integer days, `0` to `255`
 - Default: `0`
-- CLI override: [`prek auto-update --cooldown-days <DAYS>`](cli.md#prek-auto-update)
+- CLI override: [`prek update --cooldown-days <DAYS>`](cli.md#prek-update)
 
 ```toml
-[auto_update]
+[update]
 cooldown_days = 7
 ```
 
@@ -28,11 +28,15 @@ The age is computed from the tag creation timestamp for annotated tags, or from 
 
 !!! tip "Cooldowns never downgrade"
 
-    If the current `rev` is newer than the latest cooldown-eligible tag, [`prek auto-update`](cli.md#prek-auto-update) keeps the current `rev` instead of downgrading it.
+    If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](cli.md#prek-update) keeps the current `rev` instead of downgrading it.
 
-Project configs can also set [`auto_update.cooldown_days`](#auto_updatecooldown_days). The effective precedence is:
+!!! note "Compatibility alias"
 
-1. [`prek auto-update --cooldown-days <DAYS>`](cli.md#prek-auto-update)
+    The legacy `auto_update.cooldown_days` key is still accepted as an alias.
+
+Project configs can also set [`update.cooldown_days`](#updatecooldown_days). The effective precedence is:
+
+1. [`prek update --cooldown-days <DAYS>`](cli.md#prek-update)
 2. project config
 3. user-level global config
 4. default `0`
@@ -291,33 +295,37 @@ Allowed values:
 - `pre-merge-commit`
 - `pre-rebase`
 
-### `auto_update.cooldown_days`
+### `update.cooldown_days`
 
 !!! note "prek-only"
 
     This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
 
-Project default cooldown for [`prek auto-update`](cli.md#prek-auto-update).
+Project default cooldown for [`prek update`](cli.md#prek-update).
 
 - Type: integer days, `0` to `255`
 - Default: inherited from the user-level global config, or `0`
-- CLI override: [`prek auto-update --cooldown-days <DAYS>`](cli.md#prek-auto-update)
+- CLI override: [`prek update --cooldown-days <DAYS>`](cli.md#prek-update)
 
 === "prek.toml"
 
     ```toml
-    [auto_update]
+    [update]
     cooldown_days = 7
     ```
 
 === ".pre-commit-config.yaml"
 
     ```yaml
-    auto_update:
+    update:
       cooldown_days: 7
     ```
 
-In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `auto_update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, [`prek auto-update`](cli.md#prek-auto-update) fetches the repo once but evaluates each project with its own cooldown.
+!!! note "Compatibility alias"
+
+    The legacy `auto_update.cooldown_days` key is still accepted as an alias.
+
+In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, [`prek update`](cli.md#prek-update) fetches the repo once but evaluates each project with its own cooldown.
 
 ### `minimum_prek_version`
 
@@ -454,7 +462,7 @@ Example:
 Notes:
 
 - For reproducibility, prefer immutable pins (tags or commit SHAs).
-- [`prek auto-update`](cli.md#prek-auto-update) can help update [`rev`](#rev) values.
+- [`prek update`](cli.md#prek-update) can help update [`rev`](#rev) values.
 
 ### `repo: local`
 

@@ -253,9 +253,9 @@ impl TestContext {
         command
     }
 
-    pub fn auto_update(&self) -> Command {
+    pub fn update(&self) -> Command {
         let mut cmd = self.command();
-        cmd.arg("auto-update");
+        cmd.arg("update");
         cmd
     }
 

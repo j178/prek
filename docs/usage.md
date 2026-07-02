@@ -81,7 +81,7 @@ prek run -vvv
 Update pinned hook repository revisions:
 
 ```bash
-prek auto-update
+prek update
 ```
 
 Prepare hook environments without touching Git shims:

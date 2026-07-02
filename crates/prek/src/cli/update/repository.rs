@@ -13,7 +13,7 @@ use rustc_hash::FxHashSet;
 use semver::Version;
 use tracing::{debug, trace};
 
-use crate::cli::auto_update::{CommitPresence, RevisionSelection, SkippedDowngrade, TagTimestamp};
+use crate::cli::update::{CommitPresence, RevisionSelection, SkippedDowngrade, TagTimestamp};
 use crate::{config, git};
 
 /// Initializes a temporary git repo and fetches the remote HEAD plus tags.
@@ -50,15 +50,15 @@ pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> R
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// Returns whether a pinned commit SHA is already present in the refs fetched for `auto-update`.
+/// Returns whether a pinned commit SHA is already present in the refs fetched for `prek update`.
 ///
-/// `auto-update` fetches only `origin/HEAD` and tags, using `--filter=blob:none`. That filter
+/// `prek update` fetches only `origin/HEAD` and tags, using `--filter=blob:none`. That filter
 /// still downloads commits and trees reachable from those refs, but omits blobs. We intentionally
 /// use `git --no-lazy-fetch cat-file -e` here instead of `rev-parse`: in a partial clone,
 /// `rev-parse` may lazily fetch a missing commit from the promisor remote on demand. On GitHub,
 /// that can make a fork-only "impostor commit" appear to belong to the parent repository.
 ///
-/// `auto-update` only selects updates from tags, or from `HEAD` in `--bleeding-edge` mode. It
+/// `prek update` only selects updates from tags, or from `HEAD` in `--bleeding-edge` mode. It
 /// does not normally update to arbitrary branches, so we currently fetch only those refs here.
 ///
 /// So this helper answers a narrower question than "is this SHA valid anywhere on the remote?".
@@ -221,7 +221,7 @@ async fn current_tag_metadata<'a>(
         .min_by(|tag_a, tag_b| compare_tag_metadata(tag_a, tag_b))
 }
 
-/// Selects the revision action that `auto-update` should take for one fetched repo target.
+/// Selects the revision action that `prek update` should take for one fetched repo target.
 ///
 /// In normal mode this chooses the newest tag that satisfies the cooldown window.
 /// If that tag sorts older than the currently pinned tag, the current revision is kept.
@@ -429,7 +429,7 @@ mod tests {
         levenshtein_distance, list_tag_metadata, no_lazy_fetch_unsupported, resolve_bleeding_edge,
         select_best_tag, select_update_revision,
     };
-    use crate::cli::auto_update::{RevisionSelection, SkippedDowngrade};
+    use crate::cli::update::{RevisionSelection, SkippedDowngrade};
     use crate::git;
     use crate::process::Cmd;
     use std::path::Path;
