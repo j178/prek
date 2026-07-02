@@ -144,7 +144,7 @@ fn create_local_git_repo_with_tag_timestamps(
 }
 
 #[test]
-fn auto_update_basic() -> Result<()> {
+fn update_basic() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -161,7 +161,7 @@ fn auto_update_basic() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -188,7 +188,7 @@ fn auto_update_basic() -> Result<()> {
 }
 
 #[test]
-fn auto_update_already_up_to_date() -> Result<()> {
+fn update_already_up_to_date() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -206,7 +206,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,7 +231,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
 }
 
 #[test]
-fn auto_update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
+fn update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -253,7 +253,7 @@ fn auto_update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("7"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -280,7 +280,7 @@ fn auto_update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
 }
 
 #[test]
-fn auto_update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
+fn update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -306,7 +306,7 @@ fn auto_update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("7"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--cooldown-days").arg("7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -333,7 +333,7 @@ fn auto_update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
 }
 
 #[test]
-fn auto_update_already_up_to_date_verbose() -> Result<()> {
+fn update_already_up_to_date_verbose() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -351,7 +351,7 @@ fn auto_update_already_up_to_date_verbose() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters, context.auto_update().arg("-v").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters, context.update().arg("-v").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -366,7 +366,7 @@ fn auto_update_already_up_to_date_verbose() -> Result<()> {
 
 #[test]
 #[cfg(unix)]
-fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
+fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
     use std::time::UNIX_EPOCH;
 
     let context = TestContext::new();
@@ -391,7 +391,7 @@ fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
         .as_secs();
 
     let assert = context
-        .auto_update()
+        .update()
         .arg("--cooldown-days")
         .arg("0")
         .assert()
@@ -409,7 +409,7 @@ fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
 }
 
 #[test]
-fn auto_update_multiple_repos_mixed() -> Result<()> {
+fn update_multiple_repos_mixed() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -436,7 +436,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -472,7 +472,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     Ok(())
 }
 
-/// Test that `auto-update` ignores the `GIT_DIR` environment variable.
+/// Test that `prek update` ignores the `GIT_DIR` environment variable.
 #[test]
 fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
     let context = TestContext::new();
@@ -492,7 +492,7 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
 
     let filters = context.filters();
 
-    let mut cmd = context.auto_update();
+    let mut cmd = context.update();
     cmd.arg("--cooldown-days")
         .arg("0")
         .env("GIT_DIR", ChildPath::new(&external_repo_path).join(".git"));
@@ -524,7 +524,7 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
 }
 
 #[test]
-fn auto_update_specific_repos() -> Result<()> {
+fn update_specific_repos() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -548,7 +548,7 @@ fn auto_update_specific_repos() -> Result<()> {
     let filters = context.filters();
 
     // Update only repo1
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -576,7 +576,7 @@ fn auto_update_specific_repos() -> Result<()> {
     );
 
     // Update both repo1 and repo2
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path).arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path).arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -607,7 +607,7 @@ fn auto_update_specific_repos() -> Result<()> {
 }
 
 #[test]
-fn auto_update_exclude_repo_skips_fetching_repo() -> Result<()> {
+fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -634,7 +634,7 @@ fn auto_update_exclude_repo_skips_fetching_repo() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exclude-repo").arg(&missing_repo_path).arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--exclude-repo").arg(&missing_repo_path).arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -665,7 +665,7 @@ fn auto_update_exclude_repo_skips_fetching_repo() -> Result<()> {
 }
 
 #[test]
-fn auto_update_tag_filters_include_then_exclude() -> Result<()> {
+fn update_tag_filters_include_then_exclude() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -687,7 +687,7 @@ fn auto_update_tag_filters_include_then_exclude() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update()
+    cmd_snapshot!(filters.clone(), context.update()
         .arg("--include-tag").arg("v1.*")
         .arg("--include-tag").arg("v2.*")
         .arg("--exclude-tag").arg("v2.*")
@@ -718,7 +718,7 @@ fn auto_update_tag_filters_include_then_exclude() -> Result<()> {
 }
 
 #[test]
-fn auto_update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
+fn update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -740,7 +740,7 @@ fn auto_update_tag_filters_can_select_older_track_without_cooldown() -> Result<(
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update()
+    cmd_snapshot!(filters.clone(), context.update()
         .arg("--include-tag").arg("v1.*")
         .arg("--cooldown-days").arg("0"), @"
     success: true
@@ -769,7 +769,7 @@ fn auto_update_tag_filters_can_select_older_track_without_cooldown() -> Result<(
 }
 
 #[test]
-fn auto_update_repo_include_tag_is_repo_specific() -> Result<()> {
+fn update_repo_include_tag_is_repo_specific() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -801,7 +801,7 @@ fn auto_update_repo_include_tag_is_repo_specific() -> Result<()> {
     let filters = context.filters();
     let repo1_filter = format!("{repo1_path}=v1.*");
 
-    cmd_snapshot!(filters.clone(), context.auto_update()
+    cmd_snapshot!(filters.clone(), context.update()
         .arg("--jobs").arg("1")
         .arg("--repo-include-tag").arg(repo1_filter)
         .arg("--cooldown-days").arg("0"), @"
@@ -838,7 +838,7 @@ fn auto_update_repo_include_tag_is_repo_specific() -> Result<()> {
 }
 
 #[test]
-fn auto_update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
+fn update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -861,7 +861,7 @@ fn auto_update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
     let filters = context.filters();
     let repo_filter = format!("{repo_path}=v*.1.0");
 
-    cmd_snapshot!(filters.clone(), context.auto_update()
+    cmd_snapshot!(filters.clone(), context.update()
         .arg("--include-tag").arg("v1.*")
         .arg("--repo-include-tag").arg(repo_filter)
         .arg("--cooldown-days").arg("0"), @"
@@ -891,7 +891,7 @@ fn auto_update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
 }
 
 #[test]
-fn auto_update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
+fn update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -915,7 +915,7 @@ fn auto_update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
     let filters = context.filters();
     let repo1_filter = format!("{repo1_path}=v2.*");
 
-    cmd_snapshot!(filters.clone(), context.auto_update()
+    cmd_snapshot!(filters.clone(), context.update()
         .arg("--jobs").arg("1")
         .arg("--include-tag").arg("v2.*")
         .arg("--repo-exclude-tag").arg(repo1_filter)
@@ -950,7 +950,7 @@ fn auto_update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
 }
 
 #[test]
-fn auto_update_bleeding_edge() -> Result<()> {
+fn update_bleeding_edge() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -972,7 +972,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
         .chain([("[a-f0-9]{40}", "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--bleeding-edge"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -999,7 +999,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
 }
 
 #[test]
-fn auto_update_freeze() -> Result<()> {
+fn update_freeze() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1030,7 +1030,7 @@ fn auto_update_freeze() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1058,7 +1058,7 @@ fn auto_update_freeze() -> Result<()> {
 }
 
 #[test]
-fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
+fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1092,7 +1092,7 @@ fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()
     context.git_add(".");
 
     context
-        .auto_update()
+        .update()
         .arg("--freeze")
         .arg("--cooldown-days")
         .arg("0")
@@ -1117,7 +1117,7 @@ fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()
 }
 
 #[test]
-fn auto_update_shared_target_with_different_frozen_comments_displays_sha() -> Result<()> {
+fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1160,7 +1160,7 @@ fn auto_update_shared_target_with_different_frozen_comments_displays_sha() -> Re
         .chain([(old_commit_sha.as_str(), "[OLD_COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1192,7 +1192,7 @@ fn auto_update_shared_target_with_different_frozen_comments_displays_sha() -> Re
 }
 
 #[test]
-fn auto_update_preserve_quote_style() -> Result<()> {
+fn update_preserve_quote_style() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1227,7 +1227,7 @@ fn auto_update_preserve_quote_style() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1273,7 +1273,7 @@ fn auto_update_preserve_quote_style() -> Result<()> {
 }
 
 #[test]
-fn auto_update_with_existing_frozen_comment() -> Result<()> {
+fn update_with_existing_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1298,7 +1298,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
         .chain([(commit_sha, "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1332,7 +1332,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
 }
 
 #[test]
-fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
+fn update_updates_mismatched_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1360,7 +1360,7 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1394,7 +1394,7 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
 }
 
 #[test]
-fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
+fn update_updates_unresolvable_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1426,7 +1426,7 @@ fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1460,7 +1460,7 @@ fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
 }
 
 #[test]
-fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
+fn update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1492,7 +1492,7 @@ fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge").arg("--freeze"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--bleeding-edge").arg("--freeze"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1526,7 +1526,7 @@ fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<
 }
 
 #[test]
-fn auto_update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()> {
+fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1580,7 +1580,7 @@ fn auto_update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Resu
         ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1614,7 +1614,7 @@ fn auto_update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Resu
 }
 
 #[test]
-fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
+fn update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1645,7 +1645,7 @@ fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<(
         ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1679,7 +1679,7 @@ fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<(
 }
 
 #[test]
-fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
+fn update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1708,7 +1708,7 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1742,7 +1742,7 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
 }
 
 #[test]
-fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
+fn update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1771,7 +1771,7 @@ fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--check"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--check"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1805,7 +1805,7 @@ fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
 }
 
 #[test]
-fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
+fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1838,7 +1838,7 @@ fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @r#"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1873,7 +1873,7 @@ fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
 }
 
 #[test]
-fn auto_update_local_repo_ignored() -> Result<()> {
+fn update_local_repo_ignored() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1897,7 +1897,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1972,7 +1972,7 @@ fn missing_hook_ids() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1986,7 +1986,7 @@ fn missing_hook_ids() -> Result<()> {
 }
 
 #[test]
-fn auto_update_workspace() -> Result<()> {
+fn update_workspace() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2034,7 +2034,7 @@ fn auto_update_workspace() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2090,11 +2090,11 @@ fn auto_update_workspace() -> Result<()> {
 }
 
 #[test]
-fn auto_update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
+fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.write_user_config(indoc::indoc! {r"
-        [auto_update]
+        [update]
         cooldown_days = 1
     "});
 
@@ -2124,7 +2124,7 @@ fn auto_update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
         .work_dir()
         .child("project-a/.pre-commit-config.yaml")
         .write_str(&indoc::formatdoc! {r"
-        auto_update:
+        update:
           cooldown_days: 0
         repos:
           - repo: {}
@@ -2148,7 +2148,7 @@ fn auto_update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @"
+    cmd_snapshot!(filters.clone(), context.update(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2167,7 +2167,7 @@ fn auto_update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
         { filters => filters.clone() },
         {
             assert_snapshot!(context.read("project-a/.pre-commit-config.yaml"), @"
-            auto_update:
+            update:
               cooldown_days: 0
             repos:
               - repo: [HOME]/test-repos/workspace-cooldown-repo
@@ -2245,7 +2245,7 @@ fn prefer_similar_tags() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2278,7 +2278,7 @@ fn prefer_similar_tags() -> Result<()> {
 }
 
 #[test]
-fn auto_update_dry_run() -> Result<()> {
+fn update_dry_run() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2295,7 +2295,7 @@ fn auto_update_dry_run() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--dry-run").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2322,7 +2322,7 @@ fn auto_update_dry_run() -> Result<()> {
 }
 
 #[test]
-fn auto_update_check() -> Result<()> {
+fn update_check() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2340,7 +2340,7 @@ fn auto_update_check() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--check").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--check").arg("--cooldown-days").arg("0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2367,7 +2367,7 @@ fn auto_update_check() -> Result<()> {
 }
 
 #[test]
-fn auto_update_dry_run_exit_code() -> Result<()> {
+fn update_dry_run_exit_code() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2388,7 +2388,7 @@ fn auto_update_dry_run_exit_code() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--exit-code").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--dry-run").arg("--exit-code").arg("--cooldown-days").arg("0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2415,7 +2415,7 @@ fn auto_update_dry_run_exit_code() -> Result<()> {
 }
 
 #[test]
-fn auto_update_exit_code_updates_config() -> Result<()> {
+fn update_exit_code_updates_config() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2436,7 +2436,7 @@ fn auto_update_exit_code_updates_config() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2463,7 +2463,7 @@ fn auto_update_exit_code_updates_config() -> Result<()> {
 }
 
 #[test]
-fn auto_update_exit_code_succeeds_when_up_to_date() -> Result<()> {
+fn update_exit_code_succeeds_when_up_to_date() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2484,7 +2484,7 @@ fn auto_update_exit_code_succeeds_when_up_to_date() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2528,7 +2528,7 @@ fn quoting_float_like_version_number() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2572,7 +2572,7 @@ fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2599,7 +2599,7 @@ fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
 }
 
 #[test]
-fn auto_update_with_invalid_config_file() -> Result<()> {
+fn update_with_invalid_config_file() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2611,7 +2611,7 @@ fn auto_update_with_invalid_config_file() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @"
+    cmd_snapshot!(filters.clone(), context.update(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2629,7 +2629,7 @@ fn auto_update_with_invalid_config_file() -> Result<()> {
 }
 
 #[test]
-fn auto_update_toml() -> Result<()> {
+fn update_toml() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2651,7 +2651,7 @@ fn auto_update_toml() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2679,7 +2679,7 @@ fn auto_update_toml() -> Result<()> {
 }
 
 #[test]
-fn auto_update_toml_with_comment() -> Result<()> {
+fn update_toml_with_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2702,7 +2702,7 @@ fn auto_update_toml_with_comment() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2741,7 +2741,7 @@ fn auto_update_toml_with_comment() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2769,7 +2769,7 @@ fn auto_update_toml_with_comment() -> Result<()> {
 }
 
 #[test]
-fn auto_update_freeze_toml() -> Result<()> {
+fn update_freeze_toml() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2804,7 +2804,7 @@ fn auto_update_freeze_toml() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2833,7 +2833,7 @@ fn auto_update_freeze_toml() -> Result<()> {
 }
 
 #[test]
-fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
+fn update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2854,7 +2854,7 @@ fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
     context.git_add(".");
 
     let filters = context.filters();
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2883,7 +2883,7 @@ fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
 // When all tags share a timestamp and some are non-semver (e.g. "latest", "stable"),
 // semver tags should be preferred and sorted highest-first.
 #[test]
-fn auto_update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
+fn update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2905,7 +2905,7 @@ fn auto_update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2934,7 +2934,7 @@ fn auto_update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
 // When tags span multiple timestamp groups, the newest group should be selected first.
 // Within an equal-timestamp group, semver tiebreaker picks the highest version.
 #[test]
-fn auto_update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
+fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2977,7 +2977,7 @@ fn auto_update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3004,7 +3004,7 @@ fn auto_update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
 }
 
 #[test]
-fn auto_update_freeze_toml_with_comment() -> Result<()> {
+fn update_freeze_toml_with_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -3041,7 +3041,7 @@ fn auto_update_freeze_toml_with_comment() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----

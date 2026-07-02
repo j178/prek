@@ -5,7 +5,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
-use crate::cli::auto_update::{
+use crate::cli::update::{
     ApplyRepoUpdatesResult, CommitPresence, DisplayEvent, DisplayEventKind, DisplayStream,
     FrozenMismatch, FrozenMismatchAction, FrozenMismatchReason, FrozenWarningEvent, ProjectUpdates,
     RepoOccurrences, RepoUpdate, Revision,

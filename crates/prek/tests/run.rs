@@ -3029,7 +3029,7 @@ fn selectors_completion() -> Result<()> {
     validate-config	Validate configuration files (prek.toml or .pre-commit-config.yaml)
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
     sample-config	Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
-    auto-update	Auto-update the `rev` field of repositories in the config file to the latest version
+    update	Update the `rev` field of repositories in the config file to the latest version
     cache	Manage the prek cache
     try-repo	Try the pre-commit hooks in the current repo
     util	Utility commands

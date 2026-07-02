@@ -132,16 +132,16 @@ Invocation shape:
 my-hook --max-line-length=120 path/to/file1 path/to/file2
 ```
 
-## Versioning for `prek auto-update`
+## Versioning for `prek update`
 
 End users pin your repository using the `rev` field in their config. To make
-[`prek auto-update`](reference/cli.md#prek-auto-update) work as expected, publish git tags for releases:
+[`prek update`](reference/cli.md#prek-update) work as expected, publish git tags for releases:
 
 - Prefer semantic version tags like `v1.2.3` or `1.2.3`.
 - Push tags to the remote (annotated or lightweight tags both work).
 - Avoid moving tags; treat them as immutable release references.
 
-`prek auto-update` selects the newest tag by default. With `--bleeding-edge`, it
+`prek update` selects the newest tag by default. With `--bleeding-edge`, it
 uses the default branch tip instead of tags. With `--freeze`, it writes commit
 SHAs into `rev` instead of tag names.
 

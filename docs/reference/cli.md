@@ -20,7 +20,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate configuration files (prek.toml or .pre-commit-config.yaml)</p></dd>
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
 <dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)</p></dd>
-<dt><a href="#prek-auto-update"><code>prek auto-update</code></a></dt><dd><p>Auto-update the <code>rev</code> field of repositories in the config file to the latest version</p></dd>
+<dt><a href="#prek-update"><code>prek update</code></a></dt><dd><p>Update the <code>rev</code> field of repositories in the config file to the latest version</p></dd>
 <dt><a href="#prek-cache"><code>prek cache</code></a></dt><dd><p>Manage the prek cache</p></dd>
 <dt><a href="#prek-try-repo"><code>prek try-repo</code></a></dt><dd><p>Try the pre-commit hooks in the current repo</p></dd>
 <dt><a href="#prek-util"><code>prek util</code></a></dt><dd><p>Utility commands</p></dd>
@@ -546,55 +546,55 @@ prek sample-config [OPTIONS]
 </dd><dt id="prek-sample-config--version"><a href="#prek-sample-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
-## prek auto-update
+## prek update
 
-Auto-update the `rev` field of repositories in the config file to the latest version
+Update the `rev` field of repositories in the config file to the latest version
 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek auto-update [OPTIONS]
+prek update [OPTIONS]
 ```
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-auto-update--bleeding-edge"><a href="#prek-auto-update--bleeding-edge"><code>--bleeding-edge</code></a></dt><dd><p>Update to the bleeding edge of the default branch instead of the latest tagged version</p>
-</dd><dt id="prek-auto-update--cd"><a href="#prek-auto-update--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
-</dd><dt id="prek-auto-update--check"><a href="#prek-auto-update--check"><code>--check</code></a></dt><dd><p>Alias of <code>--dry-run --exit-code</code></p>
-</dd><dt id="prek-auto-update--color"><a href="#prek-auto-update--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<dl class="cli-reference"><dt id="prek-update--bleeding-edge"><a href="#prek-update--bleeding-edge"><code>--bleeding-edge</code></a></dt><dd><p>Update to the bleeding edge of the default branch instead of the latest tagged version</p>
+</dd><dt id="prek-update--cd"><a href="#prek-update--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-update--check"><a href="#prek-update--check"><code>--check</code></a></dt><dd><p>Alias of <code>--dry-run --exit-code</code></p>
+</dd><dt id="prek-update--color"><a href="#prek-update--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>
 <li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
-</ul></dd><dt id="prek-auto-update--config"><a href="#prek-auto-update--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-auto-update--cooldown-days"><a href="#prek-auto-update--cooldown-days"><code>--cooldown-days</code></a> <i>days</i></dt><dd><p>Minimum release age (in days) required for a version to be eligible.</p>
-<p>The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. If the current <code>rev</code> is newer than the latest cooldown-eligible tag, <code>prek auto-update</code> keeps the current <code>rev</code> instead of downgrading it. Defaults to <code>auto_update.cooldown_days</code> in the project or global config, or <code>0</code> when unset. Valid values are <code>0</code> through <code>255</code>; <code>0</code> disables this check.</p>
-</dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
-</dd><dt id="prek-auto-update--exclude-repo"><a href="#prek-auto-update--exclude-repo"><code>--exclude-repo</code></a> <i>repo</i></dt><dd><p>Do not update this repository. This option may be specified multiple times</p>
-</dd><dt id="prek-auto-update--exclude-tag"><a href="#prek-auto-update--exclude-tag"><code>--exclude-tag</code></a> <i>pattern</i></dt><dd><p>Ignore tags matching this glob pattern. This option may be specified multiple times.</p>
+</ul></dd><dt id="prek-update--config"><a href="#prek-update--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-update--cooldown-days"><a href="#prek-update--cooldown-days"><code>--cooldown-days</code></a> <i>days</i></dt><dd><p>Minimum release age (in days) required for a version to be eligible.</p>
+<p>The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. If the current <code>rev</code> is newer than the latest cooldown-eligible tag, <code>prek update</code> keeps the current <code>rev</code> instead of downgrading it. Defaults to <code>update.cooldown_days</code> in the project or global config, or <code>0</code> when unset. Valid values are <code>0</code> through <code>255</code>; <code>0</code> disables this check.</p>
+</dd><dt id="prek-update--dry-run"><a href="#prek-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
+</dd><dt id="prek-update--exclude-repo"><a href="#prek-update--exclude-repo"><code>--exclude-repo</code></a> <i>repo</i></dt><dd><p>Do not update this repository. This option may be specified multiple times</p>
+</dd><dt id="prek-update--exclude-tag"><a href="#prek-update--exclude-tag"><code>--exclude-tag</code></a> <i>pattern</i></dt><dd><p>Ignore tags matching this glob pattern. This option may be specified multiple times.</p>
 <p>For example, use <code>--exclude-tag nightly</code> to skip a moving tag, or <code>--exclude-tag '*-{alpha,beta,rc}*'</code> to skip common prerelease tags.</p>
-</dd><dt id="prek-auto-update--exit-code"><a href="#prek-auto-update--exit-code"><code>--exit-code</code></a></dt><dd><p>Exit with status 1 if updates are available</p>
-</dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
-</dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-auto-update--include-tag"><a href="#prek-auto-update--include-tag"><code>--include-tag</code></a> <i>pattern</i></dt><dd><p>Only consider tags matching this glob pattern. This option may be specified multiple times.</p>
+</dd><dt id="prek-update--exit-code"><a href="#prek-update--exit-code"><code>--exit-code</code></a></dt><dd><p>Exit with status 1 if updates are available</p>
+</dd><dt id="prek-update--freeze"><a href="#prek-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
+</dd><dt id="prek-update--help"><a href="#prek-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-update--include-tag"><a href="#prek-update--include-tag"><code>--include-tag</code></a> <i>pattern</i></dt><dd><p>Only consider tags matching this glob pattern. This option may be specified multiple times.</p>
 <p>For example, use <code>--include-tag 'v*'</code> to only consider version tags and ignore tags such as <code>nightly</code>.</p>
-</dd><dt id="prek-auto-update--jobs"><a href="#prek-auto-update--jobs"><code>--jobs</code></a>, <code>-j</code> <i>jobs</i></dt><dd><p>Number of threads to use</p>
-<p>[default: 0]</p></dd><dt id="prek-auto-update--log-file"><a href="#prek-auto-update--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
-</dd><dt id="prek-auto-update--no-progress"><a href="#prek-auto-update--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+</dd><dt id="prek-update--jobs"><a href="#prek-update--jobs"><code>--jobs</code></a>, <code>-j</code> <i>jobs</i></dt><dd><p>Number of threads to use</p>
+<p>[default: 0]</p></dd><dt id="prek-update--log-file"><a href="#prek-update--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-update--no-progress"><a href="#prek-update--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-auto-update--quiet"><a href="#prek-auto-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="prek-update--quiet"><a href="#prek-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-auto-update--refresh"><a href="#prek-auto-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-auto-update--repo"><a href="#prek-auto-update--repo"><code>--repo</code></a> <i>repo</i></dt><dd><p>Only update this repository. This option may be specified multiple times</p>
-</dd><dt id="prek-auto-update--repo-exclude-tag"><a href="#prek-auto-update--repo-exclude-tag"><code>--repo-exclude-tag</code></a> <i>repo=pattern</i></dt><dd><p>Ignore tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-update--refresh"><a href="#prek-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-update--repo"><a href="#prek-update--repo"><code>--repo</code></a> <i>repo</i></dt><dd><p>Only update this repository. This option may be specified multiple times</p>
+</dd><dt id="prek-update--repo-exclude-tag"><a href="#prek-update--repo-exclude-tag"><code>--repo-exclude-tag</code></a> <i>repo=pattern</i></dt><dd><p>Ignore tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
 <p>Repo-specific exclude filters are added to global <code>--exclude-tag</code> filters; matching either filter excludes the tag for that repository.</p>
 <p>For example, use <code>--repo-exclude-tag https://github.com/example/repo=nightly</code> or <code>--repo-exclude-tag https://github.com/example/repo=*-rc*</code> to skip nightly or prerelease tags for one repository.</p>
-</dd><dt id="prek-auto-update--repo-include-tag"><a href="#prek-auto-update--repo-include-tag"><code>--repo-include-tag</code></a> <i>repo=pattern</i></dt><dd><p>Only consider tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
+</dd><dt id="prek-update--repo-include-tag"><a href="#prek-update--repo-include-tag"><code>--repo-include-tag</code></a> <i>repo=pattern</i></dt><dd><p>Only consider tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
 <p>When set for a repository, this overrides any global <code>--include-tag</code> filters for that repository.</p>
 <p>For example, use <code>--repo-include-tag https://github.com/example/repo=v*</code> to only consider version tags for one repository.</p>
-</dd><dt id="prek-auto-update--verbose"><a href="#prek-auto-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-auto-update--version"><a href="#prek-auto-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-update--verbose"><a href="#prek-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-update--version"><a href="#prek-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek cache

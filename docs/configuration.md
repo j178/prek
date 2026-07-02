@@ -32,7 +32,7 @@ Both formats are first-class and will be supported long-term. They describe the 
 - Windows: `%APPDATA%\prek\prek.toml`
 
 This file is for user-level `prek` settings, not hook definitions. Project hooks still live in the project config files described below.
-For the supported global settings, see the [configuration reference](reference/configuration.md#global-auto_updatecooldown_days).
+For the supported global settings, see the [configuration reference](reference/configuration.md#global-updatecooldown_days).
 
 ## Pre-commit compatibility
 
@@ -50,7 +50,7 @@ These entries are implemented by `prek` and are not part of the documented upstr
 They work in both YAML and TOML, but they only matter for compatibility if you share a YAML config with upstream `pre-commit`.
 
 - Top-level:
-    - [`auto_update.cooldown_days`](reference/configuration.md#auto_updatecooldown_days)
+    - [`update.cooldown_days`](reference/configuration.md#updatecooldown_days)
     - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-config)
     - [`orphan`](reference/configuration.md#prek-only-orphan)
 - Repo type:

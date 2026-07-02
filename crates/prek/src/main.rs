@@ -378,11 +378,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             cli::validate_manifest(args.manifests, printer)
         }
         Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),
-        Command::AutoUpdate(args) => {
+        Command::Update(args) => {
             let filesystem = FilesystemOptions::user()?;
             show_settings!(args);
 
-            cli::auto_update(
+            cli::update(
                 &store,
                 cli.globals.config,
                 args.repo,

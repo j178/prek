@@ -8,7 +8,7 @@ fn global_config_missing_file_is_optional() {
     context.init_project();
     context.write_pre_commit_config("repos: []");
 
-    cmd_snapshot!(context.filters(), context.auto_update(), @"
+    cmd_snapshot!(context.filters(), context.update(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25,12 +25,27 @@ fn global_config_ignores_unknown_options() {
     context.write_user_config(indoc::indoc! {r#"
         future_option = true
 
-        [auto_update]
+        [update]
         cooldown_days = 3
         future_option = "ignored"
     "#});
 
-    cmd_snapshot!(context.filters(), context.auto_update(), @"
+    cmd_snapshot!(context.filters(), context.update(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn update_command_accepts_legacy_command_alias() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config("repos: []");
+
+    cmd_snapshot!(context.filters(), context.command().arg("auto-update"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -45,11 +60,11 @@ fn global_config_invalid_file_reports_parse_error() {
     context.init_project();
     context.write_pre_commit_config("repos: []");
     context.write_user_config(indoc::indoc! {r#"
-        [auto_update]
+        [update]
         cooldown_days = "soon"
     "#});
 
-    cmd_snapshot!(context.filters(), context.auto_update(), @r#"
+    cmd_snapshot!(context.filters(), context.update(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----

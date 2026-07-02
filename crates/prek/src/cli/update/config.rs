@@ -237,7 +237,7 @@ pub(super) fn render_updated_yaml_config(
 #[cfg(test)]
 mod tests {
     use super::{render_updated_toml_config, render_updated_yaml_config};
-    use crate::cli::auto_update::Revision;
+    use crate::cli::update::Revision;
     use std::path::Path;
 
     #[test]

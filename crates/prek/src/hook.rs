@@ -944,7 +944,7 @@ mod tests {
                 relative_path: "",
                 idx: 0,
                 config: Config {
-                    auto_update: None,
+                    update: None,
                     repos: [],
                     default_install_hook_types: None,
                     default_language_version: Some(

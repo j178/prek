@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::config::{HookType, Language, Stage};
 use crate::fs::expand_tilde;
 
-mod auto_update;
 mod cache_clean;
 mod cache_gc;
 mod cache_size;
@@ -28,10 +27,10 @@ mod sample_config;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod try_repo;
+mod update;
 mod validate;
 mod yaml_to_toml;
 
-pub(crate) use auto_update::auto_update;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
@@ -46,6 +45,7 @@ pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use try_repo::try_repo;
+pub(crate) use update::update;
 pub(crate) use validate::{validate_configs, validate_manifest};
 pub(crate) use yaml_to_toml::yaml_to_toml;
 
@@ -268,9 +268,9 @@ pub(crate) enum Command {
     ValidateManifest(ValidateManifestArgs),
     /// Produce a sample configuration file (prek.toml or .pre-commit-config.yaml).
     SampleConfig(SampleConfigArgs),
-    /// Auto-update the `rev` field of repositories in the config file to the latest version.
-    #[command(alias = "autoupdate")]
-    AutoUpdate(AutoUpdateArgs),
+    /// Update the `rev` field of repositories in the config file to the latest version.
+    #[command(name = "update", aliases = ["auto-update", "autoupdate"])]
+    Update(UpdateArgs),
     /// Manage the prek cache.
     Cache(CacheNamespace),
     /// Clean unused cached repos.
@@ -769,7 +769,7 @@ impl From<Option<Option<PathBuf>>> for SampleConfigTarget {
 
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Args)]
-pub(crate) struct AutoUpdateArgs {
+pub(crate) struct UpdateArgs {
     /// Update to the bleeding edge of the default branch instead of the latest tagged version.
     #[arg(long)]
     pub(crate) bleeding_edge: bool,
@@ -824,8 +824,8 @@ pub(crate) struct AutoUpdateArgs {
     /// Minimum release age (in days) required for a version to be eligible.
     ///
     /// The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags.
-    /// If the current `rev` is newer than the latest cooldown-eligible tag, `prek auto-update` keeps the current `rev` instead of downgrading it.
-    /// Defaults to `auto_update.cooldown_days` in the project or global config, or `0` when unset.
+    /// If the current `rev` is newer than the latest cooldown-eligible tag, `prek update` keeps the current `rev` instead of downgrading it.
+    /// Defaults to `update.cooldown_days` in the project or global config, or `0` when unset.
     /// Valid values are `0` through `255`; `0` disables this check.
     #[arg(long, value_name = "DAYS", conflicts_with = "bleeding_edge")]
     pub(crate) cooldown_days: Option<u8>,

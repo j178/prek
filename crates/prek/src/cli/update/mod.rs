@@ -7,11 +7,11 @@ use rustc_hash::FxHashMap;
 use semver::Version;
 
 use crate::cli::ExitStatus;
-use crate::cli::auto_update::config::write_new_config;
-use crate::cli::auto_update::display::{apply_repo_updates, warn_frozen_mismatches};
-use crate::cli::auto_update::source::{collect_repo_sources, evaluate_repo_source};
-use crate::cli::reporter::AutoUpdateReporter;
+use crate::cli::reporter::UpdateReporter;
 use crate::cli::run::Selectors;
+use crate::cli::update::config::write_new_config;
+use crate::cli::update::display::{apply_repo_updates, warn_frozen_mismatches};
+use crate::cli::update::source::{collect_repo_sources, evaluate_repo_source};
 use crate::config::GlobPatterns;
 use crate::fs::CWD;
 use crate::printer::Printer;
@@ -82,7 +82,7 @@ enum FrozenMismatchAction {
     NoReplacement,
 }
 
-/// Whether the pinned SHA is available from the refs fetched for `auto-update`.
+/// Whether the pinned SHA is available from the refs fetched for `prek update`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CommitPresence {
     /// The commit is present in the fetched repository view.
@@ -367,7 +367,7 @@ type RepoOccurrences<'a> = FxHashMap<(&'a Path, &'a str), usize>;
 
 /// Updates remote repo revisions and, when possible, keeps existing `# frozen:` comments in sync.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn auto_update(
+pub(crate) async fn update(
     store: &Store,
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
@@ -398,7 +398,7 @@ pub(crate) async fn auto_update(
     } else {
         jobs
     };
-    let reporter = AutoUpdateReporter::new(printer);
+    let reporter = UpdateReporter::new(printer);
 
     let repo_sources = collect_repo_sources(&workspace, cooldown_days, filesystem.as_ref())?;
     let sources = repo_sources.iter().filter(|repo_source| {
