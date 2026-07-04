@@ -89,6 +89,7 @@ Config {
     default_install_hook_types: None,
     default_language_version: None,
     default_stages: None,
+    default_env: None,
     files: None,
     exclude: None,
     fail_fast: None,

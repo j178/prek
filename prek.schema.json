@@ -106,6 +106,13 @@
       },
       "uniqueItems": true
     },
+    "default_env": {
+      "description": "Default runtime environment variables for hooks.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "files": {
       "description": "Global file include pattern.",
       "$ref": "#/definitions/FilePattern"

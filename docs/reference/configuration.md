@@ -272,6 +272,36 @@ Allowed values:
 
 See [Supported Git Hook Stages](#supported-git-hook-stages) for what each value means.
 
+### `default_env`
+
+<a id="prek-only-default-env"></a>
+
+!!! note "prek-only"
+
+    `default_env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
+
+Runtime environment variables to apply to every hook in this config.
+If a hook sets the same variable in [`env`](#prek-only-env), the hook-level value wins.
+
+- Type: map of string to string
+- Default: none
+
+Example:
+
+=== "prek.toml"
+
+    ```toml
+    default_env = { UV_PYTHON = "", VIRTUAL_ENV = "" }
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    default_env:
+      UV_PYTHON: ""
+      VIRTUAL_ENV: ""
+    ```
+
 ### `default_install_hook_types`
 
 Default Git shim name(s) installed by [`prek install`](cli.md#prek-install) when you don’t pass `--hook-type`.
@@ -815,9 +845,18 @@ Extra runtime environment variables for the hook process.
 Values override the existing process environment (including variables such as `PATH`).
 They are applied when the hook runs, not when `prek` installs or prepares the hook environment.
 
+!!! note "Runtime only"
+
+    `env` cannot be used to control hook installation or environment preparation.
+    Keeping it runtime-only means the installed hook environment does not depend on
+    ambient variables from the invoking shell. If those variables affected
+    installation, changing one of them would imply that `prek` may need to
+    recreate the hook environment.
+
 For remote hooks, `env` may also be set by the hook author in
 `.pre-commit-hooks.yaml`. Values from the project configuration are merged with
 manifest values and override duplicate keys.
+Values set directly on a hook override matching [`default_env`](#default_env) values.
 
 For `docker` / `docker_image` hooks, these variables are passed into the container rather than being applied to the container runtime command.
 
