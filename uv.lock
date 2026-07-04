@@ -545,7 +545,7 @@ wheels = [
 
 [[package]]
 name = "prek"
-version = "0.4.6"
+version = "0.4.7"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -560,7 +560,7 @@ docs = [
 [package.metadata]
 
 [package.metadata.requires-dev]
-dev = [{ name = "rooster", marker = "python_full_version >= '3.12'", git = "https://github.com/j178/rooster?rev=747d16f415e151f019b3645d982549db61e12b98" }]
+dev = [{ name = "rooster", marker = "python_full_version >= '3.12'", git = "https://github.com/j178/rooster?rev=c1901e113611dbe4c2c30917a4d4d392e6d0c679" }]
 docs = [
     { name = "llmstxt-standalone", marker = "python_full_version >= '3.12'", specifier = ">=0.2.0" },
     { name = "zensical", marker = "python_full_version >= '3.12'", specifier = ">=0.0.24" },
@@ -904,7 +904,7 @@ wheels = [
 [[package]]
 name = "rooster"
 version = "0.0.0"
-source = { git = "https://github.com/j178/rooster?rev=747d16f415e151f019b3645d982549db61e12b98#747d16f415e151f019b3645d982549db61e12b98" }
+source = { git = "https://github.com/j178/rooster?rev=c1901e113611dbe4c2c30917a4d4d392e6d0c679#c1901e113611dbe4c2c30917a4d4d392e6d0c679" }
 dependencies = [
     { name = "hishel", marker = "python_full_version >= '3.12'" },
     { name = "httpx", marker = "python_full_version >= '3.12'" },
@@ -912,6 +912,7 @@ dependencies = [
     { name = "packaging", marker = "python_full_version >= '3.12'" },
     { name = "pydantic", marker = "python_full_version >= '3.12'" },
     { name = "pygit2", marker = "python_full_version >= '3.12'" },
+    { name = "tomli", marker = "python_full_version >= '3.12'" },
     { name = "tqdm", marker = "python_full_version >= '3.12'" },
     { name = "typer", marker = "python_full_version >= '3.12'" },
 ]

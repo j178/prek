@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.7
+
+Released on 2026-07-04.
+
+### Enhancements
+
+- Add default_env configuration ([#2288](https://github.com/j178/prek/pull/2288))
+- Rename `auto-update` to `update` ([#2286](https://github.com/j178/prek/pull/2286))
+
+### Bug fixes
+
+- Fix progress collapse ordering ([#2291](https://github.com/j178/prek/pull/2291))
+- Fix progress insertion after collapsed rows ([#2292](https://github.com/j178/prek/pull/2292))
+
+### Contributors
+
+- @j178
+
 ## 0.4.6
 
 Released on 2026-07-01.
