@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "prek"
-version = "0.4.6"
+version = "0.4.7"
 description = "A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined."
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
@@ -32,7 +32,7 @@ dev = ["rooster"]
 docs = ["llmstxt-standalone>=0.2.0", "zensical>=0.0.24"]
 
 [tool.uv.sources]
-rooster = { git = "https://github.com/j178/rooster", rev = "747d16f415e151f019b3645d982549db61e12b98" }
+rooster = { git = "https://github.com/j178/rooster", rev = "c1901e113611dbe4c2c30917a4d4d392e6d0c679" }
 
 [tool.uv.dependency-groups]
 dev = { requires-python = ">=3.12" }
