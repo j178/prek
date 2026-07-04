@@ -400,7 +400,6 @@ GitHub stars are current as of April 15, 2026.
 - [Future-House/paper-qa](https://github.com/Future-House/paper-qa/pull/1098) <sub>8,377 stars</sub>
 - [getsentry/sentry](https://github.com/getsentry/sentry/pull/110808) <sub>43,639 stars</sub>
 - [godotengine/godot](https://github.com/godotengine/godot/pull/119150) <sub>110,312 stars</sub>
-- [Goldziher/kreuzberg](https://github.com/Goldziher/kreuzberg/pull/142) <sub>7,550 stars</sub>
 - [home-assistant/core](https://github.com/home-assistant/core/pull/160427) <sub>86,029 stars</sub>
 - [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918) <sub>3,692 stars</sub>
 - [jlowin/fastmcp](https://github.com/jlowin/fastmcp/pull/2309) <sub>24,539 stars</sub>
