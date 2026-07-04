@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.7
+## 0.4.8
 
 Released on 2026-07-04.
 
