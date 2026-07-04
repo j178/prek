@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -27,6 +27,8 @@ use crate::workspace;
 struct HookBar {
     /// Stable identity used to match a completed bar with the later hook result.
     hook_key: HookKey,
+    /// Monotonic visual insertion order of the main hook progress line.
+    line_order: usize,
     /// Main hook progress line.
     progress: ProgressBar,
     /// Live output preview lines below `progress`.
@@ -41,9 +43,10 @@ struct HookBar {
 }
 
 impl HookBar {
-    fn new(hook: &Hook, progress: ProgressBar) -> Self {
+    fn new(hook: &Hook, line_order: usize, progress: ProgressBar) -> Self {
         Self {
             hook_key: HookKey::from_hook(hook),
+            line_order,
             progress,
             output_bars: Vec::new(),
             output_preview: OutputPreview::default(),
@@ -120,36 +123,50 @@ impl HookKey {
 
 #[derive(Debug, Default)]
 struct CompletedBars {
-    visible: VecDeque<HookBar>,
+    visible: BTreeMap<usize, HookBar>,
     hidden_passed: usize,
     hidden_failed: usize,
 }
 
+#[derive(Debug)]
+struct CollapsedCompletedBars {
+    anchor: ProgressBar,
+    removed: Vec<HookBar>,
+}
+
 impl CompletedBars {
     fn push(&mut self, completed: HookBar) {
-        self.visible.push_back(completed);
+        // Hooks can finish in a different order than their progress rows were inserted.
+        // Collapsing must still remove a visual prefix.
+        let replaced = self.visible.insert(completed.line_order, completed);
+        debug_assert!(replaced.is_none());
     }
 
-    fn hide_one_line(&mut self) -> VecDeque<HookBar> {
-        let count = self.hide_count();
-        debug_assert!(self.can_hide_one_line());
+    fn collapse_one_line(&mut self) -> Option<CollapsedCompletedBars> {
+        if !self.can_collapse_one_line() {
+            return None;
+        }
 
-        let removed: VecDeque<_> = self.visible.drain(..count).collect();
-        for completed in &removed {
+        let count = self.collapse_count();
+        let anchor = self.visible.first_key_value()?.1.progress.clone();
+        let mut removed = Vec::with_capacity(count);
+        for _ in 0..count {
+            let (_, completed) = self.visible.pop_first()?;
             match completed.passed {
                 Some(true) => self.hidden_passed += 1,
                 Some(false) => self.hidden_failed += 1,
                 None => {}
             }
+            removed.push(completed);
         }
 
-        removed
+        Some(CollapsedCompletedBars { anchor, removed })
     }
 
     fn record_result(&mut self, hook_key: HookKey, passed: bool) -> Option<ProgressBar> {
         if let Some(completed) = self
             .visible
-            .iter_mut()
+            .values_mut()
             .find(|completed| completed.hook_key == hook_key)
         {
             completed.passed = Some(passed);
@@ -163,12 +180,12 @@ impl CompletedBars {
         self.visible.len() + usize::from(self.hidden_count() > 0)
     }
 
-    fn can_hide_one_line(&self) -> bool {
-        let count = self.hide_count();
+    fn can_collapse_one_line(&self) -> bool {
+        let count = self.collapse_count();
         self.visible.len() >= count
             && self
                 .visible
-                .iter()
+                .values()
                 .take(count)
                 .all(|completed| completed.passed.is_some())
     }
@@ -177,7 +194,7 @@ impl CompletedBars {
         self.hidden_passed + self.hidden_failed
     }
 
-    fn hide_count(&self) -> usize {
+    fn collapse_count(&self) -> usize {
         // The first collapse must free one row for the summary line. Once the
         // summary exists, hiding one more completed hook frees one visible row.
         if self.hidden_count() > 0 { 1 } else { 2 }
@@ -197,10 +214,14 @@ impl CompletedBars {
         Some(format!("⋮ {hidden} hooks hidden: {status}"))
     }
 
-    fn clear(&mut self) -> VecDeque<HookBar> {
+    fn has_visible(&self) -> bool {
+        !self.visible.is_empty()
+    }
+
+    fn drain_visible(&mut self) -> impl Iterator<Item = HookBar> {
         self.hidden_passed = 0;
         self.hidden_failed = 0;
-        std::mem::take(&mut self.visible)
+        std::mem::take(&mut self.visible).into_values()
     }
 }
 
@@ -408,7 +429,7 @@ impl HookRunReporter {
         group.last_line = Some(progress.clone());
         group.active_tail = Some(id);
 
-        running.insert(id, HookBar::new(hook, progress));
+        running.insert(id, HookBar::new(hook, id, progress));
         id
     }
 
@@ -623,7 +644,7 @@ impl HookRunReporter {
         if let Some(summary) = group.hidden_summary {
             self.reporter.children.remove(&summary);
         }
-        for completed in group.completed.clear() {
+        for completed in group.completed.drain_visible() {
             self.remove_hook_bar(completed);
         }
     }
@@ -662,7 +683,7 @@ impl HookRunReporter {
             group.hidden_summary = Some(summary.clone());
             summary
         };
-        if group.completed.visible.is_empty() {
+        if !group.completed.has_visible() {
             group.last_line = Some(summary.clone());
         }
         if group.header.is_some() {
@@ -691,7 +712,7 @@ impl HookRunReporter {
     fn collapse_candidate(groups: &HookGroups) -> Option<usize> {
         groups
             .iter()
-            .filter(|(_, group)| group.completed.can_hide_one_line())
+            .filter(|(_, group)| group.completed.can_collapse_one_line())
             .min_by_key(|(_, group)| group.order)
             .map(|(project_idx, _)| *project_idx)
     }
@@ -713,10 +734,11 @@ impl HookRunReporter {
             };
             let group = groups.get_mut(&project_idx).unwrap();
 
-            let hidden = group.completed.hide_one_line();
-            let anchor = hidden.front().unwrap().progress.clone();
-            self.update_group_summary(group, &anchor);
-            removed.extend(hidden);
+            let Some(collapsed) = group.completed.collapse_one_line() else {
+                break;
+            };
+            self.update_group_summary(group, &collapsed.anchor);
+            removed.extend(collapsed.removed);
         }
 
         removed
@@ -743,11 +765,21 @@ mod tests {
     }
 
     fn project_completed_bar(project_idx: usize, hook_idx: usize, passed: Option<bool>) -> HookBar {
+        project_completed_bar_with_order(project_idx, hook_idx, hook_idx, passed)
+    }
+
+    fn project_completed_bar_with_order(
+        project_idx: usize,
+        hook_idx: usize,
+        line_order: usize,
+        passed: Option<bool>,
+    ) -> HookBar {
         HookBar {
             hook_key: HookKey {
                 project_idx,
                 hook_idx,
             },
+            line_order,
             progress: ProgressBar::hidden(),
             output_bars: Vec::new(),
             output_preview: OutputPreview::default(),
@@ -762,6 +794,7 @@ mod tests {
                 project_idx: 0,
                 hook_idx: 0,
             },
+            line_order: 0,
             progress: progress_bar(reporter),
             output_bars: Vec::new(),
             output_preview: OutputPreview::default(),
@@ -790,6 +823,14 @@ mod tests {
             &reporter.reporter.root,
             ProgressBar::with_draw_target(None, reporter.reporter.printer.target()),
         )
+    }
+
+    fn visible_hook_indices(completed: &CompletedBars) -> Vec<usize> {
+        completed
+            .visible
+            .values()
+            .map(|bar| bar.hook_key.hook_idx)
+            .collect()
     }
 
     #[test]
@@ -900,25 +941,25 @@ mod tests {
     }
 
     #[test]
-    fn hiding_completed_bars_frees_one_line() {
+    fn collapsing_completed_bars_frees_one_line() {
         let mut completed = CompletedBars::default();
 
         completed.push(completed_bar(0, Some(true)));
-        assert!(!completed.can_hide_one_line());
+        assert!(!completed.can_collapse_one_line());
 
         completed.push(completed_bar(1, Some(false)));
         completed.push(completed_bar(2, Some(true)));
-        let removed = completed.hide_one_line();
-        assert_eq!(removed.len(), 2);
-        assert_eq!(completed.visible.len(), 1);
+        let collapsed = completed.collapse_one_line().unwrap();
+        assert_eq!(collapsed.removed.len(), 2);
+        assert_eq!(visible_hook_indices(&completed).len(), 1);
         assert_eq!(
             completed.hidden_summary().as_deref(),
             Some("⋮ 2 hooks hidden: 1 passed, 1 failed")
         );
 
-        let removed = completed.hide_one_line();
-        assert_eq!(removed.len(), 1);
-        assert_eq!(completed.visible.len(), 0);
+        let collapsed = completed.collapse_one_line().unwrap();
+        assert_eq!(collapsed.removed.len(), 1);
+        assert!(!completed.has_visible());
         assert_eq!(
             completed.hidden_summary().as_deref(),
             Some("⋮ 3 hooks hidden: 2 passed, 1 failed")
@@ -926,14 +967,34 @@ mod tests {
     }
 
     #[test]
-    fn hiding_requires_a_known_result_prefix() {
+    fn collapsing_completed_bars_uses_visual_order_after_out_of_order_completion() {
+        let mut completed = CompletedBars::default();
+
+        completed.push(project_completed_bar_with_order(0, 4, 4, Some(true)));
+        completed.push(project_completed_bar_with_order(0, 0, 0, Some(true)));
+        completed.push(project_completed_bar_with_order(0, 1, 1, Some(true)));
+        completed.push(project_completed_bar_with_order(0, 2, 2, Some(true)));
+        completed.push(project_completed_bar_with_order(0, 3, 3, Some(true)));
+
+        let collapsed = completed.collapse_one_line().unwrap();
+        let removed_hooks = collapsed
+            .removed
+            .iter()
+            .map(|bar| bar.hook_key.hook_idx)
+            .collect::<Vec<_>>();
+        assert_eq!(removed_hooks, [0, 1]);
+        assert_eq!(visible_hook_indices(&completed), [2, 3, 4]);
+    }
+
+    #[test]
+    fn collapsing_requires_a_known_result_prefix() {
         let mut completed = CompletedBars::default();
 
         completed.push(completed_bar(0, None));
         completed.push(completed_bar(1, Some(true)));
         completed.push(completed_bar(2, Some(true)));
 
-        assert!(!completed.can_hide_one_line());
+        assert!(!completed.can_collapse_one_line());
     }
 
     #[test]
