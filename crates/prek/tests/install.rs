@@ -1812,7 +1812,7 @@ fn install_invalid_config_warning() {
 }
 
 #[test]
-fn install_warns_on_unmatched_hook_stages() {
+fn install_tips_on_unmatched_hook_stages() {
     let context = TestContext::new();
     context.init_project();
 
@@ -1837,15 +1837,15 @@ fn install_warns_on_unmatched_hook_stages() {
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `push-only` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 
-    // Installing the `pre-push` shim covers `push-only`, so no warning is emitted.
+    // Installing the `pre-push` shim covers `push-only`, so no tip is emitted.
     cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push"), @r"
     success: true
     exit_code: 0
@@ -1857,7 +1857,7 @@ fn install_warns_on_unmatched_hook_stages() {
 }
 
 #[test]
-fn install_no_warn_for_manual_only_hook() {
+fn install_no_tip_for_manual_only_hook() {
     let context = TestContext::new();
     context.init_project();
 
@@ -1884,7 +1884,7 @@ fn install_no_warn_for_manual_only_hook() {
 }
 
 #[test]
-fn install_warns_on_unmatched_default_stages() {
+fn install_tips_on_unmatched_default_stages() {
     let context = TestContext::new();
     context.init_project();
 
@@ -1904,12 +1904,12 @@ fn install_warns_on_unmatched_default_stages() {
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `inherits-default` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `inherits-default` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 }
 
@@ -1940,7 +1940,7 @@ fn install_skips_remote_hook_without_config_stages() {
 }
 
 #[test]
-fn install_warns_on_unmatched_remote_hook_with_config_stages() {
+fn install_tips_on_unmatched_remote_hook_with_config_stages() {
     let context = TestContext::new();
     context.init_project();
 
@@ -1958,17 +1958,17 @@ fn install_warns_on_unmatched_remote_hook_with_config_stages() {
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `trailing-whitespace` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `trailing-whitespace` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 }
 
 #[test]
-fn install_warns_for_workspace_subproject_hooks() -> anyhow::Result<()> {
+fn install_tips_for_workspace_subproject_hooks() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -2003,15 +2003,15 @@ fn install_warns_for_workspace_subproject_hooks() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `nested-push-hook` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `nested-push-hook` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 
-    // Skipping the nested project excludes its hooks from the installed shims, so no warning.
+    // Skipping the nested project excludes its hooks from the installed shims, so no tip.
     cmd_snapshot!(context.filters(), context.install().arg("--skip").arg("nested/"), @r"
     success: true
     exit_code: 0
@@ -2025,7 +2025,7 @@ fn install_warns_for_workspace_subproject_hooks() -> anyhow::Result<()> {
 }
 
 #[test]
-fn install_warns_on_remote_hook_with_empty_config_stages() {
+fn install_tips_on_remote_hook_with_empty_config_stages() {
     let context = TestContext::new();
     context.init_project();
 
@@ -2045,17 +2045,17 @@ fn install_warns_on_remote_hook_with_empty_config_stages() {
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `trailing-whitespace` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `trailing-whitespace` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 }
 
 #[test]
-fn install_no_warn_for_unselected_hooks() {
+fn install_no_tip_for_unselected_hooks() {
     let context = TestContext::new();
     context.init_project();
 
@@ -2094,22 +2094,22 @@ fn install_no_warn_for_unselected_hooks() {
     ----- stderr -----
     ");
 
-    // Including the unmatched hook itself keeps the warning.
+    // Including the unmatched hook itself keeps the tip.
     cmd_snapshot!(context.filters(), context.install().arg("push-only"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `push-only` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     ");
 }
 
 #[test]
-fn install_warns_despite_env_var_skip() {
+fn install_tips_despite_env_var_skip() {
     let context = TestContext::new();
     context.init_project();
 
@@ -2125,17 +2125,17 @@ fn install_warns_despite_env_var_skip() {
     "});
 
     // Env-var skips are not persisted into the shim, so the hook would still run on
-    // pre-push and the warning must not be suppressed.
+    // pre-push and the tip must not be suppressed.
     cmd_snapshot!(context.filters(), context.install().env(EnvVars::PREK_SKIP, "push-only"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: The following hooks won't run automatically because their stages aren't being installed:
-      - `push-only` (pre-push)
-    hint: install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
     warning: Skip selectors from environment variables `PREK_SKIP` are ignored during installing hooks.
     ");
 }

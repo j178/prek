@@ -106,13 +106,14 @@ pub(crate) async fn install(
     };
 
     if project.is_some() {
-        warn_unmatched_hook_stages(
+        tip_unmatched_hook_stages(
             store,
             config.as_deref(),
             selectors.as_ref(),
             refresh,
             &hook_types,
-        );
+            printer,
+        )?;
     }
 
     for hook_type in hook_types {
@@ -239,15 +240,19 @@ fn shim_selects_hook(selectors: Option<&Selectors>, hook: &ConfiguredHook<'_>) -
             .any(|include| include.matches_configured_hook(hook))
 }
 
-/// Warn about configured hooks whose stages aren't covered by the hook types being installed,
-/// since their shims won't be installed and they won't run automatically.
-fn warn_unmatched_hook_stages(
+/// Print a tip about configured hooks whose stages aren't covered by the hook types being
+/// installed, since their shims won't be installed and they won't run automatically.
+///
+/// This is intentionally not a warning: skipping a stage (e.g. to only run a hook manually by
+/// id, or from CI) is a valid setup, not something that needs fixing.
+fn tip_unmatched_hook_stages(
     store: &Store,
     config: Option<&Path>,
     selectors: Option<&Selectors>,
     refresh: bool,
     hook_types: &[HookType],
-) {
+    printer: Printer,
+) -> Result<()> {
     let installed = Stages::from(
         hook_types
             .iter()
@@ -257,12 +262,12 @@ fn warn_unmatched_hook_stages(
 
     // A plain root install runs every workspace project, so scan them all, the same way `run` does.
     let Ok(root) = Workspace::find_root(config, &CWD) else {
-        return;
+        return Ok(());
     };
     let Ok(workspace) =
         Workspace::discover(store, root, config.map(Path::to_path_buf), None, refresh)
     else {
-        return;
+        return Ok(());
     };
 
     let mut unmatched: Vec<(&str, Stages)> = Vec::new();
@@ -305,7 +310,7 @@ fn warn_unmatched_hook_stages(
     }
 
     if unmatched.is_empty() {
-        return;
+        return Ok(());
     }
 
     let list = unmatched
@@ -313,12 +318,15 @@ fn warn_unmatched_hook_stages(
         .map(|(id, stages)| format!("  - `{}` ({})", id.cyan(), stages.yellow()))
         .collect::<Vec<_>>()
         .join("\n");
-    warn_user!(
-        "The following hooks won't run automatically because their stages aren't being installed:\n{list}\n{} install the missing hook type(s) with `{}`, or set `{}` in your config.",
-        "hint:".bold().yellow(),
+    writeln!(
+        printer.stdout(),
+        "{} the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:\n{list}\nIf that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `{}`, or set `{}` in your config.",
+        "tip:".cyan().bold(),
         "prek install --hook-type <type>".cyan(),
         "default_install_hook_types".cyan(),
-    );
+    )?;
+
+    Ok(())
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
