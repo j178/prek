@@ -20,7 +20,7 @@ concurrency:
 permissions: {}
 
 env:
-  UV_VERSION: "0.11.23"
+  UV_VERSION: "0.11.25"
 
 jobs:
   build:
