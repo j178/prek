@@ -133,7 +133,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - id: base-binary-cache
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.HYPERFINE_BIN_DIR }}/${{ env.HYPERFINE_BASE_BINARY }}
           key: prek-hyperfine-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
