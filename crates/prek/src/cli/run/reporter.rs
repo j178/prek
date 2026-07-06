@@ -127,9 +127,9 @@ impl HookBar {
 
         for (idx, line) in lines.iter().enumerate() {
             if idx == self.output_bars.len() {
-                let tail = self.output_bars.last().unwrap_or(&self.progress).clone();
+                let tail = self.visual_tail();
                 let output = reporter.children.insert_after(
-                    &tail,
+                    tail,
                     ProgressBar::with_draw_target(None, reporter.printer.target()),
                 );
                 output.set_style(
@@ -495,17 +495,11 @@ impl HookRunReporter {
         let progress_len = if len == 0 { 1 } else { len as u64 };
 
         let mut running = self.running.lock().unwrap();
-
         let mut groups = self.groups.lock().unwrap();
         let project_idx = hook.project().idx();
         let order = groups.len();
         if let Entry::Vacant(entry) = groups.entry(project_idx) {
             entry.insert(HookGroup::new(order, self.project_header(hook)));
-        }
-        for completed in
-            self.collapse_to_fit_new_progress(&mut groups, Self::running_lines(&running), 1)
-        {
-            self.remove_hook_bar(completed);
         }
         let group = groups.get_mut(&project_idx).unwrap();
         let progress = self.hook_progress_bar(
@@ -515,6 +509,7 @@ impl HookRunReporter {
         );
 
         running.insert(id, HookBar::new(hook, id, progress));
+        self.ensure_progress_capacity(&mut groups, &running);
         id
     }
 
@@ -584,23 +579,16 @@ impl HookRunReporter {
 
     fn on_run_output(&self, id: usize, chunk: &[u8]) {
         let width = self.dots.saturating_sub(HOOK_OUTPUT_PREVIEW_PREFIX.width());
-        let removed = {
-            let mut running = self.running.lock().unwrap();
-            let Some(run_bar) = running.get_mut(&id) else {
-                return;
-            };
-            if !run_bar.push_output(&self.reporter, width, chunk) {
-                return;
-            }
-
-            let running_lines = Self::running_lines(&running);
-            let mut groups = self.groups.lock().unwrap();
-            // Growing preview rows may exceed the terminal height; hide old completed rows.
-            self.collapse_to_fit_new_progress(&mut groups, running_lines, 0)
+        let mut running = self.running.lock().unwrap();
+        let Some(run_bar) = running.get_mut(&id) else {
+            return;
         };
-        for completed in removed {
-            self.remove_hook_bar(completed);
+        if !run_bar.push_output(&self.reporter, width, chunk) {
+            return;
         }
+
+        let mut groups = self.groups.lock().unwrap();
+        self.ensure_progress_capacity(&mut groups, &running);
     }
 
     pub fn on_run_complete(&self, id: usize) {
@@ -769,9 +757,9 @@ impl HookRunReporter {
             .filter(|height| *height > 0)
     }
 
-    fn active_lines(groups: &HookGroups, running: usize) -> usize {
+    fn progress_line_count(groups: &HookGroups, running_lines: usize) -> usize {
         let group_lines = groups.values().map(HookGroup::line_count).sum::<usize>();
-        1 + running + group_lines
+        1 + running_lines + group_lines
     }
 
     fn collapse_candidate(groups: &HookGroups) -> Option<usize> {
@@ -782,31 +770,33 @@ impl HookRunReporter {
             .map(|(project_idx, _)| *project_idx)
     }
 
-    fn collapse_to_fit_new_progress(
+    fn ensure_progress_capacity(
         &self,
         groups: &mut HookGroups,
-        running: usize,
-        new_lines: usize,
-    ) -> Vec<HookBar> {
+        running: &FxHashMap<usize, HookBar>,
+    ) {
         let Some(limit) = self.progress_line_limit() else {
-            return Vec::new();
+            return;
         };
 
-        let mut removed = Vec::new();
-        while Self::active_lines(groups, running).saturating_add(new_lines) > limit {
+        let running_lines = Self::running_lines(running);
+        while Self::progress_line_count(groups, running_lines) > limit {
             let Some(project_idx) = Self::collapse_candidate(groups) else {
                 break;
             };
-            let group = groups.get_mut(&project_idx).unwrap();
 
-            let Some(collapsed) = group.completed.collapse_one_line() else {
-                break;
+            let collapsed = {
+                let group = groups.get_mut(&project_idx).unwrap();
+                let Some(collapsed) = group.completed.collapse_one_line() else {
+                    break;
+                };
+                self.update_group_summary(group, collapsed.anchor());
+                collapsed
             };
-            self.update_group_summary(group, collapsed.anchor());
-            removed.extend(collapsed.removed);
+            for completed in collapsed.removed {
+                self.remove_hook_bar(completed);
+            }
         }
-
-        removed
     }
 }
 
@@ -1110,7 +1100,7 @@ mod tests {
     }
 
     #[test]
-    fn active_lines_includes_root_running_and_group_lines() {
+    fn progress_line_count_includes_root_running_and_group_lines() {
         let mut groups = HookGroups::default();
 
         let mut first = hook_group(0, true);
@@ -1126,7 +1116,7 @@ mod tests {
             .push(project_completed_bar(2, 0, Some(false)));
         groups.insert(2, second);
 
-        assert_eq!(HookRunReporter::active_lines(&groups, 2), 7);
+        assert_eq!(HookRunReporter::progress_line_count(&groups, 2), 7);
     }
 
     #[test]
