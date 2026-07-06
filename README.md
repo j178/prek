@@ -5,13 +5,19 @@
   <img width="600" alt="prek" src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/logo.png" />
 </picture>
 
+<a href="https://trendshift.io/repositories/14578?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-14578" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/14578" alt="j178%2Fprek | Trendshift" width="250" height="55"/></a>
+
 [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
 [![PyPI version](https://img.shields.io/pypi/v/prek.svg)](https://pypi.python.org/pypi/prek)
 [![codecov](https://codecov.io/github/j178/prek/graph/badge.svg?token=MP6TY24F43)](https://codecov.io/github/j178/prek)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/prek?period=monthly&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads%2Fmonth)](https://pepy.tech/projects/prek)
 [![Discord](https://img.shields.io/discord/1403581202102878289?logo=discord)](https://discord.gg/3NRJUqJz86)
 
+**[Installation](#installation) • [Quick start](#quick-start) • [Documentation](https://prek.j178.dev/)**
+
 </div>
+
+## About
 
 <!-- --8<-- [start: description] -->
 
@@ -39,14 +45,6 @@ Although prek is pretty new, it’s already powering real‑world projects like 
 - [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
 
 <!-- --8<-- [end:features] -->
-
-## Table of contents
-
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Why prek?](#why-prek)
-- [Who is using prek?](#who-is-using-prek)
-- [Acknowledgements](#acknowledgements)
 
 ## Installation
 
