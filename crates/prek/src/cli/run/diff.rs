@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use tracing::debug;
 
 use crate::git;
 
@@ -20,6 +21,13 @@ pub(super) struct DiffTracker<'a> {
     baseline_tree: Option<String>,
     /// Whether we have already attempted to capture `baseline_tree`, so a
     /// failing `write-tree` is not retried before every group.
+    ///
+    /// Not retrying is safe because the failures that remain are properties of
+    /// the index, not of timing: `git::write_tree` builds its tree from a
+    /// private copy, so a concurrent `git add` holding `index.lock` no longer
+    /// fails the capture. A retry would only re-derive the same answer, and the
+    /// two are indistinguishable anyway — both exit 128, and their messages are
+    /// localized.
     baseline_tree_captured: bool,
 }
 
@@ -56,7 +64,12 @@ impl<'a> DiffTracker<'a> {
             // Best-effort: `write-tree` fails on an unmerged or partially-present
             // index. Leave `baseline_tree` as `None` in that case so snapshots
             // fall back to the live-index diff (see `git::get_tree_diff`).
-            self.baseline_tree = git::write_tree().await.ok();
+            self.baseline_tree = git::write_tree()
+                .await
+                .inspect_err(|err| {
+                    debug!("Falling back to live-index diffs, cannot write baseline tree: {err}");
+                })
+                .ok();
             self.baseline_tree_captured = true;
         }
         if let DiffBaseline::Unknown = self.baseline {

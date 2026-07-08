@@ -423,12 +423,58 @@ pub(crate) async fn get_tree_diff(path: &Path, tree: Option<&str>) -> Result<Vec
     Ok(output.stdout)
 }
 
+/// Resolve the index file git would read.
+///
+/// Honours `GIT_INDEX_FILE`, which git points at `.git/index.lock` while running
+/// hooks for `git commit -a`, as well as linked worktrees. The path git prints is
+/// relative to the current directory, which is also what the copy below resolves
+/// against, so it is used as-is rather than forcing `--path-format=absolute`
+/// (git 2.31+).
+async fn index_path() -> Result<PathBuf, Error> {
+    let output = git_cmd()?
+        .arg("rev-parse")
+        .arg("--git-path")
+        .arg("index")
+        .check(true)
+        .output()
+        .await?;
+    Ok(PathBuf::from(
+        String::from_utf8_lossy(&output.stdout).trim_ascii(),
+    ))
+}
+
 /// Create a tree object from the current index.
 ///
 /// The name of the new tree object is printed to standard output.
 /// The index must be in a fully merged state.
+///
+/// `git write-tree` writes the recomputed cache-tree back into the index, so it
+/// takes `index.lock` and dies if it cannot get it. A user's `git add` holds that
+/// lock for as long as it runs — precisely the concurrency this tree exists to be
+/// immune to — and prek would in turn make their `git add` fail. So write the
+/// tree from a private copy of the index: it yields the same tree, only the copy
+/// is locked, and neither process can starve the other.
 pub(crate) async fn write_tree() -> Result<String, Error> {
-    let output = git_cmd()?.arg("write-tree").check(true).output().await?;
+    let index = index_path().await?;
+    let scratch_dir = tempfile::tempdir()?;
+    let scratch = scratch_dir.path().join("index");
+
+    // A *missing* index reads as an empty index, which is what git itself would
+    // produce a tree from; an empty index *file* is a fatal parse error. So only
+    // copy when there is something to copy, and let the scratch path stay absent
+    // otherwise.
+    match fs_err::tokio::copy(&index, &scratch).await {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    let output = git_cmd()?
+        .arg("write-tree")
+        .env("GIT_INDEX_FILE", &scratch)
+        .check(true)
+        .output()
+        .await?;
     Ok(String::from_utf8_lossy(&output.stdout)
         .trim_ascii()
         .to_string())

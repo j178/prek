@@ -4097,6 +4097,52 @@ fn concurrent_staging_is_not_reported_as_hook_modification() -> Result<()> {
     Ok(())
 }
 
+/// The same concurrency, caught at the one moment it used to slip through: a
+/// user's `git add` holds `.git/index.lock` for the duration of its run, and
+/// `git write-tree` wants that same lock to write back its cache-tree. A
+/// baseline capture that collided with staging therefore failed, fell back to
+/// live-index diffs for the rest of the run, and reported exactly the false
+/// positive tree anchoring exists to prevent.
+///
+/// The pre-created lock file stands in for that in-flight `git add`; the hook
+/// releases it and stages, as the user's command would have.
+#[test]
+fn concurrent_staging_is_not_reported_when_index_is_locked() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: stage-file
+                name: stage-file
+                language: system
+                entry: sh -c 'rm -f .git/index.lock && git add file.txt'
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    // Leave an unstaged modification in the working tree.
+    cwd.child("file.txt").write_str("hello\nmodified\n")?;
+    // A `git add` is mid-flight when prek captures its baseline tree.
+    cwd.child(".git/index.lock").write_str("")?;
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage-file...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Known limitation: staging a *brand-new* file mid-run is attributed to the
 /// running hook. Relative to the baseline tree the freshly-staged path is an
 /// addition, and the before/after snapshots differ, so it is reported as a
