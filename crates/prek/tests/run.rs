@@ -4057,3 +4057,80 @@ fn pass_filenames_2_limits_batch_size() -> Result<()> {
 
     Ok(())
 }
+
+/// A user running `git add` while hooks execute must not be reported as the
+/// hook modifying files: staging moves the index but leaves the working tree
+/// untouched. Reproduced deterministically by a hook that itself stages a
+/// pre-existing unstaged modification.
+#[test]
+fn concurrent_staging_is_not_reported_as_hook_modification() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: stage-file
+                name: stage-file
+                language: system
+                entry: git add file.txt
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    // Leave an unstaged modification in the working tree.
+    cwd.child("file.txt").write_str("hello\nmodified\n")?;
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage-file...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Staging a previously-untracked file mid-run must also not be attributed
+/// to the hook: an added path relative to the baseline tree can only come
+/// from the user (hooks never stage), which `--diff-filter=a` excludes.
+#[test]
+fn staging_untracked_file_is_not_reported_as_hook_modification() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: stage-new-file
+                name: stage-new-file
+                language: system
+                entry: git add new.txt
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    // Untracked at run start; the hook stages it mid-run.
+    cwd.child("new.txt").write_str("brand new\n")?;
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage-new-file...........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
