@@ -36,7 +36,16 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 
     loop {
         match reader.read_event() {
-            Ok(quick_xml::events::Event::Eof) => break,
+            Ok(quick_xml::events::Event::Eof) => {
+                if depth != 0 {
+                    let error_message = format!(
+                        "{}: Failed to xml parse (no element found)\n",
+                        filename.display()
+                    );
+                    return Ok((1, error_message.into_bytes()));
+                }
+                break;
+            }
             Ok(quick_xml::events::Event::Start(_)) => {
                 if depth == 0 {
                     root_count += 1;
@@ -208,6 +217,21 @@ mod tests {
         let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_invalid_xml_truncated() -> Result<()> {
+        let dir = tempdir()?;
+        let content = br#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <node>"#;
+        let file_path = create_test_file(&dir, "truncated.xml", content).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 1);
+        assert!(!output.is_empty());
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.contains("Failed to xml parse"));
         Ok(())
     }
 
