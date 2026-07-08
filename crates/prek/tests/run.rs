@@ -4097,11 +4097,20 @@ fn concurrent_staging_is_not_reported_as_hook_modification() -> Result<()> {
     Ok(())
 }
 
-/// Staging a previously-untracked file mid-run must also not be attributed
-/// to the hook: an added path relative to the baseline tree can only come
-/// from the user (hooks never stage), which `--diff-filter=a` excludes.
+/// Known limitation: staging a *brand-new* file mid-run is attributed to the
+/// running hook. Relative to the baseline tree the freshly-staged path is an
+/// addition, and the before/after snapshots differ, so it is reported as a
+/// modification.
+///
+/// We accept this narrow false positive deliberately. The only way to suppress
+/// it (excluding added paths from the diff) would also hide genuine hook edits
+/// to intent-to-add files — a false *negative*, which is worse for a
+/// modification detector (see `hook_modifying_intent_to_add_file_is_reported`).
+/// Staging changes to *existing* files — the common hunk-by-hunk review flow —
+/// is unaffected, because tree anchoring leaves those diffs unchanged (see
+/// `concurrent_staging_is_not_reported_as_hook_modification`).
 #[test]
-fn staging_untracked_file_is_not_reported_as_hook_modification() -> Result<()> {
+fn staging_brand_new_file_mid_run_is_attributed_to_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -4124,10 +4133,59 @@ fn staging_untracked_file_is_not_reported_as_hook_modification() -> Result<()> {
     cwd.child("new.txt").write_str("brand new\n")?;
 
     cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
-    stage-new-file...........................................................Passed
+    stage-new-file...........................................................Failed
+    - hook id: stage-new-file
+    - files were modified by this hook
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A hook that modifies an intent-to-add (`git add -N`) file must be reported
+/// as modifying files. `git write-tree` omits intent-to-add entries, so the
+/// baseline tree lacks the file; the hook's edit must still be detected via the
+/// before/after snapshot comparison rather than being hidden as an "addition".
+#[test]
+fn hook_modifying_intent_to_add_file_is_reported() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify-file
+                name: modify-file
+                language: system
+                entry: sh -c 'echo appended >> newfile.txt'
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("tracked.txt").write_str("base\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+    // A new file staged as intent-to-add: present in the index as a placeholder,
+    // absent from the tree `git write-tree` produces.
+    cwd.child("newfile.txt").write_str("brand new\n")?;
+    git_cmd(cwd.path())
+        .args(["add", "-N", "newfile.txt"])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify-file..............................................................Failed
+    - hook id: modify-file
+    - files were modified by this hook
 
     ----- stderr -----
     ");

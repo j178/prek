@@ -380,11 +380,14 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
 /// A bare `git diff` compares the working tree against the live index, so a
 /// concurrent `git add` changes its output without any file changing on disk.
 /// Anchoring the diff to a tree captured once per run (via `write_tree`) keeps
-/// before/after snapshots comparable even while the user stages files.
+/// before/after snapshots comparable even while the user stages files: staging
+/// moves the index, but neither the working tree nor the fixed baseline tree,
+/// so only a hook writing to the working tree changes the diff.
 ///
-/// `--diff-filter=a` excludes added paths (only meaningful against a tree):
-/// hooks never stage files, so a path that is "added" relative to the baseline
-/// tree can only mean the user concurrently staged a previously-untracked file.
+/// The before/after byte comparison (in `DiffTracker`) is what distinguishes a
+/// hook modification from pre-existing state, so no `--diff-filter` is applied
+/// here. Filtering out "added" paths would also hide genuine hook edits to
+/// intent-to-add (`git add -N`) files, which `write_tree` omits from the tree.
 ///
 /// `tree` is `None` when `write_tree` could not capture a baseline (an unmerged
 /// or partially-present index). The diff then falls back to the pre-existing
@@ -395,16 +398,10 @@ pub(crate) async fn get_tree_diff(path: &Path, tree: Option<&str>) -> Result<Vec
     let mut cmd = git_cmd()?;
     cmd.arg("diff");
     if let Some(tree) = tree {
-        cmd.arg(tree).hidden_args([
-            "--no-ext-diff",
-            "--no-textconv",
-            "--ignore-submodules",
-            "--diff-filter=a",
-        ]);
-    } else {
-        cmd.hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"]);
+        cmd.arg(tree);
     }
     let output = cmd
+        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
         .arg("--")
         .arg(path)
         // This diff is only used as a best-effort before/after snapshot of
