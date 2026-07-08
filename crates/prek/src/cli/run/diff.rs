@@ -12,7 +12,15 @@ pub(super) struct DiffTracker<'a> {
     /// tree instead of the live index, so a user running `git add` while
     /// hooks execute cannot change the diff — only a hook writing to the
     /// working tree can (see `git::get_tree_diff`).
+    ///
+    /// Stays `None` when `git write-tree` cannot serialize the index (an
+    /// unmerged or partially-present index); snapshots then fall back to the
+    /// live-index diff, preserving the best-effort behaviour hooks had before
+    /// tree anchoring.
     baseline_tree: Option<String>,
+    /// Whether we have already attempted to capture `baseline_tree`, so a
+    /// failing `write-tree` is not retried before every group.
+    baseline_tree_captured: bool,
 }
 
 enum DiffBaseline {
@@ -27,6 +35,7 @@ impl<'a> DiffTracker<'a> {
             path,
             baseline: DiffBaseline::Clean,
             baseline_tree: None,
+            baseline_tree_captured: false,
         }
     }
 
@@ -35,6 +44,7 @@ impl<'a> DiffTracker<'a> {
             path,
             baseline: DiffBaseline::Unknown,
             baseline_tree: None,
+            baseline_tree_captured: false,
         }
     }
 
@@ -42,12 +52,17 @@ impl<'a> DiffTracker<'a> {
         if !may_modify_files {
             return Ok(());
         }
-        if self.baseline_tree.is_none() {
-            self.baseline_tree = Some(git::write_tree().await?);
+        if !self.baseline_tree_captured {
+            // Best-effort: `write-tree` fails on an unmerged or partially-present
+            // index. Leave `baseline_tree` as `None` in that case so snapshots
+            // fall back to the live-index diff (see `git::get_tree_diff`).
+            self.baseline_tree = git::write_tree().await.ok();
+            self.baseline_tree_captured = true;
         }
         if let DiffBaseline::Unknown = self.baseline {
-            let tree = self.baseline_tree.as_deref().expect("tree captured above");
-            self.baseline = DiffBaseline::Snapshot(git::get_tree_diff(self.path, tree).await?);
+            self.baseline = DiffBaseline::Snapshot(
+                git::get_tree_diff(self.path, self.baseline_tree.as_deref()).await?,
+            );
         }
         Ok(())
     }
@@ -64,11 +79,9 @@ impl<'a> DiffTracker<'a> {
         }
 
         // `prepare_for_group` ran with `may_modify_files == true`, so the
-        // baseline tree exists.
-        let tree = self
-            .baseline_tree
-            .clone()
-            .expect("baseline tree captured in prepare_for_group");
+        // baseline-tree capture was attempted. `tree` may still be `None` when
+        // `write-tree` failed, in which case the diff falls back to the index.
+        let tree = self.baseline_tree.clone();
 
         match &mut self.baseline {
             DiffBaseline::Clean => {
@@ -81,7 +94,7 @@ impl<'a> DiffTracker<'a> {
                 // can look dirty even when the content is unchanged. Do a full
                 // diff here to ignore stat-only changes and reuse the content
                 // diff as the baseline if the hook really modified files.
-                let curr_diff = git::get_tree_diff(self.path, &tree).await?;
+                let curr_diff = git::get_tree_diff(self.path, tree.as_deref()).await?;
                 if curr_diff.is_empty() {
                     return Ok(false);
                 }
@@ -95,7 +108,7 @@ impl<'a> DiffTracker<'a> {
                 // Unknown initial state, `--all-files`, and later dirty groups
                 // need a full before/after diff comparison to avoid confusing
                 // pre-existing user changes with hook changes.
-                let curr_diff = git::get_tree_diff(self.path, &tree).await?;
+                let curr_diff = git::get_tree_diff(self.path, tree.as_deref()).await?;
                 let modified = curr_diff != *prev_diff;
                 *prev_diff = curr_diff;
                 Ok(modified)

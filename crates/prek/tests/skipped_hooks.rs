@@ -411,7 +411,7 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
 /// 2. `git diff` is not called when every hook is skipped
 ///
 /// Note: This test uses manual output capture instead of `cmd_snapshot!` because
-/// we need to count `get_diff` occurrences in trace-level stderr. Trace output
+/// we need to count `get_tree_diff` occurrences in trace-level stderr. Trace output
 /// contains non-deterministic timestamps and timing data unsuitable for snapshots.
 #[test]
 fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
@@ -460,10 +460,10 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
 
     // Regression test for #1335: skipped hooks do not need modification checks.
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let get_diff_calls = stderr.matches("get_diff").count();
+    let get_tree_diff_calls = stderr.matches("get_tree_diff").count();
     assert_eq!(
-        get_diff_calls, 0,
-        "Expected no get_diff calls when all hooks skip, found {get_diff_calls}.\n\
+        get_tree_diff_calls, 0,
+        "Expected no get_tree_diff calls when all hooks skip, found {get_tree_diff_calls}.\n\
          Trace output:\n{stderr}"
     );
 
@@ -502,10 +502,10 @@ fn may_modify_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
          Trace output:\n{stderr}"
     );
 
-    let get_diff_calls = stderr.matches("get_diff").count();
+    let get_tree_diff_calls = stderr.matches("get_tree_diff").count();
     assert_eq!(
-        get_diff_calls, 0,
-        "Expected no full get_diff calls when the hook leaves files unchanged, found {get_diff_calls}.\n\
+        get_tree_diff_calls, 0,
+        "Expected no full get_tree_diff calls when the hook leaves files unchanged, found {get_tree_diff_calls}.\n\
          Trace output:\n{stderr}"
     );
 
@@ -564,10 +564,10 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
          Trace output:\n{stderr}"
     );
 
-    let get_diff_calls = stderr.matches("get_diff").count();
+    let get_tree_diff_calls = stderr.matches("get_tree_diff").count();
     assert_eq!(
-        get_diff_calls, 1,
-        "Expected one content diff to filter out stat-only changes, found {get_diff_calls}.\n\
+        get_tree_diff_calls, 1,
+        "Expected one content diff to filter out stat-only changes, found {get_tree_diff_calls}.\n\
          Trace output:\n{stderr}"
     );
 
@@ -612,10 +612,10 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
          Trace output:\n{stderr}"
     );
 
-    let get_diff_calls = stderr.matches("get_diff").count();
+    let get_tree_diff_calls = stderr.matches("get_tree_diff").count();
     assert_eq!(
-        get_diff_calls, 1,
-        "Expected one full get_diff call after detecting modifications, found {get_diff_calls}.\n\
+        get_tree_diff_calls, 1,
+        "Expected one full get_tree_diff call after detecting modifications, found {get_tree_diff_calls}.\n\
          Trace output:\n{stderr}"
     );
 
@@ -666,10 +666,10 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
          Trace output:\n{stderr}"
     );
 
-    let get_diff_calls = stderr.matches("get_diff").count();
+    let get_tree_diff_calls = stderr.matches("get_tree_diff").count();
     assert_eq!(
-        get_diff_calls, 2,
-        "Expected a full before/after diff comparison for dirty `--all-files`, found {get_diff_calls}.\n\
+        get_tree_diff_calls, 2,
+        "Expected a full before/after diff comparison for dirty `--all-files`, found {get_tree_diff_calls}.\n\
          Trace output:\n{stderr}"
     );
 
@@ -829,10 +829,10 @@ fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
     assert!(output.status.success(), "prek should succeed");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let get_diff_calls = stderr.matches("get_diff").count();
+    let get_tree_diff_calls = stderr.matches("get_tree_diff").count();
     assert_eq!(
-        get_diff_calls, 0,
-        "Expected no get_diff calls for read-only builtin hooks, found {get_diff_calls}.\n\
+        get_tree_diff_calls, 0,
+        "Expected no get_tree_diff calls for read-only builtin hooks, found {get_tree_diff_calls}.\n\
          Trace output:\n{stderr}"
     );
 

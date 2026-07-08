@@ -374,27 +374,37 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
     Ok(true)
 }
 
-/// Get the diff of the working tree against a fixed tree object.
+/// Get the diff of the working tree against a fixed tree object, or against the
+/// live index when `tree` is `None`.
 ///
 /// A bare `git diff` compares the working tree against the live index, so a
 /// concurrent `git add` changes its output without any file changing on disk.
-/// Anchoring the diff to a tree captured once per run keeps before/after
-/// snapshots comparable even while the user stages files.
+/// Anchoring the diff to a tree captured once per run (via `write_tree`) keeps
+/// before/after snapshots comparable even while the user stages files.
 ///
-/// `--diff-filter=a` excludes added paths: hooks never stage files, so a path
-/// that is "added" relative to the baseline tree can only mean the user
-/// concurrently staged a previously-untracked file.
+/// `--diff-filter=a` excludes added paths (only meaningful against a tree):
+/// hooks never stage files, so a path that is "added" relative to the baseline
+/// tree can only mean the user concurrently staged a previously-untracked file.
+///
+/// `tree` is `None` when `write_tree` could not capture a baseline (an unmerged
+/// or partially-present index). The diff then falls back to the pre-existing
+/// index comparison so hooks still run best-effort in those environments,
+/// matching the behaviour before tree anchoring was introduced.
 #[instrument(level = "trace")]
-pub(crate) async fn get_tree_diff(path: &Path, tree: &str) -> Result<Vec<u8>, Error> {
-    let output = git_cmd()?
-        .arg("diff")
-        .arg(tree)
-        .hidden_args([
+pub(crate) async fn get_tree_diff(path: &Path, tree: Option<&str>) -> Result<Vec<u8>, Error> {
+    let mut cmd = git_cmd()?;
+    cmd.arg("diff");
+    if let Some(tree) = tree {
+        cmd.arg(tree).hidden_args([
             "--no-ext-diff",
             "--no-textconv",
             "--ignore-submodules",
             "--diff-filter=a",
-        ])
+        ]);
+    } else {
+        cmd.hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"]);
+    }
+    let output = cmd
         .arg("--")
         .arg(path)
         // This diff is only used as a best-effort before/after snapshot of
