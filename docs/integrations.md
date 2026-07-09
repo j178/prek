@@ -44,8 +44,8 @@ to verify they were built by official prek workflows. Verify using the
 [GitHub CLI](https://cli.github.com/):
 
 ```console
-$ gh attestation verify --owner j178 oci://ghcr.io/j178/prek:latest
-Loaded digest sha256:xxxx... for oci://ghcr.io/j178/prek:latest
+$ gh attestation verify --owner j178 oci://ghcr.io/j178/prek:v0.4.8
+Loaded digest sha256:xxxx... for oci://ghcr.io/j178/prek:v0.4.8
 Loaded 1 attestation from GitHub API
 ✓ Verification succeeded!
 
