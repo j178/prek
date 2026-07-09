@@ -40,7 +40,9 @@ docker run --rm ghcr.io/j178/prek-alpine:v0.4.8 --version
 
 Both images are signed with
 [GitHub Attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations)
-to verify they were built by official prek workflows. Verify using the
+to verify they were built by official prek workflows.
+Each image is verified separately; the example below verifies the minimal image, and the Alpine image is verified the same way by substituting `prek-alpine` for `prek`.
+Verify using the
 [GitHub CLI](https://cli.github.com/):
 
 ```console

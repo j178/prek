@@ -63,8 +63,10 @@ jobs:
           persist-credentials: false
 
       # QEMU is required to run the target-arch `RUN` steps in the Alpine stage
-      # when cross-building linux/arm64 on an amd64 runner.
+      # when cross-building linux/arm64 on an amd64 runner. The minimal (scratch)
+      # image only copies the cross-compiled binary, so it needs no emulation.
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        if: ${{ matrix.image == 'alpine' }}
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
