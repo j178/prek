@@ -11,7 +11,6 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunOptions, flag};
 use crate::config::{self, Stage};
-use crate::fs::PathClean;
 use crate::git;
 use crate::git::GIT_ROOT;
 use crate::printer::Printer;
@@ -91,30 +90,37 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
     Ok(shadow)
 }
 
-async fn prepare_repo_and_rev<'a>(
+struct PreparedRepo<'a> {
+    runtime_source: Cow<'a, str>,
+    display_source: Option<&'a str>,
+    rev: String,
+}
+
+async fn prepare_repo<'a>(
     repo: &'a str,
-    rev: Option<&'a str>,
-    tmp_dir: &'a Path,
-) -> Result<(Cow<'a, str>, String)> {
+    rev: Option<&str>,
+    tmp_dir: &Path,
+) -> Result<PreparedRepo<'a>> {
     let repo_path = Path::new(repo);
     let is_local = repo_path.is_dir();
-    // The generated config lives in the scratch directory, where relative repo paths would be
-    // resolved against the wrong base. Preserve the CLI argument's meaning before writing it.
-    let repo = if is_local {
+    let runtime_source = if is_local {
         Cow::Owned(
-            std::path::absolute(repo_path)?
-                .clean()
+            dunce::canonicalize(repo_path)?
                 .to_string_lossy()
                 .into_owned(),
         )
     } else {
         Cow::Borrowed(repo)
     };
-    let repo_path = Path::new(repo.as_ref());
+    let repo_path = Path::new(runtime_source.as_ref());
 
     // If rev is provided, use it directly.
     if let Some(rev) = rev {
-        return Ok((repo, rev.to_string()));
+        return Ok(PreparedRepo {
+            runtime_source,
+            display_source: is_local.then_some(repo),
+            rev: rev.to_string(),
+        });
     }
 
     // Get HEAD revision
@@ -125,7 +131,7 @@ async fn prepare_repo_and_rev<'a>(
         let head_rev = git::git_cmd()?
             .arg("ls-remote")
             .arg("--exit-code")
-            .arg(repo)
+            .arg(runtime_source.as_ref())
             .arg("HEAD")
             .output()
             .await?
@@ -142,13 +148,21 @@ async fn prepare_repo_and_rev<'a>(
         warn_user!("Creating temporary repo with uncommitted changes...");
         let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
         let head_rev = get_head_rev(&shadow).await?;
-        Ok((Cow::Owned(shadow.to_string_lossy().into_owned()), head_rev))
+        Ok(PreparedRepo {
+            runtime_source: Cow::Owned(shadow.to_string_lossy().into_owned()),
+            display_source: None,
+            rev: head_rev,
+        })
     } else {
-        Ok((repo, head_rev))
+        Ok(PreparedRepo {
+            runtime_source,
+            display_source: is_local.then_some(repo),
+            rev: head_rev,
+        })
     }
 }
 
-fn render_repo_config_toml(repo_path: &str, rev: &str, hooks: Vec<String>) -> String {
+fn render_repo_config_toml(repo_path: &str, rev: &str, hooks: &[String]) -> String {
     let mut doc = DocumentMut::new();
     let mut repo_table = toml_edit::Table::new();
     repo_table["repo"] = toml_edit::value(repo_path);
@@ -190,12 +204,16 @@ pub(crate) async fn try_repo(
     let store = Store::from_settings()?;
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
-    let (repo_path, rev) = prepare_repo_and_rev(&repo, rev.as_deref(), tmp_dir.path())
+    let prepared = prepare_repo(&repo, rev.as_deref(), tmp_dir.path())
         .await
         .context("Failed to determine repository and revision")?;
 
     let store = Store::from_path(tmp_dir.path()).init()?;
-    let repo_config = config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]);
+    let repo_config = config::RemoteRepo::new(
+        prepared.runtime_source.to_string(),
+        prepared.rev.clone(),
+        vec![],
+    );
     let repo_clone_path = store.clone_repo(&repo_config, None).await?;
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
@@ -210,16 +228,23 @@ pub(crate) async fn try_repo(
         .map(|hook| hook.id)
         .collect::<Vec<_>>();
 
-    let config_str = render_repo_config_toml(&repo_path, &rev, hooks);
+    // The scratch config needs the resolved source, while the displayed config should preserve
+    // the user's path so it remains meaningful when copied into their project.
+    let config_str = render_repo_config_toml(&prepared.runtime_source, &prepared.rev, &hooks);
     let config_file = tmp_dir.path().join(PREK_TOML);
     fs_err::tokio::write(&config_file, &config_str).await?;
+
+    let display_config_str = match prepared.display_source {
+        Some(source) => Cow::Owned(render_repo_config_toml(source, &prepared.rev, &hooks)),
+        None => Cow::Borrowed(config_str.as_str()),
+    };
 
     writeln!(
         printer.stdout(),
         "{}",
         format!("Using generated `{PREK_TOML}`:").cyan().bold()
     )?;
-    writeln!(printer.stdout(), "{}", config_str.dimmed())?;
+    writeln!(printer.stdout(), "{}", display_config_str.dimmed())?;
 
     crate::cli::run(
         &store,
