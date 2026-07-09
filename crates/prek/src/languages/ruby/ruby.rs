@@ -70,8 +70,8 @@ impl LanguageImpl for Ruby {
         if let Some(repo_path) = hook.repo_path() {
             // Try to build gemspecs, but don't fail if there aren't any
             match build_gemspecs(&ruby, repo_path).await {
-                Ok(gem_files) => {
-                    debug!("Built {} gem(s) from gemspecs", gem_files.len());
+                Ok(count) => {
+                    debug!("Built {count} gem(s) from gemspecs");
                 }
                 Err(e) if e.to_string().contains("No .gemspec files") => {
                     debug!("No gemspecs found in repo, skipping gem build");
