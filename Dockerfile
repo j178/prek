@@ -53,7 +53,7 @@ RUN apk add --no-cache \
   py3-pip
 COPY --from=build /prek /usr/local/bin/prek
 WORKDIR /io
-ENTRYPOINT ["prek"]
+ENTRYPOINT ["/usr/local/bin/prek"]
 
 FROM scratch AS minimal
 COPY --from=build /prek /
