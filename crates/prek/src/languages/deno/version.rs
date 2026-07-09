@@ -11,12 +11,6 @@ use crate::languages::version::{Error, try_into_u64_slice};
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct DenoVersion(semver::Version);
 
-impl Default for DenoVersion {
-    fn default() -> Self {
-        DenoVersion(semver::Version::new(0, 0, 0))
-    }
-}
-
 impl Deref for DenoVersion {
     type Target = semver::Version;
 

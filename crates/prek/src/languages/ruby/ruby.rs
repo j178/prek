@@ -14,7 +14,7 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
-use crate::languages::ruby::installer::{RubyInstaller, query_ruby_info};
+use crate::languages::ruby::installer::{RubyInstaller, query_ruby_version};
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -56,9 +56,6 @@ impl LanguageImpl for Ruby {
 
         info.with_toolchain(ruby.ruby_bin().to_path_buf())
             .with_language_version(ruby.version().clone());
-
-        // Store Ruby engine in metadata
-        info.with_extra("ruby_engine", ruby.engine());
 
         // 3. Create environment directories
         let gem_home = gem_home(&info.env_path);
@@ -107,7 +104,7 @@ impl LanguageImpl for Ruby {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         // 1. Verify Ruby runs and reports correct version
-        let (actual_version, _) = query_ruby_info(&info.toolchain)
+        let actual_version = query_ruby_version(&info.toolchain)
             .await
             .context("Failed to query Ruby info")?;
 

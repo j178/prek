@@ -91,7 +91,6 @@ impl LanguageImpl for Dotnet {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         let current_version = DotnetResult::from_executable(info.toolchain.clone())
-            .fill_version()
             .await
             .context("Failed to query current dotnet info")?;
 

@@ -10,12 +10,6 @@ use crate::languages::version::{Error, try_into_u64_slice};
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct GoVersion(semver::Version);
 
-impl Default for GoVersion {
-    fn default() -> Self {
-        GoVersion(semver::Version::new(0, 0, 0))
-    }
-}
-
 impl Deref for GoVersion {
     type Target = semver::Version;
 

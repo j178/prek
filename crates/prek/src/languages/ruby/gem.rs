@@ -13,11 +13,8 @@ use crate::run::INTERNAL_CONCURRENCY;
 
 /// Build a `PATH` value with the resolved Ruby's bin directory prepended.
 ///
-/// `ruby -S gem` searches `$PATH` for the `gem` script. The rv-ruby tarballs
-/// that prek auto-downloads ship `gem` next to `ruby` in the same `bin/`
-/// directory, but that directory is not on the parent process's PATH (e.g.
-/// in a Docker image with no system Ruby). Without prepending it, Ruby errors
-/// with `LoadError: No such file or directory -- gem`.
+/// Direct `gem` invocations still need the resolved Ruby's bin directory early
+/// in `$PATH` so gem scripts and generated executables resolve the same Ruby.
 fn ruby_path_env(ruby: &RubyResult) -> Result<OsString> {
     let ruby_bin_dir = ruby
         .ruby_bin()
@@ -53,12 +50,7 @@ async fn build_gemspec(ruby: &RubyResult, gemspec_path: &Path) -> Result<()> {
         .context("Gemspec path has no file name")?;
 
     debug!("Building gemspec: {}", gemspec_path.display());
-
-    // Use `ruby -S gem` instead of calling gem directly to work around Windows
-    // issue where gem.cmd/.bat can't be executed directly (os error 193)
-    Cmd::new(ruby.ruby_bin())
-        .arg("-S")
-        .arg("gem")
+    Cmd::new(ruby.gem_bin())
         .arg("build")
         .arg(gemspec_file)
         .current_dir(repo_dir)
@@ -77,20 +69,17 @@ pub(crate) async fn build_gemspecs(ruby: &RubyResult, repo_dir: &Path) -> Result
         anyhow::bail!("No .gemspec files found in {}", repo_dir.display());
     }
 
-    let count = gemspecs.len();
-
-    for gemspec in gemspecs {
-        build_gemspec(ruby, &gemspec).await?;
+    for gemspec in &gemspecs {
+        build_gemspec(ruby, gemspec).await?;
     }
 
-    Ok(count)
+    Ok(gemspecs.len())
 }
 
 /// Set common gem environment variables for isolation.
 ///
 /// Also prepends the resolved Ruby's bin directory to `$PATH` so that
-/// `ruby -S gem` can find the bundled `gem` script even when no system Ruby
-/// is on PATH.
+/// gem scripts and generated executables resolve the same Ruby.
 fn gem_env<'a>(cmd: &'a mut Cmd, ruby: &RubyResult, gem_home: &Path) -> Result<&'a mut Cmd> {
     cmd.env(EnvVars::PATH, ruby_path_env(ruby)?)
         .env(EnvVars::GEM_HOME, gem_home)
@@ -129,10 +118,8 @@ pub(crate) async fn install_gems(
         return Ok(());
     }
 
-    let mut cmd = Cmd::new(ruby.ruby_bin());
-    cmd.arg("-S")
-        .arg("gem")
-        .arg("install")
+    let mut cmd = Cmd::new(ruby.gem_bin());
+    cmd.arg("install")
         .arg("--no-document")
         .arg("--no-format-executable")
         .arg("--no-user-install")

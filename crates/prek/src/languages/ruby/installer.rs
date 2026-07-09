@@ -137,24 +137,47 @@ pub(crate) struct RubyResult {
     /// Path to ruby executable
     ruby_bin: PathBuf,
 
+    /// Path to gem executable for this Ruby
+    gem_bin: PathBuf,
+
     /// Ruby version
     version: semver::Version,
-
-    /// Ruby engine (ruby, jruby, truffleruby)
-    engine: String,
 }
 
 impl RubyResult {
+    fn from_managed_dir(dir: &Path, version: semver::Version) -> Result<Self> {
+        let bin_dir = dir.join("bin");
+        let ruby_bin = bin_dir.join("ruby").with_extension(EXE_EXTENSION);
+        let gem_bin = find_gem_for_ruby(&ruby_bin)?;
+
+        Ok(Self {
+            ruby_bin,
+            gem_bin,
+            version,
+        })
+    }
+
+    async fn from_executable(ruby_bin: PathBuf) -> Result<Self> {
+        let gem_bin = find_gem_for_ruby(&ruby_bin)?;
+        let version = query_ruby_version(&ruby_bin).await?;
+
+        Ok(Self {
+            ruby_bin,
+            gem_bin,
+            version,
+        })
+    }
+
     pub(crate) fn ruby_bin(&self) -> &Path {
         &self.ruby_bin
     }
 
-    pub(crate) fn version(&self) -> &semver::Version {
-        &self.version
+    pub(crate) fn gem_bin(&self) -> &Path {
+        &self.gem_bin
     }
 
-    pub(crate) fn engine(&self) -> &str {
-        &self.engine
+    pub(crate) fn version(&self) -> &semver::Version {
+        &self.version
     }
 }
 
@@ -247,23 +270,18 @@ impl RubyInstaller {
             .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
             .filter_map(|entry| {
                 let version = semver::Version::parse(&entry.file_name().to_string_lossy()).ok()?;
-                let bin_dir = entry.path().join("bin");
-                let ruby_bin = bin_dir.join("ruby");
-                let gem_bin = bin_dir.join("gem");
-                if ruby_bin.exists() && gem_bin.exists() {
-                    Some((version, ruby_bin))
-                } else {
-                    None
+                match RubyResult::from_managed_dir(&entry.path(), version) {
+                    Ok(ruby) => Some(ruby),
+                    Err(err) => {
+                        trace!(path = %entry.path().display(), %err, "Skipping invalid Ruby installation");
+                        None
+                    }
                 }
             })
-            .sorted_unstable_by(|(a, _), (b, _)| b.cmp(a)) // descending
-            .find_map(|(version, ruby_bin)| {
-                if request.matches(&version) {
-                    Some(RubyResult {
-                        ruby_bin,
-                        version,
-                        engine: "ruby".to_string(),
-                    })
+            .sorted_unstable_by(|a, b| b.version.cmp(&a.version)) // descending
+            .find_map(|ruby| {
+                if request.matches(&ruby.version) {
+                    Some(ruby)
                 } else {
                     None
                 }
@@ -356,11 +374,7 @@ impl RubyInstaller {
 
         fs_err::tokio::rename(&inner, &target).await?;
 
-        Ok(RubyResult {
-            ruby_bin: target.join("bin").join("ruby"),
-            version: version.clone(),
-            engine: "ruby".to_string(),
-        })
+        RubyResult::from_managed_dir(&target, version.clone())
     }
 
     async fn fetch_checksum(
@@ -413,29 +427,11 @@ impl RubyInstaller {
 
 /// Try to use a Ruby at the given path
 async fn try_ruby_path(ruby_path: &Path, request: &RubyRequest) -> Option<RubyResult> {
-    // Check for gem in same directory
-    if let Err(e) = find_gem_for_ruby(ruby_path) {
-        warn!("Ruby at {} has no gem: {}", ruby_path.display(), e);
-        return None;
-    }
-
-    // Query version and engine
-    match query_ruby_info(ruby_path).await {
-        Ok((version, engine)) => {
-            let result = RubyResult {
-                ruby_bin: ruby_path.to_path_buf(),
-                version,
-                engine,
-            };
-
-            if request.matches(&result.version) {
-                Some(result)
-            } else {
-                None
-            }
-        }
-        Err(e) => {
-            warn!("Failed to query Ruby at {}: {}", ruby_path.display(), e);
+    match RubyResult::from_executable(ruby_path.to_path_buf()).await {
+        Ok(ruby) if request.matches(ruby.version()) => Some(ruby),
+        Ok(_) => None,
+        Err(err) => {
+            warn!("Failed to inspect Ruby at {}: {err}", ruby_path.display());
             None
         }
     }
@@ -535,20 +531,15 @@ fn ruby_not_found_error(request: &RubyRequest, reason: &str) -> String {
 
 /// Find gem executable alongside Ruby
 fn find_gem_for_ruby(ruby_path: &Path) -> Result<PathBuf> {
-    let ruby_dir = ruby_path
-        .parent()
-        .context("Ruby executable has no parent directory")?;
+    let executable_names: &[&str] = if cfg!(windows) {
+        &["gem.cmd", "gem.bat", "gem.exe"]
+    } else {
+        &["gem"]
+    };
 
-    // Try various gem executable names (for Windows compatibility)
-    for name in ["gem", "gem.bat", "gem.cmd"] {
-        let gem_path = ruby_dir.join(name).with_extension(EXE_EXTENSION);
-        if gem_path.exists() {
-            return Ok(gem_path);
-        }
-
-        // Also try without explicit extension
-        let gem_path = ruby_dir.join(name);
-        if gem_path.exists() {
+    for name in executable_names {
+        let gem_path = ruby_path.with_file_name(name);
+        if gem_path.is_file() {
             return Ok(gem_path);
         }
     }
@@ -559,10 +550,9 @@ fn find_gem_for_ruby(ruby_path: &Path) -> Result<PathBuf> {
     )
 }
 
-/// Query Ruby version and engine
-pub(crate) async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version, String)> {
-    let script = "puts RUBY_ENGINE; puts RUBY_VERSION";
-
+/// Query the Ruby version.
+pub(crate) async fn query_ruby_version(ruby_path: &Path) -> Result<semver::Version> {
+    let script = "puts RUBY_VERSION";
     let output = Cmd::new(ruby_path)
         .arg("-e")
         .arg(script)
@@ -570,14 +560,11 @@ pub(crate) async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version
         .output()
         .await?;
 
-    let mut lines = str::from_utf8(&output.stdout)?.lines();
-    let engine = lines.next().unwrap_or("ruby").to_string();
-    let version_str = lines.next().context("No version in Ruby output")?.trim();
-
+    let version_str = str::from_utf8(&output.stdout)?.trim_ascii();
     let version = semver::Version::parse(version_str)
         .with_context(|| format!("Failed to parse Ruby version: {version_str}"))?;
 
-    Ok((version, engine))
+    Ok(version)
 }
 
 #[cfg(test)]
@@ -587,6 +574,10 @@ mod tests {
     use std::str::FromStr;
     use target_lexicon::Triple;
     use tempfile::TempDir;
+
+    fn test_gem_executable() -> &'static str {
+        if cfg!(windows) { "gem.bat" } else { "gem" }
+    }
 
     #[test]
     fn test_ruby_request_display() {
@@ -661,7 +652,10 @@ mod tests {
     #[test]
     fn test_find_gem_for_ruby_missing() {
         let temp_dir = TempDir::new().unwrap();
-        let ruby_path = temp_dir.path().join("bin/ruby");
+        let ruby_path = temp_dir
+            .path()
+            .join("bin/ruby")
+            .with_extension(EXE_EXTENSION);
 
         // Create parent dir but no gem
         fs::create_dir_all(temp_dir.path().join("bin")).unwrap();
@@ -683,8 +677,8 @@ mod tests {
         let bin_dir = temp_dir.path().join("bin");
         fs::create_dir_all(&bin_dir).unwrap();
 
-        let ruby_path = bin_dir.join("ruby");
-        let gem_path = bin_dir.join("gem");
+        let ruby_path = bin_dir.join("ruby").with_extension(EXE_EXTENSION);
+        let gem_path = bin_dir.join(test_gem_executable());
 
         fs::write(&ruby_path, "fake ruby").unwrap();
         fs::write(&gem_path, "fake gem").unwrap();
@@ -784,8 +778,8 @@ mod tests {
         for version in ["3.3.5", "3.4.8", "3.2.1"] {
             let bin_dir = temp_dir.path().join(version).join("bin");
             fs::create_dir_all(&bin_dir).unwrap();
-            fs::write(bin_dir.join("ruby"), "fake").unwrap();
-            fs::write(bin_dir.join("gem"), "fake").unwrap();
+            fs::write(bin_dir.join("ruby").with_extension(EXE_EXTENSION), "fake").unwrap();
+            fs::write(bin_dir.join(test_gem_executable()), "fake").unwrap();
         }
 
         let installer = RubyInstaller::new(temp_dir.path().to_path_buf());
@@ -793,6 +787,14 @@ mod tests {
         // Any: should return highest version
         let result = installer.find_installed(&RubyRequest::Any).unwrap();
         assert_eq!(*result.version(), semver::Version::new(3, 4, 8));
+        assert_eq!(
+            result.gem_bin(),
+            temp_dir
+                .path()
+                .join("3.4.8")
+                .join("bin")
+                .join(test_gem_executable())
+        );
 
         // MajorMinor(3, 3): should return 3.3.5
         let result = installer
@@ -902,7 +904,7 @@ mod tests {
         // Version dir with ruby but no gem
         let bin_dir = temp_dir.path().join("3.4.8").join("bin");
         fs::create_dir_all(&bin_dir).unwrap();
-        fs::write(bin_dir.join("ruby"), "fake").unwrap();
+        fs::write(bin_dir.join("ruby").with_extension(EXE_EXTENSION), "fake").unwrap();
 
         // Version dir with no bin at all
         fs::create_dir_all(temp_dir.path().join("3.3.0")).unwrap();
