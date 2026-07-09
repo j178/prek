@@ -11,6 +11,7 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunOptions, flag};
 use crate::config::{self, Stage};
+use crate::fs::PathClean;
 use crate::git;
 use crate::git::GIT_ROOT;
 use crate::printer::Printer;
@@ -97,10 +98,23 @@ async fn prepare_repo_and_rev<'a>(
 ) -> Result<(Cow<'a, str>, String)> {
     let repo_path = Path::new(repo);
     let is_local = repo_path.is_dir();
+    // The generated config lives in the scratch directory, where relative repo paths would be
+    // resolved against the wrong base. Preserve the CLI argument's meaning before writing it.
+    let repo = if is_local {
+        Cow::Owned(
+            std::path::absolute(repo_path)?
+                .clean()
+                .to_string_lossy()
+                .into_owned(),
+        )
+    } else {
+        Cow::Borrowed(repo)
+    };
+    let repo_path = Path::new(repo.as_ref());
 
     // If rev is provided, use it directly.
     if let Some(rev) = rev {
-        return Ok((Cow::Borrowed(repo), rev.to_string()));
+        return Ok((repo, rev.to_string()));
     }
 
     // Get HEAD revision
@@ -130,7 +144,7 @@ async fn prepare_repo_and_rev<'a>(
         let head_rev = get_head_rev(&shadow).await?;
         Ok((Cow::Owned(shadow.to_string_lossy().into_owned()), head_rev))
     } else {
-        Ok((Cow::Borrowed(repo), head_rev))
+        Ok((repo, head_rev))
     }
 }
 
