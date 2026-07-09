@@ -43,7 +43,7 @@ RUN cp target/$(cat rust_target.txt)/dist/prek /prek
 # TODO: Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /prek
 
-FROM alpine:3.23 AS alpine
+FROM alpine:3.24 AS alpine
 RUN apk add --no-cache \
   ca-certificates \
   git \
