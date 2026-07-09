@@ -364,21 +364,35 @@ impl Selectors {
             return false;
         }
 
-        // If no project prefix selectors are present, all paths are included
-        if !self
-            .includes
-            .iter()
-            .any(|include| matches!(include.expr, SelectorExpr::ProjectPrefix(_)))
-        {
+        if self.includes.is_empty() {
             return true;
         }
 
         let mut included = false;
+        // This is a project-discovery prefilter, not final hook selection.
+        // Keep scanning after a match so project-prefix selectors still get
+        // usage recorded for accurate unused-selector warnings.
         for (idx, include) in self.includes.iter().enumerate() {
-            if let SelectorExpr::ProjectPrefix(project_path) = &include.expr {
-                if path.starts_with(project_path) {
-                    usage.use_include(idx);
+            match &include.expr {
+                SelectorExpr::HookId(_) => {
+                    // A bare hook id can match any project, but we cannot mark
+                    // it used until final hook filtering proves a hook exists.
                     included = true;
+                }
+                SelectorExpr::ProjectPrefix(project_path) => {
+                    // Project-prefix selectors select projects directly, so a
+                    // matching discovered project is enough to mark them used.
+                    if path.starts_with(project_path) {
+                        usage.use_include(idx);
+                        included = true;
+                    }
+                }
+                SelectorExpr::ProjectHook { project_path, .. } => {
+                    // `project:hook` only needs this exact project initialized;
+                    // usage is still decided by the final hook-id match.
+                    if path == project_path {
+                        included = true;
+                    }
                 }
             }
         }

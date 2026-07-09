@@ -719,6 +719,86 @@ fn run_with_selectors() -> Result<()> {
 }
 
 #[test]
+fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: root-hook
+          name: root hook
+          entry: echo root
+          language: system
+          pass_filenames: false
+    "});
+
+    let sub = context.work_dir().child("sub");
+    sub.create_dir_all()?;
+    sub.child(".pre-commit-config.yaml").write_str(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: sub-hook
+          name: sub hook
+          entry: echo sub
+          language: system
+          pass_filenames: false
+    "})?;
+    sub.child("file.txt").write_str("")?;
+
+    let empty = context.work_dir().child("empty");
+    empty.create_dir_all()?;
+    empty
+        .child(".pre-commit-config.yaml")
+        .write_str("repos: []\n")?;
+
+    let unselected = context.work_dir().child("unselected");
+    unselected.create_dir_all()?;
+    unselected
+        .child(".pre-commit-config.yaml")
+        .write_str("invalid: config\n")?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("sub/").arg(".:root-hook"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ sub
+      sub hook...............................................................Passed
+    ✓ <workspace>
+      root hook..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("sub/").arg("root-hook"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ sub
+      sub hook...............................................................Passed
+    ✓ <workspace>
+      root hook..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("empty/").arg("root-hook"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    root hook................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn skips() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
