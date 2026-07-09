@@ -30,7 +30,7 @@ docker run --rm ghcr.io/j178/prek:v0.4.8 --version
 
 ### Alpine
 
-The Alpine image includes `git`, `nodejs`, `npm`, `python3`, and `py3-pip`, covering the most common hook runtimes.
+The Alpine image includes `curl`, `git`, `nodejs`, `npm`, `python3`, and `py3-pip`, covering the most common hook runtimes.
 
 ```bash
 docker run --rm ghcr.io/j178/prek-alpine:v0.4.8 --version

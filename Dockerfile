@@ -46,6 +46,7 @@ RUN cp target/$(cat rust_target.txt)/dist/prek /prek
 FROM alpine:3.24 AS alpine
 RUN apk add --no-cache \
   ca-certificates \
+  curl \
   git \
   nodejs \
   npm \
