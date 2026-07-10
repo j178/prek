@@ -143,7 +143,7 @@ impl DirectHookEntry {
     pub(crate) fn split(&self) -> Result<Vec<String>, Error> {
         let splits = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),
-            error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
+            error: anyhow::anyhow!("Failed to parse entry `{}` as commands", self.entry),
         })?;
         if splits.is_empty() {
             return Err(Error::Hook {

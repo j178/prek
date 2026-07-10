@@ -722,11 +722,7 @@ fn detail_lines_for_entry(
 
     match kind {
         RemovalKind::Repos => vec![],
-        RemovalKind::HookEnvs => {
-            let Some(info) = hook_marker else {
-                return Vec::new();
-            };
-
+        RemovalKind::HookEnvs if let Some(info) = hook_marker => {
             let mut lines = Vec::new();
             lines.push(format!(
                 "{}: {} ({})",

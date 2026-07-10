@@ -151,7 +151,7 @@ cargo binstall prek
 
 <!-- --8<-- [start: cargo-install] -->
 
-Build from source using Cargo (Rust 1.89+ is required):
+Build from source using Cargo (Rust 1.95+ is required):
 
 ```bash
 cargo install --locked prek
