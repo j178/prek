@@ -35,11 +35,7 @@ impl LanguageImpl for Haskell {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing Haskell environment");
 

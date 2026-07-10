@@ -155,11 +155,7 @@ impl LanguageImpl for Pygrep {
             anyhow::bail!("Failed to find or install a Python interpreter for `pygrep`.");
         };
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
         info.with_toolchain(python);
 
         info.persist_env_path();

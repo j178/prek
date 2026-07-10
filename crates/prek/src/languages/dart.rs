@@ -97,11 +97,7 @@ impl LanguageImpl for Dart {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing Dart environment");
 
@@ -323,12 +319,9 @@ async fn compile_executables(
 fn build_env_pubspec(
     source_path: Option<&Path>,
     package_name: Option<&str>,
-    dependencies: &rustc_hash::FxHashSet<String>,
+    dependencies: &[String],
 ) -> Pubspec {
     let mut resolved_dependencies = BTreeMap::new();
-
-    let mut dependencies = dependencies.iter().collect::<Vec<_>>();
-    dependencies.sort_unstable();
 
     for dep in dependencies {
         if let Some((package, version)) = dep.split_once(':') {
@@ -365,7 +358,7 @@ async fn install_package_config(
     env_path: &Path,
     source_path: Option<&Path>,
     package_name: Option<&str>,
-    dependencies: &rustc_hash::FxHashSet<String>,
+    dependencies: &[String],
 ) -> Result<()> {
     let pubspec = build_env_pubspec(source_path, package_name, dependencies);
     let pubspec_content = serde_saphyr::to_string(&pubspec)?;
@@ -389,7 +382,7 @@ async fn install_from_pubspec(
     dart: &Path,
     env_path: &Path,
     source_path: &Path,
-    dependencies: &rustc_hash::FxHashSet<String>,
+    dependencies: &[String],
 ) -> Result<()> {
     let pubspec_path = source_path.join(PUBSPEC_YAML);
     let pubspec_content = fs_err::read_to_string(&pubspec_path)?;
@@ -497,7 +490,7 @@ mod tests {
     #[test]
     fn build_env_pubspec_serializes_path_dependency() -> Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let dependencies = rustc_hash::FxHashSet::default();
+        let dependencies = Vec::new();
 
         let pubspec = build_env_pubspec(Some(temp_dir.path()), Some("sample"), &dependencies);
 

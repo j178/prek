@@ -107,11 +107,7 @@ impl LanguageImpl for Python {
             .await
             .context("Failed to install uv")?;
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");
 
@@ -402,22 +398,20 @@ mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    use prek_consts::env_vars::EnvVars;
-    use rustc_hash::FxHashSet;
-
     use super::Python;
     use crate::config::Language;
     use crate::hook::InstallInfo;
     use crate::languages::python::uv::Uv;
     use crate::languages::version::LanguageRequest;
     use crate::store::Store;
+    use prek_consts::env_vars::EnvVars;
 
     fn setup_test_install() -> (tempfile::TempDir, Uv, Store, InstallInfo) {
         let temp = tempfile::tempdir().expect("create tempdir");
         let hooks_dir = temp.path().join("hooks");
         fs_err::create_dir_all(&hooks_dir).expect("create hooks dir");
 
-        let info = InstallInfo::new(Language::Python, FxHashSet::default(), &hooks_dir)
+        let info = InstallInfo::create(Language::Python, None, Vec::new(), &hooks_dir)
             .expect("create install info");
         let store = Store::from_path(temp.path().join("store"));
         let uv = Uv::new(PathBuf::from("uv"));

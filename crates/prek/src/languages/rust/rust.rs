@@ -438,11 +438,7 @@ impl LanguageImpl for Rust {
         // Add toolchain bin to PATH, for cargo to use correct rustc
         let new_path = prepend_paths(&[&rustc_bin]).context("Failed to join PATH")?;
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
         info.with_toolchain(rust.toolchain().to_path_buf())
             .with_language_version(rust.version().deref().clone());
 

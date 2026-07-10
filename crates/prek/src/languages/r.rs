@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
-use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -29,11 +28,7 @@ impl LanguageImpl for R {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing R environment");
 
@@ -177,12 +172,7 @@ impl LanguageImpl for R {
     }
 }
 
-async fn run_r_code(
-    rscript: &Path,
-    code: &str,
-    args: &FxHashSet<String>,
-    cwd: &Path,
-) -> Result<()> {
+async fn run_r_code(rscript: &Path, code: &str, args: &[String], cwd: &Path) -> Result<()> {
     let script_dir = tempfile::tempdir()?;
     let script_path = script_dir.path().join("script.R");
     fs_err::tokio::write(
