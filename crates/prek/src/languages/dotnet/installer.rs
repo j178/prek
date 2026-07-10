@@ -38,18 +38,10 @@ impl Display for DotnetResult {
 }
 
 impl DotnetResult {
-    /// Creates a result from a `dotnet` executable path without probing version yet.
-    pub(crate) fn from_executable(dotnet: PathBuf) -> Self {
-        Self {
-            dotnet,
-            version: DotnetVersion::default(),
-        }
-    }
-
     /// Creates a result from a managed installation directory.
-    pub(crate) fn from_dir(dir: &Path) -> Self {
+    pub(crate) fn from_dir(dir: &Path, version: DotnetVersion) -> Self {
         let dotnet = dir.join("dotnet").with_extension(EXE_EXTENSION);
-        Self::from_executable(dotnet)
+        Self { dotnet, version }
     }
 
     /// Returns the resolved `dotnet` executable path.
@@ -62,21 +54,15 @@ impl DotnetResult {
         &self.version
     }
 
-    /// Replaces the stored SDK version.
-    pub(crate) fn with_version(mut self, version: DotnetVersion) -> Self {
-        self.version = version;
-        self
-    }
-
     /// Builds a command that runs this `dotnet` executable.
     pub(crate) fn cmd(&self) -> Cmd {
         Cmd::new(&self.dotnet)
     }
 
-    /// Fills the SDK version by running `dotnet --version`.
-    pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let mut cmd = self.cmd();
-        if let Some(parent) = self.dotnet.parent() {
+    /// Creates a result by querying the SDK version from a `dotnet` executable.
+    pub(crate) async fn from_executable(dotnet: PathBuf) -> Result<Self> {
+        let mut cmd = Cmd::new(&dotnet);
+        if let Some(parent) = dotnet.parent() {
             cmd.current_dir(parent);
         }
 
@@ -86,9 +72,7 @@ impl DotnetResult {
             .parse()
             .with_context(|| format!("Failed to parse version from: {version_str}"))?;
 
-        self.version = version;
-
-        Ok(self)
+        Ok(Self { dotnet, version })
     }
 }
 
@@ -155,7 +139,7 @@ impl DotnetInstaller {
         installed
             .find_map(|(version, path)| {
                 if request.matches(&version) {
-                    Some(DotnetResult::from_dir(&path).with_version(version))
+                    Some(DotnetResult::from_dir(&path, version))
                 } else {
                     None
                 }
@@ -174,7 +158,7 @@ impl DotnetInstaller {
         };
 
         for dotnet in dotnet_paths {
-            match DotnetResult::from_executable(dotnet).fill_version().await {
+            match DotnetResult::from_executable(dotnet).await {
                 Ok(result) => {
                     if request.matches(result.version()) {
                         trace!(%result, "Found system dotnet that matches request");
@@ -205,8 +189,11 @@ impl DotnetInstaller {
 
         self.download(install_dir.path(), request).await?;
 
-        let installed = DotnetResult::from_dir(install_dir.path())
-            .fill_version()
+        let dotnet = install_dir
+            .path()
+            .join("dotnet")
+            .with_extension(EXE_EXTENSION);
+        let installed = DotnetResult::from_executable(dotnet)
             .await
             .context("Failed to query installed dotnet version")?;
 
@@ -233,7 +220,7 @@ impl DotnetInstaller {
         let install_path = install_dir.keep();
         fs_err::tokio::rename(&install_path, &final_dir).await?;
 
-        Ok(DotnetResult::from_dir(&final_dir).with_version(version))
+        Ok(DotnetResult::from_dir(&final_dir, version))
     }
 
     /// Downloads the platform-specific install script and runs it for the request.

@@ -10,12 +10,6 @@ use crate::languages::version::{Error, try_into_u64_slice};
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BunVersion(semver::Version);
 
-impl Default for BunVersion {
-    fn default() -> Self {
-        BunVersion(semver::Version::new(0, 0, 0))
-    }
-}
-
 impl Deref for BunVersion {
     type Target = semver::Version;
 

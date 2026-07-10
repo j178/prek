@@ -20,12 +20,6 @@ use crate::languages::version::{Error, try_into_u64_slice};
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct DotnetVersion(semver::Version);
 
-impl Default for DotnetVersion {
-    fn default() -> Self {
-        Self(semver::Version::new(0, 0, 0))
-    }
-}
-
 impl Deref for DotnetVersion {
     type Target = semver::Version;
 

@@ -281,7 +281,10 @@ impl Project {
                 {
                     let resolved = config_dir.join(repo_path);
                     if resolved.is_dir() {
-                        remote.repo = resolved.to_string_lossy().into_owned();
+                        remote.repo = dunce::canonicalize(resolved)
+                            .map_err(config::Error::from)?
+                            .to_string_lossy()
+                            .into_owned();
                     }
                 }
             }

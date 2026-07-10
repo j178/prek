@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
 use crate::languages::node::NodeRequest;
-use crate::languages::node::installer::{NodeInstaller, NodeResult, bin_dir, lib_dir};
+use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir, query_node_version};
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
@@ -133,16 +133,15 @@ impl LanguageImpl for Node {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let node = NodeResult::from_executables(info.toolchain.clone(), PathBuf::new())
-            .fill_version()
+        let version = query_node_version(&info.toolchain)
             .await
             .context("Failed to query node version")?;
 
-        if node.version().version != info.language_version {
+        if version.version != info.language_version {
             anyhow::bail!(
                 "Node version mismatch: expected {}, found {}",
                 info.language_version,
-                node.version().version
+                version.version
             );
         }
 

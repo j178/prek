@@ -14,7 +14,7 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
-use crate::languages::ruby::installer::{RubyInstaller, query_ruby_info};
+use crate::languages::ruby::installer::{RubyInstaller, query_ruby_version};
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -57,9 +57,6 @@ impl LanguageImpl for Ruby {
         info.with_toolchain(ruby.ruby_bin().to_path_buf())
             .with_language_version(ruby.version().clone());
 
-        // Store Ruby engine in metadata
-        info.with_extra("ruby_engine", ruby.engine());
-
         // 3. Create environment directories
         let gem_home = gem_home(&info.env_path);
         fs_err::tokio::create_dir_all(&gem_home).await?;
@@ -70,8 +67,8 @@ impl LanguageImpl for Ruby {
         if let Some(repo_path) = hook.repo_path() {
             // Try to build gemspecs, but don't fail if there aren't any
             match build_gemspecs(&ruby, repo_path).await {
-                Ok(gem_files) => {
-                    debug!("Built {} gem(s) from gemspecs", gem_files.len());
+                Ok(count) => {
+                    debug!("Built {count} gem(s) from gemspecs");
                 }
                 Err(e) if e.to_string().contains("No .gemspec files") => {
                     debug!("No gemspecs found in repo, skipping gem build");
@@ -107,7 +104,7 @@ impl LanguageImpl for Ruby {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         // 1. Verify Ruby runs and reports correct version
-        let (actual_version, _) = query_ruby_info(&info.toolchain)
+        let actual_version = query_ruby_version(&info.toolchain)
             .await
             .context("Failed to query Ruby info")?;
 
