@@ -123,23 +123,18 @@ static PAGE_SIZE: LazyLock<usize> = LazyLock::new(|| {
 // https://github.com/uutils/findutils/blob/af48c151fe9b29cb7d25471b5388013ca15748ba/src/xargs/mod.rs#L177
 // https://github.com/sharkdp/argmax
 fn platform_max_cli_length() -> usize {
-    #[cfg(unix)]
-    {
-        let mut arg_max = *ARG_MAX;
-        // Assume arguments are counted with the granularity of a single page,
-        // so allow a one page cushion to account for rounding up
-        arg_max -= *PAGE_SIZE;
-        // POSIX recommends an additional 2048 bytes of headroom
-        arg_max -= ARG_HEADROOM;
-        arg_max.clamp(1 << 12, 1 << 20)
-    }
-    #[cfg(windows)]
-    {
-        (1 << 15) - ARG_HEADROOM // UNICODE_STRING max - headroom
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        1 << 12
+    cfg_select! {
+        unix => {
+            let mut arg_max = *ARG_MAX;
+            // Assume arguments are counted with the granularity of a single page,
+            // so allow a one page cushion to account for rounding up
+            arg_max -= *PAGE_SIZE;
+            // POSIX recommends an additional 2048 bytes of headroom
+            arg_max -= ARG_HEADROOM;
+            arg_max.clamp(1 << 12, 1 << 20)
+        },
+        windows => (1 << 15) - ARG_HEADROOM, // UNICODE_STRING max - headroom
+        _ => 1 << 12,
     }
 }
 
