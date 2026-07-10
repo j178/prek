@@ -7,9 +7,9 @@ use tracing::{debug, trace, warn};
 
 use crate::cli::update::config::read_frozen_refs;
 use crate::cli::update::repository::{
-    checkout_and_validate_manifest, get_tags_pointing_at_revision, is_commit_present,
-    list_tag_metadata, resolve_revision_to_commit, select_best_tag, select_update_revision,
-    setup_and_fetch_repo,
+    get_tags_pointing_at_revision, is_commit_present, list_tag_metadata,
+    resolve_revision_to_commit, select_best_tag, select_update_revision, setup_and_fetch_repo,
+    validate_manifest,
 };
 use crate::cli::update::{
     CommitPresence, FrozenMismatch, FrozenMismatchAction, FrozenMismatchReason, RepoSource,
@@ -19,6 +19,7 @@ use crate::cli::update::{
 use crate::config::{Repo, looks_like_sha};
 use crate::fs::Simplified;
 use crate::settings::{FilesystemOptions, UpdateSettings};
+use crate::store::Store;
 use crate::workspace::Workspace;
 
 /// Identifies repo usages that can share one update evaluation.
@@ -206,61 +207,63 @@ async fn collect_frozen_mismatches<'a>(
 
 /// Fetches a remote repository once, then evaluates all configured revisions that use it.
 pub(super) async fn evaluate_repo_source<'a>(
+    store: &Store,
     repo_source: &'a RepoSource<'a>,
     bleeding_edge: bool,
     tag_filters: &TagFilters,
 ) -> Result<Vec<RepoUpdate<'a>>> {
-    let tmp_dir = tempfile::tempdir()?;
-    let repo_path = tmp_dir.path();
+    let repo_path = store.repo_source_path(repo_source.source);
 
     let result = async {
+        // Keep FETCH_HEAD and the fetched tag set stable until every target that shares this
+        // source has been evaluated. Other prek processes may fetch different revisions into the
+        // same bare repository.
+        let _source_lock = store.repo_source_lock(repo_source.source).await?;
         trace!(
-            "Cloning repository `{}` to `{}`",
+            "Fetching repository `{}` to `{}`",
             repo_source.source,
             repo_path.display()
         );
-        setup_and_fetch_repo(repo_source.source, repo_path).await?;
-        let metadata = list_tag_metadata(repo_path).await?;
+        setup_and_fetch_repo(repo_source.source, &repo_path).await?;
+        let tag_timestamps = list_tag_metadata(&repo_path).await?;
 
-        anyhow::Ok(metadata)
+        let mut updates = Vec::with_capacity(repo_source.targets.len());
+        for target in &repo_source.targets {
+            let update_tag_timestamps = tag_filters
+                .filter(target.repo, &tag_timestamps)
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>();
+            let result = evaluate_repo_target(
+                &repo_path,
+                target,
+                bleeding_edge,
+                &tag_timestamps,
+                &update_tag_timestamps,
+            )
+            .await;
+
+            updates.push(RepoUpdate { target, result });
+        }
+
+        anyhow::Ok(updates)
     }
     .await;
 
-    let tag_timestamps = match result {
-        Ok(metadata) => metadata,
+    match result {
+        Ok(updates) => Ok(updates),
         Err(e) => {
             let error = format!("{e:#}");
-            return Ok(repo_source
+            Ok(repo_source
                 .targets
                 .iter()
                 .map(|target| RepoUpdate {
                     target,
                     result: Err(anyhow::anyhow!(error.clone())),
                 })
-                .collect());
+                .collect())
         }
-    };
-
-    let mut updates = Vec::with_capacity(repo_source.targets.len());
-    for target in &repo_source.targets {
-        let update_tag_timestamps = tag_filters
-            .filter(target.repo, &tag_timestamps)
-            .into_iter()
-            .cloned()
-            .collect::<Vec<_>>();
-        let result = evaluate_repo_target(
-            repo_path,
-            target,
-            bleeding_edge,
-            &tag_timestamps,
-            &update_tag_timestamps,
-        )
-        .await;
-
-        updates.push(RepoUpdate { target, result });
     }
-
-    Ok(updates)
 }
 
 /// Resolves one configured repo target within an already-fetched remote repository.
@@ -324,7 +327,7 @@ async fn evaluate_repo_target<'a>(
         (rev, None)
     };
 
-    checkout_and_validate_manifest(repo_path, &rev, &target.required_hook_ids).await?;
+    validate_manifest(repo_path, &rev, &target.required_hook_ids).await?;
 
     Ok(ResolvedRepoUpdate {
         revision: Revision { rev, frozen },

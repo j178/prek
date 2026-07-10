@@ -95,6 +95,8 @@ impl Store {
     /// Initialize the store.
     pub(crate) fn init(self) -> Result<Self, Error> {
         fs_err::create_dir_all(&self.path)?;
+        fs_err::create_dir_all(self.repo_sources_dir())?;
+        fs_err::create_dir_all(self.repo_source_locks_dir())?;
         fs_err::create_dir_all(self.repos_dir())?;
         fs_err::create_dir_all(self.hooks_dir())?;
         fs_err::create_dir_all(self.scratch_path())?;
@@ -116,13 +118,25 @@ impl Store {
         terminal_prompt: TerminalPrompt,
     ) -> Result<tempfile::TempDir, git::Error> {
         let temp = tempfile::tempdir_in(self.scratch_path())?;
+        let source = self.repo_source_path(repo.source());
+        let _source_lock = self.repo_source_lock(repo.source()).await?;
         debug!(
+            source = %source.display(),
             target = %temp.path().display(),
             %repo,
             ?terminal_prompt,
-            "Cloning repo"
+            "Preparing repo checkout"
         );
-        git::clone_repo(repo.source(), &repo.rev, temp.path(), terminal_prompt).await?;
+        git::ensure_bare_repo(repo.source(), &source).await?;
+        let revision = git::fetch_repo_source_revision(&source, &repo.rev, terminal_prompt).await?;
+        git::checkout_repo_from_source(
+            &source,
+            repo.source(),
+            &revision,
+            temp.path(),
+            terminal_prompt,
+        )
+        .await?;
         Ok(temp)
     }
 
@@ -289,9 +303,26 @@ impl Store {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }
 
+    pub(crate) async fn repo_source_lock(
+        &self,
+        source: &str,
+    ) -> Result<LockedFile, std::io::Error> {
+        LockedFile::acquire(
+            self.repo_source_locks_dir()
+                .join(format!("{}.lock", Self::repo_source_key(source))),
+            format!("repo source `{source}`"),
+        )
+        .await
+    }
+
     /// Returns the path to where a remote repo would be stored.
     pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
         self.repos_dir().join(Self::repo_key(repo))
+    }
+
+    /// Returns the path to the shared bare source for a remote repo.
+    pub(crate) fn repo_source_path(&self, source: &str) -> PathBuf {
+        self.repo_sources_dir().join(Self::repo_source_key(source))
     }
 
     /// Returns the store key (directory name) for a remote repo.
@@ -300,6 +331,21 @@ impl Store {
         repo.source().hash(&mut hasher);
         repo.rev.hash(&mut hasher);
         to_hex(hasher.finish())
+    }
+
+    /// Returns the store key for the shared bare source of a remote repo.
+    pub(crate) fn repo_source_key(source: &str) -> String {
+        let mut hasher = SeaHasher::new();
+        source.hash(&mut hasher);
+        to_hex(hasher.finish())
+    }
+
+    pub(crate) fn repo_sources_dir(&self) -> PathBuf {
+        self.path.join("repo-sources")
+    }
+
+    fn repo_source_locks_dir(&self) -> PathBuf {
+        self.repo_sources_dir().join(".locks")
     }
 
     pub(crate) fn repos_dir(&self) -> PathBuf {

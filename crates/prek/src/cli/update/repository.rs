@@ -2,10 +2,11 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::path::Path;
 use std::process::Stdio;
+use std::str;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
@@ -16,22 +17,10 @@ use tracing::{debug, trace};
 use crate::cli::update::{CommitPresence, RevisionSelection, SkippedDowngrade, TagTimestamp};
 use crate::{config, git};
 
-/// Initializes a temporary git repo and fetches the remote HEAD plus tags.
+/// Ensures the shared bare source exists and refreshes the remote HEAD plus tags.
 pub(super) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
-    git::init_repo(repo_url, repo_path).await?;
-    git::git_cmd()?
-        .arg("fetch")
-        .arg("origin")
-        .arg("HEAD")
-        .arg("--quiet")
-        .arg("--filter=blob:none")
-        .arg("--tags")
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await?;
+    git::ensure_bare_repo(repo_url, repo_path).await?;
+    git::fetch_repo_source_for_update(repo_path).await?;
 
     Ok(())
 }
@@ -50,13 +39,14 @@ pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> R
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// Returns whether a pinned commit SHA is already present in the refs fetched for `prek update`.
+/// Returns whether a pinned commit SHA is reachable from the refs fetched for `prek update`.
 ///
-/// `prek update` fetches only `origin/HEAD` and tags, using `--filter=blob:none`. That filter
-/// still downloads commits and trees reachable from those refs, but omits blobs. We intentionally
-/// use `git --no-lazy-fetch cat-file -e` here instead of `rev-parse`: in a partial clone,
-/// `rev-parse` may lazily fetch a missing commit from the promisor remote on demand. On GitHub,
-/// that can make a fork-only "impostor commit" appear to belong to the parent repository.
+/// The source cache is persistent and may also contain commits fetched for normal hook execution.
+/// Object existence alone therefore does not prove that a commit belongs to the current update
+/// view. After the object probe, require reachability from the freshly fetched `FETCH_HEAD` or
+/// current tag refs, ignoring accumulated objects and prek-owned pin refs.
+/// `--no-lazy-fetch` also guarantees that probing an older partial/promisor cache cannot retrieve
+/// an arbitrary SHA from the remote as a side effect.
 ///
 /// `prek update` only selects updates from tags, or from `HEAD` in `--bleeding-edge` mode. It
 /// does not normally update to arbitrary branches, so we currently fetch only those refs here.
@@ -90,7 +80,13 @@ pub(super) async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<
 
     if output.status.success() {
         let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
-        return Ok(CommitPresence::Present);
+        return Ok(
+            if commit_reachable_from_update_refs(repo_path, commit).await? {
+                CommitPresence::Present
+            } else {
+                CommitPresence::Absent
+            },
+        );
     }
 
     if no_lazy_fetch_unsupported(&output.stderr) {
@@ -100,6 +96,43 @@ pub(super) async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<
 
     let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
     Ok(CommitPresence::Absent)
+}
+
+async fn commit_reachable_from_update_refs(repo_path: &Path, commit: &str) -> Result<bool> {
+    let output = git::git_cmd()?
+        .arg("merge-base")
+        .arg("--is-ancestor")
+        .arg(commit)
+        .arg("FETCH_HEAD")
+        .check(false)
+        .current_dir(repo_path)
+        .remove_git_envs()
+        .output()
+        .await?;
+
+    match output.status.code() {
+        Some(0) => return Ok(true),
+        Some(1) => {}
+        _ => {
+            anyhow::bail!(
+                "Failed to check whether commit `{commit}` is reachable from FETCH_HEAD: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+    }
+
+    let output = git::git_cmd()?
+        .arg("for-each-ref")
+        .arg(format!("--contains={commit}"))
+        .arg("--format=%(refname)")
+        .arg("refs/tags")
+        .check(true)
+        .current_dir(repo_path)
+        .remove_git_envs()
+        .output()
+        .await?;
+
+    Ok(!output.stdout.is_empty())
 }
 
 pub(super) fn no_lazy_fetch_unsupported(stderr: &[u8]) -> bool {
@@ -369,38 +402,27 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     row[a_len]
 }
 
-/// Checks out the candidate manifest and verifies all configured hook ids still exist.
-pub(super) async fn checkout_and_validate_manifest(
+/// Reads the candidate manifest from the bare source and verifies configured hook ids still exist.
+pub(super) async fn validate_manifest(
     repo_path: &Path,
     rev: &str,
     required_hook_ids: &[&str],
 ) -> Result<()> {
-    if cfg!(windows) {
-        git::git_cmd()?
-            .arg("show")
-            .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
-            .current_dir(repo_path)
-            .remove_git_envs()
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await?;
-    }
-
-    git::git_cmd()?
-        .arg("checkout")
-        .arg("--quiet")
-        .arg(rev)
-        .arg("--")
-        .arg(PRE_COMMIT_HOOKS_YAML)
+    let output = git::git_cmd()?
+        .arg("show")
+        .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
         .current_dir(repo_path)
         .remove_git_envs()
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .check(true)
+        .output()
         .await?;
 
-    let manifest = config::read_manifest(&repo_path.join(PRE_COMMIT_HOOKS_YAML))?;
+    let content = str::from_utf8(&output.stdout).with_context(|| {
+        format!("Manifest `{PRE_COMMIT_HOOKS_YAML}` at rev `{rev}` is not UTF-8")
+    })?;
+    let manifest: config::Manifest = serde_saphyr::from_str(content).with_context(|| {
+        format!("Failed to parse manifest `{PRE_COMMIT_HOOKS_YAML}` at rev `{rev}`")
+    })?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()

@@ -15,6 +15,14 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
+fn non_hidden_directory_count(root: &Path) -> Result<usize> {
+    Ok(fs_err::read_dir(root)?
+        .filter_map(std::result::Result::ok)
+        .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .count())
+}
+
 #[test]
 fn run_basic() -> Result<()> {
     let context = TestContext::new();
@@ -357,6 +365,15 @@ fn same_repo() -> Result<()> {
 
     ----- stderr -----
     ");
+
+    assert_eq!(
+        non_hidden_directory_count(context.home_dir().child("repo-sources").path())?,
+        1
+    );
+    assert_eq!(
+        non_hidden_directory_count(context.home_dir().child("repos").path())?,
+        2
+    );
 
     Ok(())
 }

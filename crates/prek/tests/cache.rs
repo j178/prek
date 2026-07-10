@@ -278,6 +278,7 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
 
     // Add a few obviously-unused entries.
     home.child("repos/unused-repo").create_dir_all()?;
+    home.child("repo-sources/unused-source").create_dir_all()?;
     home.child("hooks/unused-hook-env").create_dir_all()?;
     home.child("tools/node").create_dir_all()?;
     home.child("cache/go").create_dir_all()?;
@@ -295,12 +296,14 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repo, 2 hook envs, 1 tool, 1 cache entry ([SIZE])
+    Removed 1 repo, 1 repo source, 2 hook envs, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
     "#);
 
     home.child("repos/unused-repo")
+        .assert(predicates::path::missing());
+    home.child("repo-sources/unused-source")
         .assert(predicates::path::missing());
     home.child("hooks/unused-hook-env")
         .assert(predicates::path::missing());
@@ -365,6 +368,11 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
         .transpose()?
         .expect("expected the relative remote repo to be cached")
         .path();
+    let cached_source = fs_err::read_dir(context.home_dir().child("repo-sources").path())?
+        .filter_map(Result::ok)
+        .find(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        .expect("expected the relative remote repo source to be cached")
+        .path();
     repos_dir.child("unused-repo").create_dir_all()?;
 
     cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
@@ -377,6 +385,10 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
     ");
 
     assert!(cached_repo.is_dir(), "cache GC removed the configured repo");
+    assert!(
+        cached_source.is_dir(),
+        "cache GC removed the configured repo source"
+    );
     repos_dir
         .child("unused-repo")
         .assert(predicates::path::missing());
@@ -888,8 +900,10 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     let tracked: Vec<String> = serde_json::from_str(&content)?;
     assert!(tracked.is_empty());
 
-    // Scratch is always cleared. Patch directories remain unless they contain stale patch files.
-    home.child("scratch").assert(predicates::path::missing());
+    // Scratch contents are cleared; patch directories remain unless they contain stale files.
+    home.child("scratch").assert(predicates::path::is_dir());
+    home.child("scratch/some-temp")
+        .assert(predicates::path::missing());
     home.child("patches").assert(predicates::path::is_dir());
 
     Ok(())
