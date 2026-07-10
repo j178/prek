@@ -43,38 +43,20 @@ static BUN_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 impl BunResult {
-    pub(crate) fn from_executable(bun: PathBuf) -> Self {
-        Self {
-            bun,
-            version: BunVersion::default(),
-        }
-    }
-
-    pub(crate) fn from_dir(dir: &Path) -> Self {
+    pub(crate) fn from_dir(dir: &Path, version: BunVersion) -> Self {
         let bun = bin_dir(dir).join("bun").with_extension(EXE_EXTENSION);
-        Self::from_executable(bun)
+        Self { bun, version }
     }
 
-    pub(crate) fn with_version(mut self, version: BunVersion) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let output = Cmd::new(&self.bun)
-            .arg("--version")
-            .check(true)
-            .output()
-            .await?;
+    pub(crate) async fn from_executable(bun: PathBuf) -> Result<Self> {
+        let output = Cmd::new(&bun).arg("--version").check(true).output().await?;
         let output_str = String::from_utf8_lossy(&output.stdout);
         let version: BunVersion = output_str
             .trim()
             .parse()
             .context("Failed to parse bun version")?;
 
-        self.version = version;
-
-        Ok(self)
+        Ok(Self { bun, version })
     }
 
     pub(crate) fn bun(&self) -> &Path {
@@ -152,7 +134,7 @@ impl BunInstaller {
         installed
             .find_map(|(v, path)| {
                 if req.matches(&v) {
-                    Some(BunResult::from_dir(&path).with_version(v))
+                    Some(BunResult::from_dir(&path, v))
                 } else {
                     None
                 }
@@ -248,7 +230,7 @@ impl BunInstaller {
         debug!(?extracted_binary, target = %target_binary.display(), "Moving bun to target");
         fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
 
-        Ok(BunResult::from_dir(&target).with_version(version.clone()))
+        Ok(BunResult::from_dir(&target, version.clone()))
     }
 
     async fn fetch_checksum(url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
@@ -281,7 +263,7 @@ impl BunInstaller {
 
         // Check each bun executable for a matching version, stop early if found
         for bun_path in bun_paths {
-            match BunResult::from_executable(bun_path).fill_version().await {
+            match BunResult::from_executable(bun_path).await {
                 Ok(bun_result) => {
                     // Check if this version matches the request
                     if bun_request.matches(&bun_result.version) {

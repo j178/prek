@@ -43,25 +43,13 @@ static DENO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 impl DenoResult {
-    pub(crate) fn from_executable(deno: PathBuf) -> Self {
-        Self {
-            deno,
-            version: DenoVersion::default(),
-        }
-    }
-
-    pub(crate) fn from_dir(dir: &Path) -> Self {
+    pub(crate) fn from_dir(dir: &Path, version: DenoVersion) -> Self {
         let deno = bin_dir(dir).join("deno").with_extension(EXE_EXTENSION);
-        Self::from_executable(deno)
+        Self { deno, version }
     }
 
-    pub(crate) fn with_version(mut self, version: DenoVersion) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let output = Cmd::new(&self.deno)
+    pub(crate) async fn from_executable(deno: PathBuf) -> Result<Self> {
+        let output = Cmd::new(&deno)
             .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
             .arg("--version")
             .check(true)
@@ -76,11 +64,11 @@ impl DenoResult {
             .and_then(|rest| rest.split_whitespace().next())
             .context("Failed to parse deno version output")?;
 
-        self.version = version_str
+        let version = version_str
             .parse()
             .context("Failed to parse deno version")?;
 
-        Ok(self)
+        Ok(Self { deno, version })
     }
 
     pub(crate) fn deno(&self) -> &Path {
@@ -158,7 +146,7 @@ impl DenoInstaller {
         installed
             .find_map(|(v, path)| {
                 if req.matches(&v, Some(&path)) {
-                    Some(DenoResult::from_dir(&path).with_version(v))
+                    Some(DenoResult::from_dir(&path, v))
                 } else {
                     None
                 }
@@ -236,7 +224,7 @@ impl DenoInstaller {
             .context("Failed to extract deno")?;
         Self::install_extracted(&target, &extracted).await?;
 
-        Ok(DenoResult::from_dir(&target).with_version(version.clone()))
+        Ok(DenoResult::from_dir(&target, version.clone()))
     }
 
     async fn fetch_checksum(checksum_url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
@@ -302,7 +290,7 @@ impl DenoInstaller {
 
         // Check each deno executable for a matching version, stop early if found
         for deno_path in deno_paths {
-            match DenoResult::from_executable(deno_path).fill_version().await {
+            match DenoResult::from_executable(deno_path).await {
                 Ok(deno_result) => {
                     // Check if this version matches the request
                     if deno_request.matches(&deno_result.version, Some(&deno_result.deno)) {

@@ -44,42 +44,17 @@ static NODE_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 impl NodeResult {
-    pub(crate) fn from_executables(node: PathBuf, npm: PathBuf) -> Self {
-        Self {
-            node,
-            npm,
-            version: NodeVersion::default(),
-        }
-    }
-
-    pub(crate) fn from_dir(dir: &Path) -> Self {
+    pub(crate) fn from_dir(dir: &Path, version: NodeVersion) -> Self {
         let node = bin_dir(dir).join("node").with_extension(EXE_EXTENSION);
         let npm = bin_dir(dir)
             .join("npm")
             .with_extension(if cfg!(windows) { "cmd" } else { "" });
-        Self::from_executables(node, npm)
+        Self { node, npm, version }
     }
 
-    pub(crate) fn with_version(mut self, version: NodeVersion) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        // https://nodejs.org/api/process.html#processrelease
-        let output = Cmd::new(&self.node)
-            .arg("-p")
-            .arg("JSON.stringify({version: process.version, lts: process.release.lts || false})")
-            .check(true)
-            .output()
-            .await?;
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let version: NodeVersion =
-            serde_json::from_str(&output_str).context("Failed to parse node version")?;
-
-        self.version = version;
-
-        Ok(self)
+    pub(crate) async fn from_executables(node: PathBuf, npm: PathBuf) -> Result<Self> {
+        let version = query_node_version(&node).await?;
+        Ok(Self { node, npm, version })
     }
 
     pub(crate) fn node(&self) -> &Path {
@@ -93,6 +68,18 @@ impl NodeResult {
     pub(crate) fn version(&self) -> &NodeVersion {
         &self.version
     }
+}
+
+pub(crate) async fn query_node_version(node: &Path) -> Result<NodeVersion> {
+    // https://nodejs.org/api/process.html#processrelease
+    let output = Cmd::new(node)
+        .arg("-p")
+        .arg("JSON.stringify({version: process.version, lts: process.release.lts || false})")
+        .check(true)
+        .output()
+        .await?;
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(&output_str).context("Failed to parse node version")
 }
 
 pub(crate) struct NodeInstaller {
@@ -161,7 +148,7 @@ impl NodeInstaller {
         installed
             .find_map(|(v, path)| {
                 if req.matches(&v) {
-                    Some(NodeResult::from_dir(&path).with_version(v))
+                    Some(NodeResult::from_dir(&path, v))
                 } else {
                     None
                 }
@@ -240,7 +227,7 @@ impl NodeInstaller {
         // TODO: retry on Windows
         fs_err::tokio::rename(&extracted, &target).await?;
 
-        Ok(NodeResult::from_dir(&target).with_version(version.clone()))
+        Ok(NodeResult::from_dir(&target, version.clone()))
     }
 
     async fn fetch_checksum(url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
@@ -274,10 +261,7 @@ impl NodeInstaller {
         // Check each node executable for a matching version, stop early if found
         for node_path in node_paths {
             if let Some(npm_path) = Self::find_npm_in_same_directory(&node_path)? {
-                match NodeResult::from_executables(node_path, npm_path)
-                    .fill_version()
-                    .await
-                {
+                match NodeResult::from_executables(node_path, npm_path).await {
                     Ok(node_result) => {
                         // Check if this version matches the request
                         if node_request.matches(&node_result.version) {

@@ -26,10 +26,10 @@ impl Display for RustResult {
 }
 
 impl RustResult {
-    pub(crate) fn from_dir(dir: &Path) -> Self {
+    pub(crate) fn from_dir(dir: &Path, version: RustVersion) -> Self {
         Self {
             toolchain: dir.to_path_buf(),
-            version: RustVersion::default(),
+            version,
         }
     }
 
@@ -41,14 +41,8 @@ impl RustResult {
         &self.version
     }
 
-    pub(crate) fn with_version(mut self, version: RustVersion) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let rustc = self
-            .toolchain
+    pub(crate) async fn inspect_dir(dir: &Path) -> Result<Self> {
+        let rustc = dir
             .join("bin")
             .join("rustc")
             .with_extension(std::env::consts::EXE_EXTENSION);
@@ -68,11 +62,9 @@ impl RustResult {
             .with_context(|| format!("Failed to parse Rust version from output: {version_str}"))?;
 
         let version = Version::parse(version_str)?;
-        let version = RustVersion::from_path(&version, &self.toolchain);
+        let version = RustVersion::from_path(&version, dir);
 
-        self.version = version;
-
-        Ok(self)
+        Ok(Self::from_dir(dir, version))
     }
 }
 
@@ -127,7 +119,7 @@ impl RustInstaller {
 
                 if matches {
                     trace!(name = %info.name, "Found matching installed rust");
-                    Some(RustResult::from_dir(&info.path).with_version(info.version))
+                    Some(RustResult::from_dir(&info.path, info.version))
                 } else {
                     trace!(name = %info.name, "Installed rust does not match request");
                     None
@@ -146,7 +138,7 @@ impl RustInstaller {
 
             if matches {
                 trace!(name = %info.name, "Found matching system rust");
-                let rust = RustResult::from_dir(&info.path).with_version(info.version);
+                let rust = RustResult::from_dir(&info.path, info.version);
                 return Ok(Some(rust));
             }
             trace!(name = %info.name, "System rust does not match request");
@@ -202,7 +194,7 @@ impl RustInstaller {
             .await
             .context("Failed to install Rust toolchain")?;
 
-        let rust = RustResult::from_dir(&toolchain_dir).fill_version().await?;
+        let rust = RustResult::inspect_dir(&toolchain_dir).await?;
         Ok(rust)
     }
 }

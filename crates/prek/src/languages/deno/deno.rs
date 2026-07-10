@@ -163,7 +163,6 @@ impl LanguageImpl for Deno {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         let deno = DenoResult::from_executable(info.toolchain.clone())
-            .fill_version()
             .await
             .context("Failed to query deno version")?;
 

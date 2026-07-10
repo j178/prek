@@ -55,15 +55,6 @@ pub(crate) struct NodeVersion {
     pub lts: Lts,
 }
 
-impl Default for NodeVersion {
-    fn default() -> Self {
-        NodeVersion {
-            version: semver::Version::new(0, 0, 0),
-            lts: Lts::NotLts,
-        }
-    }
-}
-
 impl<'de> Deserialize<'de> for NodeVersion {
     fn deserialize<D>(deserializer: D) -> anyhow::Result<NodeVersion, D::Error>
     where

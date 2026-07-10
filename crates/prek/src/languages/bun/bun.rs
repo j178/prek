@@ -102,7 +102,6 @@ impl LanguageImpl for Bun {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         let bun = BunResult::from_executable(info.toolchain.clone())
-            .fill_version()
             .await
             .context("Failed to query bun version")?;
 

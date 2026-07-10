@@ -57,17 +57,13 @@ struct GoFile {
 }
 
 impl GoResult {
-    fn from_executable(path: PathBuf, from_system: bool) -> Self {
-        Self {
-            path,
-            from_system,
-            version: GoVersion::default(),
-        }
-    }
-
-    pub(crate) fn from_dir(dir: &Path, from_system: bool) -> Self {
+    pub(crate) fn from_dir(dir: &Path, version: GoVersion) -> Self {
         let go = bin_dir(dir).join("go").with_extension(EXE_EXTENSION);
-        Self::from_executable(go, from_system)
+        Self {
+            path: go,
+            version,
+            from_system: false,
+        }
     }
 
     pub(crate) fn bin(&self) -> &Path {
@@ -86,14 +82,8 @@ impl GoResult {
         Cmd::new(&self.path)
     }
 
-    pub(crate) fn with_version(mut self, version: GoVersion) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let output = self
-            .cmd()
+    async fn from_system_executable(path: PathBuf) -> Result<Self> {
+        let output = Cmd::new(&path)
             .arg("version")
             .env(EnvVars::GOTOOLCHAIN, "local")
             .check(true)
@@ -108,9 +98,11 @@ impl GoResult {
 
         let version = GoVersion::from_str(version_str)?;
 
-        self.version = version;
-
-        Ok(self)
+        Ok(Self {
+            path,
+            version,
+            from_system: true,
+        })
     }
 }
 
@@ -181,7 +173,7 @@ impl GoInstaller {
             .find_map(|(version, path)| {
                 if request.matches(&version) {
                     trace!(%version, "Found matching installed go");
-                    Some(GoResult::from_dir(&path, false).with_version(version))
+                    Some(GoResult::from_dir(&path, version))
                 } else {
                     trace!(%version, "Installed go does not match request");
                     None
@@ -258,7 +250,7 @@ impl GoInstaller {
         // TODO: retry on Windows
         fs_err::tokio::rename(&extracted, &target).await?;
 
-        Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
+        Ok(GoResult::from_dir(&target, version.clone()))
     }
 
     async fn fetch_checksum(version: &str, filename: &str) -> Result<Option<Sha256Digest>> {
@@ -291,10 +283,7 @@ impl GoInstaller {
         };
 
         for go_path in go_paths {
-            match GoResult::from_executable(go_path, true)
-                .fill_version()
-                .await
-            {
+            match GoResult::from_system_executable(go_path).await {
                 Ok(go) => {
                     // Check if this version matches the request
                     if go_request.matches(&go.version) {
@@ -399,7 +388,7 @@ mod tests {
 
     #[tokio::test]
     #[cfg(unix)]
-    async fn fill_version_uses_local_gotoolchain() -> anyhow::Result<()> {
+    async fn from_system_executable_uses_local_gotoolchain() -> anyhow::Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
         let temp_dir = tempfile::tempdir()?;
@@ -425,9 +414,7 @@ mod tests {
         permissions.set_mode(0o755);
         fs_err::set_permissions(&fake_go, permissions)?;
 
-        let go = GoResult::from_executable(fake_go, true)
-            .fill_version()
-            .await?;
+        let go = GoResult::from_system_executable(fake_go).await?;
 
         assert_eq!(go.version().to_string(), "1.24.13");
         Ok(())
