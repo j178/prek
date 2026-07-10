@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 use prek_consts::env_vars::EnvVars;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -1535,15 +1536,7 @@ fn orphan_projects() -> Result<()> {
     Ok(())
 }
 
-/// Test that relative repo paths in subproject configs resolve from the config
-/// file's directory, not from the process's current working directory.
-///
-/// Regression test for <https://github.com/j178/prek/issues/1065>
-#[test]
-fn relative_repo_path_resolution() -> Result<()> {
-    use assert_fs::fixture::PathCreateDir;
-    use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
-
+fn setup_relative_repo_path_project() -> Result<TestContext> {
     let context = TestContext::new();
     context.init_project();
 
@@ -1552,21 +1545,6 @@ fn relative_repo_path_resolution() -> Result<()> {
     hook_repo.create_dir_all()?;
 
     git_cmd(&hook_repo).args(["init"]).assert().success();
-
-    git_cmd(&hook_repo)
-        .args(["config", "user.name", "Test"])
-        .assert()
-        .success();
-
-    git_cmd(&hook_repo)
-        .args(["config", "user.email", "test@test.com"])
-        .assert()
-        .success();
-
-    git_cmd(&hook_repo)
-        .args(["config", "core.autocrlf", "false"])
-        .assert()
-        .success();
 
     hook_repo.child(PRE_COMMIT_HOOKS_YAML).write_str(indoc! {r"
         - id: test-hook
@@ -1579,7 +1557,7 @@ fn relative_repo_path_resolution() -> Result<()> {
     git_cmd(&hook_repo).args(["add", "."]).assert().success();
 
     git_cmd(&hook_repo)
-        .args(["commit", "--no-si", "-m", "Initial commit"])
+        .args(["commit", "-m", "Initial commit"])
         .assert()
         .success();
 
@@ -1619,6 +1597,17 @@ fn relative_repo_path_resolution() -> Result<()> {
 
     context.git_add(".");
 
+    Ok(context)
+}
+
+/// Test that relative repo paths in subproject configs resolve from the config
+/// file's directory, not from the process's current working directory.
+///
+/// Regression test for <https://github.com/j178/prek/issues/1065>
+#[test]
+fn relative_repo_path_resolution() -> Result<()> {
+    let context = setup_relative_repo_path_project()?;
+
     // Run from the root directory - the relative path ../hook-repo should resolve
     // from subproject/.pre-commit-config.yaml's location, not from CWD
     cmd_snapshot!(context.filters(), context.run(), @r#"
@@ -1629,6 +1618,24 @@ fn relative_repo_path_resolution() -> Result<()> {
       Test Hook..............................................................Passed
     ✓ <workspace>
       Noop...................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn relative_repo_path_resolution_with_explicit_relative_config() -> Result<()> {
+    let context = setup_relative_repo_path_project()?;
+
+    cmd_snapshot!(context.filters(), context.run()
+        .arg("--config")
+        .arg("subproject/.pre-commit-config.yaml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Test Hook................................................................Passed
 
     ----- stderr -----
     "#);

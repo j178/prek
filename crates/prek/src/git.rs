@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -433,18 +432,6 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
 }
 
 pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
-    let url = if Path::new(url).is_dir() {
-        // If the URL is a local path, convert it to an absolute path
-        Cow::Owned(
-            std::path::absolute(url)?
-                .clean()
-                .to_string_lossy()
-                .to_string(),
-        )
-    } else {
-        Cow::Borrowed(url)
-    };
-
     git_cmd()?
         // Unset `extensions.objectFormat` if set, just follow what hash the remote uses.
         .arg("-c")
@@ -462,7 +449,7 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("remote")
         .arg("add")
         .arg("origin")
-        .arg(&*url)
+        .arg(url)
         .remove_git_envs()
         .check(true)
         .output()
