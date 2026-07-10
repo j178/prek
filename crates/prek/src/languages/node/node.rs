@@ -70,11 +70,7 @@ impl LanguageImpl for Node {
             .await
             .context("Failed to install node")?;
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
         info.with_toolchain(node.node().to_path_buf());

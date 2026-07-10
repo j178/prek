@@ -52,11 +52,7 @@ impl LanguageImpl for Bun {
             .await
             .context("Failed to install bun")?;
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         info.with_toolchain(bun.bun().to_path_buf());
         // BunVersion implements Deref<Target = semver::Version>, so we clone the inner version

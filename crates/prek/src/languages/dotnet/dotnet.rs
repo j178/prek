@@ -58,11 +58,7 @@ impl LanguageImpl for Dotnet {
             .await
             .context("Failed to install dotnet SDK")?;
 
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         let tools_dir = tools_dir(&info.env_path);
 

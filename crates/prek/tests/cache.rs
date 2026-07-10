@@ -104,6 +104,64 @@ fn cache_gc_verbose_shows_removed_entries() {
 }
 
 #[test]
+fn cache_gc_removes_legacy_hook_env_when_config_matches() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-python
+                name: Local Python Hook
+                entry: "python -c \"print(1)\""
+                language: python
+    "#});
+
+    let home = context.home_dir();
+    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
+    write_config_tracking_file(home, &[config_path.path()])?;
+    let legacy_env = home.child("hooks/python-legacy");
+    let current_env = home.child("hooks/python-current");
+    legacy_env.create_dir_all()?;
+    current_env.create_dir_all()?;
+
+    legacy_env
+        .child(".prek-hook.json")
+        .write_str(&serde_json::to_string_pretty(&json!({
+            "language": "python",
+            "language_version": "3.12.0",
+            "dependencies": [],
+            "env_path": legacy_env.path(),
+            "toolchain": "/usr/bin/python3",
+            "extra": {},
+        }))?)?;
+    current_env
+        .child(".prek-hook.json")
+        .write_str(&serde_json::to_string_pretty(&json!({
+            "schema_version": 1,
+            "language": "python",
+            "language_version": "3.12.0",
+            "dependencies": [],
+            "env_path": current_env.path(),
+            "toolchain": "/usr/bin/python3",
+            "extra": {},
+        }))?)?;
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 hook env ([SIZE])
+
+    ----- stderr -----
+    ");
+
+    legacy_env.assert(predicates::path::missing());
+    current_env.assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 fn cache_clean() -> anyhow::Result<()> {
     let context = TestContext::new().with_filtered_cache_clean_summary();
 
@@ -321,6 +379,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
 
     // Match logic for local hooks: empty deps + language request is `Any` by default.
     let marker_py = json!({
+        "schema_version": 1,
         "language": "python",
         "language_version": "3.12.0",
         "dependencies": [],
@@ -333,6 +392,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         .write_str(&serde_json::to_string_pretty(&marker_py)?)?;
 
     let marker_node = json!({
+        "schema_version": 1,
         "language": "node",
         "language_version": "22.0.0",
         "dependencies": [],
@@ -345,6 +405,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         .write_str(&serde_json::to_string_pretty(&marker_node)?)?;
 
     let marker_go = json!({
+        "schema_version": 1,
         "language": "golang",
         "language_version": "1.24.0",
         "dependencies": [],
@@ -431,6 +492,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     let env_py = home.child("hooks/python-keep");
     env_py.create_dir_all()?;
     let marker_py = json!({
+        "schema_version": 1,
         "language": "python",
         "language_version": "3.12.0",
         "dependencies": [],
