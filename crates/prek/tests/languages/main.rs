@@ -18,6 +18,7 @@ mod julia;
 mod lua;
 mod node;
 mod perl;
+mod php;
 mod pygrep;
 mod python;
 mod r;

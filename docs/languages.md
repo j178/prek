@@ -345,6 +345,46 @@ Perl toolchain.
 Perl does not support managed toolchain installation today. It uses the system
 `perl` executable, and explicit Perl version requests are rejected.
 
+### php
+
+prek runs PHP hooks with a system-installed `php` executable; it does not
+download or build PHP. Local hooks can invoke PHP directly, for example
+`entry: php script.php`. Composer is only required when installing a remote
+hook repository or `additional_dependencies`.
+
+Remote PHP hook repositories must be Composer packages with a `composer.json`
+that declares `name` and any command-line entrypoints in `bin`. prek installs
+the package as a mirrored path dependency in an isolated hook environment and
+adds that environment's `bin` directory to `PATH`, so hook entries use the
+declared executable name directly.
+
+`additional_dependencies` accept Composer package specifications such as
+`vendor/package` or `vendor/package:^1.2`. PHP extensions and PECL packages are
+not managed; Composer platform requirement failures are reported during hook
+installation.
+
+Packages used as hook commands should declare a Composer `bin`, which can be
+used directly as the hook entry. prek does not modify PHP's `include_path` or
+automatically load library-only `additional_dependencies` into local scripts.
+
+Because the hook repository is installed as a dependency, Composer uses its
+normal package-consumer behavior: the repository's `require` dependencies are
+installed, while its `composer.lock`, `require-dev`, `autoload-dev`, custom
+`repositories`, root configuration, and scripts are not applied. Private
+repositories must therefore be available through the user's Composer
+configuration.
+
+#### `language_version`
+
+PHP does not support managed toolchain installation today. Only an omitted or
+`default` language version is accepted; explicit PHP version requests are
+rejected.
+
+!!! note "prek-only"
+
+    Native PHP language support is a prek extension. Upstream pre-commit does
+    not currently provide a `language: php` backend.
+
 ### python
 
 prek installs hook repositories with `uv pip install` and uses the installed console scripts. The repository should be installable via `pip` (for example via `pyproject.toml` or `setup.py`). `additional_dependencies` are appended to the install step.

@@ -347,6 +347,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>lua</code></li>
 <li><code>node</code></li>
 <li><code>perl</code></li>
+<li><code>php</code></li>
 <li><code>pygrep</code></li>
 <li><code>python</code></li>
 <li><code>r</code></li>
