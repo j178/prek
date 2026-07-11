@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.9
+
+Released on 2026-07-11.
+
+Note: This release changes the repository identity schema stored in cached hook environments. Existing
+hook environments will be invalidated, and prek will reinstall them automatically when needed.
+
+### Enhancements
+
+- Preserve additional dependency order ([#2311](https://github.com/j178/prek/pull/2311))
+- Remove parallel Ruby gem installation ([#2307](https://github.com/j178/prek/pull/2307))
+- Warn for missing update repositories ([#2316](https://github.com/j178/prek/pull/2316))
+
+### Bug fixes
+
+- Fix mixed workspace selectors ([#2306](https://github.com/j178/prek/pull/2306))
+- Fix try-repo local path resolution ([#2310](https://github.com/j178/prek/pull/2310))
+- Use resolved gem executable ([#2308](https://github.com/j178/prek/pull/2308))
+- Validate complete XML documents in check-xml ([#2312](https://github.com/j178/prek/pull/2312))
+
+### Contributors
+
+- @j178
+
 ## 0.4.8
 
 Released on 2026-07-04.
