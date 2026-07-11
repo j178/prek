@@ -607,6 +607,45 @@ fn update_specific_repos() -> Result<()> {
 }
 
 #[test]
+fn update_warns_for_missing_repos() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "configured-repo", &["v1.0.0", "v1.1.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters, context.update()
+        .arg("--repo").arg(&repo_path)
+        .arg("--repo").arg("missing-from-repo")
+        .arg("--repo-include-tag").arg(format!("{repo_path}=v*"))
+        .arg("--repo-include-tag").arg("missing-from-include=v*")
+        .arg("--repo-exclude-tag").arg(format!("{repo_path}=nightly"))
+        .arg("--repo-exclude-tag").arg("missing-from-exclude=nightly")
+        .arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/configured-repo
+      updating rev `v1.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    warning: repos `missing-from-exclude`, `missing-from-include`, `missing-from-repo` were not found in the configuration
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
