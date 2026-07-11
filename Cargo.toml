@@ -70,7 +70,6 @@ memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.14.0", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
-quick-xml = { version = "0.40" }
 reqwest = {
   version = "0.13.2",
   default-features = false,
@@ -132,6 +131,7 @@ unicode-width = { version = "0.2.0", default-features = false }
 walkdir = { version = "2.5.0" }
 webpki-root-certs = { version = "1.0.6" }
 which = { version = "8.0.0" }
+xml = { version = "1.3.0" }
 
 # dev-dependencies
 assert_cmd = { version = "2.2.0" }

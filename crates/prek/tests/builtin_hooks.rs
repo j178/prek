@@ -2128,10 +2128,10 @@ fn check_xml_hook() -> Result<()> {
     - hook id: check-xml
     - exit code: 1
 
-      empty.xml: Failed to xml parse (no element found)
-      invalid_mismatched.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</different>` was found)
-      multiple_roots.xml: Failed to xml parse (junk after document element)
-      invalid_unclosed.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</root>` was found)
+      empty.xml: Failed to xml parse (1:1 Unexpected end of stream: no root element found)
+      invalid_mismatched.xml: Failed to xml parse (3:30 Unexpected closing tag: different != element)
+      multiple_roots.xml: Failed to xml parse (3:1 Unexpected token: <)
+      invalid_unclosed.xml: Failed to xml parse (4:7 Unexpected closing tag: root != element)
 
     ----- stderr -----
     "#);
@@ -2168,7 +2168,7 @@ fn check_xml_hook() -> Result<()> {
     - hook id: check-xml
     - exit code: 1
 
-      empty.xml: Failed to xml parse (no element found)
+      empty.xml: Failed to xml parse (1:1 Unexpected end of stream: no root element found)
 
     ----- stderr -----
     ");
