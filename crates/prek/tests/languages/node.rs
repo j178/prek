@@ -2,7 +2,7 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot, make_executable, remove_bin_from_path};
 
 /// Test `language_version` parsing and auto downloading works correctly.
 /// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
@@ -220,14 +220,7 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
         #!/usr/bin/env node
         console.log("prefix fixture ok")
     "#})?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        let mut permissions = fs_err::metadata(cli.path())?.permissions();
-        permissions.set_mode(0o755);
-        fs_err::set_permissions(cli.path(), permissions)?;
-    }
+    make_executable(cli.path())?;
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:

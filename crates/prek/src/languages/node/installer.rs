@@ -13,7 +13,7 @@ use tracing::{debug, trace, warn};
 
 use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
-use crate::fs::LockedFile;
+use crate::fs::{LockedFile, is_executable};
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
@@ -333,18 +333,5 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
         prefix.join("node_modules")
     } else {
         prefix.join("lib").join("node_modules")
-    }
-}
-
-fn is_executable(path: &Path) -> bool {
-    #[cfg(windows)]
-    {
-        path.extension()
-            .is_some_and(|ext| ext == EXE_EXTENSION || ext == "cmd" || ext == "bat")
-    }
-    #[cfg(not(windows))]
-    {
-        use std::os::unix::fs::MetadataExt;
-        path.is_file() && fs_err::metadata(path).is_ok_and(|m| m.mode() & 0o111 != 0)
     }
 }

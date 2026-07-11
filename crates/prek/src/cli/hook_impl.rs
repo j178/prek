@@ -207,8 +207,7 @@ async fn run_legacy(
     let executable;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        executable = metadata.permissions().mode() & 0o111 != 0;
+        executable = crate::fs::has_executable_bit(&metadata);
     }
     #[cfg(not(unix))]
     {

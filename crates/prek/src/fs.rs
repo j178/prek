@@ -51,6 +51,61 @@ static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(D
 static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
     LazyLock::new(Default::default);
 
+/// Add executable bits to a file's Unix permissions.
+///
+/// This is a no-op on Windows.
+pub(crate) fn make_executable(path: &Path) -> std::io::Result<()> {
+    #[cfg(not(unix))]
+    #[expect(clippy::unnecessary_wraps)]
+    fn inner(_: &Path) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn inner(path: &Path) -> std::io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs_err::metadata(path)?.permissions();
+        let mode = permissions.mode();
+        let new_mode = mode | 0o111;
+        if mode == new_mode {
+            return Ok(());
+        }
+        permissions.set_mode(new_mode);
+        fs_err::set_permissions(path, permissions)
+    }
+
+    inner(path)
+}
+
+#[cfg(unix)]
+pub(crate) fn has_executable_bit(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+/// Return whether an existing regular file has executable platform characteristics.
+pub(crate) fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = fs_err::metadata(path) else {
+        return false;
+    };
+
+    #[cfg(windows)]
+    {
+        metadata.is_file()
+            && path.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("exe")
+                    || ext.eq_ignore_ascii_case("cmd")
+                    || ext.eq_ignore_ascii_case("bat")
+            })
+    }
+
+    #[cfg(not(windows))]
+    {
+        metadata.is_file() && has_executable_bit(&metadata)
+    }
+}
+
 /// Expand a path starting with `~` to the user's home directory.
 pub(crate) fn expand_tilde(path: PathBuf) -> PathBuf {
     if let Ok(stripped) = path.strip_prefix("~") {
@@ -435,6 +490,39 @@ fn clean_path(path: impl AsRef<Path>) -> PathBuf {
 mod tests {
     use std::path::{Path, PathBuf};
     use std::time::Duration;
+
+    #[cfg(windows)]
+    #[test]
+    fn is_executable_accepts_windows_executable_extensions() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        for name in ["tool.exe", "tool.CMD", "tool.Bat"] {
+            fs_err::write(temp_dir.path().join(name), "")?;
+        }
+
+        assert!(
+            ["tool.exe", "tool.CMD", "tool.Bat"]
+                .into_iter()
+                .all(|path| super::is_executable(&temp_dir.path().join(path)))
+        );
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn is_executable_rejects_other_windows_extensions() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path().join("tool.txt");
+        fs_err::write(&path, "")?;
+
+        assert!(!super::is_executable(&path));
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn is_executable_rejects_a_missing_windows_file() {
+        assert!(!super::is_executable(Path::new("missing.exe")));
+    }
 
     #[test]
     fn path_clean() {
