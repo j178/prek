@@ -10,7 +10,7 @@ use target_lexicon::HOST;
 use tracing::{debug, trace, warn};
 
 use crate::checksum::Sha256Digest;
-use crate::fs::LockedFile;
+use crate::fs::{LockedFile, make_executable};
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
@@ -308,33 +308,6 @@ async fn toolchain_info(name: String, toolchain_dir: PathBuf) -> Result<Toolchai
         path: toolchain_dir,
         version,
     })
-}
-
-fn make_executable(path: &Path) -> std::io::Result<()> {
-    #[allow(clippy::unnecessary_wraps)]
-    #[cfg(windows)]
-    fn inner(_: &Path) -> std::io::Result<()> {
-        Ok(())
-    }
-    #[cfg(not(windows))]
-    fn inner(path: &Path) -> std::io::Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-
-        let metadata = fs_err::metadata(path)?;
-        let mut perms = metadata.permissions();
-        let mode = perms.mode();
-        let new_mode = (mode & !0o777) | 0o755;
-
-        // Check if permissions are ok already
-        if mode == new_mode {
-            return Ok(());
-        }
-
-        perms.set_mode(new_mode);
-        fs_err::set_permissions(path, perms)
-    }
-
-    inner(path)
 }
 
 #[cfg(test)]

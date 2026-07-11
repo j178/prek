@@ -389,8 +389,6 @@ mod tests {
     #[tokio::test]
     #[cfg(unix)]
     async fn from_system_executable_uses_local_gotoolchain() -> anyhow::Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-
         let temp_dir = tempfile::tempdir()?;
         let fake_go = temp_dir.path().join("go");
         fs_err::write(
@@ -410,9 +408,7 @@ mod tests {
             "#},
         )?;
 
-        let mut permissions = fs_err::metadata(&fake_go)?.permissions();
-        permissions.set_mode(0o755);
-        fs_err::set_permissions(&fake_go, permissions)?;
+        crate::fs::make_executable(&fake_go)?;
 
         let go = GoResult::from_system_executable(fake_go).await?;
 

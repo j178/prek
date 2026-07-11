@@ -14,6 +14,7 @@ use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::fs::is_executable;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
@@ -210,32 +211,17 @@ async fn copy_binaries(release_dir: &Path, dest_bin_dir: &Path) -> anyhow::Resul
     let mut entries = fs_err::tokio::read_dir(release_dir).await?;
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
-        let file_type = entry.file_type().await?;
+        if let Some(ext) = path.extension() {
+            // Skip non-binary files like .d, .rlib, etc.
+            if ext == "d" || ext == "rlib" || ext == "rmeta" {
+                continue;
+            }
+        }
+
         // Copy executable files (not directories, not .d files, etc.)
-        if file_type.is_file() {
-            if let Some(ext) = path.extension() {
-                // Skip non-binary files like .d, .rlib, etc.
-                if ext == "d" || ext == "rlib" || ext == "rmeta" {
-                    continue;
-                }
-            }
-            // On Unix, check if it's executable; on Windows, check for .exe
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let meta = entry.metadata().await?;
-                if meta.permissions().mode() & 0o111 != 0 {
-                    let dest = dest_bin_dir.join(entry.file_name());
-                    fs_err::tokio::copy(&path, &dest).await?;
-                }
-            }
-            #[cfg(windows)]
-            {
-                if path.extension().is_some_and(|e| e == "exe") {
-                    let dest = dest_bin_dir.join(entry.file_name());
-                    fs_err::tokio::copy(&path, &dest).await?;
-                }
-            }
+        if is_executable(&path) {
+            let dest = dest_bin_dir.join(entry.file_name());
+            fs_err::tokio::copy(&path, &dest).await?;
         }
     }
     Ok(())
