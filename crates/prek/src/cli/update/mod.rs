@@ -53,7 +53,7 @@ struct RepoUsage<'a> {
 
 /// One distinct `repo + rev + hook set + update settings` target that should be evaluated.
 struct RepoTarget<'a> {
-    /// The remote repository URL.
+    /// The repository value exactly as written in the configuration.
     repo: &'a str,
     /// The currently configured `rev` for this target.
     current_rev: &'a str,
@@ -67,10 +67,10 @@ struct RepoTarget<'a> {
     usages: Vec<RepoUsage<'a>>,
 }
 
-/// One fetched remote repository URL with all configured revisions that use it.
+/// One fetched remote repository source with all configured revisions that use it.
 struct RepoSource<'a> {
-    /// The remote repository URL.
-    repo: &'a str,
+    /// The resolved repository source used for fetch and cache identity.
+    source: &'a str,
     /// Distinct configured revisions that should be evaluated against this fetched repo.
     targets: Vec<RepoTarget<'a>>,
 }
@@ -280,7 +280,7 @@ fn warn_missing_repos(
 ) {
     let configured_repos = repo_sources
         .iter()
-        .map(|repo_source| repo_source.repo)
+        .flat_map(|repo_source| repo_source.targets.iter().map(|target| target.repo))
         .collect::<FxHashSet<_>>();
     let mut missing_repos = filter_repos
         .iter()
@@ -432,16 +432,24 @@ pub(crate) async fn update(
     };
     let reporter = UpdateReporter::new(printer);
 
-    let repo_sources =
+    let mut repo_sources =
         collect_repo_sources(&workspace, freeze, cooldown_days, filesystem.as_ref())?;
     warn_missing_repos(&repo_sources, &filter_repos, &tag_filters);
-    let sources = repo_sources.iter().filter(|repo_source| {
-        (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
-            && !exclude_repos.iter().any(|repo| repo == repo_source.repo)
-    });
-    let outcomes: Vec<RepoUpdate<'_>> = futures_util::stream::iter(sources)
+    for repo_source in &mut repo_sources {
+        repo_source.targets.retain(|target| {
+            (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == target.repo))
+                && !exclude_repos.iter().any(|repo| repo == target.repo)
+        });
+    }
+    repo_sources.retain(|repo_source| !repo_source.targets.is_empty());
+
+    let outcomes: Vec<RepoUpdate<'_>> = futures_util::stream::iter(&repo_sources)
         .map(async |repo_source| {
-            let progress = reporter.on_update_start(repo_source.repo);
+            let display_repo = repo_source
+                .targets
+                .first()
+                .map_or(repo_source.source, |target| target.repo);
+            let progress = reporter.on_update_start(display_repo);
             let result = evaluate_repo_source(repo_source, bleeding_edge, &tag_filters).await;
             reporter.on_update_complete(progress);
             result

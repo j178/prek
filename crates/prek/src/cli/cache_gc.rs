@@ -373,18 +373,18 @@ fn hook_env_requirements_from_config(
                 }
 
                 let repo = match HookRepo::remote(
-                    repo_config.repo.clone(),
+                    repo_config.source().to_string(),
                     repo_config.rev.clone(),
                     repo_path,
                 ) {
                     Ok(repo) => repo,
                     Err(err) => {
-                        warn!(repo = %repo_config.repo, %err, "Failed to load repo manifest, skipping");
+                        warn!(repo = %repo_config.repo(), %err, "Failed to load repo manifest, skipping");
                         continue;
                     }
                 };
 
-                let remote_repo = RepoIdentityRef::new(&repo_config.repo, &repo_config.rev);
+                let remote_repo = RepoIdentityRef::new(repo_config.source(), &repo_config.rev);
 
                 for hook_config in &repo_config.hooks {
                     let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
@@ -765,9 +765,6 @@ struct RepoMarker {
 }
 
 fn read_repo_marker(root: &Path) -> Option<RepoMarker> {
-    // NOTE: `Store::clone_repo` serializes `RemoteRepo`, but with some fields skipped during
-    // serialization (e.g. `hooks`). That means deserializing back into `RemoteRepo` can fail.
-    // For GC display, we only need `repo` + `rev`.
     let content = fs_err::read_to_string(root.join(REPO_MARKER)).ok()?;
     serde_json::from_str(&content).ok()
 }

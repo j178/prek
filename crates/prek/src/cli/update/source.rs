@@ -24,6 +24,7 @@ use crate::workspace::Workspace;
 /// Identifies repo usages that can share one update evaluation.
 #[derive(Eq, Hash, PartialEq)]
 struct RepoTargetKey<'a> {
+    repo: &'a str,
     current_rev: &'a str,
     required_hook_ids: Vec<&'a str>,
     cooldown_days: u8,
@@ -31,16 +32,16 @@ struct RepoTargetKey<'a> {
 }
 
 type RepoTargetsByKey<'a> = FxHashMap<RepoTargetKey<'a>, RepoTarget<'a>>;
-type RepoSourcesByRepo<'a> = FxHashMap<&'a str, RepoTargetsByKey<'a>>;
+type RepoSourcesBySource<'a> = FxHashMap<&'a str, RepoTargetsByKey<'a>>;
 
-/// Collects configured remote repos grouped by fetch source, revision, hooks, and settings.
+/// Collects configured remote repos grouped by source, configured value, revision, and settings.
 pub(super) fn collect_repo_sources<'a>(
     workspace: &'a Workspace,
     cli_freeze: bool,
     cli_cooldown_days: Option<u8>,
     filesystem: Option<&FilesystemOptions>,
 ) -> Result<Vec<RepoSource<'a>>> {
-    let mut repo_sources: RepoSourcesByRepo<'a> = FxHashMap::default();
+    let mut repo_sources: RepoSourcesBySource<'a> = FxHashMap::default();
 
     for project in workspace.projects() {
         let project_update = project.config().update.as_ref();
@@ -85,8 +86,9 @@ pub(super) fn collect_repo_sources<'a>(
             required_hook_ids.sort_unstable();
             required_hook_ids.dedup();
 
-            let targets = repo_sources.entry(remote_repo.repo.as_str()).or_default();
+            let targets = repo_sources.entry(remote_repo.source()).or_default();
             let target_key = RepoTargetKey {
+                repo: remote_repo.repo(),
                 current_rev: remote_repo.rev.as_str(),
                 required_hook_ids,
                 cooldown_days,
@@ -97,7 +99,7 @@ pub(super) fn collect_repo_sources<'a>(
                 Entry::Vacant(entry) => {
                     let required_hook_ids = entry.key().required_hook_ids.clone();
                     entry.insert(RepoTarget {
-                        repo: remote_repo.repo.as_str(),
+                        repo: remote_repo.repo(),
                         current_rev: remote_repo.rev.as_str(),
                         cooldown_days,
                         freeze,
@@ -120,16 +122,17 @@ pub(super) fn collect_repo_sources<'a>(
 
     Ok(repo_sources
         .into_iter()
-        .map(|(repo, targets)| {
+        .map(|(source, targets)| {
             let mut targets = targets.into_values().collect::<Vec<_>>();
             targets.sort_by(|a, b| {
-                a.current_rev
-                    .cmp(b.current_rev)
+                a.repo
+                    .cmp(b.repo)
+                    .then_with(|| a.current_rev.cmp(b.current_rev))
                     .then_with(|| a.cooldown_days.cmp(&b.cooldown_days))
                     .then_with(|| a.freeze.cmp(&b.freeze))
                     .then_with(|| a.required_hook_ids.cmp(&b.required_hook_ids))
             });
-            RepoSource { repo, targets }
+            RepoSource { source, targets }
         })
         .collect())
 }
@@ -213,10 +216,10 @@ pub(super) async fn evaluate_repo_source<'a>(
     let result = async {
         trace!(
             "Cloning repository `{}` to `{}`",
-            repo_source.repo,
+            repo_source.source,
             repo_path.display()
         );
-        setup_and_fetch_repo(repo_source.repo, repo_path).await?;
+        setup_and_fetch_repo(repo_source.source, repo_path).await?;
         let metadata = list_tag_metadata(repo_path).await?;
 
         anyhow::Ok(metadata)
@@ -238,14 +241,13 @@ pub(super) async fn evaluate_repo_source<'a>(
         }
     };
 
-    let update_tag_timestamps = tag_filters
-        .filter(repo_source.repo, &tag_timestamps)
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
-
     let mut updates = Vec::with_capacity(repo_source.targets.len());
     for target in &repo_source.targets {
+        let update_tag_timestamps = tag_filters
+            .filter(target.repo, &tag_timestamps)
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
         let result = evaluate_repo_target(
             repo_path,
             target,
