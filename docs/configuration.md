@@ -52,6 +52,7 @@ They work in both YAML and TOML, but they only matter for compatibility if you s
 - Top-level:
     - [`update`](reference/configuration.md#update)
     - [`default_env`](reference/configuration.md#default_env)
+    - [`priorities`](reference/configuration.md#priorities)
     - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-config)
     - [`orphan`](reference/configuration.md#prek-only-orphan)
 - Repo type:

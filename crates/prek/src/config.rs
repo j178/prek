@@ -20,14 +20,113 @@ use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
 
-pub(crate) fn validate_group_name(group: &str) -> std::result::Result<(), &'static str> {
-    if group.is_empty() {
+pub(crate) fn validate_name(name: &str) -> std::result::Result<(), &'static str> {
+    if name.is_empty() {
         Err("cannot be empty")
-    } else if group.chars().any(char::is_whitespace) {
+    } else if name.chars().any(char::is_whitespace) {
         Err("cannot contain whitespace")
     } else {
         Ok(())
     }
+}
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct PriorityAlias(
+    #[cfg_attr(feature = "schemars", schemars(regex(pattern = r"^\S+$")))] String,
+);
+
+impl TryFrom<String> for PriorityAlias {
+    type Error = String;
+
+    fn try_from(alias: String) -> std::result::Result<Self, Self::Error> {
+        validate_name(&alias).map_err(|reason| priority_alias_error(&alias, reason))?;
+        Ok(Self(alias))
+    }
+}
+
+impl<'de> Deserialize<'de> for PriorityAlias {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::try_from(String::deserialize(deserializer)?).map_err(D::Error::custom)
+    }
+}
+
+impl std::fmt::Debug for PriorityAlias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl Display for PriorityAlias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", serde(untagged))]
+pub(crate) enum Priority {
+    Number(u32),
+    Alias(PriorityAlias),
+}
+
+impl<'de> Deserialize<'de> for Priority {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum PriorityWire {
+            Number(u32),
+            Alias(String),
+        }
+
+        match PriorityWire::deserialize(deserializer)? {
+            PriorityWire::Number(priority) => Ok(Self::Number(priority)),
+            PriorityWire::Alias(alias) => PriorityAlias::try_from(alias)
+                .map(Self::Alias)
+                .map_err(D::Error::custom),
+        }
+    }
+}
+
+impl std::fmt::Debug for Priority {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(priority) => std::fmt::Debug::fmt(priority, f),
+            Self::Alias(alias) => std::fmt::Debug::fmt(alias, f),
+        }
+    }
+}
+
+impl Priority {
+    pub(crate) fn resolve(
+        &self,
+        priorities: &BTreeMap<PriorityAlias, u32>,
+        hook: &str,
+    ) -> std::result::Result<u32, Error> {
+        match self {
+            Self::Number(priority) => Ok(*priority),
+            Self::Alias(alias) => {
+                priorities
+                    .get(alias)
+                    .copied()
+                    .ok_or_else(|| Error::UnknownPriorityAlias {
+                        hook: hook.to_owned(),
+                        alias: alias.clone(),
+                    })
+            }
+        }
+    }
+}
+
+fn priority_alias_error(alias: &str, reason: &str) -> String {
+    format!("priority alias `{alias}` {reason}")
 }
 
 fn deserialize_groups<'de, D>(deserializer: D) -> std::result::Result<Option<Vec<String>>, D::Error>
@@ -37,7 +136,7 @@ where
     let groups = Option::<Vec<String>>::deserialize(deserializer)?;
     if let Some(groups) = &groups {
         for group in groups {
-            if let Err(reason) = validate_group_name(group) {
+            if let Err(reason) = validate_name(group) {
                 return Err(D::Error::custom(format!("group name `{group}` {reason}")));
             }
         }
@@ -711,7 +810,7 @@ pub(crate) struct RemoteHook {
     ///
     /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
-    pub priority: Option<u32>,
+    pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
     #[serde(default, deserialize_with = "deserialize_groups")]
@@ -738,7 +837,7 @@ pub(crate) struct LocalHook {
     pub language: Language,
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
-    pub priority: Option<u32>,
+    pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
     #[serde(default, deserialize_with = "deserialize_groups")]
@@ -761,7 +860,7 @@ pub(crate) struct MetaHook {
     pub name: String,
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
-    pub priority: Option<u32>,
+    pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
     #[serde(default, deserialize_with = "deserialize_groups")]
@@ -852,7 +951,7 @@ pub(crate) struct BuiltinHook {
     pub entry: String,
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
-    pub priority: Option<u32>,
+    pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
     #[serde(default, deserialize_with = "deserialize_groups")]
@@ -1273,6 +1372,9 @@ pub(crate) struct Config {
     /// Default settings for `prek update` in this project.
     #[serde(alias = "auto_update")]
     pub update: Option<UpdateOptions>,
+    /// Configuration-local aliases for numeric hook priorities.
+    #[serde(default)]
+    pub priorities: BTreeMap<PriorityAlias, u32>,
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
     /// Default is `[pre-commit]`.
@@ -1306,6 +1408,28 @@ pub(crate) struct Config {
 }
 
 impl Config {
+    fn validate_priorities(&self) -> std::result::Result<(), Error> {
+        macro_rules! validate_hooks {
+            ($hooks:expr) => {
+                for hook in $hooks {
+                    if let Some(priority) = &hook.priority {
+                        priority.resolve(&self.priorities, &hook.id)?;
+                    }
+                }
+            };
+        }
+
+        for repo in &self.repos {
+            match repo {
+                Repo::Remote(repo) => validate_hooks!(&repo.hooks),
+                Repo::Local(repo) => validate_hooks!(&repo.hooks),
+                Repo::Meta(repo) => validate_hooks!(&repo.hooks),
+                Repo::Builtin(repo) => validate_hooks!(&repo.hooks),
+            }
+        }
+        Ok(())
+    }
+
     /// Resolve local relative repository sources from the config file, not the process cwd.
     fn resolve_relative_repo_sources(&mut self, config_path: &Path) -> Result<(), Error> {
         let config_dir = config_path
@@ -1349,6 +1473,9 @@ pub(crate) enum Error {
 
     #[error("Failed to parse `{0}`")]
     Toml(String, #[source] Box<toml::de::Error>),
+
+    #[error("Priority alias `{alias}` referenced by hook `{hook}` is not declared in `priorities`")]
+    UnknownPriorityAlias { hook: String, alias: PriorityAlias },
 }
 
 impl Error {
@@ -1471,6 +1598,7 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
         _ => serde_saphyr::from_str(&content)
             .map_err(|e| Error::Yaml(path.user_display().to_string(), Box::new(e)))?,
     };
+    config.validate_priorities()?;
     config.resolve_relative_repo_sources(path)?;
 
     Ok(config)

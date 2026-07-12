@@ -556,6 +556,52 @@ fn priorities_respected() {
 }
 
 #[test]
+fn priority_aliases_are_resolved_before_scheduling() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        priorities:
+          early: 0
+          late: 10
+        repos:
+          - repo: local
+            hooks:
+              - id: late
+                name: Late Hook
+                language: system
+                entry: python3 -c "print('late')"
+                always_run: true
+                priority: late
+              - id: early
+                name: Early Hook
+                language: system
+                entry: python3 -c "print('early')"
+                always_run: true
+                priority: early
+              - id: numeric
+                name: Numeric Hook
+                language: system
+                entry: python3 -c "print('numeric')"
+                always_run: true
+                priority: 5
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Early Hook...............................................................Passed
+    Numeric Hook.............................................................Passed
+    Late Hook................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn run_group_without_stage_selects_hooks_across_stages() {
     let context = TestContext::new();
     context.init_project();
@@ -3374,6 +3420,55 @@ fn prek_toml() -> Result<()> {
     - duration: [TIME]
 
       Hello, world!
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn prek_toml_resolves_priority_aliases() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(indoc::indoc! {r#"
+        [priorities]
+        early = 0
+        late = 10
+
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "late",
+            name = "Late Hook",
+            language = "system",
+            entry = "python3 -c \"print('late')\"",
+            always_run = true,
+            priority = "late",
+          },
+          {
+            id = "early",
+            name = "Early Hook",
+            language = "system",
+            entry = "python3 -c \"print('early')\"",
+            always_run = true,
+            priority = "early",
+          },
+        ]
+    "#})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Early Hook...............................................................Passed
+    Late Hook................................................................Passed
 
     ----- stderr -----
     ");

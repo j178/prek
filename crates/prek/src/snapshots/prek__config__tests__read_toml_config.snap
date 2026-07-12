@@ -4,6 +4,7 @@ expression: config
 ---
 Config {
     update: None,
+    priorities: {},
     repos: [
         Local(
             LocalRepo {

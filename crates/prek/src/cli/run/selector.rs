@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::config::validate_group_name;
+use crate::config::validate_name;
 use crate::hook::Hook;
 use crate::warn_user;
 
@@ -419,7 +419,7 @@ impl GroupFilters {
             let mut names = Vec::new();
 
             for group in groups {
-                if let Err(reason) = validate_group_name(group) {
+                if let Err(reason) = validate_name(group) {
                     return Err(Error::GroupSelector {
                         selector: format!("{flag}={group}"),
                         source: anyhow!("group name {reason}"),

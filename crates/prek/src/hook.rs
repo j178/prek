@@ -54,7 +54,7 @@ pub(crate) struct HookSpec {
     pub name: String,
     pub entry: String,
     pub language: Language,
-    pub priority: Option<u32>,
+    pub priority: Option<config::Priority>,
     pub groups: Option<Vec<String>>,
     pub options: HookOptions,
 }
@@ -70,8 +70,8 @@ impl HookSpec {
         if let Some(language) = &config.language {
             self.language.clone_from(language);
         }
-        if let Some(priority) = config.priority {
-            self.priority = Some(priority);
+        if config.priority.is_some() {
+            self.priority.clone_from(&config.priority);
         }
         if config.groups.is_some() {
             self.groups.clone_from(&config.groups);
@@ -419,6 +419,14 @@ impl HookBuilder {
 
         self.check()?;
 
+        let priority = self
+            .hook_spec
+            .priority
+            .as_ref()
+            .map(|priority| priority.resolve(&self.project.config().priorities, &self.hook_spec.id))
+            .transpose()?
+            .unwrap_or_else(|| u32::try_from(self.idx).expect("idx too large"));
+
         let groups = self
             .hook_spec
             .groups
@@ -449,11 +457,6 @@ impl HookBuilder {
         })?;
 
         let entry = HookEntry::new(self.hook_spec.id.clone(), self.hook_spec.entry, shell);
-
-        let priority = self
-            .hook_spec
-            .priority
-            .unwrap_or_else(|| u32::try_from(self.idx).expect("idx too large"));
 
         let mut hook = Hook {
             project: self.project,
@@ -893,7 +896,7 @@ mod tests {
     use serde_json::json;
 
     use crate::config::{
-        Config, HookOptions, Language, PassFilenames, RemoteHook, Shell, Stage, Stages,
+        Config, HookOptions, Language, PassFilenames, Priority, RemoteHook, Shell, Stage, Stages,
     };
     use crate::hook::HookSpec;
     use crate::languages::version::LanguageRequest;
@@ -957,7 +960,7 @@ mod tests {
             name: Some("override-name".to_string()),
             entry: Some("python3 -c 'print(2)'".to_string()),
             language: None,
-            priority: Some(42),
+            priority: Some(Priority::Number(42)),
             groups: Some(vec!["ci".to_string(), "format".to_string()]),
             options: HookOptions {
                 alias: Some("alias-1".to_string()),
@@ -986,6 +989,7 @@ mod tests {
                 idx: 0,
                 config: Config {
                     update: None,
+                    priorities: {},
                     repos: [],
                     default_install_hook_types: None,
                     default_language_version: Some(

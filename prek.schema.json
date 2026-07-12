@@ -9,6 +9,17 @@
       "description": "Default settings for `prek update` in this project.",
       "$ref": "#/definitions/UpdateOptions"
     },
+    "priorities": {
+      "description": "Configuration-local aliases for numeric hook priorities.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^\\S+$": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "repos": {
       "type": "array",
       "items": {
@@ -272,8 +283,7 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/definitions/Priority"
         },
         "groups": {
           "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
@@ -423,6 +433,21 @@
         "system"
       ]
     },
+    "Priority": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "$ref": "#/definitions/PriorityAlias"
+        }
+      ]
+    },
+    "PriorityAlias": {
+      "type": "string",
+      "pattern": "^\\S+$"
+    },
     "FilePattern": {
       "description": "A file pattern, either a regex or glob pattern(s).",
       "oneOf": [
@@ -538,8 +563,7 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.",
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/definitions/Priority"
         },
         "groups": {
           "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
@@ -709,8 +733,7 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/definitions/Priority"
         },
         "groups": {
           "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
@@ -885,8 +908,7 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/definitions/Priority"
         },
         "groups": {
           "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",

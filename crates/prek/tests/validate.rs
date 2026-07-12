@@ -117,6 +117,92 @@ fn invalid_config_error() {
 }
 
 #[test]
+fn unknown_priority_alias_is_invalid() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        priorities:
+          checks: 10
+        repos:
+          - repo: local
+            hooks:
+              - id: format
+                name: Format
+                entry: ruff format
+                language: system
+                priority: formatting
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Priority alias `formatting` referenced by hook `format` is not declared in `priorities`
+    ");
+}
+
+#[test]
+fn priority_aliases_cannot_contain_whitespace() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        priorities:
+          "static checks": 10
+        repos: []
+    "#});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 2 column 3: priority alias `static checks` cannot contain whitespace
+     --> <input>:2:3
+      |
+    1 | priorities:
+    2 |   "static checks": 10
+      |   ^ priority alias `static checks` cannot contain whitespace
+    3 | repos: []
+      |
+    "#);
+}
+
+#[test]
+fn duplicate_and_unused_priority_aliases_are_valid() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        priorities:
+          checks: 10
+          verification: 10
+          unused: 20
+        repos:
+          - repo: local
+            hooks:
+              - id: check
+                name: Check
+                entry: check
+                language: system
+                priority: checks
+              - id: verify
+                name: Verify
+                entry: verify
+                language: system
+                priority: verification
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    success: All configs are valid
+    ");
+}
+
+#[test]
 fn validate_manifest() -> anyhow::Result<()> {
     let context = TestContext::new();
 

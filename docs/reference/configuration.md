@@ -62,6 +62,24 @@ Each entry is one of:
 
 See [Repo entries](#repo-entries).
 
+### `priorities`
+
+!!! note "prek-only"
+
+    Priority aliases are a `prek` extension and do not exist in upstream `pre-commit`.
+
+An optional mapping that declares configuration-local aliases for non-negative integer priorities.
+A hook can use one of these aliases in its [`priority`](#priority) field instead of repeating the
+integer.
+
+- Type: mapping from string to non-negative integer
+- Default: empty mapping
+- Scope: the current project configuration only
+- Aliases: non-empty, case-sensitive strings without whitespace
+
+Different aliases may map to the same integer. Unused declarations are allowed. Referencing an
+alias that is not declared in the current configuration is an error.
+
 <a id="top-level-files"></a>
 
 ### `files`
@@ -1214,12 +1232,15 @@ This is useful for tools that use global caches/locks or otherwise can’t handl
 
     `priority` controls `prek`'s scheduler and does not exist in upstream `pre-commit`.
 
-Each hook can set an explicit `priority` (a non-negative integer) that controls when it runs and with which hooks it may execute in parallel.
+Each hook can set an explicit `priority` that controls when it runs and with which hooks it may
+execute in parallel. The value may be either a non-negative integer or a [priority
+alias](#priorities) declared by the current configuration.
 
 Scope:
 
 - `priority` is evaluated **within a single configuration file** and is compared across **all hooks in that file**, even if they appear under different `repos:` entries.
 - `priority` does **not** coordinate across different config files. In workspace mode, each project’s config file is scheduled independently.
+- Numeric priorities and aliases can be mixed. Aliases resolve to their declared integer before scheduling.
 
 Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to `PREK_CONCURRENT_HOOKS`.
 
@@ -1230,6 +1251,11 @@ Example:
 === "prek.toml"
 
     ```toml
+    [priorities]
+    format = 0
+    checks = 10
+    tests = 20
+
     [[repos]]
     repo = "local"
     hooks = [
@@ -1239,7 +1265,7 @@ Example:
         language = "system",
         entry = "python3 -m ruff format",
         always_run = true,
-        priority = 0,
+        priority = "format",
       },
       {
         id = "lint",
@@ -1247,7 +1273,7 @@ Example:
         language = "system",
         entry = "python3 -m ruff check",
         always_run = true,
-        priority = 10,
+        priority = "checks",
       },
       {
         id = "tests",
@@ -1255,7 +1281,7 @@ Example:
         language = "system",
         entry = "just test",
         always_run = true,
-        priority = 20,
+        priority = "tests",
       },
     ]
     ```
@@ -1263,6 +1289,11 @@ Example:
 === ".pre-commit-config.yaml"
 
     ```yaml
+    priorities:
+      format: 0
+      checks: 10
+      tests: 20
+
     repos:
       - repo: local
         hooks:
@@ -1271,21 +1302,21 @@ Example:
             language: system
             entry: python3 -m ruff format
             always_run: true
-            priority: 0
+            priority: format
 
           - id: lint
             name: Lint
             language: system
             entry: python3 -m ruff check
             always_run: true
-            priority: 10
+            priority: checks
 
           - id: tests
             name: Tests
             language: system
             entry: just test
             always_run: true
-            priority: 20
+            priority: tests
     ```
 
 !!! danger "Parallel hooks modifying files"
@@ -1303,6 +1334,11 @@ Example:
 
     [`require_serial`](#require_serial) set to `true` prevents concurrent batches of the *same hook*.
     It does not prevent other hooks from running alongside it; use a unique `priority` if you need exclusivity.
+
+!!! note "Priority aliases are not hook groups"
+
+    Priority aliases control scheduling. [`groups`](#groups) select which hooks run and have no
+    ordering or concurrency meaning.
 
 ### `fail_fast`
 
