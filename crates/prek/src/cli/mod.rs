@@ -774,6 +774,7 @@ pub(crate) struct UpdateArgs {
     #[arg(long)]
     pub(crate) bleeding_edge: bool,
     /// Store "frozen" hashes in `rev` instead of tag names.
+    /// Defaults to `update.freeze` in the project or global config, or `false` when unset.
     #[arg(long)]
     pub(crate) freeze: bool,
     /// Only update this repository. This option may be specified multiple times.

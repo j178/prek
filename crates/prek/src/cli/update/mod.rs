@@ -51,7 +51,7 @@ struct RepoUsage<'a> {
     current_frozen_site: Option<FrozenCommentSite>,
 }
 
-/// One distinct `repo + rev + hook set` target that should be evaluated.
+/// One distinct `repo + rev + hook set + update settings` target that should be evaluated.
 struct RepoTarget<'a> {
     /// The remote repository URL.
     repo: &'a str,
@@ -59,9 +59,11 @@ struct RepoTarget<'a> {
     current_rev: &'a str,
     /// The resolved cooldown window to apply when selecting an update for this target.
     cooldown_days: u8,
+    /// Whether the selected revision should be stored as a frozen commit hash.
+    freeze: bool,
     /// The sorted hook ids that must still exist after updating this target.
     required_hook_ids: Vec<&'a str>,
-    /// Every config usage that shares this exact `repo + rev + hook set`.
+    /// Every config usage that shares this exact target configuration.
     usages: Vec<RepoUsage<'a>>,
 }
 
@@ -430,7 +432,8 @@ pub(crate) async fn update(
     };
     let reporter = UpdateReporter::new(printer);
 
-    let repo_sources = collect_repo_sources(&workspace, cooldown_days, filesystem.as_ref())?;
+    let repo_sources =
+        collect_repo_sources(&workspace, freeze, cooldown_days, filesystem.as_ref())?;
     warn_missing_repos(&repo_sources, &filter_repos, &tag_filters);
     let sources = repo_sources.iter().filter(|repo_source| {
         (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
@@ -439,8 +442,7 @@ pub(crate) async fn update(
     let outcomes: Vec<RepoUpdate<'_>> = futures_util::stream::iter(sources)
         .map(async |repo_source| {
             let progress = reporter.on_update_start(repo_source.repo);
-            let result =
-                evaluate_repo_source(repo_source, bleeding_edge, freeze, &tag_filters).await;
+            let result = evaluate_repo_source(repo_source, bleeding_edge, &tag_filters).await;
             reporter.on_update_complete(progress);
             result
         })

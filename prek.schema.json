@@ -152,6 +152,9 @@
           "type": "integer",
           "maximum": 255,
           "minimum": 0
+        },
+        "freeze": {
+          "type": "boolean"
         }
       }
     },

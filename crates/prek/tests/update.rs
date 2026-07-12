@@ -1054,6 +1054,8 @@ fn update_freeze() -> Result<()> {
         .success();
 
     context.write_pre_commit_config(&indoc::formatdoc! {r"
+        update:
+          freeze: true
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1069,7 +1071,7 @@ fn update_freeze() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1084,6 +1086,8 @@ fn update_freeze() -> Result<()> {
         { filters => filters.clone() },
         {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            update:
+              freeze: true
             repos:
               - repo: [HOME]/test-repos/freeze-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
@@ -2813,6 +2817,10 @@ fn update_freeze_toml() -> Result<()> {
     context.init_project();
 
     let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    context.write_user_config(indoc::indoc! {r"
+        [update]
+        freeze = true
+    "});
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
     git_cmd(&repo_path)
         .arg("tag")
@@ -2843,7 +2851,7 @@ fn update_freeze_toml() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
+    cmd_snapshot!(filters.clone(), context.update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----

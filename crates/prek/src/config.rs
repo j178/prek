@@ -1143,6 +1143,7 @@ where
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct UpdateOptions {
     pub(crate) cooldown_days: Option<u8>,
+    pub(crate) freeze: Option<bool>,
 }
 
 // TODO: warn sensible regex
@@ -1946,13 +1947,16 @@ mod tests {
         let yaml = indoc::indoc! {r"
             update:
               cooldown_days: 7
+              freeze: true
             repos: []
         "};
         let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
 
         assert_eq!(
-            result.update.and_then(|options| options.cooldown_days),
-            Some(7)
+            result
+                .update
+                .map(|options| (options.cooldown_days, options.freeze)),
+            Some((Some(7), Some(true)))
         );
     }
 

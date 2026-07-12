@@ -7,6 +7,8 @@ use etcetera::BaseStrategy;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use serde::Deserialize;
 
+use crate::config::UpdateOptions as ProjectUpdateOptions;
+
 fn user_config_path() -> Option<PathBuf> {
     if let Some(path) = EnvVars.var_os(EnvVars::PREK_INTERNAL__USER_CONFIG_PATH) {
         return Some(PathBuf::from(path));
@@ -87,36 +89,42 @@ pub(crate) struct Options {
 #[serde(default, rename_all = "snake_case")]
 struct UpdateOptions {
     cooldown_days: Option<u8>,
+    freeze: Option<bool>,
 }
 
 /// Resolved settings for the `update` command.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct UpdateSettings {
     pub(crate) cooldown_days: u8,
+    pub(crate) freeze: bool,
 }
 
 impl UpdateSettings {
     pub(crate) fn resolve(
+        cli_freeze: bool,
         cli_cooldown_days: Option<u8>,
+        project: Option<&ProjectUpdateOptions>,
         filesystem: Option<&FilesystemOptions>,
-        project_cooldown_days: Option<u8>,
     ) -> Self {
+        let filesystem_update = filesystem.and_then(|fs| fs.update.as_ref());
         Self {
             cooldown_days: cli_cooldown_days
-                .or(project_cooldown_days)
-                .or_else(|| {
-                    filesystem
-                        .and_then(|fs| fs.update.as_ref())
-                        .and_then(|options| options.cooldown_days)
-                })
+                .or_else(|| project.and_then(|options| options.cooldown_days))
+                .or_else(|| filesystem_update.and_then(|options| options.cooldown_days))
                 .unwrap_or_default(),
+            freeze: cli_freeze
+                || project
+                    .and_then(|options| options.freeze)
+                    .or_else(|| filesystem_update.and_then(|options| options.freeze))
+                    .unwrap_or_default(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Options;
+    use super::{FilesystemOptions, Options, UpdateSettings};
+    use crate::config::UpdateOptions as ProjectUpdateOptions;
 
     #[test]
     fn options_deserializes_update_settings() {
@@ -124,13 +132,16 @@ mod tests {
             r"
             [update]
             cooldown_days = 7
+            freeze = true
             ",
         )
         .unwrap();
 
         assert_eq!(
-            options.update.and_then(|options| options.cooldown_days),
-            Some(7)
+            options
+                .update
+                .map(|options| (options.cooldown_days, options.freeze)),
+            Some((Some(7), Some(true)))
         );
     }
 
@@ -148,5 +159,54 @@ mod tests {
             options.update.and_then(|options| options.cooldown_days),
             Some(7)
         );
+    }
+
+    #[test]
+    fn update_settings_uses_global_freeze() {
+        let filesystem = FilesystemOptions(
+            toml::from_str(
+                r"
+                [update]
+                freeze = true
+                ",
+            )
+            .unwrap(),
+        );
+
+        let settings = UpdateSettings::resolve(false, None, None, Some(&filesystem));
+
+        assert!(settings.freeze);
+    }
+
+    #[test]
+    fn update_settings_project_freeze_overrides_global() {
+        let filesystem = FilesystemOptions(
+            toml::from_str(
+                r"
+                [update]
+                freeze = true
+                ",
+            )
+            .unwrap(),
+        );
+
+        let project = ProjectUpdateOptions {
+            cooldown_days: None,
+            freeze: Some(false),
+        };
+        let settings = UpdateSettings::resolve(false, None, Some(&project), Some(&filesystem));
+
+        assert!(!settings.freeze);
+    }
+
+    #[test]
+    fn update_settings_cli_freeze_overrides_project() {
+        let project = ProjectUpdateOptions {
+            cooldown_days: None,
+            freeze: Some(false),
+        };
+        let settings = UpdateSettings::resolve(true, None, Some(&project), None);
+
+        assert!(settings.freeze);
     }
 }
