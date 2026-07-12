@@ -1344,7 +1344,7 @@ dependencies = [
  "log",
  "num-format",
  "once_cell",
- "quick-xml 0.26.0",
+ "quick-xml",
  "rgb",
  "str_stack",
 ]
@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "aho-corasick",
  "annotate-snippets",
@@ -2003,7 +2003,6 @@ dependencies = [
  "prek-identify",
  "prek-pty",
  "pretty_assertions",
- "quick-xml 0.40.1",
  "regex",
  "reqwest",
  "rustc-hash",
@@ -2033,18 +2032,19 @@ dependencies = [
  "walkdir",
  "webpki-root-certs",
  "which",
+ "xml",
 ]
 
 [[package]]
 name = "prek-consts"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-identify"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -2060,7 +2060,7 @@ dependencies = [
 
 [[package]]
 name = "prek-pty"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "fs-err",
  "rustix",
@@ -2107,15 +2107,6 @@ name = "quick-xml"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.40.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
 dependencies = [
  "memchr",
 ]
@@ -3842,6 +3833,12 @@ dependencies = [
  "libc",
  "rustix",
 ]
+
+[[package]]
+name = "xml"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "636f85e5ca6488e96401b61eb7de54f4e44755c988af0f52cf90230c312a1a89"
 
 [[package]]
 name = "yansi"

@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
-use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use crate::languages::ruby::installer::RubyResult;
@@ -102,7 +101,7 @@ pub(crate) async fn install_gems(
     ruby: &RubyResult,
     gem_home: &Path,
     repo_path: Option<&Path>,
-    additional_dependencies: &FxHashSet<String>,
+    additional_dependencies: &[String],
 ) -> Result<()> {
     // Collect gems from repository. Many of these were probably built from gemspecs earlier,
     // but install all .gem files found (matches pre-commit behavior)

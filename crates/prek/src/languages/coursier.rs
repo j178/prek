@@ -60,23 +60,14 @@ impl LanguageImpl for Coursier {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut dependencies = hook
-            .additional_dependencies
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
-        dependencies.sort_unstable();
+        let dependencies = &hook.additional_dependencies;
 
         let cs = which::which("cs")
             .or_else(|_| which::which("coursier"))
             .context(
                 "Coursier hooks require system-installed `cs` or `coursier` executables in PATH",
             )?;
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing Coursier environment");
 
@@ -115,7 +106,7 @@ impl LanguageImpl for Coursier {
             let mut fetch_cmd = Cmd::new(&cs);
             fetch_cmd
                 .arg("fetch")
-                .args(&dependencies)
+                .args(dependencies)
                 .env(EnvVars::PATH, &path_env)
                 .env(EnvVars::COURSIER_CACHE, &coursier_cache);
             if let Some(repo_path) = hook.repo_path() {
@@ -130,7 +121,7 @@ impl LanguageImpl for Coursier {
                 .arg("install")
                 .arg("--dir")
                 .arg(&info.env_path)
-                .args(&dependencies)
+                .args(dependencies)
                 .env(EnvVars::PATH, path_env)
                 .env(EnvVars::COURSIER_CACHE, &coursier_cache);
             if let Some(repo_path) = hook.repo_path() {

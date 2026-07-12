@@ -496,23 +496,11 @@ mod tests {
     use tempfile::tempdir;
 
     use super::resolve_command;
+    use crate::fs::make_executable;
 
     fn write_file(path: &Path, contents: &str) {
         fs_err::write(path, contents).expect("write test file");
     }
-
-    #[cfg(unix)]
-    fn make_executable(path: &Path) {
-        use std::os::unix::fs::PermissionsExt;
-
-        let metadata = fs_err::metadata(path).expect("stat test file");
-        let mut perms = metadata.permissions();
-        perms.set_mode(perms.mode() | 0o111);
-        fs_err::set_permissions(path, perms).expect("set executable bit");
-    }
-
-    #[cfg(windows)]
-    fn make_executable(_path: &Path) {}
 
     #[test]
     fn resolve_command_passthrough_when_not_found() {
@@ -536,7 +524,7 @@ mod tests {
         let interpreter_path = dir.path().join("prek-test-interpreter");
 
         write_file(&interpreter_path, "");
-        make_executable(&interpreter_path);
+        make_executable(&interpreter_path).expect("set executable bit");
 
         let paths = OsString::from(dir.path().as_os_str());
         let resolved = resolve_command(

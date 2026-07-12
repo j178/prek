@@ -12,6 +12,25 @@ use rustc_hash::FxHashSet;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
+#[cfg(unix)]
+pub fn make_executable(path: impl AsRef<Path>) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = path.as_ref();
+    let mut permissions = fs_err::metadata(path)?.permissions();
+    permissions.set_mode(permissions.mode() | 0o111);
+    fs_err::set_permissions(path, permissions)
+}
+
+#[cfg(windows)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "Keep the cross-platform test helper API consistent"
+)]
+pub fn make_executable(_path: impl AsRef<Path>) -> std::io::Result<()> {
+    Ok(())
+}
+
 pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
     let mut cmd = Command::new("git");
     cmd.current_dir(dir)

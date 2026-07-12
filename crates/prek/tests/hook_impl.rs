@@ -1,14 +1,10 @@
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-#[cfg(unix)]
-use std::path::Path;
-
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
+use crate::common::make_executable;
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
@@ -83,8 +79,7 @@ fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
         python3 -c 'print("legacy pre-commit ran")'
         exit 1
     "#})?;
-    #[cfg(unix)]
-    set_executable(legacy_hook.path())?;
+    make_executable(legacy_hook.path())?;
 
     // Git 2.54+ config-based hooks can invoke `hook-impl` without
     // `--hook-dir`; without a hook script directory, legacy hooks are skipped.
@@ -398,8 +393,7 @@ fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
         python3 -c 'print("legacy pre-commit ran")'
         exit 1
     "#})?;
-    #[cfg(unix)]
-    set_executable(legacy_hook.path())?;
+    make_executable(legacy_hook.path())?;
 
     let mut commit = git_cmd(context.work_dir());
     commit
@@ -452,8 +446,7 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
         python3 -c 'print("legacy pre-push ran")'
         exit 1
     "#})?;
-    #[cfg(unix)]
-    set_executable(legacy_hook.path())?;
+    make_executable(legacy_hook.path())?;
 
     let remote_repo_path = context.home_dir().join("remote.git");
     fs_err::create_dir_all(&remote_repo_path)?;
@@ -496,14 +489,6 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
     error: failed to push some refs to '[HOME]/remote.git'
     ");
 
-    Ok(())
-}
-
-#[cfg(unix)]
-fn set_executable(path: &Path) -> anyhow::Result<()> {
-    let mut perms = fs_err::metadata(path)?.permissions();
-    perms.set_mode(0o755);
-    fs_err::set_permissions(path, perms)?;
     Ok(())
 }
 

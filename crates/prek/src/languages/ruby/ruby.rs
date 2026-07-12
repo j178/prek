@@ -48,11 +48,7 @@ impl LanguageImpl for Ruby {
             .context("Failed to install Ruby")?;
 
         // 2. Create InstallInfo
-        let mut info = InstallInfo::new(
-            hook.language,
-            hook.env_key_dependencies().clone(),
-            &store.hooks_dir(),
-        )?;
+        let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
 
         info.with_toolchain(ruby.ruby_bin().to_path_buf())
             .with_language_version(ruby.version().clone());

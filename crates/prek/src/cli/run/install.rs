@@ -5,7 +5,6 @@ use anyhow::{Context, Result};
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use mea::once::OnceCell;
 use mea::semaphore::Semaphore;
-use rustc_hash::FxHashMap;
 use tracing::{debug, warn};
 
 use crate::cli::reporter::HookInstallReporter;
@@ -73,17 +72,24 @@ async fn install_partition(
     for hook in hooks {
         debug_assert!(hook.needs_install_env());
 
-        let installed_hook = if let Some(info) = installed_hooks.iter().find_map(|installed| {
-            let InstalledHook::Installed { info, .. } = installed else {
-                return None;
-            };
-            info.matches(&hook).then(|| info.clone())
-        }) {
+        let reusable_info = hook.environment_requirement().and_then(|requirement| {
+            installed_hooks.iter().find_map(|installed| {
+                let InstalledHook::Installed { info, .. } = installed else {
+                    return None;
+                };
+                requirement.is_satisfied_by(info).then_some(info)
+            })
+        });
+
+        let installed_hook = if let Some(info) = reusable_info {
             debug!(
                 "Found installed environment for hook `{hook}` at `{}`",
                 info.env_path.display()
             );
-            InstalledHook::Installed { hook, info }
+            InstalledHook::Installed {
+                hook,
+                info: Arc::clone(info),
+            }
         } else {
             let _permit = semaphore.acquire(1).await;
 
@@ -117,41 +123,39 @@ async fn install_partition(
 
 /// Group hooks so each partition can install independently.
 ///
-/// Different languages can install concurrently. Hooks with the same language and dependency set
-/// stay in one partition so later hooks can reuse an environment installed by an earlier hook.
+/// Hooks with the same install language, repository, and dependency sequence stay in one
+/// partition so later hooks can reuse an environment installed by an earlier hook. Version
+/// requirements are checked by the full environment requirement and intentionally do not split
+/// partitions.
 fn partition_hooks(hooks: Vec<Arc<Hook>>) -> Vec<Vec<Arc<Hook>>> {
-    let mut hooks_by_language = FxHashMap::default();
+    let mut partitions: Vec<Vec<Arc<Hook>>> = Vec::new();
     for hook in hooks {
-        // `pygrep` hooks use Python installation and can share Python environments.
-        let language = if hook.language == Language::Pygrep {
-            Language::Python
+        if let Some(partition) = partitions
+            .iter_mut()
+            .find(|partition| same_install_partition(&partition[0], &hook))
+        {
+            partition.push(hook);
         } else {
-            hook.language
-        };
-        hooks_by_language
-            .entry(language)
-            .or_insert_with(Vec::new)
-            .push(hook);
-    }
-
-    let mut partitions = Vec::new();
-    for (_, hooks) in hooks_by_language {
-        let mut groups: Vec<Vec<Arc<Hook>>> = Vec::new();
-        for hook in hooks {
-            let group_index = groups
-                .iter()
-                .position(|group| group[0].env_key_dependencies() == hook.env_key_dependencies());
-
-            if let Some(index) = group_index {
-                groups[index].push(hook);
-            } else {
-                groups.push(vec![hook]);
-            }
+            partitions.push(vec![hook]);
         }
-        partitions.extend(groups);
     }
 
     partitions
+}
+
+fn same_install_partition(left: &Hook, right: &Hook) -> bool {
+    partition_language(left.language) == partition_language(right.language)
+        && left.repo().identity() == right.repo().identity()
+        && left.additional_dependencies == right.additional_dependencies
+}
+
+fn partition_language(language: Language) -> Language {
+    // Both `pygrep` and Python may provision Python, so schedule them as one language.
+    if language == Language::Pygrep {
+        Language::Python
+    } else {
+        language
+    }
 }
 
 /// Cached metadata for one environment found in the store hooks directory.
@@ -170,10 +174,6 @@ impl CachedInstallInfo {
             info,
             health: OnceCell::new(),
         }
-    }
-
-    fn matches(&self, hook: &Hook) -> bool {
-        self.info.matches(hook)
     }
 
     fn info(&self) -> Arc<InstallInfo> {
@@ -238,15 +238,16 @@ impl InstallCache {
     /// Return a healthy installed environment from the store cache for this hook.
     ///
     /// This only looks at environments loaded from `store.hooks_dir()`. Environments created
-    /// during the current install call are reused inside `install_partition`, where hooks with
-    /// the same install key are installed sequentially.
+    /// during the current install call are reused inside `install_partition`, where hooks in the
+    /// same install partition are processed sequentially.
     pub(crate) async fn installed_hook(
         &self,
         store: &Store,
         hook: Arc<Hook>,
     ) -> Option<InstalledHook> {
+        let requirement = hook.environment_requirement()?;
         for env in self.installed_hooks(store).await {
-            if env.matches(&hook) && env.ensure_healthy().await {
+            if requirement.is_satisfied_by(env.info_ref()) && env.ensure_healthy().await {
                 return Some(InstalledHook::Installed {
                     hook,
                     info: env.info(),

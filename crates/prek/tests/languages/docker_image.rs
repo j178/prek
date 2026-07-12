@@ -1,12 +1,10 @@
-use std::os::unix::fs::PermissionsExt;
-
 use anyhow::Result;
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, make_executable};
 
 #[test]
 fn docker_image() -> Result<()> {
@@ -98,9 +96,7 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
     let alpine_stub = bin_dir.child("alpine");
     alpine_stub.write_str("#!/bin/sh\necho host\n")?;
 
-    let mut perms = fs_err::metadata(alpine_stub.path())?.permissions();
-    perms.set_mode(0o755);
-    fs_err::set_permissions(alpine_stub.path(), perms)?;
+    make_executable(alpine_stub.path())?;
 
     Command::new("docker")
         .args(["pull", "docker.io/library/alpine:latest"])

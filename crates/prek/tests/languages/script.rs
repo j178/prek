@@ -1,6 +1,7 @@
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
+use crate::common::make_executable;
 use crate::common::{TestContext, cmd_snapshot};
 
 #[cfg(unix)]
@@ -9,7 +10,6 @@ mod unix {
 
     use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
     use prek_consts::PRE_COMMIT_CONFIG_YAML;
-    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn script_run() {
@@ -85,14 +85,8 @@ mod unix {
             echo "$MESSAGE from child!"
         "#})?;
 
-        fs_err::set_permissions(
-            context.work_dir().child("script.sh"),
-            std::fs::Permissions::from_mode(0o755),
-        )?;
-        fs_err::set_permissions(
-            child.child("script.sh"),
-            std::fs::Permissions::from_mode(0o755),
-        )?;
+        make_executable(context.work_dir().child("script.sh"))?;
+        make_executable(child.child("script.sh"))?;
         context.git_add(".");
 
         cmd_snapshot!(context.filters(), context.run(), @r#"
@@ -151,7 +145,7 @@ mod unix {
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#})?;
-        fs_err::set_permissions(&script, std::fs::Permissions::from_mode(0o755))?;
+        make_executable(&script)?;
 
         context.git_add(".");
 
@@ -235,6 +229,7 @@ fn windows_script_run() -> Result<()> {
         #!/usr/bin/env python3
         print("Hello, World!")
     "#})?;
+    make_executable(&script)?;
 
     context.git_add(".");
 

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use semver::Version;
 
 use crate::cli::ExitStatus;
@@ -18,6 +18,7 @@ use crate::printer::Printer;
 use crate::run::INTERNAL_CONCURRENCY;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
+use crate::warn_user;
 use crate::workspace::{Project, Workspace};
 
 mod config;
@@ -270,6 +271,35 @@ fn build_repo_tag_patterns(
         .collect()
 }
 
+fn warn_missing_repos(
+    repo_sources: &[RepoSource<'_>],
+    filter_repos: &[String],
+    tag_filters: &TagFilters,
+) {
+    let configured_repos = repo_sources
+        .iter()
+        .map(|repo_source| repo_source.repo)
+        .collect::<FxHashSet<_>>();
+    let mut missing_repos = filter_repos
+        .iter()
+        .map(String::as_str)
+        .chain(tag_filters.repo_include.keys().map(String::as_str))
+        .chain(tag_filters.repo_exclude.keys().map(String::as_str))
+        .filter(|repo| !configured_repos.contains(*repo))
+        .collect::<Vec<_>>();
+    missing_repos.sort_unstable();
+    missing_repos.dedup();
+
+    match missing_repos.as_slice() {
+        [] => {}
+        [repo] => warn_user!("repo `{repo}` was not found in the configuration"),
+        _ => warn_user!(
+            "repos `{}` were not found in the configuration",
+            missing_repos.join("`, `")
+        ),
+    }
+}
+
 /// The successful result of evaluating one configured `repo + rev + hook set` target.
 struct ResolvedRepoUpdate<'a> {
     /// The revision data that may be written back to config.
@@ -401,6 +431,7 @@ pub(crate) async fn update(
     let reporter = UpdateReporter::new(printer);
 
     let repo_sources = collect_repo_sources(&workspace, cooldown_days, filesystem.as_ref())?;
+    warn_missing_repos(&repo_sources, &filter_repos, &tag_filters);
     let sources = repo_sources.iter().filter(|repo_source| {
         (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
             && !exclude_repos.iter().any(|repo| repo == repo_source.repo)
