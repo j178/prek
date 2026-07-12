@@ -285,6 +285,7 @@ pub enum Language {
     Lua,
     Node,
     Perl,
+    Php,
     Pygrep,
     Python,
     R,

@@ -31,6 +31,7 @@ mod julia;
 mod lua;
 mod node;
 mod perl;
+mod php;
 mod pygrep;
 mod python;
 mod r;
@@ -80,6 +81,7 @@ pub(crate) enum ShellSupport {
 // lua: only system version, support env, support additional deps
 // node: install requested version, support env, support additional deps (delegated to nodeenv)
 // perl: only system version, support env, support additional deps
+// php: only system version, support env, support additional deps
 // pygrep: only system version, no env, no additional deps
 // python: install requested version, support env, support additional deps (delegated to virtualenv)
 // r: only system version, support env, support additional deps
@@ -105,6 +107,7 @@ impl Language {
             | Self::Lua
             | Self::Node
             | Self::Perl
+            | Self::Php
             | Self::Pygrep
             | Self::Python
             | Self::R
@@ -127,6 +130,7 @@ impl Language {
             | Self::Lua
             | Self::Node
             | Self::Perl
+            | Self::Php
             | Self::Python
             | Self::Ruby
             | Self::Script
@@ -169,6 +173,7 @@ impl Language {
             | Self::Julia
             | Self::Lua
             | Self::Perl
+            | Self::Php
             | Self::R
             | Self::Script
             | Self::Swift
@@ -195,6 +200,7 @@ impl Language {
             | Self::Julia
             | Self::Lua
             | Self::Perl
+            | Self::Php
             | Self::R
             | Self::Ruby
             | Self::Script
@@ -226,6 +232,7 @@ impl Language {
             | Self::Julia
             | Self::Lua
             | Self::Perl
+            | Self::Php
             | Self::Pygrep
             | Self::R
             | Self::Script
@@ -252,6 +259,7 @@ impl Language {
             | Self::Lua
             | Self::Node
             | Self::Perl
+            | Self::Php
             | Self::Python
             | Self::R
             | Self::Ruby
@@ -291,6 +299,7 @@ impl Language {
             Self::Lua => lua::Lua.install(hook, store, reporter).await,
             Self::Node => node::Node.install(hook, store, reporter).await,
             Self::Perl => perl::Perl.install(hook, store, reporter).await,
+            Self::Php => php::Php.install(hook, store, reporter).await,
             Self::Pygrep => pygrep::Pygrep.install(hook, store, reporter).await,
             Self::Python => python::Python.install(hook, store, reporter).await,
             Self::R => r::R.install(hook, store, reporter).await,
@@ -319,6 +328,7 @@ impl Language {
             Self::Lua => lua::Lua.check_health(info).await,
             Self::Node => node::Node.check_health(info).await,
             Self::Perl => perl::Perl.check_health(info).await,
+            Self::Php => php::Php.check_health(info).await,
             Self::Pygrep => pygrep::Pygrep.check_health(info).await,
             Self::Python => python::Python.check_health(info).await,
             Self::R => r::R.check_health(info).await,
@@ -384,6 +394,7 @@ impl Language {
             Self::Lua => lua::Lua.run(hook, filenames, store, reporter).await,
             Self::Node => node::Node.run(hook, filenames, store, reporter).await,
             Self::Perl => perl::Perl.run(hook, filenames, store, reporter).await,
+            Self::Php => php::Php.run(hook, filenames, store, reporter).await,
             Self::Pygrep => pygrep::Pygrep.run(hook, filenames, store, reporter).await,
             Self::Python => python::Python.run(hook, filenames, store, reporter).await,
             Self::R => r::R.run(hook, filenames, store, reporter).await,
@@ -416,6 +427,7 @@ pub(crate) async fn extract_metadata(hook: &mut Hook) -> Result<()> {
         | Language::Lua
         | Language::Node
         | Language::Perl
+        | Language::Php
         | Language::Pygrep
         | Language::R
         | Language::Ruby

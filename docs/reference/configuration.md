@@ -839,7 +839,7 @@ How `prek` should run the hook (and whether it should create a managed environme
 - Optional override for remote hooks.
 - Not allowed (except as `system`) for `repo: meta` and `repo: builtin`.
 
-Common values include `system`, `python`, `node`, `rust`, `golang`, `ruby`, and `docker`.
+Common values include `system`, `python`, `node`, `php`, `rust`, `golang`, `ruby`, and `docker`.
 
 See [Language Support](../languages.md) for per-language behavior, supported values, and [`language_version`](#language_version) details.
 

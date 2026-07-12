@@ -105,6 +105,7 @@ impl LanguageRequest {
             | Language::Julia
             | Language::Lua
             | Language::Perl
+            | Language::Php
             | Language::Pygrep
             | Language::R
             | Language::Script

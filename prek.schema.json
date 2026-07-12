@@ -71,6 +71,9 @@
         "perl": {
           "type": "string"
         },
+        "php": {
+          "type": "string"
+        },
         "pygrep": {
           "type": "string"
         },
@@ -371,6 +374,7 @@
         "lua",
         "node",
         "perl",
+        "php",
         "pygrep",
         "python",
         "r",
