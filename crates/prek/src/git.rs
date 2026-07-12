@@ -437,9 +437,7 @@ async fn index_path() -> Result<PathBuf, Error> {
         .check(true)
         .output()
         .await?;
-    Ok(PathBuf::from(
-        String::from_utf8_lossy(&output.stdout).trim_ascii(),
-    ))
+    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
 }
 
 /// Create a tree object from the current index.
