@@ -41,30 +41,6 @@ mod swift;
 mod system;
 pub(crate) mod version;
 
-static BUN: bun::Bun = bun::Bun;
-static CONDA: conda::Conda = conda::Conda;
-static COURSIER: coursier::Coursier = coursier::Coursier;
-static DART: dart::Dart = dart::Dart;
-static DENO: deno::Deno = deno::Deno;
-static DOCKER: docker::Docker = docker::Docker;
-static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
-static DOTNET: dotnet::Dotnet = dotnet::Dotnet;
-static FAIL: fail::Fail = fail::Fail;
-static GOLANG: golang::Golang = golang::Golang;
-static HASKELL: haskell::Haskell = haskell::Haskell;
-static JULIA: julia::Julia = julia::Julia;
-static LUA: lua::Lua = lua::Lua;
-static NODE: node::Node = node::Node;
-static PERL: perl::Perl = perl::Perl;
-static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
-static PYTHON: python::Python = python::Python;
-static R: r::R = r::R;
-static RUBY: ruby::Ruby = ruby::Ruby;
-static RUST: rust::Rust = rust::Rust;
-static SCRIPT: script::Script = script::Script;
-static SWIFT: swift::Swift = swift::Swift;
-static SYSTEM: system::System = system::System;
-
 trait LanguageImpl {
     async fn install(
         &self,
@@ -297,57 +273,61 @@ impl Language {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         match self {
-            Self::Dart => DART.install(hook, store, reporter).await,
-            Self::Bun => BUN.install(hook, store, reporter).await,
-            Self::Coursier => COURSIER.install(hook, store, reporter).await,
-            Self::Deno => DENO.install(hook, store, reporter).await,
-            Self::Docker => DOCKER.install(hook, store, reporter).await,
-            Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
-            Self::Dotnet => DOTNET.install(hook, store, reporter).await,
-            Self::Fail => FAIL.install(hook, store, reporter).await,
-            Self::Golang => GOLANG.install(hook, store, reporter).await,
-            Self::Haskell => HASKELL.install(hook, store, reporter).await,
-            Self::Julia => JULIA.install(hook, store, reporter).await,
-            Self::Lua => LUA.install(hook, store, reporter).await,
-            Self::Node => NODE.install(hook, store, reporter).await,
-            Self::Perl => PERL.install(hook, store, reporter).await,
-            Self::Pygrep => PYGREP.install(hook, store, reporter).await,
-            Self::Python => PYTHON.install(hook, store, reporter).await,
-            Self::R => R.install(hook, store, reporter).await,
-            Self::Ruby => RUBY.install(hook, store, reporter).await,
-            Self::Rust => RUST.install(hook, store, reporter).await,
-            Self::Script => SCRIPT.install(hook, store, reporter).await,
-            Self::Swift => SWIFT.install(hook, store, reporter).await,
-            Self::System => SYSTEM.install(hook, store, reporter).await,
-            Self::Conda => CONDA.install(hook, store, reporter).await,
+            Self::Dart => dart::Dart.install(hook, store, reporter).await,
+            Self::Bun => bun::Bun.install(hook, store, reporter).await,
+            Self::Coursier => coursier::Coursier.install(hook, store, reporter).await,
+            Self::Deno => deno::Deno.install(hook, store, reporter).await,
+            Self::Docker => docker::Docker.install(hook, store, reporter).await,
+            Self::DockerImage => {
+                docker_image::DockerImage
+                    .install(hook, store, reporter)
+                    .await
+            }
+            Self::Dotnet => dotnet::Dotnet.install(hook, store, reporter).await,
+            Self::Fail => fail::Fail.install(hook, store, reporter).await,
+            Self::Golang => golang::Golang.install(hook, store, reporter).await,
+            Self::Haskell => haskell::Haskell.install(hook, store, reporter).await,
+            Self::Julia => julia::Julia.install(hook, store, reporter).await,
+            Self::Lua => lua::Lua.install(hook, store, reporter).await,
+            Self::Node => node::Node.install(hook, store, reporter).await,
+            Self::Perl => perl::Perl.install(hook, store, reporter).await,
+            Self::Pygrep => pygrep::Pygrep.install(hook, store, reporter).await,
+            Self::Python => python::Python.install(hook, store, reporter).await,
+            Self::R => r::R.install(hook, store, reporter).await,
+            Self::Ruby => ruby::Ruby.install(hook, store, reporter).await,
+            Self::Rust => rust::Rust.install(hook, store, reporter).await,
+            Self::Script => script::Script.install(hook, store, reporter).await,
+            Self::Swift => swift::Swift.install(hook, store, reporter).await,
+            Self::System => system::System.install(hook, store, reporter).await,
+            Self::Conda => conda::Conda.install(hook, store, reporter).await,
         }
     }
 
     pub(crate) async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
-            Self::Dart => DART.check_health(info).await,
-            Self::Bun => BUN.check_health(info).await,
-            Self::Coursier => COURSIER.check_health(info).await,
-            Self::Deno => DENO.check_health(info).await,
-            Self::Docker => DOCKER.check_health(info).await,
-            Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
-            Self::Dotnet => DOTNET.check_health(info).await,
-            Self::Fail => FAIL.check_health(info).await,
-            Self::Golang => GOLANG.check_health(info).await,
-            Self::Haskell => HASKELL.check_health(info).await,
-            Self::Julia => JULIA.check_health(info).await,
-            Self::Lua => LUA.check_health(info).await,
-            Self::Node => NODE.check_health(info).await,
-            Self::Perl => PERL.check_health(info).await,
-            Self::Pygrep => PYGREP.check_health(info).await,
-            Self::Python => PYTHON.check_health(info).await,
-            Self::R => R.check_health(info).await,
-            Self::Ruby => RUBY.check_health(info).await,
-            Self::Rust => RUST.check_health(info).await,
-            Self::Script => SCRIPT.check_health(info).await,
-            Self::Swift => SWIFT.check_health(info).await,
-            Self::System => SYSTEM.check_health(info).await,
-            Self::Conda => CONDA.check_health(info).await,
+            Self::Dart => dart::Dart.check_health(info).await,
+            Self::Bun => bun::Bun.check_health(info).await,
+            Self::Coursier => coursier::Coursier.check_health(info).await,
+            Self::Deno => deno::Deno.check_health(info).await,
+            Self::Docker => docker::Docker.check_health(info).await,
+            Self::DockerImage => docker_image::DockerImage.check_health(info).await,
+            Self::Dotnet => dotnet::Dotnet.check_health(info).await,
+            Self::Fail => fail::Fail.check_health(info).await,
+            Self::Golang => golang::Golang.check_health(info).await,
+            Self::Haskell => haskell::Haskell.check_health(info).await,
+            Self::Julia => julia::Julia.check_health(info).await,
+            Self::Lua => lua::Lua.check_health(info).await,
+            Self::Node => node::Node.check_health(info).await,
+            Self::Perl => perl::Perl.check_health(info).await,
+            Self::Pygrep => pygrep::Pygrep.check_health(info).await,
+            Self::Python => python::Python.check_health(info).await,
+            Self::R => r::R.check_health(info).await,
+            Self::Ruby => ruby::Ruby.check_health(info).await,
+            Self::Rust => rust::Rust.check_health(info).await,
+            Self::Script => script::Script.check_health(info).await,
+            Self::Swift => swift::Swift.check_health(info).await,
+            Self::System => system::System.check_health(info).await,
+            Self::Conda => conda::Conda.check_health(info).await,
         }
     }
 
@@ -382,29 +362,37 @@ impl Language {
         }
 
         match self {
-            Self::Dart => DART.run(hook, filenames, store, reporter).await,
-            Self::Bun => BUN.run(hook, filenames, store, reporter).await,
-            Self::Coursier => COURSIER.run(hook, filenames, store, reporter).await,
-            Self::Deno => DENO.run(hook, filenames, store, reporter).await,
-            Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
-            Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
-            Self::Dotnet => DOTNET.run(hook, filenames, store, reporter).await,
-            Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
-            Self::Golang => GOLANG.run(hook, filenames, store, reporter).await,
-            Self::Haskell => HASKELL.run(hook, filenames, store, reporter).await,
-            Self::Julia => JULIA.run(hook, filenames, store, reporter).await,
-            Self::Lua => LUA.run(hook, filenames, store, reporter).await,
-            Self::Node => NODE.run(hook, filenames, store, reporter).await,
-            Self::Perl => PERL.run(hook, filenames, store, reporter).await,
-            Self::Pygrep => PYGREP.run(hook, filenames, store, reporter).await,
-            Self::Python => PYTHON.run(hook, filenames, store, reporter).await,
-            Self::R => R.run(hook, filenames, store, reporter).await,
-            Self::Ruby => RUBY.run(hook, filenames, store, reporter).await,
-            Self::Rust => RUST.run(hook, filenames, store, reporter).await,
-            Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
-            Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
-            Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
-            Self::Conda => CONDA.run(hook, filenames, store, reporter).await,
+            Self::Dart => dart::Dart.run(hook, filenames, store, reporter).await,
+            Self::Bun => bun::Bun.run(hook, filenames, store, reporter).await,
+            Self::Coursier => {
+                coursier::Coursier
+                    .run(hook, filenames, store, reporter)
+                    .await
+            }
+            Self::Deno => deno::Deno.run(hook, filenames, store, reporter).await,
+            Self::Docker => docker::Docker.run(hook, filenames, store, reporter).await,
+            Self::DockerImage => {
+                docker_image::DockerImage
+                    .run(hook, filenames, store, reporter)
+                    .await
+            }
+            Self::Dotnet => dotnet::Dotnet.run(hook, filenames, store, reporter).await,
+            Self::Fail => fail::Fail.run(hook, filenames, store, reporter).await,
+            Self::Golang => golang::Golang.run(hook, filenames, store, reporter).await,
+            Self::Haskell => haskell::Haskell.run(hook, filenames, store, reporter).await,
+            Self::Julia => julia::Julia.run(hook, filenames, store, reporter).await,
+            Self::Lua => lua::Lua.run(hook, filenames, store, reporter).await,
+            Self::Node => node::Node.run(hook, filenames, store, reporter).await,
+            Self::Perl => perl::Perl.run(hook, filenames, store, reporter).await,
+            Self::Pygrep => pygrep::Pygrep.run(hook, filenames, store, reporter).await,
+            Self::Python => python::Python.run(hook, filenames, store, reporter).await,
+            Self::R => r::R.run(hook, filenames, store, reporter).await,
+            Self::Ruby => ruby::Ruby.run(hook, filenames, store, reporter).await,
+            Self::Rust => rust::Rust.run(hook, filenames, store, reporter).await,
+            Self::Script => script::Script.run(hook, filenames, store, reporter).await,
+            Self::Swift => swift::Swift.run(hook, filenames, store, reporter).await,
+            Self::System => system::System.run(hook, filenames, store, reporter).await,
+            Self::Conda => conda::Conda.run(hook, filenames, store, reporter).await,
         }
     }
 }
