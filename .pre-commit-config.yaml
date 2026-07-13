@@ -30,7 +30,7 @@ repos:
         args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
         additional_dependencies:
           - mdformat-frontmatter==2.1.2
-          - mdformat-mkdocs==5.1.4
+          - mdformat-mkdocs==5.2.0
           - mdformat-simple-breaks==0.1.0
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
@@ -44,7 +44,7 @@ repos:
         additional_dependencies: ['json5']
 
   - repo: https://github.com/tombi-toml/tombi-pre-commit
-    rev: 6e68b94732283b4455763359004c28a7cc94bdfd  # frozen: v1.1.7
+    rev: fcb0ac886b00dd0305756b1e8466432e11601b5a  # frozen: v1.2.0
     hooks:
       - id: tombi-format
         args: ["--offline"]
