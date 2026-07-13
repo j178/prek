@@ -383,82 +383,86 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
 /// moves the index, but neither the working tree nor the fixed baseline tree,
 /// so only a hook writing to the working tree changes the diff.
 ///
-/// `git diff <tree>` on its own ignores untracked files, so a baseline path the
-/// user *unstages* mid-run (e.g. `git reset new.txt`, which leaves the file on
-/// disk but untracked) would read as a deletion of that path and be
-/// misattributed to the hook. To keep index-only operations no-ops, the working
-/// tree — including untracked files — is first staged into a private scratch
-/// index, and that snapshot is diffed against the baseline tree. Staging into a
-/// copy keeps the diff immune to concurrent `git add` for the same reason
-/// `write_tree` uses a scratch index.
+/// One blind spot remains: `git diff <tree>` ignores untracked files, so a
+/// baseline path the user *unstages* mid-run (e.g. `git reset new.txt`, which
+/// leaves the file on disk but untracked) shows up as a deletion of that path
+/// and would be misattributed to the hook. A `D` entry whose file still exists
+/// on disk can only be such an unstage — a real deletion removes the file — so
+/// those paths are re-excluded and git regenerates the diff without them. Only a
+/// diff that actually reports a deletion pays for this; the common case is a
+/// single `git diff`.
 ///
 /// The before/after byte comparison (in `DiffTracker`) is what distinguishes a
-/// hook modification from pre-existing state, so no `--diff-filter` is applied
-/// here. Filtering out "added" paths would also hide genuine hook edits to
-/// intent-to-add (`git add -N`) files, which `write_tree` omits from the tree.
+/// hook modification from pre-existing state, so no `--diff-filter` is applied to
+/// the reported diff. Filtering out "added" paths would also hide genuine hook
+/// edits to intent-to-add (`git add -N`) files, which `write_tree` omits from the
+/// tree; unlike plain untracked files, those still surface in `git diff <tree>`.
 ///
 /// `tree` is `None` when `write_tree` could not capture a baseline (an unmerged
 /// or partially-present index). The diff then falls back to the pre-existing
 /// index comparison so hooks still run best-effort in those environments,
-/// matching the behaviour before tree anchoring was introduced.
+/// matching the behaviour before tree anchoring was introduced. The live index
+/// already forgets unstaged files symmetrically, so that fallback needs no
+/// deletion handling.
 #[instrument(level = "trace")]
 pub(crate) async fn get_tree_diff(path: &Path, tree: Option<&str>) -> Result<Vec<u8>, Error> {
-    // No baseline tree: compare the working tree against the live index, the
-    // behaviour from before tree anchoring. The live index already forgets
-    // unstaged files symmetrically, so untracked paths need no special handling
-    // on this path.
+    let diff = run_tree_diff(path, tree, &[]).await?;
+
+    // Only the tree-anchored diff has the phantom-deletion blind spot, and only
+    // when it reports a deletion at all.
     let Some(tree) = tree else {
-        let output = git_cmd()?
-            .arg("diff")
-            .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
-            .arg("--")
-            .arg(path)
-            .check(false)
-            .output()
-            .await?;
-        return Ok(diff_stdout(output));
+        return Ok(diff);
     };
+    if !diff_has_deletion(&diff) {
+        return Ok(diff);
+    }
 
-    // Snapshot the working tree (including untracked files) into a private index
-    // so an unstaged-but-present baseline path is not seen as a deletion.
-    let scratch_dir = tempfile::tempdir()?;
-    let scratch = scratch_dir.path().join("index");
-    copy_index_to(&scratch).await?;
+    // A deleted baseline path that still exists on disk was unstaged, not
+    // removed; re-diff excluding those paths so the index-only change is a no-op.
+    let root = get_root()?;
+    let spurious: Vec<PathBuf> = deleted_paths(path, tree)
+        .await?
+        .into_iter()
+        .filter(|rel| root.join(rel).exists())
+        .collect();
+    if spurious.is_empty() {
+        return Ok(diff);
+    }
+    run_tree_diff(path, Some(tree), &spurious).await
+}
 
-    // Best-effort: if `add` fails, the scratch index stays the untouched copy of
-    // the live index, so the diff degrades to tree-vs-index rather than erroring.
-    git_cmd()?
-        .arg("add")
-        .arg("-A")
-        .env("GIT_INDEX_FILE", &scratch)
+/// Run `git diff` of the working tree against `tree` (or the live index when
+/// `tree` is `None`), limited to `path` and excluding `exclude` (paths relative
+/// to the repo root).
+async fn run_tree_diff(
+    path: &Path,
+    tree: Option<&str>,
+    exclude: &[PathBuf],
+) -> Result<Vec<u8>, Error> {
+    let mut cmd = git_cmd()?;
+    cmd.arg("diff");
+    if let Some(tree) = tree {
+        cmd.arg(tree);
+    }
+    cmd.hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
         .arg("--")
-        .arg(path)
-        .check(false)
-        .status()
-        .await?;
-
-    let output = git_cmd()?
-        .arg("diff-index")
-        .arg("-p")
-        .env("GIT_INDEX_FILE", &scratch)
-        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
-        .arg(tree)
-        .arg("--")
-        .arg(path)
+        .arg(path);
+    for rel in exclude {
+        // `:(top,exclude)` anchors the pathspec at the repo root, matching the
+        // paths `git diff --name-only` reports regardless of the process cwd.
+        let mut spec = std::ffi::OsString::from(":(top,exclude)");
+        spec.push(rel);
+        cmd.arg(spec);
+    }
+    let output = cmd
+        // This diff is only used as a best-effort before/after snapshot of hook
+        // changes. Some CI environments keep enough of `.git` for `git ls-files`
+        // but omit blob objects needed by `git diff`; Git then exits 128 on
+        // stderr with empty stdout. Keep comparing stdout in that case so `run
+        // --all-files` can still run against the files Git can enumerate.
         .check(false)
         .output()
         .await?;
-    Ok(diff_stdout(output))
-}
-
-/// Extract stdout from a best-effort diff, tolerating a non-zero exit.
-///
-/// This diff is only used as a before/after snapshot of hook changes. Some CI
-/// environments keep enough of `.git` for `git ls-files` but omit blob objects
-/// needed to diff; Git then exits 128 on stderr with empty stdout. Keep the
-/// stdout in that case so `run --all-files` can still run against the files Git
-/// can enumerate.
-fn diff_stdout(output: std::process::Output) -> Vec<u8> {
     if !output.status.success() {
         debug!(
             status = %output.status,
@@ -466,7 +470,39 @@ fn diff_stdout(output: std::process::Output) -> Vec<u8> {
             "Continuing with git diff stdout despite non-zero exit status"
         );
     }
-    output.stdout
+    Ok(output.stdout)
+}
+
+/// Paths deleted between `tree` and the working tree, limited to `path` and
+/// reported relative to the repo root.
+async fn deleted_paths(path: &Path, tree: &str) -> Result<Vec<PathBuf>, Error> {
+    let output = git_cmd()?
+        .arg("diff")
+        .arg("--diff-filter=D")
+        .arg("--name-only")
+        .arg("-z")
+        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
+        .arg(tree)
+        .arg("--")
+        .arg(path)
+        .check(false)
+        .output()
+        .await?;
+    output
+        .stdout
+        .split(|&b| b == 0)
+        .filter(|name| !name.is_empty())
+        .map(path_from_git_bytes)
+        .collect::<Result<_, _>>()
+        .map_err(Error::from)
+}
+
+/// Whether a `git diff` patch reports a file deletion. The `deleted file mode`
+/// extended header sits at the start of a line, whereas patched content lines
+/// carry a `+`/`-`/space prefix, so a leading newline disambiguates it.
+fn diff_has_deletion(diff: &[u8]) -> bool {
+    const MARKER: &[u8] = b"\ndeleted file mode ";
+    diff.windows(MARKER.len()).any(|window| window == MARKER)
 }
 
 /// Resolve the index file git would read.
@@ -487,23 +523,6 @@ async fn index_path() -> Result<PathBuf, Error> {
     path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
 }
 
-/// Copy the live index into `scratch` so git operations can run against a
-/// private copy without contending for `index.lock`.
-///
-/// A *missing* index reads as an empty index, which is what git itself would
-/// operate on; an empty index *file*, by contrast, is a fatal parse error. So
-/// only copy when there is something to copy, and let the scratch path stay
-/// absent otherwise.
-async fn copy_index_to(scratch: &Path) -> Result<(), Error> {
-    let index = index_path().await?;
-    match fs_err::tokio::copy(&index, scratch).await {
-        Ok(_) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
-    Ok(())
-}
-
 /// Create a tree object from the current index.
 ///
 /// The name of the new tree object is printed to standard output.
@@ -516,9 +535,19 @@ async fn copy_index_to(scratch: &Path) -> Result<(), Error> {
 /// tree from a private copy of the index: it yields the same tree, only the copy
 /// is locked, and neither process can starve the other.
 pub(crate) async fn write_tree() -> Result<String, Error> {
+    let index = index_path().await?;
     let scratch_dir = tempfile::tempdir()?;
     let scratch = scratch_dir.path().join("index");
-    copy_index_to(&scratch).await?;
+
+    // A *missing* index reads as an empty index, which is what git itself would
+    // produce a tree from; an empty index *file* is a fatal parse error. So only
+    // copy when there is something to copy, and let the scratch path stay absent
+    // otherwise.
+    match fs_err::tokio::copy(&index, &scratch).await {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
 
     let output = git_cmd()?
         .arg("write-tree")

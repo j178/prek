@@ -4148,19 +4148,25 @@ fn concurrent_staging_is_not_reported_when_index_is_locked() -> Result<()> {
     Ok(())
 }
 
-/// Staging a *brand-new* file mid-run must not be attributed to the hook: `git
-/// add new.txt` moves only the index, leaving the working tree untouched. The
-/// file is already present (untracked) on disk before the run, so both snapshots
-/// capture it identically once untracked files are included, and the before/after
-/// comparison stays equal.
+/// Known limitation: staging a *brand-new* file mid-run is attributed to the
+/// running hook. Relative to the baseline tree the freshly-staged path is an
+/// addition, and the before/after snapshots differ, so it is reported as a
+/// modification.
 ///
-/// This is the mirror of `concurrent_unstaging_of_new_file_is_not_reported`: the
-/// same untracked-inclusive snapshot that keeps an unstage a no-op keeps a stage
-/// a no-op. A hook that genuinely *creates* a new file on disk still differs
-/// between snapshots and is reported; and hook edits to intent-to-add files are
-/// still caught (see `hook_modifying_intent_to_add_file_is_reported`).
+/// This is the mirror of `concurrent_unstaging_of_new_file_is_not_reported`, but
+/// harder to suppress cheaply: an unstage surfaces as a phantom *deletion* of a
+/// path still on disk, which is unambiguous, whereas a stage surfaces as an
+/// *addition* that is indistinguishable from a hook genuinely creating and
+/// staging a file without recording the worktree's untracked state up front (the
+/// costly path this deliberately avoids). We accept this narrow false positive:
+/// suppressing it by excluding added paths would also hide genuine hook edits to
+/// intent-to-add files — a false *negative*, worse for a modification detector
+/// (see `hook_modifying_intent_to_add_file_is_reported`). Staging changes to
+/// *existing* files — the common hunk-by-hunk review flow — is unaffected,
+/// because tree anchoring leaves those diffs unchanged (see
+/// `concurrent_staging_is_not_reported_as_hook_modification`).
 #[test]
-fn staging_brand_new_file_mid_run_is_not_reported() -> Result<()> {
+fn staging_brand_new_file_mid_run_is_attributed_to_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -4183,10 +4189,12 @@ fn staging_brand_new_file_mid_run_is_not_reported() -> Result<()> {
     cwd.child("new.txt").write_str("brand new\n")?;
 
     cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
-    stage-new-file...........................................................Passed
+    stage-new-file...........................................................Failed
+    - hook id: stage-new-file
+    - files were modified by this hook
 
     ----- stderr -----
     ");
