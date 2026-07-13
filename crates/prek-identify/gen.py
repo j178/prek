@@ -37,6 +37,14 @@ TAG_SET_CONSTS = [
     ("TAG_SET_YAML", ["yaml"]),
 ]
 
+# This override is intentionally undesirable: it may diverge from upstream
+# identify, but upstream is unlikely to accept this mapping. We reluctantly
+# carry it here because there is no practical upstream path for now.
+EXTENSION_OVERRIDES = {
+    "cts": {"text", "ts"},
+    "mts": {"text", "ts"},
+}
+
 SELF_DIR = Path(__file__).parent
 TAGS_FILE = SELF_DIR / "src/tags.rs"
 
@@ -77,6 +85,7 @@ def gen():
         f.write("};\n\n")
 
         EXTENSIONS.update(EXTENSIONS_NEED_BINARY_CHECK)
+        EXTENSIONS.update(EXTENSION_OVERRIDES)
         f.write("pub const EXTENSIONS: phf::Map<&str, TagSet> = phf::phf_map! {\n")
         for ext in sorted(EXTENSIONS):
             tag_names = sorted(EXTENSIONS[ext])

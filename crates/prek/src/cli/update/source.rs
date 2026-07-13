@@ -21,29 +21,34 @@ use crate::fs::Simplified;
 use crate::settings::{FilesystemOptions, UpdateSettings};
 use crate::workspace::Workspace;
 
-type RepoTargetKey<'a> = (&'a str, Vec<&'a str>, u8);
-type RepoTargetsByKey<'a> = FxHashMap<RepoTargetKey<'a>, RepoTarget<'a>>;
-type RepoSourcesByRepo<'a> = FxHashMap<&'a str, RepoTargetsByKey<'a>>;
+/// Identifies repo usages that can share one update evaluation.
+#[derive(Eq, Hash, PartialEq)]
+struct RepoTargetKey<'a> {
+    repo: &'a str,
+    current_rev: &'a str,
+    required_hook_ids: Vec<&'a str>,
+    cooldown_days: u8,
+    freeze: bool,
+}
 
-/// Collects the configured remote repos grouped by fetch source, revision, and hook set.
+type RepoTargetsByKey<'a> = FxHashMap<RepoTargetKey<'a>, RepoTarget<'a>>;
+type RepoSourcesBySource<'a> = FxHashMap<&'a str, RepoTargetsByKey<'a>>;
+
+/// Collects configured remote repos grouped by source, configured value, revision, and settings.
 pub(super) fn collect_repo_sources<'a>(
     workspace: &'a Workspace,
+    cli_freeze: bool,
     cli_cooldown_days: Option<u8>,
     filesystem: Option<&FilesystemOptions>,
 ) -> Result<Vec<RepoSource<'a>>> {
-    let mut repo_sources: RepoSourcesByRepo<'a> = FxHashMap::default();
+    let mut repo_sources: RepoSourcesBySource<'a> = FxHashMap::default();
 
     for project in workspace.projects() {
-        let settings = UpdateSettings::resolve(
-            cli_cooldown_days,
-            filesystem,
-            project
-                .config()
-                .update
-                .as_ref()
-                .and_then(|options| options.cooldown_days),
-        );
-        let cooldown_days = settings.cooldown_days;
+        let project_update = project.config().update.as_ref();
+        let UpdateSettings {
+            cooldown_days,
+            freeze,
+        } = UpdateSettings::resolve(cli_freeze, cli_cooldown_days, project_update, filesystem);
         let remote_count = project
             .config()
             .repos
@@ -81,16 +86,23 @@ pub(super) fn collect_repo_sources<'a>(
             required_hook_ids.sort_unstable();
             required_hook_ids.dedup();
 
-            let targets = repo_sources.entry(remote_repo.repo.as_str()).or_default();
-            let target_key = (remote_repo.rev.as_str(), required_hook_ids, cooldown_days);
+            let targets = repo_sources.entry(remote_repo.source()).or_default();
+            let target_key = RepoTargetKey {
+                repo: remote_repo.repo(),
+                current_rev: remote_repo.rev.as_str(),
+                required_hook_ids,
+                cooldown_days,
+                freeze,
+            };
             let target = match targets.entry(target_key) {
                 Entry::Occupied(entry) => entry.into_mut(),
                 Entry::Vacant(entry) => {
-                    let required_hook_ids = entry.key().1.clone();
+                    let required_hook_ids = entry.key().required_hook_ids.clone();
                     entry.insert(RepoTarget {
-                        repo: remote_repo.repo.as_str(),
+                        repo: remote_repo.repo(),
                         current_rev: remote_repo.rev.as_str(),
                         cooldown_days,
+                        freeze,
                         required_hook_ids,
                         usages: Vec::new(),
                     })
@@ -110,15 +122,17 @@ pub(super) fn collect_repo_sources<'a>(
 
     Ok(repo_sources
         .into_iter()
-        .map(|(repo, targets)| {
+        .map(|(source, targets)| {
             let mut targets = targets.into_values().collect::<Vec<_>>();
             targets.sort_by(|a, b| {
-                a.current_rev
-                    .cmp(b.current_rev)
+                a.repo
+                    .cmp(b.repo)
+                    .then_with(|| a.current_rev.cmp(b.current_rev))
                     .then_with(|| a.cooldown_days.cmp(&b.cooldown_days))
+                    .then_with(|| a.freeze.cmp(&b.freeze))
                     .then_with(|| a.required_hook_ids.cmp(&b.required_hook_ids))
             });
-            RepoSource { repo, targets }
+            RepoSource { source, targets }
         })
         .collect())
 }
@@ -194,7 +208,6 @@ async fn collect_frozen_mismatches<'a>(
 pub(super) async fn evaluate_repo_source<'a>(
     repo_source: &'a RepoSource<'a>,
     bleeding_edge: bool,
-    freeze: bool,
     tag_filters: &TagFilters,
 ) -> Result<Vec<RepoUpdate<'a>>> {
     let tmp_dir = tempfile::tempdir()?;
@@ -203,10 +216,10 @@ pub(super) async fn evaluate_repo_source<'a>(
     let result = async {
         trace!(
             "Cloning repository `{}` to `{}`",
-            repo_source.repo,
+            repo_source.source,
             repo_path.display()
         );
-        setup_and_fetch_repo(repo_source.repo, repo_path).await?;
+        setup_and_fetch_repo(repo_source.source, repo_path).await?;
         let metadata = list_tag_metadata(repo_path).await?;
 
         anyhow::Ok(metadata)
@@ -228,19 +241,17 @@ pub(super) async fn evaluate_repo_source<'a>(
         }
     };
 
-    let update_tag_timestamps = tag_filters
-        .filter(repo_source.repo, &tag_timestamps)
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
-
     let mut updates = Vec::with_capacity(repo_source.targets.len());
     for target in &repo_source.targets {
+        let update_tag_timestamps = tag_filters
+            .filter(target.repo, &tag_timestamps)
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
         let result = evaluate_repo_target(
             repo_path,
             target,
             bleeding_edge,
-            freeze,
             &tag_timestamps,
             &update_tag_timestamps,
         )
@@ -252,12 +263,11 @@ pub(super) async fn evaluate_repo_source<'a>(
     Ok(updates)
 }
 
-/// Resolves one configured `repo + rev + hook set` entry within an already-fetched remote repository.
+/// Resolves one configured repo target within an already-fetched remote repository.
 async fn evaluate_repo_target<'a>(
     repo_path: &Path,
     target: &'a RepoTarget<'a>,
     bleeding_edge: bool,
-    freeze: bool,
     tag_timestamps: &[TagTimestamp],
     update_tag_timestamps: &[TagTimestamp],
 ) -> Result<ResolvedRepoUpdate<'a>> {
@@ -302,7 +312,7 @@ async fn evaluate_repo_target<'a>(
         }
     };
 
-    let (rev, frozen) = if freeze {
+    let (rev, frozen) = if target.freeze {
         let exact = resolve_revision_to_commit(repo_path, &rev).await?;
         if rev.eq_ignore_ascii_case(&exact) {
             (rev, None)

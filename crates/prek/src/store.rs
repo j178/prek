@@ -22,6 +22,12 @@ struct PendingClone<'a> {
     repo: &'a RemoteRepo,
 }
 
+#[derive(serde::Serialize)]
+struct RepoMarker<'a> {
+    repo: &'a str,
+    rev: &'a str,
+}
+
 enum FirstClonePass<'a> {
     Ready {
         repo: &'a RemoteRepo,
@@ -116,7 +122,7 @@ impl Store {
             ?terminal_prompt,
             "Cloning repo"
         );
-        git::clone_repo(&repo.repo, &repo.rev, temp.path(), terminal_prompt).await?;
+        git::clone_repo(repo.source(), &repo.rev, temp.path(), terminal_prompt).await?;
         Ok(temp)
     }
 
@@ -131,7 +137,11 @@ impl Store {
         fs_err::tokio::remove_dir_all(&target).await.ok();
         fs_err::tokio::rename(temp, &target).await?;
 
-        let content = serde_json::to_string_pretty(&repo)?;
+        let marker = RepoMarker {
+            repo: repo.source(),
+            rev: &repo.rev,
+        };
+        let content = serde_json::to_string_pretty(&marker)?;
         fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
 
         Ok(target)
@@ -176,7 +186,7 @@ impl Store {
                     }),
                     Err(err) if git::is_auth_error(&err) => {
                         warn!(
-                            repo = %pending.repo.repo,
+                            repo = %pending.repo.repo(),
                             ?err,
                             "Clone failed with authentication error and terminal prompts disabled"
                         );
@@ -187,7 +197,7 @@ impl Store {
                         })
                     }
                     Err(err) => Err(Error::CloneRepo {
-                        repo: pending.repo.repo.clone(),
+                        repo: pending.repo.repo().to_string(),
                         error: err,
                     }),
                 }
@@ -225,7 +235,7 @@ impl Store {
             // failure instead of attempting the prompt-enabled retry path.
             if let Some((repo, error)) = auth_failed.into_iter().next() {
                 return Err(Error::CloneRepo {
-                    repo: repo.repo.clone(),
+                    repo: repo.repo().to_string(),
                     error,
                 });
             }
@@ -242,13 +252,13 @@ impl Store {
         for (repo, _error) in auth_failed {
             warn_user!(
                 "Authentication may be required to clone repository `{}`. Retrying with terminal prompts enabled.",
-                repo.repo
+                repo.repo()
             );
             let temp = self
                 .clone_repo_to_temp(repo, TerminalPrompt::Enabled)
                 .await
                 .map_err(|error| Error::CloneRepo {
-                    repo: repo.repo.clone(),
+                    repo: repo.repo().to_string(),
                     error,
                 })?;
             let path = self.persist_cloned_repo(repo, temp).await?;
@@ -270,7 +280,7 @@ impl Store {
             .get(&repo_key)
             .cloned()
             .ok_or_else(|| Error::CloneRepo {
-                repo: repo.repo.clone(),
+                repo: repo.repo().to_string(),
                 error: git::Error::Io(std::io::Error::other("repo was not cloned")),
             })
     }
@@ -287,7 +297,7 @@ impl Store {
     /// Returns the store key (directory name) for a remote repo.
     pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
         let mut hasher = SeaHasher::new();
-        repo.repo.hash(&mut hasher);
+        repo.source().hash(&mut hasher);
         repo.rev.hash(&mut hasher);
         to_hex(hasher.finish())
     }

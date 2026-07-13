@@ -15,11 +15,12 @@ permissions: {}
 env:
   # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
   # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
-  UV_VERSION: "0.11.25"
+  UV_VERSION: "0.11.26"
   NODE_VERSION: "20"
   BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
   PYTHON_VERSION: "3.12"
+  PHP_VERSION: "8.4"
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
@@ -139,7 +140,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek checks
-        uses: j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d # v2.0.4
+        uses: j178/prek-action@e98a699c41eb69ab013a45817a0406469a748f8d # v2.0.5
         env:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
@@ -191,7 +192,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      - uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -283,7 +284,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -307,12 +308,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-llvm-cov
 
@@ -373,17 +374,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -439,17 +440,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
@@ -512,12 +513,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: cargo-llvm-cov
 
@@ -529,7 +530,7 @@ jobs:
 
       - name: "Install uv"
         if: ${{ contains(format(' {0} ', matrix.languages), ' python ') }}
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -570,9 +571,17 @@ jobs:
 
       - name: "Install Ruby"
         if: ${{ contains(format(' {0} ', matrix.languages), ' ruby ') }}
-        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
+        uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1.316.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install PHP and Composer"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' php ') }}
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer
+          coverage: none
 
       - name: "Install Bun"
         if: ${{ contains(format(' {0} ', matrix.languages), ' bun ') }}
@@ -595,7 +604,7 @@ jobs:
 
       - name: "Install Deno"
         if: ${{ contains(format(' {0} ', matrix.languages), ' deno ') }}
-        uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: ${{ env.DENO_VERSION }}
 

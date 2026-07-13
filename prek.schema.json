@@ -71,6 +71,9 @@
         "perl": {
           "type": "string"
         },
+        "php": {
+          "type": "string"
+        },
         "pygrep": {
           "type": "string"
         },
@@ -152,6 +155,9 @@
           "type": "integer",
           "maximum": 255,
           "minimum": 0
+        },
+        "freeze": {
+          "type": "boolean"
         }
       }
     },
@@ -368,6 +374,7 @@
         "lua",
         "node",
         "perl",
+        "php",
         "pygrep",
         "python",
         "r",

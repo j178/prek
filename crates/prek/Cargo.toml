@@ -91,7 +91,7 @@ webpki-root-certs = { workspace = true }
 which = { workspace = true }
 xml = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
+[target."cfg(unix)".dependencies]
 prek-pty = { workspace = true }
 
 libc = { workspace = true }

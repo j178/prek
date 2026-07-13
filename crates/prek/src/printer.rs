@@ -20,8 +20,93 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#[cfg(windows)]
+use std::io;
+
 use anstream::{eprint, print};
+#[cfg(windows)]
+use console::Term;
 use indicatif::ProgressDrawTarget;
+#[cfg(windows)]
+use indicatif::TermLike;
+
+// Windows console mode belongs to the shared screen buffer, so a child process
+// can disable virtual terminal processing while prek's spinner is active.
+// Indicatif buffers its ANSI output until flush; re-enable VT immediately before
+// that output reaches the console. See https://github.com/j178/prek/issues/1237.
+#[cfg(windows)]
+#[derive(Debug)]
+struct WindowsVtTerm {
+    inner: Term,
+}
+
+#[cfg(windows)]
+impl WindowsVtTerm {
+    fn stderr() -> Self {
+        Self {
+            inner: Term::buffered_stderr(),
+        }
+    }
+}
+
+#[cfg(windows)]
+impl TermLike for WindowsVtTerm {
+    fn width(&self) -> u16 {
+        self.inner.size().1
+    }
+
+    fn height(&self) -> u16 {
+        self.inner.size().0
+    }
+
+    fn move_cursor_up(&self, n: usize) -> io::Result<()> {
+        self.inner.move_cursor_up(n)
+    }
+
+    fn move_cursor_down(&self, n: usize) -> io::Result<()> {
+        self.inner.move_cursor_down(n)
+    }
+
+    fn move_cursor_right(&self, n: usize) -> io::Result<()> {
+        self.inner.move_cursor_right(n)
+    }
+
+    fn move_cursor_left(&self, n: usize) -> io::Result<()> {
+        self.inner.move_cursor_left(n)
+    }
+
+    fn write_line(&self, s: &str) -> io::Result<()> {
+        self.inner.write_line(s)
+    }
+
+    fn write_str(&self, s: &str) -> io::Result<()> {
+        self.inner.write_str(s)
+    }
+
+    fn clear_line(&self) -> io::Result<()> {
+        self.inner.clear_line()
+    }
+
+    fn flush(&self) -> io::Result<()> {
+        let _ = anstyle_query::windows::enable_ansi_colors();
+        self.inner.flush()
+    }
+}
+
+#[cfg(windows)]
+fn progress_draw_target() -> ProgressDrawTarget {
+    let term = WindowsVtTerm::stderr();
+    if term.inner.features().colors_supported() {
+        ProgressDrawTarget::term_like_with_hz(Box::new(term), 20)
+    } else {
+        ProgressDrawTarget::hidden()
+    }
+}
+
+#[cfg(not(windows))]
+fn progress_draw_target() -> ProgressDrawTarget {
+    ProgressDrawTarget::stderr()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Printer {
@@ -43,7 +128,7 @@ impl Printer {
         match self {
             Self::Silent => ProgressDrawTarget::hidden(),
             Self::Quiet => ProgressDrawTarget::hidden(),
-            Self::Default => ProgressDrawTarget::stderr(),
+            Self::Default => progress_draw_target(),
             // Confusingly, hide the progress bar when in verbose mode.
             // Otherwise, it gets interleaved with debug messages.
             Self::Verbose => ProgressDrawTarget::hidden(),

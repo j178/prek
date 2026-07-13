@@ -488,6 +488,8 @@ pub const EXTENSIONS: phf::Map<&str, TagSet> = phf::phf_map! {
     "csv" => TagSet::new(&[48, 255]),
     // ["c#", "c#script", "text"]
     "csx" => TagSet::new(&[29, 30, 255]),
+    // ["text", "ts"]
+    "cts" => TagSet::new(&[255, 261]),
     // ["cuda", "text"]
     "cu" => TagSet::new(&[49, 255]),
     // ["cue", "text"]
@@ -756,6 +758,8 @@ pub const EXTENSIONS: phf::Map<&str, TagSet> = phf::phf_map! {
     "mscx" => TagSet::new(&[169, 255, 297]),
     // ["binary", "musescore", "zip"]
     "mscz" => TagSet::new(&[21, 169, 308]),
+    // ["text", "ts"]
+    "mts" => TagSet::new(&[255, 261]),
     // ["mustache", "text"]
     "mustache" => TagSet::new(&[170, 255]),
     // ["myst", "text"]

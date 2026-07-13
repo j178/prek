@@ -347,6 +347,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>lua</code></li>
 <li><code>node</code></li>
 <li><code>perl</code></li>
+<li><code>php</code></li>
 <li><code>pygrep</code></li>
 <li><code>python</code></li>
 <li><code>r</code></li>
@@ -575,7 +576,7 @@ prek update [OPTIONS]
 </dd><dt id="prek-update--exclude-tag"><a href="#prek-update--exclude-tag"><code>--exclude-tag</code></a> <i>pattern</i></dt><dd><p>Ignore tags matching this glob pattern. This option may be specified multiple times.</p>
 <p>For example, use <code>--exclude-tag nightly</code> to skip a moving tag, or <code>--exclude-tag '*-{alpha,beta,rc}*'</code> to skip common prerelease tags.</p>
 </dd><dt id="prek-update--exit-code"><a href="#prek-update--exit-code"><code>--exit-code</code></a></dt><dd><p>Exit with status 1 if updates are available</p>
-</dd><dt id="prek-update--freeze"><a href="#prek-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
+</dd><dt id="prek-update--freeze"><a href="#prek-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names. Defaults to <code>update.freeze</code> in the project or global config, or <code>false</code> when unset</p>
 </dd><dt id="prek-update--help"><a href="#prek-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-update--include-tag"><a href="#prek-update--include-tag"><code>--include-tag</code></a> <i>pattern</i></dt><dd><p>Only consider tags matching this glob pattern. This option may be specified multiple times.</p>
 <p>For example, use <code>--include-tag 'v*'</code> to only consider version tags and ignore tags such as <code>nightly</code>.</p>

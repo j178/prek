@@ -11,6 +11,26 @@ This page documents the configuration keys that `prek` understands.
 
 This file stores user-level `prek` settings and does not define project hooks.
 
+### Global `update.freeze`
+
+Whether [`prek update`](cli.md#prek-update) stores commit hashes in `rev` instead of tag names by default.
+
+- Type: boolean
+- Default: `false`
+- CLI override: [`prek update --freeze`](cli.md#prek-update--freeze)
+
+```toml
+[update]
+freeze = true
+```
+
+Project configs can also set [`update.freeze`](#updatefreeze). The effective precedence is:
+
+1. [`prek update --freeze`](cli.md#prek-update--freeze), which forces freezing on
+2. project config
+3. user-level global config
+4. default `false`
+
 ### Global `update.cooldown_days`
 
 Default cooldown for [`prek update`](cli.md#prek-update).
@@ -356,6 +376,34 @@ Project default cooldown for [`prek update`](cli.md#prek-update).
     The legacy `auto_update.cooldown_days` key is still accepted as an alias.
 
 In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, [`prek update`](cli.md#prek-update) fetches the repo once but evaluates each project with its own cooldown.
+
+### `update.freeze`
+
+!!! note "prek-only"
+
+    This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
+
+Whether [`prek update`](cli.md#prek-update) stores commit hashes in `rev` instead of tag names by default.
+
+- Type: boolean
+- Default: inherited from the user-level global config, or `false`
+- CLI override: [`prek update --freeze`](cli.md#prek-update--freeze), which forces freezing on
+
+=== "prek.toml"
+
+    ```toml
+    [update]
+    freeze = true
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    update:
+      freeze: true
+    ```
+
+In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. A project can set `freeze: false` to override a user-level `true`. If two projects use the same repo URL with different freeze settings, [`prek update`](cli.md#prek-update) fetches the repo once but writes each project's configured revision in the requested form.
 
 ### `minimum_prek_version`
 
@@ -791,7 +839,7 @@ How `prek` should run the hook (and whether it should create a managed environme
 - Optional override for remote hooks.
 - Not allowed (except as `system`) for `repo: meta` and `repo: builtin`.
 
-Common values include `system`, `python`, `node`, `rust`, `golang`, `ruby`, and `docker`.
+Common values include `system`, `python`, `node`, `php`, `rust`, `golang`, `ruby`, and `docker`.
 
 See [Language Support](../languages.md) for per-language behavior, supported values, and [`language_version`](#language_version) details.
 

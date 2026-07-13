@@ -2,6 +2,9 @@ fail_fast: true
 default_install_hook_types: [pre-push]
 exclude:
   glob: '**/snapshots/**'
+update:
+  cooldown_days: 7
+  freeze: true
 
 repos:
   - repo: builtin
@@ -15,7 +18,7 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/crate-ci/typos
-    rev: 37bb98842b0d8c4ffebdb75301a13db0267cef89  # frozen: v1.47.2
+    rev: bee27e3a4fd1ea2111cf90ab89cd076c870fce14  # frozen: v1.48.0
     hooks:
       - id: typos
 
@@ -27,11 +30,11 @@ repos:
         args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
         additional_dependencies:
           - mdformat-frontmatter==2.1.2
-          - mdformat-mkdocs==5.1.4
+          - mdformat-mkdocs==5.2.0
           - mdformat-simple-breaks==0.1.0
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 5030dca3047414c338091455ac41803200ec1f0f  # frozen: 0.37.3
+    rev: 6b63472e72e1a91ed8a2f6d483790dfb644fa1d3  # frozen: 0.37.4
     hooks:
       - id: check-metaschema
         files:
@@ -41,7 +44,7 @@ repos:
         additional_dependencies: ['json5']
 
   - repo: https://github.com/tombi-toml/tombi-pre-commit
-    rev: 1376e3d73ce106474179c8adfda11d1e50b7d4dc  # frozen: v1.1.6
+    rev: fcb0ac886b00dd0305756b1e8466432e11601b5a  # frozen: v1.2.0
     hooks:
       - id: tombi-format
         args: ["--offline"]

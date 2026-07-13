@@ -1,11 +1,12 @@
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
-use prek_consts::PRE_COMMIT_CONFIG_YAML;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 use serde_json::json;
 use std::time::{Duration, SystemTime};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -305,6 +306,80 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
         .assert(predicates::path::missing());
     home.child("tools/node").assert(predicates::path::missing());
     home.child("cache/go").assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_repo = context.work_dir().child("hook-repo");
+    hook_repo.create_dir_all()?;
+    git_cmd(&hook_repo).args(["init"]).assert().success();
+    hook_repo
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r"
+        - id: test-hook
+          name: Test Hook
+          entry: echo test
+          language: system
+          always_run: true
+    "})?;
+    git_cmd(&hook_repo).args(["add", "."]).assert().success();
+    git_cmd(&hook_repo)
+        .args(["commit", "-m", "Initial commit"])
+        .assert()
+        .success();
+    let output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let revision = String::from_utf8(output.stdout)?.trim().to_string();
+
+    let subproject = context.work_dir().child("subproject");
+    subproject.create_dir_all()?;
+    subproject
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(&indoc::formatdoc! {r"
+            repos:
+              - repo: ../hook-repo
+                rev: {revision}
+                hooks:
+                  - id: test-hook
+        "})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run()
+        .arg("--config")
+        .arg("subproject/.pre-commit-config.yaml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Test Hook................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let repos_dir = context.home_dir().child("repos");
+    let cached_repo = fs_err::read_dir(repos_dir.path())?
+        .next()
+        .transpose()?
+        .expect("expected the relative remote repo to be cached")
+        .path();
+    repos_dir.child("unused-repo").create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 repo ([SIZE])
+
+    ----- stderr -----
+    ");
+
+    assert!(cached_repo.is_dir(), "cache GC removed the configured repo");
+    repos_dir
+        .child("unused-repo")
+        .assert(predicates::path::missing());
 
     Ok(())
 }

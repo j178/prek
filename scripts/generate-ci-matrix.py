@@ -32,6 +32,7 @@ LANGUAGE_TESTS = {
     "lua": LanguageTest("test(lua::)", 35),
     "node": LanguageTest("test(node::)", 35),
     "perl": LanguageTest("test(perl::)", 30),
+    "php": LanguageTest("test(php::)", 30),
     "python": LanguageTest("test(python::)", 60),
     "r": LanguageTest("test(/^r::/)", 90),
     "ruby": LanguageTest("test(ruby::)", 60),
