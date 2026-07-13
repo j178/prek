@@ -257,6 +257,7 @@ pub(crate) async fn try_repo(
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,
+        run_args.working_tree,
         run_args.files,
         run_args.directory,
         run_args.last_commit,

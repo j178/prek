@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Enhancements
+
+- Add `run --working-tree` to detect files modified by hooks from working-tree content (compared against `HEAD`) instead of the Git index, so staging or unstaging files while hooks run is not misreported as "files were modified by this hook".
+
 ## 0.4.9
 
 Released on 2026-07-11.

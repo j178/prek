@@ -48,6 +48,7 @@ pub(crate) async fn run(
     from_ref: Option<String>,
     to_ref: Option<String>,
     all_files: bool,
+    working_tree: bool,
     files: Vec<String>,
     directories: Vec<String>,
     last_commit: bool,
@@ -234,6 +235,7 @@ pub(crate) async fn run(
         show_diff_on_failure,
         fail_fast,
         dry_run,
+        working_tree,
         should_stash,
         verbose,
         printer,
@@ -500,6 +502,7 @@ async fn run_hooks<'paths>(
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
+    working_tree: bool,
     worktree_cleaned: bool,
     verbose: bool,
     printer: Printer,
@@ -523,6 +526,7 @@ async fn run_hooks<'paths>(
         hooks,
         store,
         dry_run,
+        working_tree,
         verbose,
         show_project_headers,
         printer,
@@ -669,16 +673,19 @@ struct HookRunSession<'a> {
     status_printer: StatusPrinter,
     printer: Printer,
     dry_run: bool,
+    working_tree: bool,
     verbose: bool,
     success: bool,
     file_modified: bool,
 }
 
 impl<'a> HookRunSession<'a> {
+    #[allow(clippy::fn_params_excessive_bools)]
     fn new(
         hooks: &[InstalledHook],
         store: &'a Store,
         dry_run: bool,
+        working_tree: bool,
         verbose: bool,
         show_project_headers: bool,
         printer: Printer,
@@ -693,6 +700,7 @@ impl<'a> HookRunSession<'a> {
             status_printer,
             printer,
             dry_run,
+            working_tree,
             verbose,
             success: true,
             file_modified: false,
@@ -786,7 +794,9 @@ impl<'a> HookRunSession<'a> {
         // The worktree is only known clean at the start of a depth level. Once
         // an earlier level leaves a diff behind, later projects need a fresh
         // per-project snapshot to avoid attributing that diff to their hooks.
-        let mut diff_tracker = if clean_baseline {
+        let mut diff_tracker = if self.working_tree {
+            DiffTracker::working_tree(project_run.project.path())
+        } else if clean_baseline {
             DiffTracker::clean_baseline(project_run.project.path())
         } else {
             DiffTracker::unknown_baseline(project_run.project.path())

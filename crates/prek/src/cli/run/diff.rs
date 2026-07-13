@@ -7,6 +7,11 @@ use crate::git;
 pub(super) struct DiffTracker<'a> {
     path: &'a Path,
     baseline: DiffBaseline,
+    /// When set, detect modifications from working-tree content (via
+    /// `git::get_working_tree_diff`) instead of the live-index diff, so a user
+    /// concurrently staging or unstaging files is not misread as a hook
+    /// modification. Set by `run --working-tree`.
+    working_tree: bool,
 }
 
 enum DiffBaseline {
@@ -20,6 +25,7 @@ impl<'a> DiffTracker<'a> {
         Self {
             path,
             baseline: DiffBaseline::Clean,
+            working_tree: false,
         }
     }
 
@@ -27,12 +33,39 @@ impl<'a> DiffTracker<'a> {
         Self {
             path,
             baseline: DiffBaseline::Unknown,
+            working_tree: false,
+        }
+    }
+
+    /// Track modifications by working-tree content rather than the live index.
+    ///
+    /// Always uses the before/after snapshot comparison (never the index-based
+    /// `Clean` fast path, whose `diff-files` check is itself index-sensitive).
+    pub(super) fn working_tree(path: &'a Path) -> Self {
+        Self {
+            path,
+            baseline: DiffBaseline::Unknown,
+            working_tree: true,
+        }
+    }
+
+    /// The before/after snapshot: working-tree content vs `HEAD` in
+    /// `--working-tree` mode, otherwise the working tree vs the live index.
+    ///
+    /// An associated function over the individual fields (rather than `&self`)
+    /// so it can be called while `self.baseline` is mutably borrowed.
+    async fn snapshot(path: &Path, working_tree: bool) -> Result<Vec<u8>> {
+        if working_tree {
+            Ok(git::get_working_tree_diff(path).await?)
+        } else {
+            Ok(git::get_diff(path).await?)
         }
     }
 
     pub(super) async fn prepare_for_group(&mut self, may_modify_files: bool) -> Result<()> {
         if may_modify_files && let DiffBaseline::Unknown = self.baseline {
-            self.baseline = DiffBaseline::Snapshot(git::get_diff(self.path).await?);
+            self.baseline =
+                DiffBaseline::Snapshot(Self::snapshot(self.path, self.working_tree).await?);
         }
         Ok(())
     }
@@ -59,7 +92,7 @@ impl<'a> DiffTracker<'a> {
                 // can look dirty even when the content is unchanged. Do a full
                 // diff here to ignore stat-only changes and reuse the content
                 // diff as the baseline if the hook really modified files.
-                let curr_diff = git::get_diff(self.path).await?;
+                let curr_diff = Self::snapshot(self.path, self.working_tree).await?;
                 if curr_diff.is_empty() {
                     return Ok(false);
                 }
@@ -73,7 +106,7 @@ impl<'a> DiffTracker<'a> {
                 // Unknown initial state, `--all-files`, and later dirty groups
                 // need a full before/after diff comparison to avoid confusing
                 // pre-existing user changes with hook changes.
-                let curr_diff = git::get_diff(self.path).await?;
+                let curr_diff = Self::snapshot(self.path, self.working_tree).await?;
                 let modified = curr_diff != *prev_diff;
                 *prev_diff = curr_diff;
                 Ok(modified)

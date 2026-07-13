@@ -364,6 +364,7 @@ prek self update
 - Workspace mode schedules independent same-depth projects concurrently while preserving parent/child ordering, which helps large monorepos finish faster without mixing project file scopes.
 - [`prek install`](https://prek.j178.dev/reference/cli/#prek-install) and [`prek uninstall`](https://prek.j178.dev/reference/cli/#prek-uninstall) honor repo-local and worktree-local `core.hooksPath`.
 - [`prek run`](https://prek.j178.dev/reference/cli/#prek-run) supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id, and adds quality-of-life improvements such as `--dry-run`, `--directory`, `--last-commit`, and `--no-fail-fast`.
+- [`prek run --working-tree`](https://prek.j178.dev/reference/cli/#prek-run--working-tree) detects files modified by hooks from working-tree content instead of the Git index, so staging or unstaging files while hooks run isn't misreported as "files were modified by this hook".
 - [`prek list`](https://prek.j178.dev/reference/cli/#prek-list), [`prek util identify`](https://prek.j178.dev/reference/cli/#prek-util-identify), and [`prek util list-builtins`](https://prek.j178.dev/reference/cli/#prek-util-list-builtins) make it easier to inspect configured hooks, debug file matching, and discover builtins.
 
 ### prek includes security-focused safeguards

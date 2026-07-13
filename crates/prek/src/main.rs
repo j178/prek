@@ -297,6 +297,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 options.from_ref,
                 options.to_ref,
                 options.all_files,
+                options.working_tree,
                 options.files,
                 options.directory,
                 options.last_commit,

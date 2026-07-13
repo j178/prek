@@ -399,6 +399,57 @@ pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
     Ok(output.stdout)
 }
 
+/// Diff the working-tree *content* (tracked and untracked) against `HEAD`.
+///
+/// Unlike [`get_diff`], which compares the working tree against the live index,
+/// this ignores the index entirely: the working tree is snapshotted into a
+/// throwaway index (leaving the real index and its lock untouched) and diffed
+/// against `HEAD`. Staging or unstaging a file moves the index but changes
+/// neither the working-tree content nor `HEAD`, so before/after snapshots stay
+/// equal — only a hook writing to the working tree changes the diff. This backs
+/// `run --working-tree`.
+#[instrument(level = "trace")]
+pub(crate) async fn get_working_tree_diff(path: &Path) -> Result<Vec<u8>, Error> {
+    let scratch_dir = tempfile::tempdir()?;
+    let scratch = scratch_dir.path().join("index");
+
+    // Snapshot the whole working tree into the empty scratch index. `-A` also
+    // records untracked files, so an unstaged-but-present file is not seen as a
+    // deletion.
+    git_cmd()?
+        .arg("add")
+        .arg("-A")
+        .env("GIT_INDEX_FILE", &scratch)
+        .arg("--")
+        .arg(path)
+        .check(false)
+        .status()
+        .await?;
+
+    let output = git_cmd()?
+        .arg("diff-index")
+        .arg("-p")
+        .env("GIT_INDEX_FILE", &scratch)
+        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
+        .arg("HEAD")
+        .arg("--")
+        .arg(path)
+        // Best-effort, like `get_diff`: tolerate a non-zero exit (e.g. a repo
+        // with no commits, so `HEAD` is unresolved) and keep the stdout so the
+        // before/after comparison still works.
+        .check(false)
+        .output()
+        .await?;
+    if !output.status.success() {
+        debug!(
+            status = %output.status,
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "Continuing with git diff stdout despite non-zero exit status"
+        );
+    }
+    Ok(output.stdout)
+}
+
 /// Create a tree object from the current index.
 ///
 /// The name of the new tree object is printed to standard output.

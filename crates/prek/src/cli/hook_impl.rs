@@ -130,6 +130,7 @@ pub(crate) async fn hook_impl(
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,
+        false,
         vec![],
         vec![],
         false,

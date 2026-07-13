@@ -1663,6 +1663,7 @@ fn global_path_options_expand_tilde() -> Result<()> {
             includes: [],
             skips: [],
             all_files: false,
+            working_tree: false,
             files: [],
             directory: [],
             from_ref: None,
@@ -3041,6 +3042,7 @@ fn selectors_completion() -> Result<()> {
     root-hook	Root Hook
     --skip	Skip the specified hooks or projects
     --all-files	Run on all files in the repo
+    --working-tree	Detect files modified by hooks from working-tree content instead of the Git index
     --files	Specific filenames to run hooks on
     --directory	Run hooks on all files in the specified directories
     --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
@@ -4051,6 +4053,128 @@ fn pass_filenames_2_limits_batch_size() -> Result<()> {
     two at a time............................................................Passed
     - hook id: two-at-a-time
     - duration: [TIME]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// With `--working-tree`, modification detection compares working-tree content
+/// against `HEAD`, so a hook (or the user) *staging* an existing file's unstaged
+/// modification mid-run is not reported: `git add` moves only the index, not the
+/// file on disk. The default (working tree vs the live index) reports this as a
+/// spurious modification — before staging the diff shows the change, after it is
+/// empty — so a passing run here proves the flag takes effect.
+#[test]
+fn working_tree_ignores_staging_a_modification() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: stage-file
+                name: stage-file
+                language: system
+                entry: git add file.txt
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+    // Leave an unstaged modification in the working tree; the hook stages it.
+    cwd.child("file.txt").write_str("hello\nmodified\n")?;
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--working-tree"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage-file...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// With `--working-tree`, *unstaging* a staged modification mid-run
+/// (`git reset`) is likewise a no-op: the index moves back but the file on disk
+/// is unchanged. The default reports it as a spurious modification.
+#[test]
+fn working_tree_ignores_unstaging_a_modification() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: unstage-file
+                name: unstage-file
+                language: system
+                entry: git reset -- file.txt
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+    // A staged modification; the hook unstages it mid-run.
+    cwd.child("file.txt").write_str("hello\nmodified\n")?;
+    context.git_add("file.txt");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--working-tree"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    unstage-file.............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--working-tree` must still report genuine hook modifications: the file's
+/// content on disk changed, which is independent of the index.
+#[test]
+fn working_tree_reports_real_modification() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    // Double-quoted entry (so the Python literal can use single quotes) needs the
+    // `r#"..."#` raw string; `python3` is portable across CI, unlike `sh`.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify-file
+                name: modify-file
+                language: system
+                entry: python3 -c "from pathlib import Path; p = Path('file.txt'); p.write_text(p.read_text() + 'appended\n')"
+                pass_filenames: false
+                always_run: true
+    "#});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--working-tree"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify-file..............................................................Failed
+    - hook id: modify-file
+    - files were modified by this hook
 
     ----- stderr -----
     ");

@@ -272,6 +272,8 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-run--to-ref"><a href="#prek-run--to-ref"><code>--to-ref</code></a>, <code>--origin</code>, <code>-o</code> <i>to-ref</i></dt><dd><p>The destination ref in a <code>from_ref...to_ref</code> diff expression. Defaults to <code>HEAD</code> if <code>from_ref</code> is specified</p>
 </dd><dt id="prek-run--verbose"><a href="#prek-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-run--version"><a href="#prek-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-run--working-tree"><a href="#prek-run--working-tree"><code>--working-tree</code></a></dt><dd><p>Detect files modified by hooks from working-tree content instead of the Git index.</p>
+<p>By default prek reports &quot;files were modified by this hook&quot; by diffing the working tree against the index, so staging or unstaging a file while hooks run can be misreported as a hook modification. With this flag prek compares the working-tree content (tracked and untracked) against <code>HEAD</code> instead, making concurrent <code>git add</code>/<code>git reset</code> a no-op. Most useful with <code>--all-files</code> and other long runs. Costs an extra working-tree snapshot per hook group.</p>
 </dd></dl>
 
 ## prek list
@@ -830,6 +832,8 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </ul></dd><dt id="prek-try-repo--to-ref"><a href="#prek-try-repo--to-ref"><code>--to-ref</code></a>, <code>--origin</code>, <code>-o</code> <i>to-ref</i></dt><dd><p>The destination ref in a <code>from_ref...to_ref</code> diff expression. Defaults to <code>HEAD</code> if <code>from_ref</code> is specified</p>
 </dd><dt id="prek-try-repo--verbose"><a href="#prek-try-repo--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-try-repo--version"><a href="#prek-try-repo--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-try-repo--working-tree"><a href="#prek-try-repo--working-tree"><code>--working-tree</code></a></dt><dd><p>Detect files modified by hooks from working-tree content instead of the Git index.</p>
+<p>By default prek reports &quot;files were modified by this hook&quot; by diffing the working tree against the index, so staging or unstaging a file while hooks run can be misreported as a hook modification. With this flag prek compares the working-tree content (tracked and untracked) against <code>HEAD</code> instead, making concurrent <code>git add</code>/<code>git reset</code> a no-op. Most useful with <code>--all-files</code> and other long runs. Costs an extra working-tree snapshot per hook group.</p>
 </dd></dl>
 
 ## prek util

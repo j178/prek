@@ -504,6 +504,20 @@ pub(crate) struct RunOptions {
     /// Run on all files in the repo.
     #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
     pub(crate) all_files: bool,
+
+    /// Detect files modified by hooks from working-tree content instead of the
+    /// Git index.
+    ///
+    /// By default prek reports "files were modified by this hook" by diffing the
+    /// working tree against the index, so staging or unstaging a file while
+    /// hooks run can be misreported as a hook modification. With this flag prek
+    /// compares the working-tree content (tracked and untracked) against `HEAD`
+    /// instead, making concurrent `git add`/`git reset` a no-op. Most useful
+    /// with `--all-files` and other long runs. Costs an extra working-tree
+    /// snapshot per hook group.
+    #[arg(long)]
+    pub(crate) working_tree: bool,
+
     /// Specific filenames to run hooks on.
     #[arg(
         long,
