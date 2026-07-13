@@ -4112,17 +4112,22 @@ fn concurrent_staging_is_not_reported_when_index_is_locked() -> Result<()> {
     context.init_project();
 
     let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    // `system` hooks are spawned directly (`Cmd::new(&entry[0])`), so the entry
+    // must be portable: Windows CI strips msys64 from PATH, leaving no `sh`.
+    // Drive the lock removal and staging through `python3` instead. The Python
+    // literals need single quotes, so the entry is double-quoted, which in turn
+    // needs the `r#"..."#` raw string.
+    context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
               - id: stage-file
                 name: stage-file
                 language: system
-                entry: sh -c 'rm -f .git/index.lock && git add file.txt'
+                entry: python3 -c "import os, subprocess; os.remove('.git/index.lock'); subprocess.run(['git', 'add', 'file.txt'], check=True)"
                 pass_filenames: false
                 always_run: true
-    "});
+    "#});
 
     cwd.child("file.txt").write_str("hello\n")?;
     context.git_add(".");
@@ -4202,17 +4207,21 @@ fn hook_modifying_intent_to_add_file_is_reported() -> Result<()> {
     context.init_project();
 
     let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    // `system` hooks are spawned directly, so `sh` is not portable (Windows CI
+    // has no `sh` on PATH); append via `python3` instead. The double-quoted
+    // entry (needed so the Python literals can use single quotes) requires the
+    // `r#"..."#` raw string.
+    context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
               - id: modify-file
                 name: modify-file
                 language: system
-                entry: sh -c 'echo appended >> newfile.txt'
+                entry: python3 -c "from pathlib import Path; p = Path('newfile.txt'); p.write_text(p.read_text() + 'appended\n')"
                 pass_filenames: false
                 always_run: true
-    "});
+    "#});
 
     cwd.child("tracked.txt").write_str("base\n")?;
     context.git_add(".");
