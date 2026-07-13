@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Bug fixes
-
-- Fix concurrent `git add` being misreported as "files were modified by this hook" — anchor before/after diffs to a tree object captured once per run instead of the live index.
-
 ## 0.4.9
 
 Released on 2026-07-11.
