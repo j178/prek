@@ -16,7 +16,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::fs::is_executable;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::languages::rust::RustRequest;
 use crate::languages::rust::installer::RustInstaller;
 use crate::languages::rust::rustup::Rustup;
@@ -394,11 +394,12 @@ async fn install_cli_dependency(
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Rust;
 
-impl LanguageImpl for Rust {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Rust {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         store: &Store,
+        hook: Arc<Hook>,
         reporter: &HookInstallReporter,
     ) -> anyhow::Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -493,9 +494,9 @@ impl LanguageImpl for Rust {
 
     async fn run(
         &self,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        store: &Store,
         reporter: &HookRunReporter,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());

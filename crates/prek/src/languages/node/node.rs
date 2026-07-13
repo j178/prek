@@ -11,7 +11,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir, query_node_version};
 use crate::languages::node::version::EXTRA_KEY_LTS;
@@ -40,11 +40,12 @@ const NPM_CONFIG_ENVS_TO_REMOVE: &[&str] = &[
     "npm_config_cache",
 ];
 
-impl LanguageImpl for Node {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Node {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         store: &Store,
+        hook: Arc<Hook>,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -146,9 +147,9 @@ impl LanguageImpl for Node {
 
     async fn run(
         &self,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());

@@ -7,17 +7,18 @@ use anyhow::Result;
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Fail;
 
-impl LanguageImpl for Fail {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Fail {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         _store: &Store,
+        hook: Arc<Hook>,
         _reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))
@@ -29,9 +30,9 @@ impl LanguageImpl for Fail {
 
     async fn run(
         &self,
+        _store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
         _reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let mut out = Vec::new();

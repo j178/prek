@@ -20,6 +20,7 @@ annotate-snippets = { version = "0.12.13" }
 anstream = { version = "1.0.0" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
+async-trait = { version = "0.1.89" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async_zip = { version = "0.0.18", package = "astral_async_zip", features = [
   "deflate",
