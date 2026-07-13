@@ -11,7 +11,7 @@ use tracing::debug;
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -19,11 +19,12 @@ use crate::store::Store;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct R;
 
-impl LanguageImpl for R {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for R {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         store: &Store,
+        hook: Arc<Hook>,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -121,9 +122,9 @@ impl LanguageImpl for R {
 
     async fn run(
         &self,
+        _store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());

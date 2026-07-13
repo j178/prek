@@ -1432,14 +1432,14 @@ async fn run_hook(
     } else {
         match &input {
             HookRunInput::Filenames(filenames) => {
-                hook.language.run(&hook, filenames, store, reporter).await
+                hook.language.run(store, &hook, filenames, reporter).await
             }
             HookRunInput::Filename(filename) => {
                 let filenames = [filename.as_path()];
-                hook.language.run(&hook, &filenames, store, reporter).await
+                hook.language.run(store, &hook, &filenames, reporter).await
             }
             HookRunInput::WithoutFilenames { .. } => {
-                hook.language.run(&hook, &[], store, reporter).await
+                hook.language.run(store, &hook, &[], reporter).await
             }
         }
         .with_context(|| format!("Failed to run hook `{hook}`"))?
