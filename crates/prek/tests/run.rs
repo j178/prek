@@ -4148,20 +4148,19 @@ fn concurrent_staging_is_not_reported_when_index_is_locked() -> Result<()> {
     Ok(())
 }
 
-/// Known limitation: staging a *brand-new* file mid-run is attributed to the
-/// running hook. Relative to the baseline tree the freshly-staged path is an
-/// addition, and the before/after snapshots differ, so it is reported as a
-/// modification.
+/// Staging a *brand-new* file mid-run must not be attributed to the hook: `git
+/// add new.txt` moves only the index, leaving the working tree untouched. The
+/// file is already present (untracked) on disk before the run, so both snapshots
+/// capture it identically once untracked files are included, and the before/after
+/// comparison stays equal.
 ///
-/// We accept this narrow false positive deliberately. The only way to suppress
-/// it (excluding added paths from the diff) would also hide genuine hook edits
-/// to intent-to-add files — a false *negative*, which is worse for a
-/// modification detector (see `hook_modifying_intent_to_add_file_is_reported`).
-/// Staging changes to *existing* files — the common hunk-by-hunk review flow —
-/// is unaffected, because tree anchoring leaves those diffs unchanged (see
-/// `concurrent_staging_is_not_reported_as_hook_modification`).
+/// This is the mirror of `concurrent_unstaging_of_new_file_is_not_reported`: the
+/// same untracked-inclusive snapshot that keeps an unstage a no-op keeps a stage
+/// a no-op. A hook that genuinely *creates* a new file on disk still differs
+/// between snapshots and is reported; and hook edits to intent-to-add files are
+/// still caught (see `hook_modifying_intent_to_add_file_is_reported`).
 #[test]
-fn staging_brand_new_file_mid_run_is_attributed_to_hook() -> Result<()> {
+fn staging_brand_new_file_mid_run_is_not_reported() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -4184,12 +4183,57 @@ fn staging_brand_new_file_mid_run_is_attributed_to_hook() -> Result<()> {
     cwd.child("new.txt").write_str("brand new\n")?;
 
     cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
-    stage-new-file...........................................................Failed
-    - hook id: stage-new-file
-    - files were modified by this hook
+    stage-new-file...........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A user *unstaging* a freshly staged file mid-run must not be reported as the
+/// hook modifying files: `git reset new.txt` moves only the index and leaves the
+/// file on disk. The baseline tree still contains the path, and `git diff <tree>`
+/// alone ignores the now-untracked file, so the after snapshot would read as a
+/// deletion. Snapshotting the working tree (untracked files included) before
+/// diffing keeps this index-only operation a no-op.
+#[test]
+fn concurrent_unstaging_of_new_file_is_not_reported() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    // `system` hooks are spawned directly, so the entry must be a real program:
+    // `git` is portable across CI, unlike `sh`. `git reset` unstages the file
+    // without touching the working tree.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: unstage-file
+                name: unstage-file
+                language: system
+                entry: git reset -- new.txt
+                pass_filenames: false
+                always_run: true
+    "});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+    // A brand-new file staged just before the run; the hook unstages it, leaving
+    // it on disk as untracked.
+    cwd.child("new.txt").write_str("brand new\n")?;
+    context.git_add("new.txt");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    unstage-file.............................................................Passed
 
     ----- stderr -----
     ");
