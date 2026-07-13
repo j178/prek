@@ -408,14 +408,35 @@ pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
 /// neither the working-tree content nor `HEAD`, so before/after snapshots stay
 /// equal — only a hook writing to the working tree changes the diff. This backs
 /// `run --working-tree`.
+///
+/// The scratch index is seeded from the base tree (`git read-tree`) before
+/// `git add -A`, for two reasons:
+/// - A tracked file that also matches `.gitignore` (committed with `git add -f`)
+///   would be skipped by `git add -A` against an *empty* index and misread as a
+///   deletion in both snapshots; seeding makes it already tracked, so `add -A`
+///   updates it and a hook editing it is detected.
+/// - When `HEAD` is unborn (a repo before its first commit), the base is the
+///   empty tree, so staged files still diff as additions instead of both
+///   snapshots collapsing to empty.
 #[instrument(level = "trace")]
 pub(crate) async fn get_working_tree_diff(path: &Path) -> Result<Vec<u8>, Error> {
     let scratch_dir = tempfile::tempdir()?;
     let scratch = scratch_dir.path().join("index");
+    let base = head_tree().await?;
 
-    // Snapshot the whole working tree into the empty scratch index. `-A` also
-    // records untracked files, so an unstaged-but-present file is not seen as a
-    // deletion.
+    // Seed the scratch index from the base tree so tracked files — including
+    // tracked files that match `.gitignore` — are already tracked before the add.
+    git_cmd()?
+        .arg("read-tree")
+        .arg(&base)
+        .env("GIT_INDEX_FILE", &scratch)
+        .check(false)
+        .status()
+        .await?;
+
+    // Snapshot the working tree into the scratch index. `-A` updates tracked
+    // files and records untracked ones, so an unstaged-but-present file is not
+    // seen as a deletion.
     git_cmd()?
         .arg("add")
         .arg("-A")
@@ -429,14 +450,15 @@ pub(crate) async fn get_working_tree_diff(path: &Path) -> Result<Vec<u8>, Error>
     let output = git_cmd()?
         .arg("diff-index")
         .arg("-p")
+        .arg("--cached")
         .env("GIT_INDEX_FILE", &scratch)
         .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
-        .arg("HEAD")
+        .arg(&base)
         .arg("--")
         .arg(path)
-        // Best-effort, like `get_diff`: tolerate a non-zero exit (e.g. a repo
-        // with no commits, so `HEAD` is unresolved) and keep the stdout so the
-        // before/after comparison still works.
+        // Best-effort, like `get_diff`: tolerate a non-zero exit (some CI
+        // environments omit blob objects) and keep the stdout so the before/after
+        // comparison still works.
         .check(false)
         .output()
         .await?;
@@ -448,6 +470,34 @@ pub(crate) async fn get_working_tree_diff(path: &Path) -> Result<Vec<u8>, Error>
         );
     }
     Ok(output.stdout)
+}
+
+/// Resolve `HEAD`'s tree, falling back to the empty tree when `HEAD` is unborn
+/// (a repository before its first commit).
+async fn head_tree() -> Result<String, Error> {
+    let output = git_cmd()?
+        .arg("rev-parse")
+        .arg("--verify")
+        .arg("--quiet")
+        .arg("HEAD^{tree}")
+        .check(false)
+        .output()
+        .await?;
+    let tree = output.stdout.trim_ascii();
+    if output.status.success() && !tree.is_empty() {
+        return Ok(String::from_utf8_lossy(tree).into_owned());
+    }
+    // Unborn `HEAD`: the empty tree. `--stdin` reads the (null) stdin `Cmd` sets,
+    // so this hashes empty input, yielding the repo's empty-tree object id.
+    let output = git_cmd()?
+        .arg("hash-object")
+        .arg("-t")
+        .arg("tree")
+        .arg("--stdin")
+        .check(true)
+        .output()
+        .await?;
+    Ok(String::from_utf8_lossy(output.stdout.trim_ascii()).into_owned())
 }
 
 /// Create a tree object from the current index.

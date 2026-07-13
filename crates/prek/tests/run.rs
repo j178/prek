@@ -4181,3 +4181,88 @@ fn working_tree_reports_real_modification() -> Result<()> {
 
     Ok(())
 }
+
+/// `--working-tree` must report a hook editing a tracked file that also matches
+/// `.gitignore` (committed with `git add -f`). The scratch index is seeded from
+/// `HEAD`, so the file is already tracked and `git add -A` updates it instead of
+/// skipping it as ignored (which would hide the edit in both snapshots).
+#[test]
+fn working_tree_reports_edit_to_tracked_ignored_file() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify-file
+                name: modify-file
+                language: system
+                entry: python3 -c "from pathlib import Path; Path('gen.out').write_text('changed\n')"
+                pass_filenames: false
+                always_run: true
+    "#});
+
+    cwd.child(".gitignore").write_str("gen.out\n")?;
+    cwd.child("gen.out").write_str("generated\n")?;
+    context.git_add(".");
+    // Force-add the ignored file so it is tracked despite `.gitignore`.
+    git_cmd(cwd.path())
+        .args(["add", "-f", "gen.out"])
+        .assert()
+        .success();
+    context.git_commit("init");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--working-tree"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify-file..............................................................Failed
+    - hook id: modify-file
+    - files were modified by this hook
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--working-tree` must report hook edits in a repository before its first
+/// commit (unborn `HEAD`), where the base falls back to the empty tree. Without
+/// the fallback both snapshots collapse to empty and the edit is missed.
+#[test]
+fn working_tree_reports_modification_with_unborn_head() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify-file
+                name: modify-file
+                language: system
+                entry: python3 -c "from pathlib import Path; p = Path('file.txt'); p.write_text(p.read_text() + 'appended\n')"
+                pass_filenames: false
+                always_run: true
+    "#});
+
+    cwd.child("file.txt").write_str("hello\n")?;
+    // Staged but never committed: `HEAD` is unborn.
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--working-tree"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify-file..............................................................Failed
+    - hook id: modify-file
+    - files were modified by this hook
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
