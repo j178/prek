@@ -31,6 +31,7 @@ annotate-snippets = { workspace = true }
 anstream = { workspace = true }
 anstyle-query = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 async-compression = { workspace = true }
 async_zip = { workspace = true }
 axoupdater = { workspace = true, optional = true }

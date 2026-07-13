@@ -10,7 +10,7 @@ use prek_consts::prepend_paths;
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
 use crate::languages::version::LanguageRequest;
@@ -21,11 +21,12 @@ use crate::store::{CacheBucket, Store, ToolBucket};
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Golang;
 
-impl LanguageImpl for Golang {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Golang {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         store: &Store,
+        hook: Arc<Hook>,
         reporter: &HookInstallReporter,
     ) -> anyhow::Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -116,9 +117,9 @@ impl LanguageImpl for Golang {
 
     async fn run(
         &self,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        store: &Store,
         reporter: &HookRunReporter,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());

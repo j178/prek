@@ -95,7 +95,7 @@ async fn install_partition(
 
             let installed_hook = hook
                 .language
-                .install(hook.clone(), store, reporter)
+                .install(store, hook.clone(), reporter)
                 .await
                 .with_context(|| format!("Failed to install hook `{hook}`"))?;
 

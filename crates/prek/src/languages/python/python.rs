@@ -15,7 +15,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::languages::python::PythonRequest;
 use crate::languages::python::uv::Uv;
 use crate::languages::version::LanguageRequest;
@@ -93,11 +93,12 @@ pub(crate) async fn query_python_info_cached(
         .await
 }
 
-impl LanguageImpl for Python {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Python {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         store: &Store,
+        hook: Arc<Hook>,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -181,9 +182,9 @@ impl LanguageImpl for Python {
 
     async fn run(
         &self,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());

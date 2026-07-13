@@ -8,7 +8,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -16,11 +16,12 @@ use crate::store::Store;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Script;
 
-impl LanguageImpl for Script {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Script {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         _store: &Store,
+        hook: Arc<Hook>,
         _reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))
@@ -32,9 +33,9 @@ impl LanguageImpl for Script {
 
     async fn run(
         &self,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         // For `language: script`, the `entry[0]` is a script path.

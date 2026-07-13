@@ -11,7 +11,7 @@ use tracing::debug;
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::LanguageBackend;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
 use crate::languages::ruby::installer::{RubyInstaller, query_ruby_version};
@@ -23,11 +23,12 @@ use crate::store::{Store, ToolBucket};
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Ruby;
 
-impl LanguageImpl for Ruby {
+#[async_trait::async_trait(?Send)]
+impl LanguageBackend for Ruby {
     async fn install(
         &self,
-        hook: Arc<Hook>,
         store: &Store,
+        hook: Arc<Hook>,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -127,9 +128,9 @@ impl LanguageImpl for Ruby {
 
     async fn run(
         &self,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
-        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
