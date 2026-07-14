@@ -12,6 +12,7 @@
 
 use std::collections::BTreeMap;
 use std::env::consts::EXE_EXTENSION;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -171,9 +172,10 @@ impl LanguageBackend for Dart {
         if packages_path.exists()
             && let Some(index) = packages_arg_insert_position(entry.argv(), &hook.args)
         {
-            entry
-                .argv_mut()
-                .insert(index, format!("--packages={}", packages_path.display()));
+            entry.argv_mut().insert(
+                index,
+                format!("--packages={}", packages_path.display()).into(),
+            );
         }
 
         let run = async |batch: &[&Path]| {
@@ -223,29 +225,31 @@ fn package_config_path(env_path: &Path) -> PathBuf {
 }
 
 /// Return the `entry` argv position where `--packages=...` should be inserted.
-fn packages_arg_insert_position(entry: &[String], hook_args: &[String]) -> Option<usize> {
-    fn is_dart_binary(arg: &str) -> bool {
+fn packages_arg_insert_position(entry: &[OsString], hook_args: &[String]) -> Option<usize> {
+    fn is_dart_binary(arg: &OsStr) -> bool {
         Path::new(arg)
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| matches!(name, "dart" | "dart.exe"))
     }
 
-    fn has_packages_arg(arg: &str) -> bool {
-        arg == "-p" || arg == "--packages" || arg.starts_with("--packages=")
+    fn has_packages_arg(arg: &OsStr) -> bool {
+        arg.to_str()
+            .is_some_and(|arg| arg == "-p" || arg == "--packages" || arg.starts_with("--packages="))
     }
 
-    fn is_dart_script(arg: &str) -> bool {
+    fn is_dart_script(arg: &OsStr) -> bool {
         Path::new(arg)
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("dart"))
     }
 
-    let dart_index = entry.iter().position(|arg| is_dart_binary(arg))?;
+    let dart_index = entry.iter().position(|arg| is_dart_binary(arg.as_ref()))?;
 
     for (index, arg) in entry
         .iter()
-        .chain(hook_args)
+        .map(AsRef::as_ref)
+        .chain(hook_args.iter().map(OsStr::new))
         .enumerate()
         .skip(dart_index + 1)
     {
@@ -255,7 +259,7 @@ fn packages_arg_insert_position(entry: &[String], hook_args: &[String]) -> Optio
             return None;
         }
 
-        if !arg.starts_with('-') {
+        if !arg.to_str().is_some_and(|arg| arg.starts_with('-')) {
             // `--packages` is a VM flag, so place it before `run` or a script target.
             if arg != "run" && !is_dart_script(arg) {
                 return None;
@@ -417,13 +421,17 @@ mod tests {
     use super::*;
     use anyhow::Result;
 
+    fn make_entry(values: &[&str]) -> Vec<OsString> {
+        values.iter().map(OsString::from).collect()
+    }
+
     fn strings(values: &[&str]) -> Vec<String> {
         values.iter().map(ToString::to_string).collect()
     }
 
     #[test]
     fn packages_arg_insert_position_inserts_before_dart_run() {
-        let entry = strings(&["/usr/bin/dart", "run", "bin/hook.dart"]);
+        let entry = make_entry(&["/usr/bin/dart", "run", "bin/hook.dart"]);
 
         assert_eq!(packages_arg_insert_position(&entry, &[]), Some(1));
     }
@@ -431,16 +439,19 @@ mod tests {
     #[test]
     fn packages_arg_insert_position_keeps_existing_packages_arg() {
         assert_eq!(
-            packages_arg_insert_position(&strings(&["dart", "--packages=custom", "run"]), &[]),
-            None
-        );
-        assert_eq!(
-            packages_arg_insert_position(&strings(&["dart", "--packages", "custom", "run"]), &[]),
+            packages_arg_insert_position(&make_entry(&["dart", "--packages=custom", "run"]), &[]),
             None
         );
         assert_eq!(
             packages_arg_insert_position(
-                &strings(&["dart"]),
+                &make_entry(&["dart", "--packages", "custom", "run"]),
+                &[]
+            ),
+            None
+        );
+        assert_eq!(
+            packages_arg_insert_position(
+                &make_entry(&["dart"]),
                 &strings(&["--packages=custom", "run"])
             ),
             None
@@ -450,19 +461,19 @@ mod tests {
     #[test]
     fn packages_arg_insert_position_only_checks_vm_options_for_packages_arg() {
         assert_eq!(
-            packages_arg_insert_position(&strings(&["dart", "run", "tool.dart", "-p"]), &[]),
+            packages_arg_insert_position(&make_entry(&["dart", "run", "tool.dart", "-p"]), &[]),
             Some(1)
         );
         assert_eq!(
             packages_arg_insert_position(
-                &strings(&["dart", "tool.dart", "--packages=script-value"]),
+                &make_entry(&["dart", "tool.dart", "--packages=script-value"]),
                 &[]
             ),
             Some(1)
         );
         assert_eq!(
             packages_arg_insert_position(
-                &strings(&["dart"]),
+                &make_entry(&["dart"]),
                 &strings(&["run", "tool.dart", "--packages=script-value"])
             ),
             Some(1)
@@ -472,16 +483,19 @@ mod tests {
     #[test]
     fn packages_arg_insert_position_checks_hook_args() {
         assert_eq!(
-            packages_arg_insert_position(&strings(&["dart"]), &strings(&["run", "bin/hook.dart"])),
+            packages_arg_insert_position(
+                &make_entry(&["dart"]),
+                &strings(&["run", "bin/hook.dart"])
+            ),
             Some(1)
         );
         assert_eq!(
-            packages_arg_insert_position(&strings(&["dart"]), &strings(&["bin/hook.dart"])),
+            packages_arg_insert_position(&make_entry(&["dart"]), &strings(&["bin/hook.dart"])),
             Some(1)
         );
         assert_eq!(
             packages_arg_insert_position(
-                &strings(&["dart", "--enable-asserts"]),
+                &make_entry(&["dart", "--enable-asserts"]),
                 &strings(&["run", "bin/hook.dart"])
             ),
             Some(2)

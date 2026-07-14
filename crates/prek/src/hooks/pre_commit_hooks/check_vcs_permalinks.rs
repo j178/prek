@@ -82,7 +82,7 @@ pub(crate) async fn check_vcs_permalinks(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
     let matcher = GithubNonPermalinkMatcher::new(args.additional_github_domains);
 
     let file_base = hook.project().relative_path();

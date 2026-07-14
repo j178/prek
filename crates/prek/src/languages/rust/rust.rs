@@ -193,8 +193,8 @@ async fn find_package_dir(
 }
 
 /// Check if two names match, accounting for hyphen/underscore normalization.
-fn names_match(a: &str, b: &str) -> bool {
-    a == b || a.replace('-', "_") == b.replace('-', "_")
+fn names_match(name: &str, binary_name: &str) -> bool {
+    name == binary_name || name.replace('-', "_") == binary_name.replace('-', "_")
 }
 
 /// Check if a package produces a binary with the given name.
@@ -251,9 +251,7 @@ async fn install_local_project(
         }
         Ok(Some((package_dir, package_name, is_workspace))) => {
             debug!(
-                "Found package `{}` for binary `{}` in repo `{}` at `{}`",
-                package_name,
-                hook_binary,
+                "Found package `{package_name}` for binary `{hook_binary}` in repo `{}` at `{}`",
                 repo_path.display(),
                 package_dir.display(),
             );
@@ -261,8 +259,7 @@ async fn install_local_project(
         }
         Ok(None) => {
             debug!(
-                "Binary `{}` not found in cargo metadata for repo `{}`, falling back to repo root",
-                hook_binary,
+                "Binary `{hook_binary}` not found in cargo metadata for repo `{}`, falling back to repo root",
                 repo_path.display(),
             );
             (repo_path.to_path_buf(), String::new(), false)
@@ -457,7 +454,9 @@ impl LanguageBackend for Rust {
 
         // Use the hook entry as the binary name to find the package, this could be improved by allowing an explicit binary name in the hook config.
         let hook_entry = hook.entry.expect_direct().split()?;
-        let hook_bin = &hook_entry[0];
+        let hook_bin = hook_entry[0]
+            .to_str()
+            .context("Rust hook entry binary must be valid UTF-8")?;
 
         // Install library dependencies and local project
         if let Some(repo) = hook.repo_path() {

@@ -59,7 +59,7 @@ impl LineEndingCounts {
 }
 
 pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
 
     run_concurrent_file_checks(
         filenames.iter().copied(),

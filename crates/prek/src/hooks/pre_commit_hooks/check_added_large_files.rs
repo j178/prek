@@ -23,7 +23,7 @@ pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
 
     let candidate_filenames;
     let filenames = if args.enforce_all {
