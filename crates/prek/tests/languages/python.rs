@@ -209,7 +209,12 @@ fn can_not_download() {
         filters.push((r"exit code: ", "exit status: "));
     }
 
-    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
+    cmd_snapshot!(
+        filters,
+        context
+            .run()
+            .arg("-v")
+            .env(EnvVars::UV_PYTHON_PREFERENCE, "managed"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
