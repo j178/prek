@@ -248,14 +248,17 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum VenvAttempt {
+    PrekManaged,
+    External,
+    Download,
+}
+
 impl Python {
     fn remove_uv_python_override_envs(cmd: &mut Cmd) -> &mut Cmd {
-        // Ensure uv selects the hook virtualenv interpreter.
         cmd.env_remove(EnvVars::UV_PYTHON)
             .env_remove(EnvVars::UV_SYSTEM_PYTHON)
-            // `--managed-python` and `--no-managed-python` conflict with our explicit preference.
-            .env_remove(EnvVars::UV_MANAGED_PYTHON)
-            .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
     }
 
     fn pip_install_command(uv: &Uv, store: &Store, env_path: &Path) -> Cmd {
@@ -280,21 +283,39 @@ impl Python {
         info: &InstallInfo,
         python_request: &LanguageRequest,
     ) -> Result<()> {
-        // Try creating venv without downloads first
-        match Self::create_venv_command(uv, store, info, python_request, false, false)
+        // Prefer Python installations already managed by prek.
+        match Self::create_venv_command(uv, store, info, python_request, VenvAttempt::PrekManaged)
             .check(true)
             .output()
             .await
         {
             Ok(_) => {
                 debug!(
-                    "Venv created successfully with no downloads: `{}`",
+                    "Venv created with prek-managed Python: `{}`",
+                    info.env_path.display()
+                );
+                return Ok(());
+            }
+            Err(process::Error::Status { .. }) => {}
+            Err(e) => {
+                return Err(e.into());
+            }
+        }
+
+        // Next, use uv's normal discovery outside prek's managed store.
+        match Self::create_venv_command(uv, store, info, python_request, VenvAttempt::External)
+            .check(true)
+            .output()
+            .await
+        {
+            Ok(_) => {
+                debug!(
+                    "Venv created with Python discovered outside prek's managed store: `{}`",
                     info.env_path.display()
                 );
                 Ok(())
             }
             Err(e @ process::Error::Status { .. }) => {
-                // Check if we can retry with downloads
                 if Self::can_retry_with_downloads(&e) {
                     if !python_request.allows_download() {
                         anyhow::bail!(
@@ -303,13 +324,19 @@ impl Python {
                     }
 
                     debug!(
-                        "Retrying venv creation with managed Python downloads: `{}`",
+                        "Downloading Python into prek's managed store: `{}`",
                         info.env_path.display()
                     );
-                    Self::create_venv_command(uv, store, info, python_request, true, true)
-                        .check(true)
-                        .output()
-                        .await?;
+                    Self::create_venv_command(
+                        uv,
+                        store,
+                        info,
+                        python_request,
+                        VenvAttempt::Download,
+                    )
+                    .check(true)
+                    .output()
+                    .await?;
                     return Ok(());
                 }
                 // If we can't retry, return the original error
@@ -327,35 +354,41 @@ impl Python {
         store: &Store,
         info: &InstallInfo,
         python_request: &LanguageRequest,
-        set_install_dir: bool,
-        allow_downloads: bool,
+        attempt: VenvAttempt,
     ) -> Cmd {
         let mut cmd = uv.cmd(store);
         cmd.arg("venv").arg(&info.env_path);
         Self::remove_uv_python_override_envs(&mut cmd);
-        if set_install_dir {
-            cmd.env(
-                EnvVars::UV_PYTHON_INSTALL_DIR,
-                store.tools_path(ToolBucket::Python),
-            );
-        }
 
-        let download_arg = if allow_downloads {
-            "--allow-python-downloads"
-        } else {
-            "--no-python-downloads"
-        };
         let python = to_uv_python_request(python_request);
-        let mut hidden_args = vec![
-            "--python-preference",
-            "managed",
+        let mut hidden_args = Vec::from([
             // Avoid discovering a project or workspace.
             "--no-project",
             // Explicitly set project to root to avoid uv searching for project-level configs.
             "--project",
             "/",
-            download_arg,
-        ];
+        ]);
+
+        match attempt {
+            VenvAttempt::PrekManaged | VenvAttempt::Download => {
+                // uv maps these variables to `--managed-python` and `--no-managed-python`,
+                // which conflict with `--python-preference`.
+                cmd.env_remove(EnvVars::UV_MANAGED_PYTHON)
+                    .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
+                    .env(
+                        EnvVars::UV_PYTHON_INSTALL_DIR,
+                        store.tools_path(ToolBucket::Python),
+                    );
+                hidden_args.extend(["--python-preference", "only-managed"]);
+            }
+            VenvAttempt::External => {}
+        }
+
+        hidden_args.push(match attempt {
+            VenvAttempt::Download => "--allow-python-downloads",
+            VenvAttempt::PrekManaged | VenvAttempt::External => "--no-python-downloads",
+        });
+
         if let Some(python) = &python {
             hidden_args.extend(["--python", python.as_str()]);
         }
@@ -399,12 +432,12 @@ mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    use super::Python;
+    use super::{Python, VenvAttempt};
     use crate::config::Language;
     use crate::hook::InstallInfo;
     use crate::languages::python::uv::Uv;
     use crate::languages::version::LanguageRequest;
-    use crate::store::Store;
+    use crate::store::{Store, ToolBucket};
     use prek_consts::env_vars::EnvVars;
 
     fn setup_test_install() -> (tempfile::TempDir, Uv, Store, InstallInfo) {
@@ -431,17 +464,84 @@ mod tests {
             .collect()
     }
 
+    fn assert_venv_attempt(
+        attempt: VenvAttempt,
+        expected_args: &[&str],
+        uses_prek_managed_store: bool,
+    ) {
+        let (_temp, uv, store, info) = setup_test_install();
+        let request = LanguageRequest::Any { system_only: false };
+        let cmd = Python::create_venv_command(&uv, &store, &info, &request, attempt);
+        let args = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(&args[2..], expected_args);
+        assert_eq!(
+            env_map(&cmd)
+                .get(EnvVars::UV_PYTHON_INSTALL_DIR)
+                .cloned()
+                .flatten(),
+            uses_prek_managed_store.then(|| {
+                store
+                    .tools_path(ToolBucket::Python)
+                    .to_string_lossy()
+                    .into_owned()
+            })
+        );
+    }
+
     #[test]
     fn create_venv_command_removes_uv_system_python_override() {
         let (_temp, uv, store, info) = setup_test_install();
         let request = LanguageRequest::Any { system_only: false };
-        let cmd = Python::create_venv_command(&uv, &store, &info, &request, false, false);
+        let cmd = Python::create_venv_command(&uv, &store, &info, &request, VenvAttempt::External);
         let envs = env_map(&cmd);
 
         assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
         assert_eq!(envs.get(EnvVars::UV_PYTHON), Some(&None));
-        assert_eq!(envs.get(EnvVars::UV_MANAGED_PYTHON), Some(&None));
-        assert_eq!(envs.get(EnvVars::UV_NO_MANAGED_PYTHON), Some(&None));
+    }
+
+    #[test]
+    fn prek_managed_attempt_uses_only_prek_managed_python() {
+        assert_venv_attempt(
+            VenvAttempt::PrekManaged,
+            &[
+                "--no-project",
+                "--project",
+                "/",
+                "--python-preference",
+                "only-managed",
+                "--no-python-downloads",
+            ],
+            true,
+        );
+    }
+
+    #[test]
+    fn external_attempt_does_not_override_uv_python_preference() {
+        assert_venv_attempt(
+            VenvAttempt::External,
+            &["--no-project", "--project", "/", "--no-python-downloads"],
+            false,
+        );
+    }
+
+    #[test]
+    fn download_attempt_installs_only_into_prek_managed_store() {
+        assert_venv_attempt(
+            VenvAttempt::Download,
+            &[
+                "--no-project",
+                "--project",
+                "/",
+                "--python-preference",
+                "only-managed",
+                "--allow-python-downloads",
+            ],
+            true,
+        );
     }
 
     #[test]
@@ -452,7 +552,5 @@ mod tests {
 
         assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
         assert_eq!(envs.get(EnvVars::UV_PYTHON), Some(&None));
-        assert_eq!(envs.get(EnvVars::UV_MANAGED_PYTHON), Some(&None));
-        assert_eq!(envs.get(EnvVars::UV_NO_MANAGED_PYTHON), Some(&None));
     }
 }
