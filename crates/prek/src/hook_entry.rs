@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::ops::Deref;
 use std::path::Path;
 
@@ -11,36 +11,36 @@ use crate::store::Store;
 
 #[derive(Debug)]
 pub(crate) struct PreparedHookEntry {
-    argv: Vec<String>,
+    argv: Vec<OsString>,
     _temp_dir: Option<TempDir>,
 }
 
 impl PreparedHookEntry {
-    fn direct(argv: Vec<String>) -> Self {
+    fn direct(argv: Vec<OsString>) -> Self {
         Self {
             argv,
             _temp_dir: None,
         }
     }
 
-    fn shell(argv: Vec<String>, temp_dir: TempDir) -> Self {
+    fn shell(argv: Vec<OsString>, temp_dir: TempDir) -> Self {
         Self {
             argv,
             _temp_dir: Some(temp_dir),
         }
     }
 
-    pub(crate) fn argv(&self) -> &[String] {
+    pub(crate) fn argv(&self) -> &[OsString] {
         &self.argv
     }
 
-    pub(crate) fn argv_mut(&mut self) -> &mut Vec<String> {
+    pub(crate) fn argv_mut(&mut self) -> &mut Vec<OsString> {
         &mut self.argv
     }
 }
 
 impl Deref for PreparedHookEntry {
-    type Target = [String];
+    type Target = [OsString];
 
     fn deref(&self) -> &Self::Target {
         &self.argv
@@ -134,13 +134,13 @@ impl DirectHookEntry {
     ) -> Result<PreparedHookEntry, Error> {
         let mut split = self.split()?;
         let cmd = repo_path.join(&split[0]);
-        split[0] = cmd.to_string_lossy().into_owned();
+        split[0] = cmd.into_os_string();
 
         Ok(PreparedHookEntry::direct(resolve_command(split, env_path)))
     }
 
     /// Split the entry into a list of commands.
-    pub(crate) fn split(&self) -> Result<Vec<String>, Error> {
+    pub(crate) fn split(&self) -> Result<Vec<OsString>, Error> {
         let splits = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", self.entry),
@@ -151,7 +151,13 @@ impl DirectHookEntry {
                 error: anyhow::anyhow!("Failed to parse entry: entry is empty"),
             });
         }
-        Ok(splits)
+        Ok(splits.into_iter().map(OsString::from).collect())
+    }
+
+    pub(crate) fn split_with_args(&self, args: &[String]) -> Result<Vec<OsString>, Error> {
+        let mut split = self.split()?;
+        split.extend(args.iter().map(OsString::from));
+        Ok(split)
     }
 
     /// Get the original entry string.
@@ -193,10 +199,10 @@ impl Shell {
         }
     }
 
-    fn argv_for_script(self, script_path: &Path) -> Vec<String> {
-        let script = script_path.to_string_lossy().into_owned();
+    fn argv_for_script(self, script_path: &Path) -> Vec<OsString> {
+        let script = script_path.as_os_str().to_owned();
         match self {
-            Self::Sh => vec!["sh".to_string(), "-e".to_string(), script],
+            Self::Sh => vec![OsString::from("sh"), OsString::from("-e"), script],
             Self::Bash => bash_argv(script),
             Self::Pwsh => powershell_argv("pwsh", script),
             Self::Powershell => powershell_argv("powershell", script),
@@ -205,34 +211,34 @@ impl Shell {
     }
 }
 
-fn bash_argv(script: String) -> Vec<String> {
+fn bash_argv(script: OsString) -> Vec<OsString> {
     // Avoid user startup files for deterministic hook behavior. `-e` fails on the first
     // failing command, and `-o pipefail` makes failing pipeline segments fail the script.
     const BASH_ARGV_PREFIX: &[&str] = &["bash", "--noprofile", "--norc", "-eo", "pipefail"];
 
     let mut argv = BASH_ARGV_PREFIX
         .iter()
-        .map(ToString::to_string)
+        .map(OsString::from)
         .collect::<Vec<_>>();
     argv.push(script);
     argv
 }
 
-fn powershell_argv(command: &str, script: String) -> Vec<String> {
+fn powershell_argv(command: &str, script: OsString) -> Vec<OsString> {
     let mut argv = vec![
-        command.to_string(),
+        OsString::from(command),
         // Avoid user profile scripts and prompts in hook execution.
-        "-NoProfile".to_string(),
-        "-NonInteractive".to_string(),
+        OsString::from("-NoProfile"),
+        OsString::from("-NonInteractive"),
     ];
     #[cfg(windows)]
     // Allow running prek's temporary script without changing the user's execution policy.
-    argv.extend(["-ExecutionPolicy".to_string(), "Bypass".to_string()]);
-    argv.extend(["-File".to_string(), script]);
+    argv.extend([OsString::from("-ExecutionPolicy"), OsString::from("Bypass")]);
+    argv.extend([OsString::from("-File"), script]);
     argv
 }
 
-fn cmd_argv(script: String) -> Vec<String> {
+fn cmd_argv(script: OsString) -> Vec<OsString> {
     // `/D` disables AutoRun, `/E:ON` enables command extensions, `/V:OFF` disables
     // delayed expansion, `/S` normalizes quote handling, `/C` runs and exits, and
     // `CALL` executes the temporary script while preserving `%*` argument access.
@@ -240,7 +246,7 @@ fn cmd_argv(script: String) -> Vec<String> {
 
     let mut argv = CMD_ARGV_PREFIX
         .iter()
-        .map(ToString::to_string)
+        .map(OsString::from)
         .collect::<Vec<_>>();
     argv.push(script);
     argv

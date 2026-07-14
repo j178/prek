@@ -110,7 +110,7 @@ impl LanguageBackend for Julia {
         if let Some(repo_path) = hook.repo_path() {
             let jl_path = repo_path.join(&entry[0]);
             if jl_path.exists() {
-                entry[0] = jl_path.to_string_lossy().into_owned();
+                entry[0] = jl_path.into_os_string();
             }
         }
 

@@ -34,7 +34,7 @@ impl Args {
 }
 
 pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
 
     let output = git_cmd()?
         .arg("symbolic-ref")
