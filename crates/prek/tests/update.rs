@@ -4,6 +4,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
+use std::path::PathBuf;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -158,6 +159,12 @@ fn update_basic() -> Result<()> {
               - id: test-hook
     ", repo_path});
     context.git_add(".");
+    // An existing tracking file disables workspace-cache bootstrapping. `update` must register
+    // this config itself so its persistent repo source remains live during cache GC.
+    context
+        .home_dir()
+        .child("config-tracking.json")
+        .write_str("[]")?;
 
     let filters = context.filters();
 
@@ -182,6 +189,20 @@ fn update_basic() -> Result<()> {
                   - id: test-hook
             ");
         }
+    );
+
+    let tracked: Vec<PathBuf> = serde_json::from_str(&fs_err::read_to_string(
+        context.home_dir().child("config-tracking.json").path(),
+    )?)?;
+    assert_eq!(
+        tracked,
+        vec![
+            context
+                .work_dir()
+                .child(PRE_COMMIT_CONFIG_YAML)
+                .path()
+                .to_path_buf()
+        ]
     );
 
     Ok(())
@@ -1725,6 +1746,10 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
     ", repo_path, branch_commit});
 
     context.git_add(".");
+
+    // Populate the persistent repo source with this branch-only commit through the normal run
+    // path. Update must not mistake an accumulated object for a commit reachable from HEAD/tags.
+    context.run().arg("--all-files").assert().success();
 
     let filters = context
         .filters()

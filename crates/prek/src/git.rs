@@ -431,29 +431,88 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
     path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
 }
 
-pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
-    git_cmd()?
-        // Unset `extensions.objectFormat` if set, just follow what hash the remote uses.
-        .arg("-c")
-        .arg("init.defaultObjectFormat=")
-        .arg("init")
-        .arg("--template=")
-        .arg(path)
-        .remove_git_envs()
-        .check(true)
-        .output()
-        .await?;
+/// Ensure a shared bare source repository exists and points at its upstream.
+pub(crate) async fn ensure_bare_repo(repo: &str, source: &Path) -> Result<(), Error> {
+    let valid = if source.join("HEAD").try_exists()? {
+        let output = git_cmd()?
+            .arg("--git-dir")
+            .arg(source)
+            .arg("rev-parse")
+            .arg("--is-bare-repository")
+            .remove_git_envs()
+            .check(false)
+            .output()
+            .await?;
+        output.status.success() && output.stdout.trim_ascii() == b"true"
+    } else {
+        false
+    };
 
-    git_cmd()?
-        .current_dir(path)
+    if !valid {
+        if source.try_exists()? {
+            let metadata = fs_err::tokio::symlink_metadata(source).await?;
+            if metadata.is_dir() {
+                fs_err::tokio::remove_dir_all(source).await?;
+            } else {
+                fs_err::tokio::remove_file(source).await?;
+            }
+        }
+        if let Some(parent) = source.parent() {
+            fs_err::tokio::create_dir_all(parent).await?;
+        }
+
+        git_cmd()?
+            // Unset `extensions.objectFormat` if set, just follow what hash the remote uses.
+            .arg("-c")
+            .arg("init.defaultObjectFormat=")
+            .arg("init")
+            .arg("--bare")
+            .arg("--template=")
+            .arg(source)
+            .remove_git_envs()
+            .check(true)
+            .output()
+            .await?;
+
+        git_cmd()?
+            .arg("--git-dir")
+            .arg(source)
+            .arg("remote")
+            .arg("add")
+            .arg("origin")
+            .arg(repo)
+            .remove_git_envs()
+            .check(true)
+            .output()
+            .await?;
+
+        return Ok(());
+    }
+
+    let output = git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
         .arg("remote")
-        .arg("add")
+        .arg("set-url")
         .arg("origin")
-        .arg(url)
+        .arg(repo)
         .remove_git_envs()
-        .check(true)
+        .check(false)
         .output()
         .await?;
+    if !output.status.success() {
+        git_cmd()?
+            .arg("--git-dir")
+            .arg(source)
+            .arg("remote")
+            .arg("add")
+            .arg("origin")
+            .arg(repo)
+            .remove_git_envs()
+            .check(true)
+            .output()
+            .await?;
+    }
 
     Ok(())
 }
@@ -501,14 +560,108 @@ pub(crate) fn is_auth_error(err: &Error) -> bool {
     .any(|needle| error.contains(needle))
 }
 
-async fn shallow_clone(
+fn is_full_object_id(rev: &str) -> bool {
+    matches!(rev.len(), 40 | 64) && rev.as_bytes().iter().all(u8::is_ascii_hexdigit)
+}
+
+async fn try_resolve_repo_source_commit(source: &Path, rev: &str) -> Result<Option<String>, Error> {
+    let output = git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
+        .arg("rev-parse")
+        .arg(format!("{rev}^{{commit}}"))
+        .remove_git_envs()
+        .check(false)
+        .output()
+        .await?;
+    if output.status.success() {
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout)
+                .trim_ascii()
+                .to_string(),
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn resolve_repo_source_commit(source: &Path, rev: &str) -> Result<String, Error> {
+    if let Some(commit) = try_resolve_repo_source_commit(source, rev).await? {
+        return Ok(commit);
+    }
+
+    let remote_rev = format!("refs/remotes/origin/{rev}");
+    if let Some(commit) = try_resolve_repo_source_commit(source, &remote_rev).await? {
+        return Ok(commit);
+    }
+
+    let output = git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
+        .arg("rev-parse")
+        .arg(format!("{rev}^{{commit}}"))
+        .remove_git_envs()
+        .check(true)
+        .output()
+        .await?;
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_ascii()
+        .to_string())
+}
+
+async fn pin_repo_source_commit(source: &Path, commit: &str) -> Result<(), Error> {
+    git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
+        .arg("update-ref")
+        .arg(repo_source_pin(commit))
+        .arg(commit)
+        .remove_git_envs()
+        .check(true)
+        .output()
+        .await?;
+    Ok(())
+}
+
+fn repo_source_pin(commit: &str) -> String {
+    format!("refs/heads/prek/{commit}")
+}
+
+async fn repo_source_commit_is_pinned(source: &Path, commit: &str) -> Result<bool, Error> {
+    Ok(git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
+        .args(["show-ref", "--verify", "--quiet"])
+        .arg(repo_source_pin(commit))
+        .remove_git_envs()
+        .check(false)
+        .output()
+        .await?
+        .status
+        .success())
+}
+
+async fn repo_source_is_partial(source: &Path) -> Result<bool, Error> {
+    let output = git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
+        .args(["config", "--bool", "--get", "remote.origin.promisor"])
+        .remove_git_envs()
+        .check(false)
+        .output()
+        .await?;
+    Ok(output.status.success() && output.stdout.trim_ascii() == b"true")
+}
+
+async fn fetch_repo_source_shallow(
+    source: &Path,
     rev: &str,
-    path: &Path,
     terminal_prompt: TerminalPrompt,
 ) -> Result<(), Error> {
     git_cmd()?
-        .current_dir(path)
         .hidden_args(["-c", "protocol.version=2"])
+        .arg("--git-dir")
+        .arg(source)
         .arg("fetch")
         .arg("origin")
         .arg(rev)
@@ -519,11 +672,235 @@ async fn shallow_clone(
         .check(true)
         .output()
         .await?;
+    Ok(())
+}
+
+async fn materialize_repo_source_revision(
+    source: &Path,
+    rev: &str,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    // Walk the snapshot's tree, rather than the commit, so history is excluded. Fetching all
+    // promised objects reported by `--missing=print` in one request avoids both one-fetch-per-blob
+    // lazy loading and the shallow-boundary changes caused by another depth-one commit fetch.
+    let output = git_cmd()?
+        .arg("--git-dir")
+        .arg(source)
+        .args([
+            "rev-list",
+            "--objects",
+            "--missing=print",
+            "--no-object-names",
+        ])
+        .arg(format!("{rev}^{{tree}}"))
+        .remove_git_envs()
+        .check(true)
+        .output()
+        .await?;
+    let missing = str::from_utf8(&output.stdout)?
+        .lines()
+        .filter_map(|line| line.strip_prefix('?'))
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    let mut fetch = git_cmd()?;
+    fetch
+        .hidden_args(["-c", "fetch.negotiationAlgorithm=noop"])
+        .arg("--git-dir")
+        .arg(source)
+        .arg("fetch")
+        .arg("origin")
+        .args([
+            "--no-tags",
+            "--no-write-fetch-head",
+            "--recurse-submodules=no",
+            "--stdin",
+        ])
+        .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null());
+    let mut child = fetch.spawn()?;
+    let mut stdin = child.stdin.take().expect("failed to open stdin");
+    for object in missing {
+        stdin.write_all(object.as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
+    }
+    stdin.shutdown().await?;
+    drop(stdin);
+    fetch.check_status(child.wait().await?)?;
+    Ok(())
+}
+
+async fn fetch_repo_source_full(
+    source: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    let is_shallow = source.join("shallow").try_exists()?;
+    let mut cmd = git_cmd()?;
+    cmd.hidden_args(["--git-dir"])
+        .hidden_args([source.as_os_str()])
+        .arg("fetch")
+        .arg("origin")
+        .hidden_args([
+            "+refs/heads/*:refs/remotes/origin/*",
+            "+refs/tags/*:refs/tags/*",
+            "--prune",
+        ]);
+    if is_shallow {
+        cmd.hidden_args(["--unshallow"]);
+    } else {
+        cmd.hidden_args(["--update-shallow"]);
+    }
+    cmd.remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+        .check(true)
+        .output()
+        .await?;
+    Ok(())
+}
+
+/// Fetch a revision into a shared bare source and return its exact commit.
+///
+/// A source has two object-completeness levels: refs fetched by `prek update` have a complete
+/// commit graph but may omit blobs, while `refs/heads/prek/<commit>` certifies that the commit's
+/// depth-one tree and blobs are materialized for a derived checkout. Object existence alone is
+/// therefore not a checkout-readiness check once the source becomes a partial repository.
+pub(crate) async fn fetch_repo_source_revision(
+    source: &Path,
+    rev: &str,
+    terminal_prompt: TerminalPrompt,
+) -> Result<String, Error> {
+    if is_full_object_id(rev)
+        && let Some(commit) = try_resolve_repo_source_commit(source, rev).await?
+    {
+        if repo_source_commit_is_pinned(source, &commit).await? {
+            return Ok(commit);
+        }
+        if repo_source_is_partial(source).await? {
+            materialize_repo_source_revision(source, &commit, terminal_prompt).await?;
+        }
+        pin_repo_source_commit(source, &commit).await?;
+        return Ok(commit);
+    }
+
+    let commit = match fetch_repo_source_shallow(source, rev, terminal_prompt).await {
+        Ok(()) => {
+            let commit = resolve_repo_source_commit(source, "FETCH_HEAD").await?;
+            if repo_source_is_partial(source).await? {
+                materialize_repo_source_revision(source, &commit, terminal_prompt).await?;
+            }
+            commit
+        }
+        Err(err) => {
+            if is_auth_error(&err) {
+                warn!(
+                    ?err,
+                    "Failed to fetch repo source due to authentication error"
+                );
+                return Err(err);
+            }
+
+            warn!(
+                ?err,
+                "Failed to fetch repo source revision, falling back to full fetch"
+            );
+            fetch_repo_source_full(source, terminal_prompt).await?;
+            let commit = resolve_repo_source_commit(source, rev).await?;
+            if repo_source_is_partial(source).await? {
+                materialize_repo_source_revision(source, &commit, terminal_prompt).await?;
+            }
+            commit
+        }
+    };
+
+    // Create the pin only after the revision is complete; checkout treats this ref as its readiness
+    // marker as well as the branch exposed to the depth-one transport clone.
+    pin_repo_source_commit(source, &commit).await?;
+    Ok(commit)
+}
+
+/// Refresh the default branch and tags used by `prek update`.
+///
+/// Update needs the complete commit graph for ancestry checks, but not historical file contents.
+/// A blobless fetch can coexist with complete pinned snapshots already added by normal runs. If a
+/// run added a depth-one boundary, `--unshallow` repairs the graph before update inspects ancestry.
+pub(crate) async fn fetch_repo_source_for_update(source: &Path) -> Result<(), Error> {
+    let is_shallow = source.join("shallow").try_exists()?;
+    let mut cmd = git_cmd()?;
+    cmd.hidden_args(["-c", "protocol.version=2"])
+        .arg("--git-dir")
+        .arg(source)
+        .arg("fetch")
+        .arg("--filter=blob:none")
+        .arg("origin")
+        .arg("HEAD")
+        .arg("+refs/tags/*:refs/tags/*")
+        .arg("--prune");
+    if is_shallow {
+        cmd.arg("--unshallow");
+    } else {
+        cmd.arg("--update-shallow");
+    }
+    cmd.remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .check(true)
+        .output()
+        .await?;
+    Ok(())
+}
+
+/// Create an independent checkout from a shared bare source.
+pub(crate) async fn checkout_repo_from_source(
+    source: &Path,
+    repo: &str,
+    revision: &str,
+    target: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    git_cmd()?
+        .arg("clone")
+        .arg("--no-checkout")
+        // Only the pin's depth-one closure is guaranteed complete. Force the transport path so Git
+        // honors `--depth=1` for a local source; a normal local clone ignores depth and could copy
+        // blobless history from the update view into a non-promisor checkout.
+        .arg("--no-local")
+        .arg("--depth=1")
+        .arg("--single-branch")
+        .arg("--no-tags")
+        .arg("--branch")
+        .arg(format!("prek/{revision}"))
+        .arg("--template=")
+        .arg("--origin=origin")
+        .arg(source)
+        .arg(target)
+        .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+        .check(true)
+        .output()
+        .await?;
 
     git_cmd()?
-        .current_dir(path)
+        .current_dir(target)
+        .arg("remote")
+        .arg("set-url")
+        .arg("origin")
+        .arg(repo)
+        .remove_git_envs()
+        .check(true)
+        .output()
+        .await?;
+
+    git_cmd()?
+        .current_dir(target)
         .arg("checkout")
-        .arg("FETCH_HEAD")
+        .arg("--quiet")
+        .arg(revision)
         .remove_git_envs()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .env(EnvVars::LC_ALL, "C")
@@ -532,39 +909,106 @@ async fn shallow_clone(
         .output()
         .await?;
 
-    update_submodules(path, terminal_prompt, true).await?;
+    if let Err(err) = update_submodules(target, terminal_prompt, true).await {
+        if is_auth_error(&err) {
+            return Err(err);
+        }
+        warn!(
+            ?err,
+            "Failed to shallow clone submodules, falling back to full clones"
+        );
+        update_submodules(target, terminal_prompt, false).await?;
+    }
 
     Ok(())
 }
 
-async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> Result<(), Error> {
+/// Snapshot tracked and staged local changes as a deterministic commit in a bare source.
+pub(crate) async fn create_repo_snapshot(
+    source: &Path,
+    worktree: &Path,
+    head_commit: &str,
+    scratch: &Path,
+) -> Result<String, Error> {
+    let temp = tempfile::tempdir_in(scratch)?;
+    let index = temp.path().join("index");
+    let objects = source.join("objects");
+
     git_cmd()?
-        .current_dir(path)
-        .arg("fetch")
-        .arg("origin")
-        .arg("--tags")
+        .current_dir(worktree)
+        .arg("read-tree")
+        .arg(head_commit)
         .remove_git_envs()
-        .env(EnvVars::LC_ALL, "C")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+        .env("GIT_INDEX_FILE", &index)
+        .env("GIT_OBJECT_DIRECTORY", &objects)
         .check(true)
         .output()
         .await?;
 
+    let staged_files = get_staged_files(worktree).await?;
+    if !staged_files.is_empty() {
+        git_cmd()?
+            .current_dir(worktree)
+            .arg("add")
+            .arg("--")
+            .file_args(&staged_files)
+            .remove_git_envs()
+            .env("GIT_INDEX_FILE", &index)
+            .env("GIT_OBJECT_DIRECTORY", &objects)
+            .check(true)
+            .output()
+            .await?;
+    }
+
     git_cmd()?
-        .current_dir(path)
-        .arg("checkout")
-        .arg(rev)
+        .current_dir(worktree)
+        .arg("add")
+        .arg("--update")
         .remove_git_envs()
-        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
-        .env(EnvVars::LC_ALL, "C")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+        .env("GIT_INDEX_FILE", &index)
+        .env("GIT_OBJECT_DIRECTORY", &objects)
         .check(true)
         .output()
         .await?;
 
-    update_submodules(path, terminal_prompt, false).await?;
+    let tree = git_cmd()?
+        .current_dir(worktree)
+        .arg("write-tree")
+        .remove_git_envs()
+        .env("GIT_INDEX_FILE", &index)
+        .env("GIT_OBJECT_DIRECTORY", &objects)
+        .check(true)
+        .output()
+        .await?;
+    let tree = String::from_utf8_lossy(&tree.stdout)
+        .trim_ascii()
+        .to_string();
 
-    Ok(())
+    let commit = git_cmd()?
+        .current_dir(worktree)
+        .arg("commit-tree")
+        .arg(&tree)
+        .arg("-p")
+        .arg(head_commit)
+        .arg("-m")
+        .arg("Temporary commit by prek try-repo")
+        .remove_git_envs()
+        .env("GIT_OBJECT_DIRECTORY", &objects)
+        .env("GIT_AUTHOR_NAME", "prek try-repo")
+        .env("GIT_AUTHOR_EMAIL", "try-repo@prek.dev")
+        .env("GIT_COMMITTER_NAME", "prek try-repo")
+        .env("GIT_COMMITTER_EMAIL", "try-repo@prek.dev")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .check(true)
+        .output()
+        .await?;
+    let commit = String::from_utf8_lossy(&commit.stdout)
+        .trim_ascii()
+        .to_string();
+    pin_repo_source_commit(source, &commit).await?;
+
+    Ok(commit)
 }
 
 async fn update_submodules(
@@ -616,35 +1060,6 @@ async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
         .stdout
         .split(|&byte| byte == b'\0')
         .any(|entry| entry.starts_with(b"160000 ")))
-}
-
-async fn clone_repo_attempt(
-    rev: &str,
-    path: &Path,
-    terminal_prompt: TerminalPrompt,
-) -> Result<(), Error> {
-    if let Err(err) = shallow_clone(rev, path, terminal_prompt).await {
-        if is_auth_error(&err) {
-            warn!(?err, "Failed to shallow clone due to authentication error");
-            return Err(err);
-        }
-
-        warn!(?err, "Failed to shallow clone, falling back to full clone");
-        return full_clone(rev, path, terminal_prompt).await;
-    }
-
-    Ok(())
-}
-
-/// Clone a repository into an initialized destination with the requested terminal prompt mode.
-pub(crate) async fn clone_repo(
-    url: &str,
-    rev: &str,
-    path: &Path,
-    terminal_prompt: TerminalPrompt,
-) -> Result<(), Error> {
-    init_repo(url, path).await?;
-    clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
 async fn get_config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {
@@ -934,7 +1349,8 @@ mod tests {
     #[cfg(unix)]
     use super::zsplit;
     use super::{
-        Error, GIT, TerminalPrompt, full_clone, init_repo, shared_repository_file_mode,
+        Error, GIT, TerminalPrompt, checkout_repo_from_source, ensure_bare_repo,
+        fetch_repo_source_for_update, fetch_repo_source_revision, shared_repository_file_mode,
         should_update_submodules, update_submodules,
     };
     use assert_cmd::assert::OutputAssertExt;
@@ -948,6 +1364,34 @@ mod tests {
         command.assert().success();
     }
 
+    fn git_stdout(path: &Path, args: &[&str]) -> String {
+        let output = Command::new(GIT.as_ref().unwrap())
+            .current_dir(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn commit_all(path: &Path, message: &str) {
+        run_git(path, &["add", "--all"]);
+        run_git(
+            path,
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=prek",
+                "-c",
+                "user.email=prek@example.com",
+                "commit",
+                "-m",
+                message,
+            ],
+        );
+    }
+
     #[tokio::test]
     async fn should_update_submodules_when_gitmodules_exists() {
         let tmp = tempfile::tempdir().unwrap();
@@ -958,40 +1402,243 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn full_clone_skips_submodule_update_when_repo_has_no_submodules() {
+    async fn repo_source_update_refreshes_moved_and_deleted_tags() {
         let remote = tempfile::tempdir().unwrap();
         run_git(remote.path(), &["init"]);
-        fs_err::write(remote.path().join("file.txt"), "content\n").unwrap();
-        run_git(remote.path(), &["add", "."]);
         run_git(
             remote.path(),
             &[
+                "-c",
+                "commit.gpgsign=false",
                 "-c",
                 "user.name=prek",
                 "-c",
                 "user.email=prek@example.com",
                 "commit",
+                "--allow-empty",
                 "-m",
-                "initial commit",
+                "first",
             ],
         );
-        let output = Command::new(GIT.as_ref().unwrap())
+        let first = Command::new(GIT.as_ref().unwrap())
             .current_dir(remote.path())
-            .arg("rev-parse")
-            .arg("HEAD")
+            .args(["rev-parse", "HEAD"])
             .output()
             .unwrap();
-        assert!(output.status.success());
-        let rev = String::from_utf8_lossy(&output.stdout);
+        let first = String::from_utf8_lossy(&first.stdout).trim().to_string();
+        run_git(remote.path(), &["-c", "tag.gpgsign=false", "tag", "v1"]);
 
-        let clone = tempfile::tempdir().unwrap();
-        init_repo(remote.path().to_str().unwrap(), clone.path())
+        let source_root = tempfile::tempdir().unwrap();
+        let source = source_root.path().join("source.git");
+        ensure_bare_repo(remote.path().to_str().unwrap(), &source)
             .await
             .unwrap();
+        fetch_repo_source_for_update(&source).await.unwrap();
+        let fetched_first = Command::new(GIT.as_ref().unwrap())
+            .current_dir(&source)
+            .args(["rev-parse", "refs/tags/v1"])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&fetched_first.stdout).trim(), first);
 
-        full_clone(rev.trim(), clone.path(), TerminalPrompt::Disabled)
+        run_git(
+            remote.path(),
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=prek",
+                "-c",
+                "user.email=prek@example.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "second",
+            ],
+        );
+        let second = Command::new(GIT.as_ref().unwrap())
+            .current_dir(remote.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        let second = String::from_utf8_lossy(&second.stdout).trim().to_string();
+        run_git(
+            remote.path(),
+            &["-c", "tag.gpgsign=false", "tag", "-f", "v1"],
+        );
+        run_git(remote.path(), &["-c", "tag.gpgsign=false", "tag", "v2"]);
+
+        fetch_repo_source_for_update(&source).await.unwrap();
+        let moved = Command::new(GIT.as_ref().unwrap())
+            .current_dir(&source)
+            .args(["rev-parse", "refs/tags/v1"])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&moved.stdout).trim(), second);
+
+        run_git(remote.path(), &["tag", "--delete", "v2"]);
+        fetch_repo_source_for_update(&source).await.unwrap();
+        let deleted = Command::new(GIT.as_ref().unwrap())
+            .current_dir(&source)
+            .args(["show-ref", "--verify", "--quiet", "refs/tags/v2"])
+            .status()
+            .unwrap();
+        assert!(!deleted.success());
+    }
+
+    #[tokio::test]
+    async fn repo_source_full_fetches_unshallow_existing_sources() {
+        let remote = tempfile::tempdir().unwrap();
+        run_git(remote.path(), &["init"]);
+        run_git(
+            remote.path(),
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=prek",
+                "-c",
+                "user.email=prek@example.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "first",
+            ],
+        );
+        let first = Command::new(GIT.as_ref().unwrap())
+            .current_dir(remote.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        let first = String::from_utf8_lossy(&first.stdout).trim().to_string();
+        let first_short = &first[..7];
+        run_git(
+            remote.path(),
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=prek",
+                "-c",
+                "user.email=prek@example.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "second",
+            ],
+        );
+
+        let source_root = tempfile::tempdir().unwrap();
+        let update_source = source_root.path().join("update.git");
+        ensure_bare_repo(remote.path().to_str().unwrap(), &update_source)
             .await
             .unwrap();
+        fetch_repo_source_revision(&update_source, "HEAD", TerminalPrompt::Disabled)
+            .await
+            .unwrap();
+        assert!(update_source.join("shallow").is_file());
+
+        fetch_repo_source_for_update(&update_source).await.unwrap();
+        assert!(!update_source.join("shallow").exists());
+        Command::new(GIT.as_ref().unwrap())
+            .args([
+                "--git-dir",
+                update_source.to_str().unwrap(),
+                "cat-file",
+                "-e",
+            ])
+            .arg(format!("{first}^{{commit}}"))
+            .assert()
+            .success();
+
+        let fallback_source = source_root.path().join("fallback.git");
+        ensure_bare_repo(remote.path().to_str().unwrap(), &fallback_source)
+            .await
+            .unwrap();
+        fetch_repo_source_revision(&fallback_source, "HEAD", TerminalPrompt::Disabled)
+            .await
+            .unwrap();
+        assert!(fallback_source.join("shallow").is_file());
+
+        let resolved =
+            fetch_repo_source_revision(&fallback_source, first_short, TerminalPrompt::Disabled)
+                .await
+                .unwrap();
+        assert_eq!(resolved, first);
+        assert!(!fallback_source.join("shallow").exists());
+
+        let cached =
+            fetch_repo_source_revision(&fallback_source, &resolved, TerminalPrompt::Disabled)
+                .await
+                .unwrap();
+        assert_eq!(cached, first);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn repo_source_materializes_only_the_checkout_snapshot_after_update() {
+        let remote = tempfile::tempdir().unwrap();
+        run_git(remote.path(), &["init"]);
+        fs_err::write(remote.path().join("old.py"), "print('old')\n").unwrap();
+        commit_all(remote.path(), "old hook");
+        let old_commit = git_stdout(remote.path(), &["rev-parse", "HEAD"]);
+        let old_blob = git_stdout(remote.path(), &["rev-parse", "HEAD:old.py"]);
+
+        fs_err::remove_file(remote.path().join("old.py")).unwrap();
+        fs_err::write(remote.path().join("hook.py"), "print('hello')\n").unwrap();
+        commit_all(remote.path(), "hook");
+        // Local upload-pack disables filtering by default, unlike the hosted remotes this models.
+        run_git(remote.path(), &["config", "uploadpack.allowFilter", "true"]);
+        let repo = format!("file://{}", remote.path().display());
+
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.git");
+        ensure_bare_repo(&repo, &source).await.unwrap();
+        fetch_repo_source_for_update(&source).await.unwrap();
+        let commit = git_stdout(&source, &["rev-parse", "FETCH_HEAD"]);
+
+        let resolved = fetch_repo_source_revision(&source, &commit, TerminalPrompt::Disabled)
+            .await
+            .unwrap();
+        assert_eq!(resolved, commit);
+        assert!(
+            !source.join("shallow").exists(),
+            "materializing a known commit must preserve update's complete graph"
+        );
+        let old_snapshot = Command::new(GIT.as_ref().unwrap())
+            .args([
+                "--git-dir",
+                source.to_str().unwrap(),
+                "rev-list",
+                "--objects",
+                "--missing=print",
+                "--no-object-names",
+            ])
+            .arg(format!("{old_commit}^{{tree}}"))
+            .output()
+            .unwrap();
+        let missing_old_blob = format!("?{old_blob}");
+        assert!(
+            String::from_utf8_lossy(&old_snapshot.stdout)
+                .lines()
+                .any(|line| line == missing_old_blob),
+            "materializing HEAD must not fetch blobs used only by its history"
+        );
+
+        let checkout = root.path().join("checkout");
+        checkout_repo_from_source(&source, &repo, &commit, &checkout, TerminalPrompt::Disabled)
+            .await
+            .unwrap();
+        assert_eq!(
+            fs_err::read_to_string(checkout.join("hook.py")).unwrap(),
+            "print('hello')\n"
+        );
+        assert_eq!(git_stdout(&checkout, &["rev-list", "--count", "HEAD"]), "1");
+        Command::new(GIT.as_ref().unwrap())
+            .current_dir(&checkout)
+            .args(["fsck", "--full"])
+            .assert()
+            .success();
     }
 
     #[tokio::test]

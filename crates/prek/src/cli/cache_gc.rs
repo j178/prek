@@ -25,6 +25,7 @@ use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
     Repos,
+    RepoSources,
     HookEnvs,
     Tools,
     CacheEntries,
@@ -36,6 +37,7 @@ impl RemovalKind {
         if count > 1 {
             match self {
                 RemovalKind::Repos => "repos",
+                RemovalKind::RepoSources => "repo sources",
                 RemovalKind::HookEnvs => "hook envs",
                 RemovalKind::Tools => "tools",
                 RemovalKind::CacheEntries => "cache entries",
@@ -44,6 +46,7 @@ impl RemovalKind {
         } else {
             match self {
                 RemovalKind::Repos => "repo",
+                RemovalKind::RepoSources => "repo source",
                 RemovalKind::HookEnvs => "hook env",
                 RemovalKind::Tools => "tool",
                 RemovalKind::CacheEntries => "cache entry",
@@ -159,6 +162,7 @@ pub(crate) async fn cache_gc(
 
     let mut kept_configs: FxHashSet<&Path> = FxHashSet::default();
     let mut used_repo_keys: FxHashSet<String> = FxHashSet::default();
+    let mut used_repo_source_keys: FxHashSet<String> = FxHashSet::default();
     let mut used_hook_env_dirs: FxHashSet<String> = FxHashSet::default();
     let mut used_tools: FxHashSet<ToolBucket> = FxHashSet::default();
     let mut used_tool_versions: FxHashMap<ToolBucket, FxHashSet<String>> = FxHashMap::default();
@@ -182,7 +186,7 @@ pub(crate) async fn cache_gc(
                     continue;
                 }
                 err => {
-                    warn!(path = %config_path.display(), %err, "Failed to parse config, skipping for GC");
+                    warn!(path = %config_path.display(), %err, "Failed to load config, skipping for GC");
                     kept_configs.insert(config_path);
                     continue;
                 }
@@ -204,6 +208,7 @@ pub(crate) async fn cache_gc(
                 if let Some(key) = key {
                     used_repo_keys.insert(key);
                 }
+                used_repo_source_keys.insert(Store::repo_source_key(remote.source()));
             }
         }
     }
@@ -251,6 +256,15 @@ pub(crate) async fn cache_gc(
         verbose,
     )?;
 
+    // Sweep repo-sources/<hash(repo)>; the hidden lock directory is ignored by the sweeper.
+    let removed_repo_sources = sweep_dir_by_name(
+        RemovalKind::RepoSources,
+        &store.repo_sources_dir(),
+        &used_repo_source_keys,
+        dry_run,
+        verbose,
+    )?;
+
     // Sweep hooks/<hash>
     let removed_hooks = sweep_dir_by_name(
         RemovalKind::HookEnvs,
@@ -288,15 +302,15 @@ pub(crate) async fn cache_gc(
         verbose,
     )?;
 
-    // Seep scratch/, as it is only temporary data.
     if !dry_run {
-        let _ = fs_err::remove_dir_all(store.scratch_path());
+        clear_directory(&store.scratch_path())?;
     }
     // Keep recent recovery patches, but clear out stale ones that are unlikely to be useful.
     let removed_patches = sweep_stale_patch_files(&store.patches_dir(), dry_run, verbose)?;
 
     let mut removed = RemovalSummary::default();
     removed += &removed_repos;
+    removed += &removed_repo_sources;
     removed += &removed_hooks;
     removed += &removed_tools;
     removed += &removed_cache;
@@ -318,6 +332,7 @@ pub(crate) async fn cache_gc(
 
         if verbose {
             print_removed_details(printer, verb, &removed_repos)?;
+            print_removed_details(printer, verb, &removed_repo_sources)?;
             print_removed_details(printer, verb, &removed_hooks)?;
             print_removed_details(printer, verb, &removed_tools)?;
             print_removed_details(printer, verb, &removed_cache)?;
@@ -326,6 +341,18 @@ pub(crate) async fn cache_gc(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn clear_directory(path: &Path) -> std::io::Result<()> {
+    for entry in fs_err::read_dir(path)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            fs_err::remove_dir_all(entry.path())?;
+        } else {
+            fs_err::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
 }
 
 fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Result<()> {

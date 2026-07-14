@@ -418,10 +418,20 @@ pub(crate) async fn update(
     filesystem: Option<FilesystemOptions>,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Repository sources are shared with normal hook initialization and try-repo. Keep the
+    // command-level store invariant while per-source locks below serialize individual fetches.
+    let _store_lock = store.lock_async().await?;
+
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors?
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
+    store.track_configs(
+        workspace
+            .projects()
+            .iter()
+            .map(|project| project.config_file()),
+    )?;
 
     let tag_filters =
         TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
@@ -450,7 +460,8 @@ pub(crate) async fn update(
                 .first()
                 .map_or(repo_source.source, |target| target.repo);
             let progress = reporter.on_update_start(display_repo);
-            let result = evaluate_repo_source(repo_source, bleeding_edge, &tag_filters).await;
+            let result =
+                evaluate_repo_source(store, repo_source, bleeding_edge, &tag_filters).await;
             reporter.on_update_complete(progress);
             result
         })

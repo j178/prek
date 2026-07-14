@@ -29,77 +29,15 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
     Ok(head_rev)
 }
 
-async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
-    let shadow = tmp_dir.join("shadow-repo");
-    git::git_cmd()?
-        .arg("clone")
-        .arg(repo_path)
-        .arg(&shadow)
-        .output()
-        .await?;
-    git::git_cmd()?
-        .arg("checkout")
-        .arg(head_rev)
-        .arg("-b")
-        .arg("_prek_tmp")
-        .current_dir(&shadow)
-        .output()
-        .await?;
-
-    let index_path = shadow.join(".git/index");
-    let objects_path = shadow.join(".git/objects");
-
-    let staged_files = git::get_staged_files(repo_path).await?;
-    if !staged_files.is_empty() {
-        git::git_cmd()?
-            .arg("add")
-            .arg("--")
-            .file_args(&staged_files)
-            .current_dir(repo_path)
-            .env("GIT_INDEX_FILE", &index_path)
-            .env("GIT_OBJECT_DIRECTORY", &objects_path)
-            .output()
-            .await?;
-    }
-
-    let mut add_u_cmd = git::git_cmd()?;
-    add_u_cmd
-        .arg("add")
-        .arg("--update") // Update tracked files
-        .current_dir(repo_path)
-        .env("GIT_INDEX_FILE", &index_path)
-        .env("GIT_OBJECT_DIRECTORY", &objects_path)
-        .output()
-        .await?;
-
-    git::git_cmd()?
-        .arg("commit")
-        .arg("-m")
-        .arg("Temporary commit by prek try-repo")
-        .arg("--no-gpg-sign")
-        .arg("--no-edit")
-        .arg("--no-verify")
-        .current_dir(&shadow)
-        .env("GIT_AUTHOR_NAME", "prek test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "prek test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        .output()
-        .await?;
-
-    Ok(shadow)
-}
-
 struct PreparedRepo<'a> {
-    runtime_source: Cow<'a, str>,
-    display_source: Option<&'a str>,
+    source: Cow<'a, str>,
     rev: String,
 }
 
 async fn prepare_repo<'a>(
+    store: &Store,
     repo: &'a str,
     rev: Option<&str>,
-    tmp_dir: &Path,
 ) -> Result<PreparedRepo<'a>> {
     let repo_path = Path::new(repo);
     let is_local = repo_path.is_dir();
@@ -117,8 +55,7 @@ async fn prepare_repo<'a>(
     // If rev is provided, use it directly.
     if let Some(rev) = rev {
         return Ok(PreparedRepo {
-            runtime_source,
-            display_source: is_local.then_some(repo),
+            source: runtime_source,
             rev: rev.to_string(),
         });
     }
@@ -143,20 +80,25 @@ async fn prepare_repo<'a>(
             .to_string()
     };
 
-    // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
+    // Persist a deterministic synthetic commit in the shared source. The logical source remains
+    // the canonical local path, so identical dirty trees get the same repo and environment keys.
     if is_local && git::has_diff("HEAD", repo_path).await? {
         warn_user!("Creating temporary repo with uncommitted changes...");
-        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
-        let head_rev = get_head_rev(&shadow).await?;
+        let source = store.repo_source_path(runtime_source.as_ref());
+        let _source_lock = store.repo_source_lock(runtime_source.as_ref()).await?;
+        git::ensure_bare_repo(runtime_source.as_ref(), &source).await?;
+        let head_rev =
+            git::fetch_repo_source_revision(&source, &head_rev, git::TerminalPrompt::Disabled)
+                .await?;
+        let snapshot =
+            git::create_repo_snapshot(&source, repo_path, &head_rev, &store.scratch_path()).await?;
         Ok(PreparedRepo {
-            runtime_source: Cow::Owned(shadow.to_string_lossy().into_owned()),
-            display_source: None,
-            rev: head_rev,
+            source: runtime_source,
+            rev: snapshot,
         })
     } else {
         Ok(PreparedRepo {
-            runtime_source,
-            display_source: is_local.then_some(repo),
+            source: runtime_source,
             rev: head_rev,
         })
     }
@@ -202,41 +144,46 @@ pub(crate) async fn try_repo(
     }
 
     let store = Store::from_settings()?;
-    let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
-
-    let prepared = prepare_repo(&repo, rev.as_deref(), tmp_dir.path())
-        .await
-        .context("Failed to determine repository and revision")?;
-
-    let store = Store::from_path(tmp_dir.path()).init()?;
-    let repo_config = config::RemoteRepo::new(
-        prepared.runtime_source.to_string(),
-        prepared.rev.clone(),
-        vec![],
-    );
-    let repo_clone_path = store.clone_repo(&repo_config, None).await?;
-
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
-    let manifest =
-        config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+    let (_tmp_dir, prepared, hooks, config_str, config_file) = {
+        let _lock = store.lock_async().await?;
+        // `cache gc` clears the contents of the store scratch directory after taking the store
+        // lock. Keep the active generated config in the system temporary directory so it survives
+        // between this preparation lock and the lock acquired by `run`.
+        let tmp_dir = TempDir::with_prefix("try-repo-")?;
+        let prepared = prepare_repo(&store, &repo, rev.as_deref())
+            .await
+            .context("Failed to determine repository and revision")?;
+        let repo_config =
+            config::RemoteRepo::new(prepared.source.to_string(), prepared.rev.clone(), vec![]);
+        let repo_clone_path = store.clone_repo(&repo_config, None).await?;
+        let manifest =
+            config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+        let hooks = manifest
+            .hooks
+            .into_iter()
+            .filter(|hook| selectors.matches_hook_id(&hook.id))
+            .map(|hook| hook.id)
+            .collect::<Vec<_>>();
 
-    let hooks = manifest
-        .hooks
-        .into_iter()
-        .filter(|hook| selectors.matches_hook_id(&hook.id))
-        .map(|hook| hook.id)
-        .collect::<Vec<_>>();
+        let config_str = render_repo_config_toml(&prepared.source, &prepared.rev, &hooks);
+        let config_file = tmp_dir.path().join(PREK_TOML);
+        fs_err::tokio::write(&config_file, &config_str).await?;
+        // Make the new source/checkout visible to GC before releasing the store lock. `run` also
+        // tracks this path, but a concurrent `cache gc` must not sweep a dirty synthetic commit in
+        // the interval between preparation and hook initialization.
+        store.track_configs(std::iter::once(config_file.as_path()))?;
+
+        (tmp_dir, prepared, hooks, config_str, config_file)
+    };
 
     // The scratch config needs the resolved source, while the displayed config should preserve
     // the user's path so it remains meaningful when copied into their project.
-    let config_str = render_repo_config_toml(&prepared.runtime_source, &prepared.rev, &hooks);
-    let config_file = tmp_dir.path().join(PREK_TOML);
-    fs_err::tokio::write(&config_file, &config_str).await?;
-
-    let display_config_str = match prepared.display_source {
-        Some(source) => Cow::Owned(render_repo_config_toml(source, &prepared.rev, &hooks)),
-        None => Cow::Borrowed(config_str.as_str()),
+    let display_config_str = if prepared.source.as_ref() == repo {
+        Cow::Borrowed(config_str.as_str())
+    } else {
+        Cow::Owned(render_repo_config_toml(&repo, &prepared.rev, &hooks))
     };
 
     writeln!(

@@ -8,6 +8,14 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 use assert_fs::fixture::ChildPath;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
+fn non_hidden_directory_count(root: &ChildPath) -> Result<usize> {
+    Ok(fs_err::read_dir(root.path())?
+        .filter_map(std::result::Result::ok)
+        .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .count())
+}
+
 fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
     repo_dir.create_dir_all()?;
@@ -308,11 +316,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     context.git_add(".");
 
     let mut filters = context.filters();
-    filters.extend([
-        (r"try-repo-[^/\\]+", "[REPO]"),
-        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-        ("'", "\""),
-    ]);
+    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]"), ("'", "\"")]);
 
     cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r#"
     success: true
@@ -320,7 +324,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ----- stdout -----
     Using generated `prek.toml`:
     [[repos]]
-    repo = "[HOME]/scratch/[REPO]/shadow-repo"
+    repo = "[HOME]/test-repos/try-repo-uncommitted"
     rev = "[COMMIT_SHA]"
     hooks = [
       { id = "uncommitted-hook" },
@@ -331,6 +335,16 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ----- stderr -----
     warning: Creating temporary repo with uncommitted changes...
     "#);
+
+    context.try_repo().arg(&repo_path).assert().success();
+    assert_eq!(
+        non_hidden_directory_count(&context.home_dir().child("repo-sources"))?,
+        1
+    );
+    assert_eq!(
+        non_hidden_directory_count(&context.home_dir().child("repos"))?,
+        1
+    );
 
     Ok(())
 }
