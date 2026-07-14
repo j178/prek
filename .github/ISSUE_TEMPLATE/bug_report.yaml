@@ -1,6 +1,13 @@
 name: Bug report
 description: Create a report to help us improve prek
 body:
+  - type: checkboxes
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched the issue list for similar bug reports.
+          required: true
+
   - type: textarea
     attributes:
       label: Summary
@@ -9,14 +16,6 @@ body:
         If we cannot reproduce the bug, it is unlikely that we will be able to help you.
     validations:
       required: true
-
-  - type: checkboxes
-    attributes:
-      label: Willing to submit a PR?
-      description: |
-        If you have time, we welcome pull requests.
-      options:
-        - label: Yes — I’m willing to open a PR to fix this.
 
   - type: input
     attributes:
@@ -28,7 +27,7 @@ body:
 
   - type: input
     attributes:
-      label: Version
+      label: "Version (current: 0.4.9)"
       description: What version of prek are you using? (see `prek -V`)
       placeholder: e.g., prek 0.2.3 (7fe75a86d 2025-09-29)
     validations:
