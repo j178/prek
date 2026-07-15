@@ -32,6 +32,7 @@
     'pre-commit',
     'cargo',
     'custom.regex',
+    'dockerfile',
     'pep621',
   ],
   customManagers: [
@@ -133,7 +134,7 @@
       commitMessageTopic: "Rust",
     },
     {
-      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'pep621', 'custom.regex' ],
+      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'pep621', 'custom.regex', 'dockerfile' ],
       minimumReleaseAge: '7 days'
     },
     {

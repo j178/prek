@@ -1,10 +1,10 @@
-# Build and publish a Docker image.
+# Build and publish Docker images.
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
 #
 # Adapted from https://github.com/astral-sh/ty/blob/main/.github/workflows/build-docker.yml
-name: "Build Docker image"
+name: "Build Docker images"
 
 on:
   workflow_call:
@@ -15,44 +15,58 @@ on:
 
 env:
   PREK_BASE_IMG: ghcr.io/${{ github.repository_owner }}/prek
+  ALPINE_VERSION: "3.24"
 
-permissions:
-  contents: read
-  packages: write # zizmor: ignore[excessive-permissions]
+permissions: {}
 
 jobs:
   plan:
     runs-on: ubuntu-slim
     outputs:
-      publish: ${{ steps.plan.outputs.publish }}
+      push: ${{ steps.plan.outputs.push }}
+      tag: ${{ steps.plan.outputs.tag }}
+      base-tag: ${{ steps.plan.outputs.base-tag }}
+      floating-tags: ${{ steps.plan.outputs.floating-tags }}
+      action: ${{ steps.plan.outputs.action }}
     steps:
       - name: Plan
         id: plan
         shell: bash
         env:
-          HAS_PLAN: ${{ inputs.plan != '' }}
-          HAS_IMPLICIT_TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag_is_implicit }}
+          DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
+          PRERELEASE: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_is_prerelease }}
+          TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
         run: |
-          [[ "$HAS_PLAN" == "true" && "$HAS_IMPLICIT_TAG" != "true" ]] && publish=1
-
-          if [[ "$publish" ]]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+          if [[ "$DRY_RUN" == "false" ]]; then
+            version="${TAG#v}"
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${version}" >> "$GITHUB_OUTPUT"
+            echo "base-tag=${version}" >> "$GITHUB_OUTPUT"
+            echo "action=Build and publish" >> "$GITHUB_OUTPUT"
+            if [[ "$PRERELEASE" == "true" ]]; then
+              echo "floating-tags=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "floating-tags=true" >> "$GITHUB_OUTPUT"
+            fi
           else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            echo "tag=dry-run" >> "$GITHUB_OUTPUT"
+            echo "base-tag=latest" >> "$GITHUB_OUTPUT"
+            echo "floating-tags=false" >> "$GITHUB_OUTPUT"
+            echo "action=Build" >> "$GITHUB_OUTPUT"
           fi
 
-  docker-build:
-    name: Build Docker image ghcr.io/j178/prek for ${{ matrix.platform }}
+  docker-publish-base:
+    name: ${{ needs.plan.outputs.action }} Docker image
     needs: plan
     runs-on: ubuntu-latest
     environment:
       name: release
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -61,19 +75,19 @@ jobs:
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
-        if: ${{ needs.plan.outputs.publish == 'true' }}
+        if: ${{ needs.plan.outputs.push == 'true' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check tag consistency
-        if: ${{ needs.plan.outputs.publish == 'true' }}
+        if: ${{ needs.plan.outputs.push == 'true' }}
         env:
-          TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag || 'dry-run' }}
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
           version=$(grep -m 1 "^version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${TAG}" != "v${version}" ]; then
+          if [ "${TAG}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
             echo "${TAG}" >&2
             echo "${version}" >&2
@@ -91,64 +105,83 @@ jobs:
           images: ${{ env.PREK_BASE_IMG }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
           tags: |
-            type=raw,value=dry-run,enable=${{ needs.plan.outputs.publish != 'true' }}
-            type=semver,pattern={{ raw }},value=${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag || 'dry-run' }},enable=${{ needs.plan.outputs.publish == 'true' }}
+            type=raw,value=dry-run,enable=${{ needs.plan.outputs.push == 'false' }}
+            type=semver,pattern={{ raw }},value=${{ needs.plan.outputs.tag }},enable=${{ needs.plan.outputs.push == 'true' }}
+            type=semver,pattern={{ major }}.{{ minor }},value=${{ needs.plan.outputs.tag }},enable=${{ needs.plan.outputs.push == 'true' }}
 
-      - name: Normalize Platform Pair (replace / with -)
-        run: |
-          platform=${{ matrix.platform }}
-          echo "PLATFORM_TUPLE=${platform//\//-}" >> "$GITHUB_ENV"
-
-      # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
-      - name: Build and push by digest
+      - name: Build and push
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          platforms: ${{ matrix.platform }}
-          cache-from: type=gha,scope=prek-${{ env.PLATFORM_TUPLE }}
-          cache-to: type=gha,mode=min,scope=prek-${{ env.PLATFORM_TUPLE }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=prek
+          cache-to: type=gha,mode=min,scope=prek
+          push: ${{ needs.plan.outputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.PREK_BASE_IMG }},push-by-digest=true,name-canonical=true,push=${{ needs.plan.outputs.publish == 'true' }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
 
-      - name: Export digests
-        env:
-          digest: ${{ steps.build.outputs.digest }}
-        run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digests
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Generate artifact attestation
+        if: ${{ needs.plan.outputs.push == 'true' }}
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
-          name: digests-${{ env.PLATFORM_TUPLE }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
+          subject-name: ${{ env.PREK_BASE_IMG }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
-  docker-publish:
-    name: Publish Docker image (ghcr.io/j178/prek)
+  docker-publish-alpine:
+    name: ${{ needs.plan.outputs.action }} Alpine Docker image
     runs-on: ubuntu-latest
     environment:
       name: release
     needs:
       - plan
-      - docker-build
+      - docker-publish-base
     permissions:
       contents: read
       packages: write
       id-token: write
       attestations: write
-    if: ${{ needs.plan.outputs.publish == 'true' }}
+    if: ${{ needs.plan.result == 'success' && needs.docker-publish-base.result == 'success' }}
     steps:
-      - name: Download digests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          path: /tmp/digests
-          pattern: digests-*
-          merge-multiple: true
+          persist-credentials: false
+
+      # Installing Alpine packages executes target-architecture binaries.
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        if: ${{ needs.plan.outputs.push == 'true' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Alpine Dockerfile
+        env:
+          PREK_IMAGE: ${{ format('{0}:{1}', env.PREK_BASE_IMG, needs.plan.outputs.base-tag) }}
+        run: |
+          cat <<EOF > Dockerfile.alpine
+          FROM ${PREK_IMAGE} AS prek
+          FROM alpine:${ALPINE_VERSION}
+
+          RUN apk add --no-cache \
+            ca-certificates \
+            git \
+            && git config --system --add safe.directory /io
+
+          COPY --from=prek /prek /usr/local/bin/prek
+          WORKDIR /io
+          ENTRYPOINT ["/usr/local/bin/prek"]
+          EOF
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -157,48 +190,36 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.PREK_BASE_IMG }}
-          # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
+          flavor: latest=false
           tags: |
-            type=raw,value=${{ fromJson(inputs.plan).announcement_tag }}
-            type=semver,pattern=v{{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
+            type=raw,value=dry-run-alpine,enable=${{ needs.plan.outputs.push == 'false' }}
+            type=semver,pattern={{ raw }},suffix=-alpine${{ env.ALPINE_VERSION }},value=${{ needs.plan.outputs.tag }},enable=${{ needs.plan.outputs.push == 'true' }}
+            type=semver,pattern={{ major }}.{{ minor }},suffix=-alpine${{ env.ALPINE_VERSION }},value=${{ needs.plan.outputs.tag }},enable=${{ needs.plan.outputs.push == 'true' }}
+            type=raw,value=alpine${{ env.ALPINE_VERSION }},enable=${{ needs.plan.outputs.floating-tags == 'true' }}
+            type=semver,pattern={{ raw }},suffix=-alpine,value=${{ needs.plan.outputs.tag }},enable=${{ needs.plan.outputs.push == 'true' }}
+            type=semver,pattern={{ major }}.{{ minor }},suffix=-alpine,value=${{ needs.plan.outputs.tag }},enable=${{ needs.plan.outputs.push == 'true' }}
+            type=raw,value=alpine,enable=${{ needs.plan.outputs.floating-tags == 'true' }}
 
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
-      - name: Create manifest list and push
-        working-directory: /tmp/digests
-        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
-        # The printf will expand the base image with the `<PREK_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
-        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <PREK_BASE_IMG>@sha256:<sha256_1> <PREK_BASE_IMG>@sha256:<sha256_2> ...`
-        run: |
-          # shellcheck disable=SC2046
-          readarray -t lines <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
-
-          docker buildx imagetools create \
-            "${annotations[@]}" \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${PREK_BASE_IMG}@sha256:%s " *)
-
-      - name: Export manifest digest
-        id: manifest-digest
-        env:
-          IMAGE: ${{ env.PREK_BASE_IMG }}
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          digest="$(
-            docker buildx imagetools inspect \
-              "${IMAGE}:${VERSION}" \
-              --format '{{json .Manifest}}' \
-            | jq -r '.digest'
-          )"
-          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          context: .
+          file: Dockerfile.alpine
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=prek-alpine
+          cache-to: type=gha,mode=min,scope=prek-alpine
+          push: ${{ needs.plan.outputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
 
       - name: Generate artifact attestation
+        if: ${{ needs.plan.outputs.push == 'true' }}
         uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-name: ${{ env.PREK_BASE_IMG }}
-          subject-digest: ${{ steps.manifest-digest.outputs.digest }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
