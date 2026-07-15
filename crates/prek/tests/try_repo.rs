@@ -411,3 +411,61 @@ fn try_repo_dot_path() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn try_repo_builtin_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.work_dir().child("test.txt").write_str("test\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.try_repo().arg("builtin").arg("check-merge-conflict").arg("--all-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Using generated `prek.toml`:
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "check-merge-conflict" },
+    ]
+
+    check for merge conflicts................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn try_repo_meta_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.work_dir().child("test.txt").write_str("test\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.try_repo().arg("meta").arg("identity").arg("--all-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Using generated `prek.toml`:
+    [[repos]]
+    repo = "meta"
+    hooks = [
+      { id = "identity" },
+    ]
+
+    identity.................................................................Passed
+    - hook id: identity
+    - duration: [TIME]
+
+      test.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}

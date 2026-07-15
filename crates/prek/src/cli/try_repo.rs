@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
+use strum::IntoEnumIterator;
 use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
@@ -13,6 +14,7 @@ use crate::cli::{ExitStatus, RunOptions, flag};
 use crate::config::{self, Stage};
 use crate::git;
 use crate::git::GIT_ROOT;
+use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
@@ -162,11 +164,13 @@ async fn prepare_repo<'a>(
     }
 }
 
-fn render_repo_config_toml(repo_path: &str, rev: &str, hooks: &[String]) -> String {
+fn render_repo_config_toml(repo_path: &str, rev: Option<&str>, hooks: &[String]) -> String {
     let mut doc = DocumentMut::new();
     let mut repo_table = toml_edit::Table::new();
     repo_table["repo"] = toml_edit::value(repo_path);
-    repo_table["rev"] = toml_edit::value(rev);
+    if let Some(rev) = rev {
+        repo_table["rev"] = toml_edit::value(rev);
+    }
 
     let mut hooks_array = Array::new();
     hooks_array.set_trailing_comma(true);
@@ -187,6 +191,16 @@ fn render_repo_config_toml(repo_path: &str, rev: &str, hooks: &[String]) -> Stri
     doc.to_string()
 }
 
+fn select_predefined_hooks<H>(selectors: &Selectors) -> Vec<String>
+where
+    H: AsRef<str> + IntoEnumIterator,
+{
+    H::iter()
+        .filter(|hook| selectors.matches_hook_id(hook.as_ref()))
+        .map(|hook| hook.as_ref().to_string())
+        .collect()
+}
+
 pub(crate) async fn try_repo(
     config: Option<PathBuf>,
     repo: String,
@@ -204,40 +218,53 @@ pub(crate) async fn try_repo(
     let store = Store::from_settings()?;
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
-    let prepared = prepare_repo(&repo, rev.as_deref(), tmp_dir.path())
-        .await
-        .context("Failed to determine repository and revision")?;
-
     let store = Store::from_path(tmp_dir.path()).init()?;
-    let repo_config = config::RemoteRepo::new(
-        prepared.runtime_source.to_string(),
-        prepared.rev.clone(),
-        vec![],
-    );
-    let repo_clone_path = store.clone_repo(&repo_config, None).await?;
-
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
-    let manifest =
-        config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+    let predefined_hooks = match repo.as_str() {
+        "builtin" => Some(select_predefined_hooks::<BuiltinHooks>(&selectors)),
+        "meta" => Some(select_predefined_hooks::<MetaHooks>(&selectors)),
+        _ => None,
+    };
 
-    let hooks = manifest
-        .hooks
-        .into_iter()
-        .filter(|hook| selectors.matches_hook_id(&hook.id))
-        .map(|hook| hook.id)
-        .collect::<Vec<_>>();
+    let (config_str, display_config_str) = if let Some(hooks) = predefined_hooks {
+        if rev.is_some() {
+            warn_user!("`--rev` option is ignored for the `{repo}` repo");
+        }
+        (render_repo_config_toml(&repo, None, &hooks), None)
+    } else {
+        let prepared = prepare_repo(&repo, rev.as_deref(), tmp_dir.path())
+            .await
+            .context("Failed to determine repository and revision")?;
 
-    // The scratch config needs the resolved source, while the displayed config should preserve
-    // the user's path so it remains meaningful when copied into their project.
-    let config_str = render_repo_config_toml(&prepared.runtime_source, &prepared.rev, &hooks);
+        let repo_config = config::RemoteRepo::new(
+            prepared.runtime_source.to_string(),
+            prepared.rev.clone(),
+            vec![],
+        );
+        let repo_clone_path = store.clone_repo(&repo_config, None).await?;
+        let manifest =
+            config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+        let hooks = manifest
+            .hooks
+            .into_iter()
+            .filter(|hook| selectors.matches_hook_id(&hook.id))
+            .map(|hook| hook.id)
+            .collect::<Vec<_>>();
+
+        // The scratch config needs the resolved source, while the displayed config should preserve
+        // the user's path so it remains meaningful when copied into their project.
+        let config_str =
+            render_repo_config_toml(&prepared.runtime_source, Some(&prepared.rev), &hooks);
+        let display_config_str = prepared
+            .display_source
+            .map(|source| render_repo_config_toml(source, Some(&prepared.rev), &hooks));
+        (config_str, display_config_str)
+    };
     let config_file = tmp_dir.path().join(PREK_TOML);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
-    let display_config_str = match prepared.display_source {
-        Some(source) => Cow::Owned(render_repo_config_toml(source, &prepared.rev, &hooks)),
-        None => Cow::Borrowed(config_str.as_str()),
-    };
+    let display_config_str = display_config_str.as_deref().unwrap_or(&config_str);
 
     writeln!(
         printer.stdout(),
