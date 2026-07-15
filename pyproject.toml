@@ -30,6 +30,7 @@ Homepage = "https://prek.j178.dev/"
 [dependency-groups]
 dev = ["rooster"]
 docs = ["llmstxt-standalone>=0.2.0", "zensical>=0.0.24"]
+docker = ["cargo-zigbuild>=0.19.8"]
 
 [tool.uv.sources]
 rooster = { git = "https://github.com/j178/rooster", rev = "c1901e113611dbe4c2c30917a4d4d392e6d0c679" }
@@ -67,7 +68,8 @@ version_files = [
   { target = "Cargo.toml", match = "^prek-", version_format = "cargo" },
   "README.md",
   "docs/installation.md",
-  "docs/integrations.md",
+  # Update current Docker examples without rewriting historical tag references.
+  { target = "docs/integrations.md", match = "ghcr.io/j178/prek:[0-9]", version_format = "cargo" },
   { target = ".github/ISSUE_TEMPLATE/bug_report.yaml", match = "current:", version_format = "cargo" },
 ]
 
