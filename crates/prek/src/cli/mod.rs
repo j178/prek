@@ -208,7 +208,10 @@ pub(crate) struct GlobalArgs {
     pub quiet: u8,
 
     /// Use verbose output.
-    #[arg(global = true, short, long, action = ArgAction::Count)]
+    ///
+    /// When running hooks, this also prints a hook's `description`, if set, whenever the
+    /// hook fails, to help explain the failure.
+    #[arg(global = true, short, long, env = EnvVars::PREK_VERBOSE, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
     /// Write trace logs to the specified file.

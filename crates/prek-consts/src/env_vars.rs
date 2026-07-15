@@ -99,6 +99,7 @@ impl EnvVars {
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";
     pub const PREK_DOCKER_NO_INIT: &'static str = "PREK_DOCKER_NO_INIT";
     pub const PREK_QUIET: &'static str = "PREK_QUIET";
+    pub const PREK_VERBOSE: &'static str = "PREK_VERBOSE";
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";

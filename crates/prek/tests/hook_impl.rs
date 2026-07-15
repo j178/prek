@@ -58,6 +58,62 @@ fn hook_impl() {
     ");
 }
 
+/// Test that `PREK_VERBOSE=1` makes a Git-triggered hook (e.g. `git commit`) print a
+/// failing hook's `description`, since Git does not let users pass CLI flags like
+/// `--verbose` through to the underlying `prek hook-impl` invocation.
+#[test]
+fn hook_impl_verbose_env_var_prints_hook_description() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r"
+        repos:
+        - repo: local
+          hooks:
+           - id: fail
+             name: fail
+             description: This hook always fails.
+             language: fail
+             entry: always fail
+             always_run: true
+    "});
+
+    context.git_add(".");
+
+    let mut commit = git_cmd(context.work_dir());
+    commit
+        .arg("commit")
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .env(EnvVars::PREK_VERBOSE, "1")
+        .arg("-m")
+        .arg("Initial commit");
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - description: This hook always fails.
+    - duration: [TIME]
+    - exit code: 1
+
+      always fail
+
+      .pre-commit-config.yaml
+    ");
+}
+
 #[test]
 fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
     let context = TestContext::new();

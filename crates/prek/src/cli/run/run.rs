@@ -1005,6 +1005,16 @@ impl<'a> HookRunSession<'a> {
                     "{detail_prefix}{}",
                     format!("- hook id: {}", result.hook.id).dimmed()
                 )?;
+                if status == RunStatus::Failed
+                    && (self.verbose || result.hook.verbose)
+                    && let Some(description) = result.hook.description.as_deref()
+                {
+                    writeln!(
+                        stdout,
+                        "{detail_prefix}{}",
+                        format!("- description: {description}").dimmed()
+                    )?;
+                }
                 if self.verbose || result.hook.verbose {
                     writeln!(
                         stdout,

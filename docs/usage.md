@@ -165,6 +165,15 @@ Use verbose output when a hook fails without enough context:
 prek run -vvv
 ```
 
+If a hook defines a `description` in the config, `--verbose` also prints it when the
+hook fails, which can help explain what the hook checks for. This works for `prek run`
+as well as for hooks triggered by Git (e.g. `git commit`); for the latter, set the
+`PREK_VERBOSE` environment variable since Git does not forward CLI flags to the hook:
+
+```bash
+PREK_VERBOSE=1 git commit
+```
+
 prek also writes a log file to `~/.cache/prek/prek.log` by default. See
 [Debugging](debugging.md) when reporting a prek problem.
 

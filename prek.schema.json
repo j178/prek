@@ -353,7 +353,7 @@
           "$ref": "#/definitions/PassFilenames"
         },
         "description": {
-          "description": "A description of the hook. For metadata only.",
+          "description": "A description of the hook, shown in listings and, when `--verbose` is enabled, printed\nif the hook fails to help explain the failure.",
           "type": "string"
         },
         "language_version": {
@@ -619,7 +619,7 @@
           "$ref": "#/definitions/PassFilenames"
         },
         "description": {
-          "description": "A description of the hook. For metadata only.",
+          "description": "A description of the hook, shown in listings and, when `--verbose` is enabled, printed\nif the hook fails to help explain the failure.",
           "type": "string"
         },
         "language_version": {
@@ -790,7 +790,7 @@
           "$ref": "#/definitions/PassFilenames"
         },
         "description": {
-          "description": "A description of the hook. For metadata only.",
+          "description": "A description of the hook, shown in listings and, when `--verbose` is enabled, printed\nif the hook fails to help explain the failure.",
           "type": "string"
         },
         "language_version": {
@@ -966,7 +966,7 @@
           "$ref": "#/definitions/PassFilenames"
         },
         "description": {
-          "description": "A description of the hook. For metadata only.",
+          "description": "A description of the hook, shown in listings and, when `--verbose` is enabled, printed\nif the hook fails to help explain the failure.",
           "type": "string"
         },
         "language_version": {

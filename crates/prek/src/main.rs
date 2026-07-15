@@ -333,6 +333,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.skip_on_missing_config,
                 args.script_version,
                 args.args,
+                cli.globals.verbose > 0,
                 printer,
             )
             .await
