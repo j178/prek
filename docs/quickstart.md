@@ -80,7 +80,7 @@ Now every `git commit` will invoke `prek run` for the files included in the comm
 ### 4. Go further
 
 - Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/). Every example there works with prek.
-- See [Common Workflows](./usage.md) for the commands you will use after setup.
+- See [Common Workflows](./usage.md) for the commands you will use after setup and how to handle hook failures.
 - Check the [configuration reference](./reference/configuration.md) for prek-specific settings.
 - Browse the [built-in hooks](./builtin.md) and the [difference guide](./diff.md) to see what else you can leverage.
 
