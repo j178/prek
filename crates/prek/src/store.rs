@@ -430,6 +430,7 @@ pub(crate) enum CacheBucket {
     Python,
     Cargo,
     Deno,
+    Julia,
     Npm,
     Coursier,
     Prek,
