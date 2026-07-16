@@ -140,7 +140,7 @@ fn create_local_git_repo_with_tag_timestamps(
         .assert()
         .success();
 
-    Ok(repo_dir.to_string_lossy().into_owned())
+    Ok(repo_dir.to_string_lossy().replace('\\', "/"))
 }
 
 #[test]
@@ -639,7 +639,72 @@ fn update_warns_for_missing_repos() -> Result<()> {
       updating rev `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
-    warning: repos `missing-from-exclude`, `missing-from-include`, `missing-from-repo` were not found in the configuration
+    warning: the following repository selectors were not found in the configuration:
+      - `--repo=missing-from-repo`
+      - `--repo-include-tag=missing-from-include=v*`
+      - `--repo-exclude-tag=missing-from-exclude=nightly`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "project-repo-1", &["v1.0.0", "v1.1.0"])?;
+    let repo2_path = create_local_git_repo(&context, "project-repo-2", &["v1.0.0", "v1.1.0"])?;
+
+    context.setup_workspace(&["project-a", "project-b"], "repos: []")?;
+    context
+        .work_dir()
+        .child("project-a/.pre-commit-config.yaml")
+        .write_str(&indoc::formatdoc! {r#"
+        update:
+          repos:
+            "{}":
+              exclude_tags: nightly
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    "#, repo2_path, repo1_path})?;
+    context
+        .work_dir()
+        .child("project-b/.pre-commit-config.yaml")
+        .write_str(&indoc::formatdoc! {r#"
+        update:
+          repos:
+            "{}":
+              include_tags: "v*"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    "#, repo1_path, repo2_path})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.update().arg("--jobs").arg("1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-a/.pre-commit-config.yaml
+      [HOME]/test-repos/project-repo-1
+        updating rev `v1.0.0` -> `v1.1.0`
+
+    project-b/.pre-commit-config.yaml
+      [HOME]/test-repos/project-repo-2
+        updating rev `v1.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    warning: the following `update.repos` entries were not found in their project configurations:
+      `project-a/.pre-commit-config.yaml`:
+        - `[HOME]/test-repos/project-repo-2`
+      `project-b/.pre-commit-config.yaml`:
+        - `[HOME]/test-repos/project-repo-1`
     ");
 
     Ok(())
@@ -862,6 +927,85 @@ fn update_tag_filters_include_then_exclude() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn update_uses_project_tag_filter_config() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(
+        &context,
+        "tag-filter-config-1",
+        &["v1.0.0", "v2.0.0", "v2.1.0", "v3.0.0-rc1"],
+    )?;
+    let repo2_path = create_local_git_repo(
+        &context,
+        "tag-filter-config-2",
+        &["v1.0.0", "v2.0.0", "v2.1.0", "v3.0.0-rc1"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r#"
+        update:
+          include_tags: "v*"
+          exclude_tags: ["*-rc*"]
+          repos:
+            "{}":
+              include_tags: "v2.*"
+              exclude_tags: "v2.1.0"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    "#, repo1_path, repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.update().arg("--jobs").arg("1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/tag-filter-config-1
+      updating rev `v1.0.0` -> `v2.0.0`
+
+    [HOME]/test-repos/tag-filter-config-2
+      updating rev `v1.0.0` -> `v2.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            update:
+              include_tags: "v*"
+              exclude_tags: ["*-rc*"]
+              repos:
+                "[HOME]/test-repos/tag-filter-config-1":
+                  include_tags: "v2.*"
+                  exclude_tags: "v2.1.0"
+            repos:
+              - repo: [HOME]/test-repos/tag-filter-config-1
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/tag-filter-config-2
+                rev: v2.1.0
+                hooks:
+                  - id: test-hook
+            "#);
         }
     );
 
@@ -1983,7 +2127,7 @@ fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-        "#, repo_path.replace('\\', "/"), commit_sha})?;
+        "#, repo_path, commit_sha})?;
 
     context.git_add(".");
 
@@ -2801,7 +2945,7 @@ fn update_toml() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-      "#, repo_path.replace('\\', "/")})?;
+      "#, repo_path})?;
     context.git_add(".");
 
     let filters = context.filters();
@@ -2851,7 +2995,7 @@ fn update_toml_with_comment() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-      "#, repo_path.replace('\\', "/")})?;
+      "#, repo_path})?;
 
     context.git_add(".");
 
@@ -2892,7 +3036,7 @@ fn update_toml_with_comment() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-      "#, repo_path.replace('\\', "/")})?;
+      "#, repo_path})?;
 
     context.git_add(".");
 
@@ -2953,7 +3097,7 @@ fn update_freeze_toml() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-    "#, repo_path.replace('\\', "/")})?;
+    "#, repo_path})?;
 
     context.git_add(".");
 
@@ -3190,7 +3334,7 @@ fn update_freeze_toml_with_comment() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-    "#, repo_path.replace('\\', "/")})?;
+    "#, repo_path})?;
 
     context.git_add(".");
 

@@ -11,40 +11,33 @@ This page documents the configuration keys that `prek` understands.
 
 This file stores user-level `prek` settings and does not define project hooks.
 
-### Global `update.freeze`
+### Global `update`
 
-Whether [`prek update`](cli.md#prek-update) stores commit hashes in `rev` instead of tag names by default.
+User-level defaults for [`prek update`](cli.md#prek-update):
 
-- Type: boolean
-- Default: `false`
-- CLI override: [`prek update --freeze`](cli.md#prek-update--freeze)
-
-```toml
-[update]
-freeze = true
-```
-
-Project configs can also set [`update.freeze`](#updatefreeze). The effective precedence is:
-
-1. [`prek update --freeze`](cli.md#prek-update--freeze), which forces freezing on
-2. project config
-3. user-level global config
-4. default `false`
-
-### Global `update.cooldown_days`
-
-Default cooldown for [`prek update`](cli.md#prek-update).
-
-- Type: integer days, `0` to `255`
-- Default: `0`
-- CLI override: [`prek update --cooldown-days <DAYS>`](cli.md#prek-update)
+| Key | Type | Default | CLI override |
+| -- | -- | -- | -- |
+| `update.cooldown_days` | integer days, `0` to `255` | `0` | [`--cooldown-days <DAYS>`](cli.md#prek-update) |
+| `update.freeze` | boolean | `false` | [`--freeze`](cli.md#prek-update--freeze), which forces freezing on |
+| `update.include_tags` | glob string or list of glob strings | empty | [`--include-tag`](cli.md#prek-update--include-tag) |
+| `update.exclude_tags` | glob string or list of glob strings | empty | [`--exclude-tag`](cli.md#prek-update--exclude-tag) |
 
 ```toml
 [update]
 cooldown_days = 7
+freeze = true
+include_tags = "v*"
+exclude_tags = ["*-{alpha,beta,rc}*"]
 ```
 
-The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.
+Each field is resolved independently with this precedence:
+
+1. the corresponding CLI option, when provided
+2. [project `update`](#update)
+3. user-level global config
+4. the default shown above
+
+The cooldown age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.
 
 !!! tip "Cooldowns never downgrade"
 
@@ -52,14 +45,7 @@ The age is computed from the tag creation timestamp for annotated tags, or from 
 
 !!! note "Compatibility alias"
 
-    The legacy `auto_update.cooldown_days` key is still accepted as an alias.
-
-Project configs can also set [`update.cooldown_days`](#updatecooldown_days). The effective precedence is:
-
-1. [`prek update --cooldown-days <DAYS>`](cli.md#prek-update)
-2. project config
-3. user-level global config
-4. default `0`
+    The legacy `auto_update` key is still accepted as an alias for `update`.
 
 ## Top-level keys
 
@@ -345,23 +331,36 @@ Allowed values:
 - `pre-merge-commit`
 - `pre-rebase`
 
-### `update.cooldown_days`
+### `update`
 
 !!! note "prek-only"
 
     This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
 
-Project default cooldown for [`prek update`](cli.md#prek-update).
+Project settings for [`prek update`](cli.md#prek-update):
 
-- Type: integer days, `0` to `255`
-- Default: inherited from the user-level global config, or `0`
-- CLI override: [`prek update --cooldown-days <DAYS>`](cli.md#prek-update)
+| Key | Type | Default or behavior |
+| -- | -- | -- |
+| `update.cooldown_days` | integer days, `0` to `255` | Inherited from the global config, or `0`. |
+| `update.freeze` | boolean | Inherited from the global config, or `false`. |
+| `update.include_tags` | glob string or list of glob strings | Inherited from the global config, or empty. Only consider matching tags. |
+| `update.exclude_tags` | glob string or list of glob strings | Inherited from the global config, or empty. Ignore matching tags. |
+| `update.repos` | map from repo to tag-filter fields | Override tag filters for a repository whose configured `repo` value exactly matches the map key. |
 
 === "prek.toml"
 
     ```toml
     [update]
     cooldown_days = 7
+    freeze = false
+    include_tags = "v*"
+    exclude_tags = ["*-{alpha,beta,rc}*"]
+
+    [update.repos."https://github.com/example/hooks"]
+    include_tags = ["v1.*", "v2.*"]
+
+    [update.repos."https://github.com/lycheeverse/lychee"]
+    exclude_tags = ["nightly", "*-rc*", "*-dev*"]
     ```
 
 === ".pre-commit-config.yaml"
@@ -369,41 +368,25 @@ Project default cooldown for [`prek update`](cli.md#prek-update).
     ```yaml
     update:
       cooldown_days: 7
+      freeze: false
+      include_tags: "v*"
+      exclude_tags: ["*-{alpha,beta,rc}*"]
+      repos:
+        "https://github.com/example/hooks":
+          include_tags: ["v1.*", "v2.*"]
+        "https://github.com/lycheeverse/lychee":
+          exclude_tags: ["nightly", "*-rc*", "*-dev*"]
     ```
+
+Each project-level field overrides the corresponding [global `update`](#global-update) field. Within `update.repos`, `include_tags` and `exclude_tags` are resolved independently: an omitted field inherits the project default, a present field replaces it, and `[]` explicitly clears it. This allows one repository to override only `include_tags` while still inheriting `exclude_tags`.
+
+CLI filters have the highest precedence. `--include-tag` and `--exclude-tag` replace the configured effective defaults; `--repo-include-tag` then replaces the include filters for its named repository, while `--repo-exclude-tag` adds excludes for its named repository.
+
+In workspace mode, `update` is scoped to the project config file that defines it and is not inherited by nested projects. Sub-projects use their own `update`, then the user-level global config, then built-in defaults. Repositories shared by multiple projects are fetched once but evaluated with each project's cooldown, freeze, and tag-filter settings.
 
 !!! note "Compatibility alias"
 
-    The legacy `auto_update.cooldown_days` key is still accepted as an alias.
-
-In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, [`prek update`](cli.md#prek-update) fetches the repo once but evaluates each project with its own cooldown.
-
-### `update.freeze`
-
-!!! note "prek-only"
-
-    This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
-
-Whether [`prek update`](cli.md#prek-update) stores commit hashes in `rev` instead of tag names by default.
-
-- Type: boolean
-- Default: inherited from the user-level global config, or `false`
-- CLI override: [`prek update --freeze`](cli.md#prek-update--freeze), which forces freezing on
-
-=== "prek.toml"
-
-    ```toml
-    [update]
-    freeze = true
-    ```
-
-=== ".pre-commit-config.yaml"
-
-    ```yaml
-    update:
-      freeze: true
-    ```
-
-In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. A project can set `freeze: false` to override a user-level `true`. If two projects use the same repo URL with different freeze settings, [`prek update`](cli.md#prek-update) fetches the repo once but writes each project's configured revision in the requested form.
+    The legacy `auto_update` key is still accepted as an alias for `update`.
 
 ### `minimum_prek_version`
 

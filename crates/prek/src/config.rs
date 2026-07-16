@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use fancy_regex::Regex;
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{Glob, GlobSet};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use prek_identify::TagSet;
@@ -47,15 +47,23 @@ where
 
 #[derive(Clone)]
 pub(crate) struct GlobPatterns {
-    patterns: Vec<String>,
+    patterns: Vec<Glob>,
     set: GlobSet,
 }
 
 impl GlobPatterns {
     pub(crate) fn new(patterns: Vec<String>) -> Result<Self, globset::Error> {
-        let mut builder = GlobSetBuilder::new();
+        let patterns = patterns
+            .into_iter()
+            .map(|pattern| pattern.parse())
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::from_globs(patterns)
+    }
+
+    pub(crate) fn from_globs(patterns: Vec<Glob>) -> Result<Self, globset::Error> {
+        let mut builder = GlobSet::builder();
         for pattern in &patterns {
-            builder.add(Glob::new(pattern)?);
+            builder.add(pattern.clone());
         }
         let set = builder.build()?;
         Ok(Self { patterns, set })
@@ -70,10 +78,18 @@ impl GlobPatterns {
     }
 }
 
+fn debug_globs(globs: &[Glob]) -> impl std::fmt::Debug + '_ {
+    std::fmt::from_fn(|f| {
+        f.debug_list()
+            .entries(globs.iter().map(Glob::glob))
+            .finish()
+    })
+}
+
 impl std::fmt::Debug for GlobPatterns {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GlobPatterns")
-            .field("patterns", &self.patterns)
+            .field("patterns", &debug_globs(&self.patterns))
             .finish_non_exhaustive()
     }
 }
@@ -1171,6 +1187,65 @@ where
     })
 }
 
+/// A configuration value that accepts either one string or a list of strings.
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) enum StringOrList {
+    One(Glob),
+    Many(Vec<Glob>),
+}
+
+impl std::fmt::Debug for StringOrList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::One(pattern) => f.debug_tuple("One").field(&pattern.glob()).finish(),
+            Self::Many(patterns) => f.debug_tuple("Many").field(&debug_globs(patterns)).finish(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StringOrList {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum RawStringOrList {
+            One(String),
+            Many(Vec<String>),
+        }
+
+        match RawStringOrList::deserialize(deserializer)? {
+            RawStringOrList::One(pattern) => {
+                pattern.parse().map(Self::One).map_err(D::Error::custom)
+            }
+            RawStringOrList::Many(patterns) => patterns
+                .into_iter()
+                .map(|pattern| pattern.parse().map_err(D::Error::custom))
+                .collect::<Result<_, _>>()
+                .map(Self::Many),
+        }
+    }
+}
+
+impl StringOrList {
+    pub(crate) fn as_slice(&self) -> &[Glob] {
+        match self {
+            Self::One(value) => std::slice::from_ref(value),
+            Self::Many(values) => values,
+        }
+    }
+}
+
+/// Overrides tag selection for one repository during `prek update`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct RepoTagFilterOptions {
+    pub(crate) include_tags: Option<StringOrList>,
+    pub(crate) exclude_tags: Option<StringOrList>,
+}
+
 /// Controls how `prek update` selects eligible releases.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
@@ -1178,6 +1253,9 @@ where
 pub(crate) struct UpdateOptions {
     pub(crate) cooldown_days: Option<u8>,
     pub(crate) freeze: Option<bool>,
+    pub(crate) include_tags: Option<StringOrList>,
+    pub(crate) exclude_tags: Option<StringOrList>,
+    pub(crate) repos: BTreeMap<String, RepoTagFilterOptions>,
 }
 
 // TODO: warn sensible regex
@@ -2013,20 +2091,81 @@ mod tests {
 
     #[test]
     fn parse_update_options() {
-        let yaml = indoc::indoc! {r"
+        let yaml = indoc::indoc! {r#"
             update:
               cooldown_days: 7
               freeze: true
+              include_tags: "v*"
+              exclude_tags: ["*-rc*"]
+              repos:
+                "https://example.com/repo":
+                  include_tags: "v1.*"
+                  exclude_tags: [nightly, "*-dev*"]
             repos: []
-        "};
+        "#};
         let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        let options = result.update.unwrap();
 
-        assert_eq!(
-            result
-                .update
-                .map(|options| (options.cooldown_days, options.freeze)),
-            Some((Some(7), Some(true)))
-        );
+        insta::assert_debug_snapshot!(options, @r###"
+        UpdateOptions {
+            cooldown_days: Some(
+                7,
+            ),
+            freeze: Some(
+                true,
+            ),
+            include_tags: Some(
+                One(
+                    "v*",
+                ),
+            ),
+            exclude_tags: Some(
+                Many(
+                    [
+                        "*-rc*",
+                    ],
+                ),
+            ),
+            repos: {
+                "https://example.com/repo": RepoTagFilterOptions {
+                    include_tags: Some(
+                        One(
+                            "v1.*",
+                        ),
+                    ),
+                    exclude_tags: Some(
+                        Many(
+                            [
+                                "nightly",
+                                "*-dev*",
+                            ],
+                        ),
+                    ),
+                },
+            },
+        }
+        "###);
+    }
+
+    #[test]
+    fn parse_update_options_rejects_invalid_glob() {
+        let yaml = indoc::indoc! {r#"
+            update:
+              include_tags: "["
+            repos: []
+        "#};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+
+        insta::assert_snapshot!(err, @r#"
+        error: line 2 column 17: error parsing glob '[': unclosed character class; missing ']'
+         --> <input>:2:17
+          |
+        1 | update:
+        2 |   include_tags: "["
+          |                 ^ error parsing glob '[': unclosed character class; missing ']'
+        3 | repos: []
+          |
+        "#);
     }
 
     #[test]

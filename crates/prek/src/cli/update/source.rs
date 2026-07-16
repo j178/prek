@@ -1,4 +1,3 @@
-use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -18,7 +17,7 @@ use crate::cli::update::{
 };
 use crate::config::{Repo, looks_like_sha};
 use crate::fs::Simplified;
-use crate::settings::{FilesystemOptions, UpdateSettings};
+use crate::settings::{CliTagFilterOptions, FilesystemOptions, TagFilterOptions, UpdateSettings};
 use crate::workspace::Workspace;
 
 /// Identifies repo usages that can share one update evaluation.
@@ -26,12 +25,27 @@ use crate::workspace::Workspace;
 struct RepoTargetKey<'a> {
     repo: &'a str,
     current_rev: &'a str,
-    required_hook_ids: Vec<&'a str>,
     cooldown_days: u8,
     freeze: bool,
+    tag_filters: TagFilterOptions,
+    required_hook_ids: Vec<&'a str>,
 }
 
-type RepoTargetsByKey<'a> = FxHashMap<RepoTargetKey<'a>, RepoTarget<'a>>;
+impl<'a> RepoTargetKey<'a> {
+    fn into_repo_target(self, usages: Vec<RepoUsage<'a>>) -> Result<RepoTarget<'a>> {
+        Ok(RepoTarget {
+            repo: self.repo,
+            current_rev: self.current_rev,
+            cooldown_days: self.cooldown_days,
+            freeze: self.freeze,
+            tag_filters: TagFilters::from_options(self.tag_filters)?,
+            required_hook_ids: self.required_hook_ids,
+            usages,
+        })
+    }
+}
+
+type RepoTargetsByKey<'a> = FxHashMap<RepoTargetKey<'a>, Vec<RepoUsage<'a>>>;
 type RepoSourcesBySource<'a> = FxHashMap<&'a str, RepoTargetsByKey<'a>>;
 
 /// Collects configured remote repos grouped by source, configured value, revision, and settings.
@@ -39,16 +53,13 @@ pub(super) fn collect_repo_sources<'a>(
     workspace: &'a Workspace,
     cli_freeze: bool,
     cli_cooldown_days: Option<u8>,
+    cli_tag_filters: &CliTagFilterOptions,
     filesystem: Option<&FilesystemOptions>,
 ) -> Result<Vec<RepoSource<'a>>> {
     let mut repo_sources: RepoSourcesBySource<'a> = FxHashMap::default();
 
     for project in workspace.projects() {
         let project_update = project.config().update.as_ref();
-        let UpdateSettings {
-            cooldown_days,
-            freeze,
-        } = UpdateSettings::resolve(cli_freeze, cli_cooldown_days, project_update, filesystem);
         let remote_count = project
             .config()
             .repos
@@ -77,6 +88,18 @@ pub(super) fn collect_repo_sources<'a>(
             let Repo::Remote(remote_repo) = repo else {
                 continue;
             };
+            let UpdateSettings {
+                cooldown_days,
+                freeze,
+                tag_filters,
+            } = UpdateSettings::resolve(
+                cli_freeze,
+                cli_cooldown_days,
+                remote_repo.repo(),
+                cli_tag_filters,
+                project_update,
+                filesystem,
+            );
 
             let mut required_hook_ids = remote_repo
                 .hooks
@@ -90,25 +113,12 @@ pub(super) fn collect_repo_sources<'a>(
             let target_key = RepoTargetKey {
                 repo: remote_repo.repo(),
                 current_rev: remote_repo.rev.as_str(),
-                required_hook_ids,
                 cooldown_days,
                 freeze,
+                tag_filters,
+                required_hook_ids,
             };
-            let target = match targets.entry(target_key) {
-                Entry::Occupied(entry) => entry.into_mut(),
-                Entry::Vacant(entry) => {
-                    let required_hook_ids = entry.key().required_hook_ids.clone();
-                    entry.insert(RepoTarget {
-                        repo: remote_repo.repo(),
-                        current_rev: remote_repo.rev.as_str(),
-                        cooldown_days,
-                        freeze,
-                        required_hook_ids,
-                        usages: Vec::new(),
-                    })
-                }
-            };
-            target.usages.push(RepoUsage {
+            targets.entry(target_key).or_default().push(RepoUsage {
                 project,
                 remote_count,
                 remote_index,
@@ -120,21 +130,19 @@ pub(super) fn collect_repo_sources<'a>(
         }
     }
 
-    Ok(repo_sources
+    repo_sources
         .into_iter()
         .map(|(source, targets)| {
-            let mut targets = targets.into_values().collect::<Vec<_>>();
-            targets.sort_by(|a, b| {
-                a.repo
-                    .cmp(b.repo)
-                    .then_with(|| a.current_rev.cmp(b.current_rev))
-                    .then_with(|| a.cooldown_days.cmp(&b.cooldown_days))
-                    .then_with(|| a.freeze.cmp(&b.freeze))
-                    .then_with(|| a.required_hook_ids.cmp(&b.required_hook_ids))
-            });
-            RepoSource { source, targets }
+            let mut targets = targets.into_iter().collect::<Vec<_>>();
+            // The first repo is used as the progress label; result events are sorted separately.
+            targets.sort_unstable_by_key(|(target, _)| target.repo);
+            let targets = targets
+                .into_iter()
+                .map(|(target_key, usages)| target_key.into_repo_target(usages))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(RepoSource { source, targets })
         })
-        .collect())
+        .collect()
 }
 
 /// Collects stale `# frozen:` comments for one configured `repo + rev + hook set` target.
@@ -208,7 +216,6 @@ async fn collect_frozen_mismatches<'a>(
 pub(super) async fn evaluate_repo_source<'a>(
     repo_source: &'a RepoSource<'a>,
     bleeding_edge: bool,
-    tag_filters: &TagFilters,
 ) -> Result<Vec<RepoUpdate<'a>>> {
     let tmp_dir = tempfile::tempdir()?;
     let repo_path = tmp_dir.path();
@@ -243,8 +250,9 @@ pub(super) async fn evaluate_repo_source<'a>(
 
     let mut updates = Vec::with_capacity(repo_source.targets.len());
     for target in &repo_source.targets {
-        let update_tag_timestamps = tag_filters
-            .filter(target.repo, &tag_timestamps)
+        let update_tag_timestamps = target
+            .tag_filters
+            .filter(&tag_timestamps)
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
