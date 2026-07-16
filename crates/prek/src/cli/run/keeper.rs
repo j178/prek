@@ -59,7 +59,8 @@ impl IntentToAddRestorer {
     fn restore(&self) -> Result<()> {
         // Restore the intent-to-add changes.
         if !self.0.is_empty() {
-            Command::new(GIT.as_ref()?)
+            let mut cmd = Command::new(GIT.as_ref()?);
+            git::apply_git_work_tree(&mut cmd)
                 .arg("add")
                 .arg("--intent-to-add")
                 .arg("--")
@@ -154,7 +155,8 @@ impl UnstagedChangesRestorer {
     }
 
     fn checkout_working_tree(root: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
+        let mut cmd = Command::new(GIT.as_ref()?);
+        let output = git::apply_git_work_tree(&mut cmd)
             .arg("-c")
             .arg("submodule.recurse=0")
             .arg("checkout")
@@ -173,7 +175,8 @@ impl UnstagedChangesRestorer {
     }
 
     fn git_apply(patch: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
+        let mut cmd = Command::new(GIT.as_ref()?);
+        let output = git::apply_git_work_tree(&mut cmd)
             .arg("apply")
             .arg("--whitespace=nowarn")
             .arg(patch)

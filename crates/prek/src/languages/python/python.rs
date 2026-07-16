@@ -13,6 +13,7 @@ use tracing::{debug, trace};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::git::GitCommandExt;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageBackend;
@@ -272,7 +273,7 @@ impl Python {
         Self::remove_uv_python_override_envs(&mut cmd)
             // Remove GIT environment variables that may leak from git hooks (e.g., in worktrees).
             // These can break packages using setuptools_scm for file discovery.
-            .remove_git_envs()
+            .isolate_from_git_env()
             .check(true);
         cmd
     }

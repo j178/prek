@@ -501,14 +501,6 @@ impl Cmd {
     pub fn get_current_dir(&self) -> Option<&Path> {
         self.inner.as_std().get_current_dir()
     }
-
-    /// Remove some git-specific environment variables to make git commands isolated.
-    pub fn remove_git_envs(&mut self) -> &mut Self {
-        for (key, _) in crate::git::GIT_ENV_TO_REMOVE.iter() {
-            self.inner.env_remove(key);
-        }
-        self
-    }
 }
 
 /// Diagnostic APIs used by execution methods and direct child-process callers.

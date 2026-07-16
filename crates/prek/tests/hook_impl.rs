@@ -613,6 +613,41 @@ fn git_dir_respected() {
 }
 
 #[test]
+fn git_dir_synthesized_git_work_tree_not_leaked_to_hook() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: print-git-work-tree
+             name: Print Git Work Tree
+             language: system
+             entry: python3 -c 'import os, sys; print("GIT_DIR:", os.environ.get("GIT_DIR")); print("GIT_WORK_TREE:", os.environ.get("GIT_WORK_TREE")); sys.exit(1)'
+             pass_filenames: false
+             always_run: true
+    "#});
+    context.git_add(".");
+
+    let mut run = context.run();
+    run.env(EnvVars::GIT_DIR, context.work_dir().join(".git"));
+
+    cmd_snapshot!(context.filters(), run, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Print Git Work Tree......................................................Failed
+    - hook id: print-git-work-tree
+    - exit code: 1
+
+      GIT_DIR: [TEMP_DIR]/.git
+      GIT_WORK_TREE: None
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
