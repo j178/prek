@@ -595,8 +595,8 @@ pub(crate) struct HookOptions {
     /// Append filenames that would be checked to the hook entry as arguments.
     /// Default is true.
     pub pass_filenames: Option<PassFilenames>,
-    /// A description of the hook, shown in listings and, when `--verbose` is enabled, printed
-    /// if the hook fails to help explain the failure.
+    /// A description of the hook, shown in listings and printed on failure when verbose output is
+    /// enabled (via `--verbose`/`PREK_VERBOSE` or `verbose: true`).
     pub description: Option<String>,
     /// Run the hook on a specific version of the language.
     /// Default is `default`.
