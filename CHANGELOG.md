@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.10
+
+Released on 2026-07-16.
+
+### Enhancements
+
+- Add PHP language support ([#2314](https://github.com/j178/prek/pull/2314))
+- Add freeze option to update settings ([#2323](https://github.com/j178/prek/pull/2323))
+- Add tag filters to update configuration ([#2354](https://github.com/j178/prek/pull/2354))
+- Identify 'mts' and 'cts' as TypeScript files ([#2209](https://github.com/j178/prek/pull/2209))
+- Publish Alpine Docker images ([#2352](https://github.com/j178/prek/pull/2352))
+- Support builtin and meta in try-repo ([#2350](https://github.com/j178/prek/pull/2350))
+
+### Bug fixes
+
+- Fix Python discovery order ([#2348](https://github.com/j178/prek/pull/2348))
+- Fix Windows progress rendering ([#2328](https://github.com/j178/prek/pull/2328))
+- Preserve configured repo values for updates ([#2324](https://github.com/j178/prek/pull/2324))
+- Scope synthetic `GIT_WORK_TREE` to git commands ([#2356](https://github.com/j178/prek/pull/2356))
+
+### Documentation
+
+- Expand common workflows guide ([#2351](https://github.com/j178/prek/pull/2351))
+
+### Contributors
+
+- @j178
+
 ## 0.4.9
 
 Released on 2026-07-11.

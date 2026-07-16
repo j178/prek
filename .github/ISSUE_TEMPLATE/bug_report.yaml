@@ -27,7 +27,7 @@ body:
 
   - type: input
     attributes:
-      label: "Version (current: 0.4.9)"
+      label: "Version (current: 0.4.10)"
       description: What version of prek are you using? (see `prek -V`)
       placeholder: e.g., prek 0.2.3 (7fe75a86d 2025-09-29)
     validations:
