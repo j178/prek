@@ -1,22 +1,24 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
+use globset::Glob;
 use rustc_hash::{FxHashMap, FxHashSet};
 use semver::Version;
 
-use crate::cli::ExitStatus;
 use crate::cli::reporter::UpdateReporter;
 use crate::cli::run::Selectors;
 use crate::cli::update::config::write_new_config;
 use crate::cli::update::display::{apply_repo_updates, warn_frozen_mismatches};
 use crate::cli::update::source::{collect_repo_sources, evaluate_repo_source};
-use crate::config::GlobPatterns;
-use crate::fs::CWD;
+use crate::cli::{ExitStatus, RepoTagPattern};
+use crate::config::{GlobPatterns, Repo};
+use crate::fs::{CWD, Simplified};
 use crate::printer::Printer;
 use crate::run::INTERNAL_CONCURRENCY;
-use crate::settings::FilesystemOptions;
+use crate::settings::{CliTagFilterOptions, FilesystemOptions, TagFilterOptions};
 use crate::store::Store;
 use crate::warn_user;
 use crate::workspace::{Project, Workspace};
@@ -61,6 +63,8 @@ struct RepoTarget<'a> {
     cooldown_days: u8,
     /// Whether the selected revision should be stored as a frozen commit hash.
     freeze: bool,
+    /// Tag filters to apply when selecting an update for this target.
+    tag_filters: TagFilters,
     /// The sorted hook ids that must still exist after updating this target.
     required_hook_ids: Vec<&'a str>,
     /// Every config usage that shares this exact target configuration.
@@ -194,112 +198,137 @@ enum RevisionSelection {
 }
 
 struct TagFilters {
-    global_include: GlobPatterns,
-    global_exclude: GlobPatterns,
-    repo_include: FxHashMap<String, GlobPatterns>,
-    repo_exclude: FxHashMap<String, GlobPatterns>,
+    include: GlobPatterns,
+    exclude: GlobPatterns,
 }
 
 impl TagFilters {
-    fn new(
-        include_tag: Vec<String>,
-        exclude_tag: Vec<String>,
-        repo_include_tag: Vec<String>,
-        repo_exclude_tag: Vec<String>,
-    ) -> Result<Self> {
+    fn from_options(options: TagFilterOptions) -> Result<Self> {
         Ok(Self {
-            global_include: GlobPatterns::new(include_tag)
-                .context("Invalid --include-tag pattern")?,
-            global_exclude: GlobPatterns::new(exclude_tag)
-                .context("Invalid --exclude-tag pattern")?,
-            repo_include: build_repo_tag_patterns(repo_include_tag, "--repo-include-tag")?,
-            repo_exclude: build_repo_tag_patterns(repo_exclude_tag, "--repo-exclude-tag")?,
+            include: GlobPatterns::from_globs(options.include)
+                .context("Failed to compile update include_tags patterns")?,
+            exclude: GlobPatterns::from_globs(options.exclude)
+                .context("Failed to compile update exclude_tags patterns")?,
         })
     }
 
-    fn filter<'a>(&self, repo: &str, tags: &'a [TagTimestamp]) -> Vec<&'a TagTimestamp> {
+    fn filter<'a>(&self, tags: &'a [TagTimestamp]) -> Vec<&'a TagTimestamp> {
         tags.iter()
-            .filter(|tag| self.is_included(repo, &tag.tag) && !self.is_excluded(repo, &tag.tag))
+            .filter(|tag| self.is_included(&tag.tag) && !self.is_excluded(&tag.tag))
             .collect()
     }
 
-    /// Returns whether a tag passes include filters for a repository.
-    ///
-    /// Repo-specific include filters override global include filters for that repo.
-    fn is_included(&self, repo: &str, tag: &str) -> bool {
-        if let Some(repo_include) = self.repo_include.get(repo) {
-            return repo_include.is_empty() || repo_include.is_match(Path::new(tag));
-        }
-
-        self.global_include.is_empty() || self.global_include.is_match(Path::new(tag))
+    fn is_included(&self, tag: &str) -> bool {
+        self.include.is_empty() || self.include.is_match(Path::new(tag))
     }
 
-    /// Returns whether a tag matches any global or repo-specific exclude filter.
-    fn is_excluded(&self, repo: &str, tag: &str) -> bool {
-        self.global_exclude.is_match(Path::new(tag))
-            || self
-                .repo_exclude
-                .get(repo)
-                .is_some_and(|set| set.is_match(Path::new(tag)))
+    fn is_excluded(&self, tag: &str) -> bool {
+        self.exclude.is_match(Path::new(tag))
     }
 }
 
-fn build_repo_tag_patterns(
-    values: Vec<String>,
-    option: &str,
-) -> Result<FxHashMap<String, GlobPatterns>> {
-    let mut patterns_by_repo: FxHashMap<String, Vec<String>> = FxHashMap::default();
-    for value in values {
-        let (repo, pattern) = value.rsplit_once('=').ok_or_else(|| {
-            anyhow::anyhow!("Invalid {option} value `{value}`: expected `<repo>=<pattern>`")
-        })?;
-        if repo.is_empty() || pattern.is_empty() {
-            anyhow::bail!("Invalid {option} value `{value}`: expected `<repo>=<pattern>`");
-        }
-        patterns_by_repo
-            .entry(repo.to_string())
-            .or_default()
-            .push(pattern.to_string());
+fn group_repo_tag_patterns(values: Vec<RepoTagPattern>) -> BTreeMap<String, Vec<Glob>> {
+    let mut patterns_by_repo: BTreeMap<String, Vec<Glob>> = BTreeMap::new();
+    for RepoTagPattern { repo, pattern } in values {
+        patterns_by_repo.entry(repo).or_default().push(pattern);
     }
-
     patterns_by_repo
+}
+
+fn project_has_repo(project: &Project, repo: &str) -> bool {
+    project.config().repos.iter().any(
+        |configured_repo| matches!(configured_repo, Repo::Remote(remote) if remote.repo() == repo),
+    )
+}
+
+fn warn_missing_cli_repos(
+    configured_repos: &FxHashSet<&str>,
+    filter_repos: &[String],
+    cli_tag_filters: &CliTagFilterOptions,
+) {
+    let mut missing_selectors = BTreeSet::new();
+    missing_selectors.extend(
+        filter_repos
+            .iter()
+            .filter(|repo| !configured_repos.contains(repo.as_str()))
+            .map(|repo| (0, format!("--repo={repo}"))),
+    );
+    for (order, option, patterns_by_repo) in [
+        (1, "--repo-include-tag", &cli_tag_filters.repo_include),
+        (2, "--repo-exclude-tag", &cli_tag_filters.repo_exclude),
+    ] {
+        for (repo, patterns) in patterns_by_repo {
+            if configured_repos.contains(repo.as_str()) {
+                continue;
+            }
+            missing_selectors.extend(
+                patterns
+                    .iter()
+                    .map(|pattern| (order, format!("{option}={repo}={}", pattern.glob()))),
+            );
+        }
+    }
+    let missing_selectors = missing_selectors
         .into_iter()
-        .map(|(repo, patterns)| {
-            Ok((
-                repo,
-                GlobPatterns::new(patterns).with_context(|| format!("Invalid {option} pattern"))?,
-            ))
+        .map(|(_, selector)| selector)
+        .collect::<Vec<_>>();
+
+    match missing_selectors.as_slice() {
+        [] => {}
+        [selector] => {
+            warn_user!("repository selector `{selector}` was not found in the configuration");
+        }
+        _ => {
+            warn_user!("the following repository selectors were not found in the configuration:");
+            for selector in missing_selectors {
+                anstream::eprintln!("  - `{selector}`");
+            }
+        }
+    }
+}
+
+fn warn_missing_project_repos(workspace: &Workspace) {
+    let missing_project_repos = workspace
+        .projects()
+        .iter()
+        .filter_map(|project| {
+            let repos = project
+                .config()
+                .update
+                .iter()
+                .flat_map(|options| options.repos.keys())
+                .filter(|repo| !project_has_repo(project, repo))
+                .collect::<Vec<_>>();
+            (!repos.is_empty()).then_some((project.config_file(), repos))
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    if !missing_project_repos.is_empty() {
+        warn_user!(
+            "the following `update.repos` entries were not found in their project configurations:"
+        );
+        for (config_file, repos) in missing_project_repos {
+            anstream::eprintln!("  `{}`:", config_file.user_display());
+            for repo in repos {
+                anstream::eprintln!("    - `{repo}`");
+            }
+        }
+    }
 }
 
 fn warn_missing_repos(
+    workspace: &Workspace,
     repo_sources: &[RepoSource<'_>],
     filter_repos: &[String],
-    tag_filters: &TagFilters,
+    cli_tag_filters: &CliTagFilterOptions,
 ) {
     let configured_repos = repo_sources
         .iter()
         .flat_map(|repo_source| repo_source.targets.iter().map(|target| target.repo))
         .collect::<FxHashSet<_>>();
-    let mut missing_repos = filter_repos
-        .iter()
-        .map(String::as_str)
-        .chain(tag_filters.repo_include.keys().map(String::as_str))
-        .chain(tag_filters.repo_exclude.keys().map(String::as_str))
-        .filter(|repo| !configured_repos.contains(*repo))
-        .collect::<Vec<_>>();
-    missing_repos.sort_unstable();
-    missing_repos.dedup();
 
-    match missing_repos.as_slice() {
-        [] => {}
-        [repo] => warn_user!("repo `{repo}` was not found in the configuration"),
-        _ => warn_user!(
-            "repos `{}` were not found in the configuration",
-            missing_repos.join("`, `")
-        ),
-    }
+    warn_missing_cli_repos(&configured_repos, filter_repos, cli_tag_filters);
+    warn_missing_project_repos(workspace);
 }
 
 /// The successful result of evaluating one configured `repo + rev + hook set` target.
@@ -404,10 +433,10 @@ pub(crate) async fn update(
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
     exclude_repos: Vec<String>,
-    include_tag: Vec<String>,
-    exclude_tag: Vec<String>,
-    repo_include_tag: Vec<String>,
-    repo_exclude_tag: Vec<String>,
+    include_tag: Vec<Glob>,
+    exclude_tag: Vec<Glob>,
+    repo_include_tag: Vec<RepoTagPattern>,
+    repo_exclude_tag: Vec<RepoTagPattern>,
     verbose: bool,
     bleeding_edge: bool,
     freeze: bool,
@@ -423,8 +452,13 @@ pub(crate) async fn update(
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
 
-    let tag_filters =
-        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
+    let cli_tag_filters = CliTagFilterOptions {
+        include: include_tag,
+        exclude: exclude_tag,
+        repo_include: group_repo_tag_patterns(repo_include_tag),
+        repo_exclude: group_repo_tag_patterns(repo_exclude_tag),
+    };
+
     let jobs = if jobs == 0 {
         *INTERNAL_CONCURRENCY
     } else {
@@ -432,9 +466,15 @@ pub(crate) async fn update(
     };
     let reporter = UpdateReporter::new(printer);
 
-    let mut repo_sources =
-        collect_repo_sources(&workspace, freeze, cooldown_days, filesystem.as_ref())?;
-    warn_missing_repos(&repo_sources, &filter_repos, &tag_filters);
+    let mut repo_sources = collect_repo_sources(
+        &workspace,
+        freeze,
+        cooldown_days,
+        &cli_tag_filters,
+        filesystem.as_ref(),
+    )?;
+    warn_missing_repos(&workspace, &repo_sources, &filter_repos, &cli_tag_filters);
+
     for repo_source in &mut repo_sources {
         repo_source.targets.retain(|target| {
             (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == target.repo))
@@ -450,7 +490,7 @@ pub(crate) async fn update(
                 .first()
                 .map_or(repo_source.source, |target| target.repo);
             let progress = reporter.on_update_start(display_repo);
-            let result = evaluate_repo_source(repo_source, bleeding_edge, &tag_filters).await;
+            let result = evaluate_repo_source(repo_source, bleeding_edge).await;
             reporter.on_update_complete(progress);
             result
         })
@@ -492,55 +532,47 @@ mod tests {
         TagTimestamp::new(name.to_string(), 0, String::new())
     }
 
-    fn filtered_tags(filters: &TagFilters, repo: &str, tags: &[TagTimestamp]) -> Vec<String> {
+    fn filtered_tags(filters: &TagFilters, tags: &[TagTimestamp]) -> Vec<String> {
         filters
-            .filter(repo, tags)
+            .filter(tags)
             .into_iter()
             .map(|tag| tag.tag.clone())
             .collect()
     }
 
-    #[test]
-    fn tag_filters_keep_all_tags_without_filters() {
-        let filters = TagFilters::new(Vec::new(), Vec::new(), Vec::new(), Vec::new()).unwrap();
-        let tags = [tag("v1.0.0"), tag("nightly")];
-
-        assert_eq!(
-            filtered_tags(&filters, "https://example.com/repo", &tags),
-            vec!["v1.0.0", "nightly"]
-        );
+    fn tag_filters(include: &[&str], exclude: &[&str]) -> TagFilters {
+        TagFilters::from_options(TagFilterOptions {
+            include: include
+                .iter()
+                .map(|pattern| pattern.parse().unwrap())
+                .collect(),
+            exclude: exclude
+                .iter()
+                .map(|pattern| pattern.parse().unwrap())
+                .collect(),
+        })
+        .unwrap()
     }
 
     #[test]
-    fn tag_filters_repo_include_overrides_global_include() {
-        let filters = TagFilters::new(
-            vec!["v1.*".to_string()],
-            Vec::new(),
-            vec!["https://example.com/repo=v*.1.0".to_string()],
-            Vec::new(),
-        )
-        .unwrap();
+    fn tag_filters_keep_all_tags_without_filters() {
+        let filters = tag_filters(&[], &[]);
+        let tags = [tag("v1.0.0"), tag("nightly")];
+
+        assert_eq!(filtered_tags(&filters, &tags), vec!["v1.0.0", "nightly"]);
+    }
+
+    #[test]
+    fn tag_filters_apply_include_patterns() {
+        let filters = tag_filters(&["v*.1.0"], &[]);
         let tags = [tag("v1.0.0"), tag("v1.1.0"), tag("v2.1.0")];
 
-        assert_eq!(
-            filtered_tags(&filters, "https://example.com/repo", &tags),
-            vec!["v1.1.0", "v2.1.0"]
-        );
-        assert_eq!(
-            filtered_tags(&filters, "https://example.com/other", &tags),
-            vec!["v1.0.0", "v1.1.0"]
-        );
+        assert_eq!(filtered_tags(&filters, &tags), vec!["v1.1.0", "v2.1.0"]);
     }
 
     #[test]
     fn tag_filters_apply_excludes_after_includes() {
-        let filters = TagFilters::new(
-            vec!["v*".to_string()],
-            vec!["*-rc*".to_string()],
-            Vec::new(),
-            vec!["https://example.com/repo=v2.*".to_string()],
-        )
-        .unwrap();
+        let filters = tag_filters(&["v*"], &["v2.*", "*-rc*"]);
         let tags = [
             tag("v1.0.0"),
             tag("v2.0.0"),
@@ -548,31 +580,6 @@ mod tests {
             tag("nightly"),
         ];
 
-        assert_eq!(
-            filtered_tags(&filters, "https://example.com/repo", &tags),
-            vec!["v1.0.0"]
-        );
-        assert_eq!(
-            filtered_tags(&filters, "https://example.com/other", &tags),
-            vec!["v1.0.0", "v2.0.0"]
-        );
-    }
-
-    #[test]
-    fn tag_filters_reject_invalid_repo_filter_values() {
-        let result = TagFilters::new(
-            Vec::new(),
-            Vec::new(),
-            vec!["https://example.com/repo".to_string()],
-            Vec::new(),
-        );
-
-        match result {
-            Ok(_) => panic!("expected invalid repo tag filter to fail"),
-            Err(err) => assert!(
-                err.to_string().contains("expected `<repo>=<pattern>`"),
-                "{err:#}"
-            ),
-        }
+        assert_eq!(filtered_tags(&filters, &tags), vec!["v1.0.0"]);
     }
 }

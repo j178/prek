@@ -30,8 +30,7 @@
 
 | Compatibility spelling | Preferred `prek` spelling |
 | -- | -- |
-| `auto_update.cooldown_days` | `update.cooldown_days` |
-| `auto_update.freeze` | `update.freeze` |
+| `auto_update` | `update` |
 
 ## Why the CLI is reorganized
 

@@ -1,6 +1,6 @@
 use crate::config::{
     BuiltinHook, BuiltinRepo, FilePattern, LocalHook, LocalRepo, MetaHook, MetaRepo, PassFilenames,
-    RemoteHook, RemoteRepo, Repo, Stage, Stages,
+    RemoteHook, RemoteRepo, Repo, Stage, Stages, StringOrList,
 };
 use std::borrow::Cow;
 
@@ -200,6 +200,25 @@ impl schemars::JsonSchema for FilePattern {
                     "required": ["glob"],
                 }
             ],
+        })
+    }
+}
+
+impl schemars::JsonSchema for StringOrList {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("StringOrList")
+    }
+
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "A configuration value that accepts either one string or a list of strings.",
+            "anyOf": [
+                { "type": "string" },
+                {
+                    "type": "array",
+                    "items": { "type": "string" }
+                }
+            ]
         })
     }
 }

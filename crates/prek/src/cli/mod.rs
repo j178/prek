@@ -6,6 +6,7 @@ use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::{ArgPredicate, PathBufValueParser, Styles, TypedValueParser};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::ArgValueCompleter;
+use globset::Glob;
 use prek_consts::env_vars::EnvVars;
 use serde::{Deserialize, Serialize};
 
@@ -784,32 +785,46 @@ pub(crate) struct UpdateArgs {
     #[arg(long, value_name = "REPO")]
     pub(crate) exclude_repo: Vec<String>,
     /// Only consider tags matching this glob pattern. This option may be specified multiple times.
+    /// Defaults to `update.include_tags` in the project or global config when unset.
     ///
     /// For example, use `--include-tag 'v*'` to only consider version tags and ignore tags such as `nightly`.
     #[arg(long, value_name = "PATTERN", conflicts_with = "bleeding_edge")]
-    pub(crate) include_tag: Vec<String>,
+    pub(crate) include_tag: Vec<Glob>,
     /// Ignore tags matching this glob pattern. This option may be specified multiple times.
+    /// Defaults to `update.exclude_tags` in the project or global config when unset.
     ///
     /// For example, use `--exclude-tag nightly` to skip a moving tag, or
     /// `--exclude-tag '*-{alpha,beta,rc}*'` to skip common prerelease tags.
     #[arg(long, value_name = "PATTERN", conflicts_with = "bleeding_edge")]
-    pub(crate) exclude_tag: Vec<String>,
+    pub(crate) exclude_tag: Vec<Glob>,
     /// Only consider tags matching this glob pattern for a repository (`<repo>=<pattern>`).
     /// This option may be specified multiple times.
+    /// Overrides the effective include filters for the named repository.
     ///
     /// When set for a repository, this overrides any global `--include-tag` filters for that repository.
     ///
     /// For example, use `--repo-include-tag https://github.com/example/repo=v*` to only consider version tags for one repository.
-    #[arg(long, value_name = "REPO=PATTERN", conflicts_with = "bleeding_edge")]
-    pub(crate) repo_include_tag: Vec<String>,
+    #[arg(
+        long,
+        value_name = "REPO=PATTERN",
+        value_parser = parse_repo_tag_pattern,
+        conflicts_with = "bleeding_edge"
+    )]
+    pub(crate) repo_include_tag: Vec<RepoTagPattern>,
     /// Ignore tags matching this glob pattern for a repository (`<repo>=<pattern>`).
     /// This option may be specified multiple times.
+    /// Adds to the effective `update` exclude filters for the named repository.
     ///
     /// Repo-specific exclude filters are added to global `--exclude-tag` filters; matching either filter excludes the tag for that repository.
     ///
     /// For example, use `--repo-exclude-tag https://github.com/example/repo=nightly` or `--repo-exclude-tag https://github.com/example/repo=*-rc*` to skip nightly or prerelease tags for one repository.
-    #[arg(long, value_name = "REPO=PATTERN", conflicts_with = "bleeding_edge")]
-    pub(crate) repo_exclude_tag: Vec<String>,
+    #[arg(
+        long,
+        value_name = "REPO=PATTERN",
+        value_parser = parse_repo_tag_pattern,
+        conflicts_with = "bleeding_edge"
+    )]
+    pub(crate) repo_exclude_tag: Vec<RepoTagPattern>,
     /// Do not write changes to the config file, only display what would be changed.
     #[arg(long)]
     pub(crate) dry_run: bool,
@@ -830,6 +845,26 @@ pub(crate) struct UpdateArgs {
     /// Valid values are `0` through `255`; `0` disables this check.
     #[arg(long, value_name = "DAYS", conflicts_with = "bleeding_edge")]
     pub(crate) cooldown_days: Option<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RepoTagPattern {
+    pub(crate) repo: String,
+    pub(crate) pattern: Glob,
+}
+
+fn parse_repo_tag_pattern(value: &str) -> Result<RepoTagPattern, String> {
+    let Some((repo, pattern)) = value.rsplit_once('=') else {
+        return Err("expected `<repo>=<pattern>`".to_string());
+    };
+    if repo.is_empty() || pattern.is_empty() {
+        return Err("repo and pattern must not be empty".to_string());
+    }
+
+    Ok(RepoTagPattern {
+        repo: repo.to_string(),
+        pattern: pattern.parse::<Glob>().map_err(|err| err.to_string())?,
+    })
 }
 
 #[derive(Debug, Args)]
@@ -998,6 +1033,44 @@ pub(crate) struct InitTemplateDirArgs {
     /// or defaults to `pre-commit` if that is also not set.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::Cli;
+
+    #[test]
+    fn update_rejects_invalid_repo_tag_pattern_during_cli_parsing() {
+        let Err(err) = Cli::try_parse_from([
+            "prek",
+            "update",
+            "--repo-include-tag",
+            "https://example.com/repo",
+        ]) else {
+            panic!("expected invalid repo tag pattern to fail");
+        };
+
+        insta::assert_snapshot!(err.to_string(), @r"
+        error: invalid value 'https://example.com/repo' for '--repo-include-tag <REPO=PATTERN>': expected `<repo>=<pattern>`
+
+        For more information, try '--help'.
+        ");
+    }
+
+    #[test]
+    fn update_rejects_invalid_glob_during_cli_parsing() {
+        let Err(err) = Cli::try_parse_from(["prek", "update", "--include-tag", "["]) else {
+            panic!("expected invalid tag pattern to fail");
+        };
+
+        insta::assert_snapshot!(err.to_string(), @r"
+        error: invalid value '[' for '--include-tag <PATTERN>': error parsing glob '[': unclosed character class; missing ']'
+
+        For more information, try '--help'.
+        ");
+    }
 }
 
 #[cfg(test)]

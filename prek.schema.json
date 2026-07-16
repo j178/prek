@@ -158,6 +158,44 @@
         },
         "freeze": {
           "type": "boolean"
+        },
+        "include_tags": {
+          "$ref": "#/definitions/StringOrList"
+        },
+        "exclude_tags": {
+          "$ref": "#/definitions/StringOrList"
+        },
+        "repos": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/RepoTagFilterOptions"
+          }
+        }
+      }
+    },
+    "StringOrList": {
+      "description": "A configuration value that accepts either one string or a list of strings.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "RepoTagFilterOptions": {
+      "description": "Overrides tag selection for one repository during `prek update`.",
+      "type": "object",
+      "properties": {
+        "include_tags": {
+          "$ref": "#/definitions/StringOrList"
+        },
+        "exclude_tags": {
+          "$ref": "#/definitions/StringOrList"
         }
       }
     },
