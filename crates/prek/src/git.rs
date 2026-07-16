@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Command, Stdio};
 use std::str::Utf8Error;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 
 use anyhow::Result;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
@@ -37,6 +37,30 @@ pub(crate) enum Error {
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
+// Git hooks can expose `GIT_DIR` without `GIT_WORK_TREE`. Keep the derived
+// work tree scoped to prek's own git commands so user hooks do not inherit it.
+static GIT_WORK_TREE: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+pub(crate) fn init_git_work_tree() -> Result<()> {
+    if !EnvVars.is_set(EnvVars::GIT_DIR) || EnvVars.is_set(EnvVars::GIT_WORK_TREE) {
+        let _ = GIT_WORK_TREE.set(None);
+        return Ok(());
+    }
+
+    let cwd = std::env::current_dir()?;
+    debug!(
+        "Using {} `{}` for git commands",
+        EnvVars::GIT_WORK_TREE,
+        cwd.display()
+    );
+    let _ = GIT_WORK_TREE.set(Some(cwd));
+    Ok(())
+}
+
+fn git_work_tree() -> Option<&'static Path> {
+    GIT_WORK_TREE.get().and_then(Option::as_deref)
+}
+
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
     get_root()
         .map(|root| dunce::canonicalize(&root).unwrap_or(root))
@@ -51,7 +75,7 @@ pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| 
 /// and set `GIT_INDEX_FILE` to point to it.
 /// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
 /// <https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202>
-pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+static GIT_ENVS_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
         "GIT_EXEC_PATH",
         "GIT_SSH",
@@ -75,9 +99,39 @@ pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock:
         .collect()
 });
 
+pub(crate) trait GitCommandExt {
+    fn isolate_from_git_env(&mut self) -> &mut Self;
+}
+
+pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
+    if let Some(work_tree) = git_work_tree() {
+        cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
+    }
+    cmd
+}
+
+impl GitCommandExt for Cmd {
+    fn isolate_from_git_env(&mut self) -> &mut Self {
+        // `git_cmd()` adds this synthetic value as a command-local env. Commands
+        // that call `isolate_from_git_env()` are intentionally detached from the
+        // current repo, so remove it here; inherited `GIT_WORK_TREE` is handled
+        // by `GIT_ENVS_TO_REMOVE`.
+        if git_work_tree().is_some() {
+            self.env_remove(EnvVars::GIT_WORK_TREE);
+        }
+        for (key, _) in GIT_ENVS_TO_REMOVE.iter() {
+            self.env_remove(key);
+        }
+        self
+    }
+}
+
 pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?);
     cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"]);
+    if let Some(work_tree) = git_work_tree() {
+        cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
+    }
 
     Ok(cmd)
 }
@@ -414,7 +468,8 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 #[instrument(level = "trace")]
 pub(crate) fn get_root() -> Result<PathBuf, Error> {
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
-    let output = std::process::Command::new(git)
+    let mut cmd = Command::new(git);
+    let output = apply_git_work_tree(&mut cmd)
         .arg("rev-parse")
         .arg("--show-toplevel")
         .output()?;
@@ -439,7 +494,7 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("init")
         .arg("--template=")
         .arg(path)
-        .remove_git_envs()
+        .isolate_from_git_env()
         .check(true)
         .output()
         .await?;
@@ -450,7 +505,7 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("add")
         .arg("origin")
         .arg(url)
-        .remove_git_envs()
+        .isolate_from_git_env()
         .check(true)
         .output()
         .await?;
@@ -513,7 +568,7 @@ async fn shallow_clone(
         .arg("origin")
         .arg(rev)
         .arg("--depth=1")
-        .remove_git_envs()
+        .isolate_from_git_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -524,7 +579,7 @@ async fn shallow_clone(
         .current_dir(path)
         .arg("checkout")
         .arg("FETCH_HEAD")
-        .remove_git_envs()
+        .isolate_from_git_env()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
@@ -543,7 +598,7 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
         .arg("fetch")
         .arg("origin")
         .arg("--tags")
-        .remove_git_envs()
+        .isolate_from_git_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -554,7 +609,7 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
-        .remove_git_envs()
+        .isolate_from_git_env()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
@@ -586,7 +641,7 @@ async fn update_submodules(
     if shallow {
         cmd.arg("--depth=1");
     }
-    cmd.remove_git_envs()
+    cmd.isolate_from_git_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -606,7 +661,7 @@ async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
         .arg("ls-files")
         .arg("-z")
         .arg("-s")
-        .remove_git_envs()
+        .isolate_from_git_env()
         .env(EnvVars::LC_ALL, "C")
         .check(true)
         .output()
@@ -912,7 +967,8 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
     }
 
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
-    let output = std::process::Command::new(git)
+    let mut cmd = Command::new(git);
+    let output = apply_git_work_tree(&mut cmd)
         .current_dir(git_root)
         .arg("config")
         .arg("--file")

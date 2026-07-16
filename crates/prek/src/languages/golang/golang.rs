@@ -9,6 +9,7 @@ use prek_consts::prepend_paths;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::languages::golang::GoRequest;
@@ -88,7 +89,7 @@ impl LanguageBackend for Golang {
             go_install_cmd()
                 .arg("./...")
                 .current_dir(repo)
-                .remove_git_envs()
+                .isolate_from_git_env()
                 .check(true)
                 .output()
                 .await?;
@@ -98,7 +99,11 @@ impl LanguageBackend for Golang {
             if let Some(repo) = hook.repo_path() {
                 cmd.current_dir(repo);
             }
-            cmd.arg(dep).remove_git_envs().check(true).output().await?;
+            cmd.arg(dep)
+                .isolate_from_git_env()
+                .check(true)
+                .output()
+                .await?;
         }
 
         info.persist_env_path();

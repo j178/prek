@@ -15,6 +15,7 @@ use tracing::debug;
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::fs::is_executable;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::languages::rust::RustRequest;
@@ -275,7 +276,7 @@ async fn install_local_project(
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .remove_git_envs()
+            .isolate_from_git_env()
             .check(true)
             .output()
             .await?;
@@ -324,7 +325,7 @@ async fn install_local_project(
         cmd.current_dir(&manifest_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .remove_git_envs()
+            .isolate_from_git_env()
             .check(true)
             .output()
             .await?;
@@ -347,7 +348,7 @@ async fn install_local_project(
         cmd.current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .remove_git_envs()
+            .isolate_from_git_env()
             .check(true)
             .output()
             .await?;
@@ -380,7 +381,7 @@ async fn install_cli_dependency(
 
     cmd.env(EnvVars::PATH, new_path)
         .env(EnvVars::CARGO_HOME, cargo_home)
-        .remove_git_envs()
+        .isolate_from_git_env()
         .check(true)
         .output()
         .await?;

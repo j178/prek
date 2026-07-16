@@ -9,7 +9,6 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use tracing::debug;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Directive;
@@ -198,21 +197,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
     }
 
-    // If `GIT_DIR` is set, prek may be running from a git hook.
-    // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
-    // treats the current working directory as the working tree. If prek changes the current
-    // working directory (with `--cd`), git commands run by prek may behave unexpectedly.
-    //
-    // To make git behavior stable, we set `GIT_WORK_TREE` ourselves to where prek is run from.
-    // If `GIT_WORK_TREE` is already set, we leave it alone.
-    // If `GIT_DIR` is not set, we let git discover `.git` after an optional `cd`.
+    // Initialize before `--cd` so a synthetic work tree captures the directory where
+    // git launched the hook. Keep it in prek's own lazy state instead of the
+    // process environment, otherwise user hooks and their nested git commands
+    // would inherit a `GIT_WORK_TREE` that git itself did not expose.
     // See: https://www.spinics.net/lists/git/msg374197.html
     //      https://github.com/pre-commit/pre-commit/issues/2295
-    if EnvVars.is_set(EnvVars::GIT_DIR) && !EnvVars.is_set(EnvVars::GIT_WORK_TREE) {
-        let cwd = std::env::current_dir().context("Failed to get current directory")?;
-        debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
-        unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }
-    }
+    git::init_git_work_tree()?;
 
     if let Some(dir) = cli.globals.cd.as_ref() {
         debug!("Changing current directory to: `{}`", dir.display());
