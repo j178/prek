@@ -12,6 +12,7 @@ use crate::store::Store;
 
 mod check_illegal_windows_names;
 mod check_json5;
+mod pattern;
 
 #[derive(
     Debug,
@@ -41,6 +42,7 @@ pub(crate) enum BuiltinHooks {
     CheckVcsPermalinks,
     CheckXml,
     CheckYaml,
+    DenyPattern,
     DestroyedSymlinks,
     DetectPrivateKey,
     EndOfFileFixer,
@@ -50,6 +52,7 @@ pub(crate) enum BuiltinHooks {
     MixedLineEnding,
     NoCommitToBranch,
     PrettyFormatJson,
+    RequirePattern,
     TrailingWhitespace,
 }
 
@@ -76,10 +79,12 @@ impl BuiltinHooks {
             | Self::CheckVcsPermalinks
             | Self::CheckXml
             | Self::CheckYaml
+            | Self::DenyPattern
             | Self::DestroyedSymlinks
             | Self::DetectPrivateKey
             | Self::ForbidNewSubmodules
-            | Self::NoCommitToBranch => false,
+            | Self::NoCommitToBranch
+            | Self::RequirePattern => false,
         }
     }
 
@@ -117,6 +122,7 @@ impl BuiltinHooks {
             }
             Self::CheckXml => pre_commit_hooks::check_xml(hook, filenames).await,
             Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
+            Self::DenyPattern => pattern::deny_pattern(hook, filenames).await,
             Self::DestroyedSymlinks => pre_commit_hooks::destroyed_symlinks(hook, filenames).await,
             Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::EndOfFileFixer => pre_commit_hooks::fix_end_of_file(hook, filenames).await,
@@ -132,6 +138,7 @@ impl BuiltinHooks {
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
             Self::PrettyFormatJson => pre_commit_hooks::pretty_format_json(hook, filenames).await,
+            Self::RequirePattern => pattern::require_pattern(hook, filenames).await,
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
@@ -323,6 +330,20 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
+            BuiltinHooks::DenyPattern => BuiltinHook {
+                id: "deny-pattern".to_string(),
+                name: "deny patterns".to_string(),
+                entry: "deny-pattern".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "fails if any file contains a matching regular expression.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
+                    ..Default::default()
+                },
+            },
             BuiltinHooks::DestroyedSymlinks => BuiltinHook {
                 id: "destroyed-symlinks".to_string(),
                 name: "detect destroyed symlinks".to_string(),
@@ -439,6 +460,21 @@ impl BuiltinHook {
                     description: Some("checks that JSON files are pretty-formatted.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::RequirePattern => BuiltinHook {
+                id: "require-pattern".to_string(),
+                name: "require patterns".to_string(),
+                entry: "require-pattern".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "fails if any file does not contain a matching regular expression."
+                            .to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
             },

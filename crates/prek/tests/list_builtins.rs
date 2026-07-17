@@ -23,6 +23,7 @@ fn list_builtins_basic() {
     check-vcs-permalinks
     check-xml
     check-yaml
+    deny-pattern
     destroyed-symlinks
     detect-private-key
     end-of-file-fixer
@@ -32,6 +33,7 @@ fn list_builtins_basic() {
     mixed-line-ending
     no-commit-to-branch
     pretty-format-json
+    require-pattern
     trailing-whitespace
 
     ----- stderr -----
@@ -85,6 +87,9 @@ fn list_builtins_verbose() {
     check-yaml
       checks yaml files for parseable syntax.
 
+    deny-pattern
+      fails if any file contains a matching regular expression.
+
     destroyed-symlinks
       detects symlinks that were replaced with regular files whose contents are the original symlink target path.
 
@@ -110,6 +115,9 @@ fn list_builtins_verbose() {
 
     pretty-format-json
       checks that JSON files are pretty-formatted.
+
+    require-pattern
+      fails if any file does not contain a matching regular expression.
 
     trailing-whitespace
       trims trailing whitespace.
@@ -194,6 +202,11 @@ fn list_builtins_json() {
         "description": "checks yaml files for parseable syntax."
       },
       {
+        "id": "deny-pattern",
+        "name": "deny patterns",
+        "description": "fails if any file contains a matching regular expression."
+      },
+      {
         "id": "destroyed-symlinks",
         "name": "detect destroyed symlinks",
         "description": "detects symlinks that were replaced with regular files whose contents are the original symlink target path."
@@ -237,6 +250,11 @@ fn list_builtins_json() {
         "id": "pretty-format-json",
         "name": "pretty format json",
         "description": "checks that JSON files are pretty-formatted."
+      },
+      {
+        "id": "require-pattern",
+        "name": "require patterns",
+        "description": "fails if any file does not contain a matching regular expression."
       },
       {
         "id": "trailing-whitespace",

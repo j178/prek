@@ -1023,6 +1023,7 @@
         "check-vcs-permalinks",
         "check-xml",
         "check-yaml",
+        "deny-pattern",
         "destroyed-symlinks",
         "detect-private-key",
         "end-of-file-fixer",
@@ -1032,6 +1033,7 @@
         "mixed-line-ending",
         "no-commit-to-branch",
         "pretty-format-json",
+        "require-pattern",
         "trailing-whitespace"
       ]
     },

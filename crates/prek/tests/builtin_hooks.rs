@@ -78,6 +78,170 @@ fn builtin_hooks_unknown_hook() {
 }
 
 #[test]
+fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args:
+                  - --ignore-case
+                  - '\btodo\b'
+                  - 'remove'
+                  - '^#import\s+.+:\s+\*$'
+                files: '\.typ$'
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("policy.typ").write_str(indoc::indoc! {"
+        permitted content
+        TODO: remove this
+        #import package: *
+    "})?;
+    cwd.child("ignored.txt")
+        .write_str("TODO: ignored by files filter\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - exit code: 1
+
+      policy.typ:2:TODO: remove this
+      policy.typ:3:#import package: *
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn deny_pattern_hook_rejects_invalid_regex() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: ['*invalid-pattern*']
+    "});
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("content\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `deny-pattern`
+      caused by: Failed to compile regex patterns
+      caused by: error parsing pattern 0
+      caused by: regex parse error:
+        *invalid-pattern*
+        ^
+    error: repetition operator missing expression
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // `END` is listed first, but `BEGIN.*END` starts earlier in the file.
+    // Multiline matching should report the earliest match, not the first pattern.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [-m, 'END', 'BEGIN.*END']
+                files: '\.txt$'
+    "});
+
+    context
+        .work_dir()
+        .child("block.txt")
+        .write_str(indoc::indoc! {"
+        before
+        BEGIN
+        middle
+        END
+        after
+    "})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - exit code: 1
+
+      block.txt:2:BEGIN
+      middle
+      END
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn require_pattern_hook_reports_files_without_any_match() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: require-pattern
+                args: [--ignore-case, --multiline, 'begin.*end', 'copyright']
+                files: '\.txt$'
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("block.txt").write_str("BEGIN\nmiddle\nEND\n")?;
+    cwd.child("copyright.txt").write_str("Copyright 2026\n")?;
+    cwd.child("missing.txt").write_str("No required marker\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    require patterns.........................................................Failed
+    - hook id: require-pattern
+    - exit code: 1
+
+      missing.txt: no pattern matched
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn end_of_file_fixer_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
