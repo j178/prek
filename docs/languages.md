@@ -576,6 +576,10 @@ prek provides a Python-based grep implementation for file content matching. The 
 
 Regex matching uses Python’s `re` semantics for compatibility with pre-commit.
 
+!!! warning "Compatibility-only"
+
+    `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](builtin.md#deny-pattern) or [`require-pattern`](builtin.md#require-pattern) builtin.
+
 ### system
 
 `system` runs a system executable without a managed environment. The command is taken from `entry`, and filenames are appended unless `pass_filenames: false` is set. Dependencies must be installed by the user.

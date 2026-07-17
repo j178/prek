@@ -109,6 +109,8 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-vcs-permalinks`](#check-vcs-permalinks) (Check that VCS links are permalinks)
 - [`check-yaml`](#check-yaml) (Validate YAML files)
 - [`check-xml`](#check-xml) (Validate XML files)
+- [`deny-pattern`](#deny-pattern) (Reject configured regular expression matches)
+- [`require-pattern`](#require-pattern) (Require each file to match a configured regular expression)
 - [`mixed-line-ending`](#mixed-line-ending) (Normalize or check line endings)
 - [`check-symlinks`](#check-symlinks) (Check for broken symlinks)
 - [`destroyed-symlinks`](#destroyed-symlinks) (Detect destroyed symlinks)
@@ -389,6 +391,55 @@ Attempts to load all XML files to verify syntax.
 
 - Empty files are treated as invalid XML.
 - Fails if there is “junk after the document element” (multiple top-level roots).
+
+---
+
+#### `deny-pattern`
+
+Fails when any selected text file matches a configured regular expression.
+Patterns use the [Rust `regex` syntax](https://docs.rs/regex/latest/regex/#syntax).
+When multiple patterns are provided, matching any one of them is sufficient.
+
+**Supported arguments**
+
+- `PATTERN...` (required)
+    - Positional regular expressions to deny.
+    - Use `--` before a pattern that begins with `-`.
+- `-i`, `--ignore-case`
+    - Match all patterns case-insensitively.
+- `-m`, `--multiline`
+    - Search each file as a whole, with `^` and `$` matching line boundaries and `.` matching newlines.
+    - Reads each selected file into memory.
+
+By default, each matching line is reported as `path:line:contents`. A line matching more than one pattern is reported only once. With `--multiline`, the earliest match in each file is reported as `path:start-line:matched-block`.
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: deny-pattern
+        name: disallow wildcard imports
+        args: ['^\s*#import\s+.+:\s*\*']
+        files: \.typ$
+```
+
+---
+
+#### `require-pattern`
+
+Fails when any selected text file does not match at least one configured regular expression. This is a per-file requirement: every file must match, while different files may match different patterns.
+
+`require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](#deny-pattern). Files without a match are reported as `path: no pattern matched`.
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: require-pattern
+        name: require a copyright notice
+        args: [--ignore-case, copyright]
+        files: '\.(rs|py)$'
+```
 
 ---
 
