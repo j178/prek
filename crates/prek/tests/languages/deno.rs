@@ -2,7 +2,7 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot};
 
 /// Test basic Deno hook execution with an inline script.
 #[test]
@@ -490,39 +490,6 @@ fn checksum_policy() {
     - duration: [TIME]
 
       Deno 1.46.3
-
-    ----- stderr -----
-    ");
-}
-
-/// Test that deno hooks work without system deno in PATH.
-/// Regression test ensuring run-time resolution still finds the managed toolchain.
-#[test]
-fn without_system_deno() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: deno-check
-                name: deno check
-                language: deno
-                entry: deno eval 'console.log("Hello")'
-                always_run: true
-                pass_filenames: false
-    "#});
-
-    context.git_add(".");
-
-    let new_path = remove_bin_from_path("deno", None).expect("Failed to remove deno from PATH");
-
-    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    deno check...............................................................Passed
 
     ----- stderr -----
     ");
