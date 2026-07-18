@@ -1,12 +1,14 @@
 use std::cell::OnceCell;
+use std::ffi::OsStr;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags_from_path};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, Stage};
@@ -145,16 +147,12 @@ impl<'a> ProjectFile<'a> {
 
 #[derive(Default)]
 pub(crate) struct FileTagCache<'a> {
-    paths: Vec<&'a Path>,
+    paths: &'a [PathBuf],
     tags_by_file: Vec<OnceCell<Option<TagSet>>>,
 }
 
 impl<'a> FileTagCache<'a> {
-    pub(crate) fn from_paths<I>(paths: I) -> Self
-    where
-        I: IntoIterator<Item = &'a Path>,
-    {
-        let paths = paths.into_iter().collect::<Vec<_>>();
+    pub(crate) fn from_paths(paths: &'a [PathBuf]) -> Self {
         let tags_by_file = (0..paths.len()).map(|_| OnceCell::new()).collect();
         Self {
             paths,
@@ -165,7 +163,7 @@ impl<'a> FileTagCache<'a> {
     pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
         self.tags_by_file[file_idx]
             .get_or_init(|| {
-                let path = self.paths[file_idx];
+                let path = &self.paths[file_idx];
                 match tags_from_path(path) {
                     Ok(tags) => Some(tags),
                     Err(err) => {
@@ -183,61 +181,20 @@ pub(crate) struct ProjectFiles<'a> {
 }
 
 impl<'a> ProjectFiles<'a> {
-    /// Create project-owned files after applying the project's relative path and include/exclude patterns.
-    /// `filenames` are paths relative to the workspace root.
-    pub(crate) fn for_project<I>(
-        filenames: I,
-        project: &Project,
-        consumed_files: Option<&FxHashSet<&'a Path>>,
-        newly_consumed_files: Option<&mut FxHashSet<&'a Path>>,
-    ) -> Self
-    where
-        I: Iterator<Item = &'a PathBuf> + Send,
-    {
-        let relative_path = project.relative_path();
-        let files_capacity = if relative_path.as_os_str().is_empty() {
-            filenames.size_hint().0
-        } else {
-            0
-        };
-        let mut files = Vec::with_capacity(files_capacity);
-        Self::visit_for_project(
-            filenames,
-            project,
-            consumed_files,
-            newly_consumed_files,
-            |file| {
-                files.push(file);
-                ControlFlow::Continue(())
-            },
-        );
-
-        Self { files }
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            files: Vec::with_capacity(capacity),
+        }
     }
 
-    /// Mark files owned by this project without collecting or visiting them.
-    pub(crate) fn consume_for_project<I>(
-        filenames: I,
-        project: &Project,
-        consumed_files: Option<&FxHashSet<&'a Path>>,
-        newly_consumed_files: &mut FxHashSet<&'a Path>,
-    ) where
-        I: Iterator<Item = &'a PathBuf> + Send,
-    {
-        Self::visit_for_project(
-            filenames,
-            project,
-            consumed_files,
-            Some(newly_consumed_files),
-            |_| ControlFlow::Continue(()),
-        );
+    fn push(&mut self, file_idx: usize, hook_path: &'a Path) {
+        self.files.push(ProjectFile::new(file_idx, hook_path));
     }
 
     /// Visit project-owned files without collecting them.
     ///
-    /// This shares the same ownership, orphan-project, and project-level filtering rules as
-    /// `for_project`, but lets callers that only need a boolean result avoid allocating a
-    /// `Vec<ProjectFile>`. Return [`ControlFlow::Break`] from `visit` to stop calling the visitor.
+    /// This applies the same ownership, orphan-project, and project-level filtering rules as the
+    /// run file index. Return [`ControlFlow::Break`] from `visit` to stop calling the visitor.
     /// Orphan projects still finish marking owned files as consumed before returning.
     pub(crate) fn visit_for_project<I, F>(
         filenames: I,
@@ -309,6 +266,10 @@ impl<'a> ProjectFiles<'a> {
         self.files.len()
     }
 
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &ProjectFile<'a>> {
+        self.files.iter()
+    }
+
     /// Filter filenames by file patterns and tags for a specific hook.
     #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
     pub(crate) fn matching_filenames(
@@ -335,6 +296,127 @@ impl<'a> ProjectFiles<'a> {
             }
         }
         false
+    }
+}
+
+#[derive(Default)]
+struct ProjectPathNode<'a> {
+    project_idx: Option<usize>,
+    children: FxHashMap<&'a OsStr, ProjectPathNode<'a>>,
+}
+
+impl<'a> ProjectPathNode<'a> {
+    fn insert(&mut self, path: &'a Path, project_idx: usize) {
+        let mut node = self;
+        for component in path.components() {
+            node = node.children.entry(component.as_os_str()).or_default();
+        }
+        let previous = node.project_idx.replace(project_idx);
+        debug_assert!(previous.is_none());
+    }
+
+    fn matching_projects(&self, path: &Path, matches: &mut Vec<usize>) {
+        matches.clear();
+
+        let mut node = self;
+        if let Some(project_idx) = node.project_idx {
+            matches.push(project_idx);
+        }
+        if node.children.is_empty() {
+            return;
+        }
+        for component in path.components() {
+            let Some(child) = node.children.get(component.as_os_str()) else {
+                break;
+            };
+            node = child;
+            if let Some(project_idx) = node.project_idx {
+                matches.push(project_idx);
+            }
+            if node.children.is_empty() {
+                break;
+            }
+        }
+    }
+}
+
+/// Project-relative views of the run input, built once and shared by hook setup and execution.
+pub(crate) struct RunFileIndex<'a> {
+    projects: Vec<ProjectFiles<'a>>,
+    tag_cache: FileTagCache<'a>,
+}
+
+impl<'a> RunFileIndex<'a> {
+    pub(crate) fn new(input: &'a RunInput, projects: &[Arc<Project>]) -> Self {
+        let RunInput::Files(filenames) = input else {
+            return Self {
+                projects: Vec::new(),
+                tag_cache: FileTagCache::default(),
+            };
+        };
+
+        debug_assert!(
+            projects
+                .iter()
+                .enumerate()
+                .all(|(idx, project)| project.idx() == idx),
+            "workspace projects must be indexed in storage order"
+        );
+
+        let mut project_tree = ProjectPathNode::default();
+        let project_filters = projects
+            .iter()
+            .map(|project| {
+                project_tree.insert(project.relative_path(), project.idx());
+                FilenameFilter::new(
+                    project.config().files.as_ref(),
+                    project.config().exclude.as_ref(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut project_files = projects
+            .iter()
+            .map(|project| {
+                ProjectFiles::with_capacity(if project.is_root() {
+                    filenames.len()
+                } else {
+                    0
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut matching_projects = Vec::new();
+        for (file_idx, filename) in filenames.iter().enumerate() {
+            project_tree.matching_projects(filename, &mut matching_projects);
+
+            // The tree yields ancestors from root to leaf. Apply ownership from the most
+            // specific project upwards, stopping once an orphan project consumes the file.
+            for &project_idx in matching_projects.iter().rev() {
+                let project = &projects[project_idx];
+                let hook_path = filename
+                    .strip_prefix(project.relative_path())
+                    .expect("matched project path must be a file prefix");
+                if project_filters[project_idx].matches(hook_path) {
+                    project_files[project_idx].push(file_idx, hook_path);
+                }
+                if project.config().orphan.unwrap_or(false) {
+                    break;
+                }
+            }
+        }
+
+        Self {
+            projects: project_files,
+            tag_cache: FileTagCache::from_paths(filenames),
+        }
+    }
+
+    pub(crate) fn project_files(&self, project: &Project) -> &ProjectFiles<'a> {
+        &self.projects[project.idx()]
+    }
+
+    pub(crate) fn tag_cache(&self) -> &FileTagCache<'a> {
+        &self.tag_cache
     }
 }
 
@@ -624,5 +706,37 @@ mod tests {
         let filter = FilenameFilter::new(Some(&include), None);
 
         assert!(!filter.matches(path));
+    }
+
+    #[test]
+    fn project_path_tree_matches_nested_ancestors() {
+        let project_paths = [
+            PathBuf::new(),
+            PathBuf::from("src"),
+            PathBuf::from("src/backend"),
+        ];
+        let mut tree = ProjectPathNode::default();
+        for (idx, path) in project_paths.iter().enumerate() {
+            tree.insert(path, idx);
+        }
+
+        let mut matches = Vec::new();
+        tree.matching_projects(Path::new("src/backend/lib.rs"), &mut matches);
+
+        assert_eq!(matches, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn project_path_tree_respects_component_boundaries() {
+        let project_paths = [PathBuf::new(), PathBuf::from("src")];
+        let mut tree = ProjectPathNode::default();
+        for (idx, path) in project_paths.iter().enumerate() {
+            tree.insert(path, idx);
+        }
+
+        let mut matches = Vec::new();
+        tree.matching_projects(Path::new("src-tools/main.rs"), &mut matches);
+
+        assert_eq!(matches, vec![0]);
     }
 }

@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::ops::ControlFlow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -124,7 +124,7 @@ pub(crate) async fn check_hooks_apply(
 
     let mut code = 0;
     let mut output = Vec::new();
-    let tag_cache = FileTagCache::from_paths(input.iter().map(PathBuf::as_path));
+    let tag_cache = FileTagCache::from_paths(&input);
 
     for project in projects {
         let project_hooks = project
@@ -271,7 +271,7 @@ pub(crate) async fn check_useless_excludes(
 
     let mut code = 0;
     let mut output = Vec::new();
-    let tag_cache = FileTagCache::from_paths(input_workspace.iter().map(PathBuf::as_path));
+    let tag_cache = FileTagCache::from_paths(&input_workspace);
 
     for project in projects {
         let config = project.config();
