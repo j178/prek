@@ -1,6 +1,6 @@
 pub(crate) use filter::{
-    CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, RunInput,
-    collect_run_input,
+    CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, RunFileIndex,
+    RunInput, collect_run_input,
 };
 pub(crate) use install::{InstallCache, install_hooks};
 pub(crate) use reporter::{HookRunReporter, project_status_marker};
