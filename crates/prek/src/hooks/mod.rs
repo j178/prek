@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -15,6 +16,9 @@ use crate::store::Store;
 mod builtin_hooks;
 mod meta_hooks;
 mod pre_commit_hooks;
+
+// Erase hook implementation futures before awaiting them so dispatchers have one suspension point.
+type HookFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<(i32, Vec<u8>)>> + 'a>>;
 
 static NO_FAST_PATH: LazyLock<bool> = LazyLock::new(|| EnvVars.is_set(EnvVars::PREK_NO_FAST_PATH));
 

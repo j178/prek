@@ -5,6 +5,8 @@ use tracing::debug;
 
 use crate::hook::Hook;
 
+use super::HookFuture;
+
 mod check_added_large_files;
 mod check_case_conflict;
 mod check_executables_have_shebangs;
@@ -117,32 +119,33 @@ impl PreCommitHooks {
 
     pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
         debug!("Running hook `{}` in fast path", hook.id);
-        match self {
-            Self::CheckAddedLargeFiles => check_added_large_files(hook, filenames).await,
-            Self::CheckCaseConflict => check_case_conflict(hook, filenames).await,
+        let future: HookFuture<'_> = match self {
+            Self::CheckAddedLargeFiles => Box::pin(check_added_large_files(hook, filenames)),
+            Self::CheckCaseConflict => Box::pin(check_case_conflict(hook, filenames)),
             Self::CheckExecutablesHaveShebangs => {
-                check_executables_have_shebangs(hook, filenames).await
+                Box::pin(check_executables_have_shebangs(hook, filenames))
             }
             Self::CheckShebangScriptsAreExecutable => {
-                check_shebang_scripts_are_executable(hook, filenames).await
+                Box::pin(check_shebang_scripts_are_executable(hook, filenames))
             }
-            Self::CheckVcsPermalinks => check_vcs_permalinks(hook, filenames).await,
-            Self::FileContentsSorter => file_contents_sorter(hook, filenames).await,
-            Self::EndOfFileFixer => fix_end_of_file(hook, filenames).await,
-            Self::FixByteOrderMarker => fix_byte_order_marker(hook, filenames).await,
-            Self::ForbidNewSubmodules => forbid_new_submodules(hook, filenames).await,
-            Self::CheckJson => check_json(hook, filenames).await,
-            Self::CheckSymlinks => check_symlinks(hook, filenames).await,
-            Self::CheckMergeConflict => check_merge_conflict(hook, filenames).await,
-            Self::CheckToml => check_toml(hook, filenames).await,
-            Self::CheckYaml => check_yaml(hook, filenames).await,
-            Self::CheckXml => check_xml(hook, filenames).await,
-            Self::DestroyedSymlinks => destroyed_symlinks(hook, filenames).await,
-            Self::MixedLineEnding => mixed_line_ending(hook, filenames).await,
-            Self::DetectPrivateKey => detect_private_key(hook, filenames).await,
-            Self::NoCommitToBranch => no_commit_to_branch(hook).await,
-            Self::TrailingWhitespace => fix_trailing_whitespace(hook, filenames).await,
-        }
+            Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks(hook, filenames)),
+            Self::FileContentsSorter => Box::pin(file_contents_sorter(hook, filenames)),
+            Self::EndOfFileFixer => Box::pin(fix_end_of_file(hook, filenames)),
+            Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker(hook, filenames)),
+            Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules(hook, filenames)),
+            Self::CheckJson => Box::pin(check_json(hook, filenames)),
+            Self::CheckSymlinks => Box::pin(check_symlinks(hook, filenames)),
+            Self::CheckMergeConflict => Box::pin(check_merge_conflict(hook, filenames)),
+            Self::CheckToml => Box::pin(check_toml(hook, filenames)),
+            Self::CheckYaml => Box::pin(check_yaml(hook, filenames)),
+            Self::CheckXml => Box::pin(check_xml(hook, filenames)),
+            Self::DestroyedSymlinks => Box::pin(destroyed_symlinks(hook, filenames)),
+            Self::MixedLineEnding => Box::pin(mixed_line_ending(hook, filenames)),
+            Self::DetectPrivateKey => Box::pin(detect_private_key(hook, filenames)),
+            Self::NoCommitToBranch => Box::pin(no_commit_to_branch(hook)),
+            Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace(hook, filenames)),
+        };
+        future.await
     }
 }
 
