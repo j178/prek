@@ -9,6 +9,8 @@ mod common;
 const YAML_CONFIG: &str = r#"
 fail_fast: true
 default_install_hook_types: [pre-push]
+priorities:
+  checks: 1
 exclude: |
   (?x)^(
     .*/(snapshots)/.*|
@@ -36,7 +38,7 @@ repos:
         args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
         env:
           Hello: World
-        priority: 1
+        priority: checks
         additional_dependencies:
           - mdformat-mkdocs==5.1.4
           - mdformat-simple-breaks==0.1.0
@@ -85,6 +87,7 @@ fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
 
     fail_fast = true
     default_install_hook_types = ["pre-push"]
+    priorities = { checks = 1 }
     exclude = """
     (?x)^(
       .*/(snapshots)/.*|
@@ -121,7 +124,7 @@ fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
           "--align-semantic-breaks-in-lists"
         ],
         env = { Hello = "World" },
-        priority = 1,
+        priority = "checks",
         additional_dependencies = [
           "mdformat-mkdocs==5.1.4",
           "mdformat-simple-breaks==0.1.0"

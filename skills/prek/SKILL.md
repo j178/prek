@@ -106,11 +106,14 @@ Scheduling:
 
 - smaller `priority` values run earlier
 - hooks with the same `priority` can run concurrently
+- top-level `priorities` can declare configuration-local aliases for numeric priorities
+- hook `priority` accepts either a non-negative integer or a declared alias
 - `priority` is evaluated within one config file, not across workspace projects
 
 Useful `prek`-specific hook/config fields when editing TOML:
 
 - `env` for per-hook environment variables
+- `priorities` for readable, reusable priority aliases
 - `priority` for hook ordering and concurrency
 - `minimum_prek_version` for gating newer config features
 - `orphan = true` to isolate a nested workspace project from parent configs

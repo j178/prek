@@ -4,6 +4,7 @@ expression: result
 ---
 Config {
     update: None,
+    priorities: {},
     repos: [
         Remote(
             RemoteRepo {

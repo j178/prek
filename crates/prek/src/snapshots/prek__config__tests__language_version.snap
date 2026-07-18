@@ -5,6 +5,7 @@ expression: result
 Ok(
     Config {
         update: None,
+        priorities: {},
         repos: [
             Local(
                 LocalRepo {
