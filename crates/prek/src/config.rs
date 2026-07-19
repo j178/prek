@@ -1523,7 +1523,6 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
     );
 
     for (repo_idx, repo) in config.repos.iter().enumerate() {
-        let repo_prefix = format!("repos[{repo_idx}]");
         let (repo_unused_keys, hooks_options): (_, Box<dyn Iterator<Item = &HookOptions>>) =
             match repo {
                 Repo::Remote(remote) => (
@@ -1544,13 +1543,19 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
                 ),
             };
 
-        push_unused_paths(
-            &mut paths,
-            &repo_prefix,
-            repo_unused_keys.keys().map(String::as_str),
-        );
+        if !repo_unused_keys.is_empty() {
+            let repo_prefix = format!("repos[{repo_idx}]");
+            push_unused_paths(
+                &mut paths,
+                &repo_prefix,
+                repo_unused_keys.keys().map(String::as_str),
+            );
+        }
         for (hook_idx, options) in hooks_options.enumerate() {
-            let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
+            if options._unused_keys.is_empty() {
+                continue;
+            }
+            let hook_prefix = format!("repos[{repo_idx}].hooks[{hook_idx}]");
             push_unused_paths(
                 &mut paths,
                 &hook_prefix,
@@ -1612,27 +1617,20 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     warn_unused_paths(path, &unused_paths);
 
     // Check for mutable revs and warn the user.
-    let repos_has_mutable_rev = config
+    let mutable_revs = config
         .repos
         .iter()
-        .filter_map(|repo| {
-            if let Repo::Remote(repo) = repo {
-                let rev = &repo.rev;
-                // A rev is considered mutable if it doesn't contain a '.' (like a version)
-                // and is not a hexadecimal string (like a commit SHA).
-                if !rev.contains('.') && !looks_like_sha(rev) {
-                    return Some(repo);
-                }
+        .filter_map(|repo| match repo {
+            // A rev is considered mutable if it doesn't contain a '.' (like a version)
+            // and is not a hexadecimal string (like a commit SHA).
+            Repo::Remote(repo) if !repo.rev.contains('.') && !looks_like_sha(&repo.rev) => {
+                Some(repo)
             }
-            None
+            _ => None,
         })
-        .collect::<Vec<_>>();
-    if !repos_has_mutable_rev.is_empty() {
-        let msg = repos_has_mutable_rev
-            .iter()
-            .map(|repo| format!("{}: {}", repo.repo().cyan(), repo.rev.yellow()))
-            .join("\n");
-
+        .map(|repo| format!("{}: {}", repo.repo().cyan(), repo.rev.yellow()))
+        .join("\n");
+    if !mutable_revs.is_empty() {
         warn_user!(
             "{}",
             indoc::formatdoc! { r#"
@@ -1642,7 +1640,7 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
             See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
             hint: `prek update` often fixes this",
             "#,
-            msg
+            mutable_revs
             }
         );
     }
