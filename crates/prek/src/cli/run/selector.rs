@@ -239,6 +239,45 @@ impl Selectors {
         })
     }
 
+    /// Reconstruct selectors from the include/skip strings persisted in an already-installed
+    /// hook shim. Skips are always treated as `--skip` flags; env-var skips are never persisted
+    /// into a shim, so unlike `load`, this doesn't fall back to `PREK_SKIP`/`SKIP`.
+    pub(crate) fn from_persisted(
+        includes: &[String],
+        skips: &[String],
+        workspace_root: &Path,
+    ) -> Result<Selectors, Error> {
+        let includes = includes
+            .iter()
+            .map(|selector| {
+                parse_single_selector(
+                    selector,
+                    workspace_root,
+                    SelectorSource::CliArg,
+                    RealFileSystem,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let skips = skips
+            .iter()
+            .map(|selector| {
+                parse_single_selector(
+                    selector,
+                    workspace_root,
+                    SelectorSource::CliFlag("--skip"),
+                    RealFileSystem,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self {
+            includes,
+            skips,
+            usage: Arc::default(),
+        })
+    }
+
     pub(crate) fn includes(&self) -> &[Selector] {
         &self.includes
     }

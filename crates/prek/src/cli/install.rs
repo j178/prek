@@ -112,6 +112,7 @@ pub(crate) async fn install(
             selectors.as_ref(),
             refresh,
             &hook_types,
+            &hooks_path,
             printer,
         )?;
     }
@@ -240,8 +241,8 @@ fn shim_selects_hook(selectors: Option<&Selectors>, hook: &ConfiguredHook<'_>) -
             .any(|include| include.matches_configured_hook(hook))
 }
 
-/// Print a tip about configured hooks whose stages aren't covered by the hook types being
-/// installed, since their shims won't be installed and they won't run automatically.
+/// Print a tip about configured hooks whose stages aren't covered by any shim that will exist
+/// once this install finishes, since they won't run automatically.
 ///
 /// This is intentionally not a warning: skipping a stage (e.g. to only run a hook manually by
 /// id, or from CI) is a valid setup, not something that needs fixing.
@@ -251,6 +252,7 @@ fn tip_unmatched_hook_stages(
     selectors: Option<&Selectors>,
     refresh: bool,
     hook_types: &[HookType],
+    hooks_path: &Path,
     printer: Printer,
 ) -> Result<()> {
     let installed = Stages::from(
@@ -264,6 +266,25 @@ fn tip_unmatched_hook_stages(
     let Ok(root) = Workspace::find_root(config, &CWD) else {
         return Ok(());
     };
+
+    // Hook types outside `installed` still run automatically if a shim from an earlier `install`
+    // is already in place. That shim's own persisted selectors decide which hooks it runs, so a
+    // hook is only covered by it if those selectors would also select the hook.
+    let mut existing_shim_selectors: rustc_hash::FxHashMap<Stage, Selectors> =
+        rustc_hash::FxHashMap::default();
+    for &hook_type in HookType::value_variants() {
+        let stage = Stage::from(hook_type);
+        if installed.contains(stage) {
+            continue;
+        }
+        let hook_path = hooks_path.join(hook_type.as_ref());
+        if hook_path.try_exists().unwrap_or(false) && is_our_script(&hook_path).unwrap_or(false) {
+            if let Ok(persisted) = read_shim_selectors(&hook_path, &root) {
+                existing_shim_selectors.insert(stage, persisted);
+            }
+        }
+    }
+
     let Ok(workspace) =
         Workspace::discover(store, root, config.map(Path::to_path_buf), None, refresh)
     else {
@@ -282,6 +303,8 @@ fn tip_unmatched_hook_stages(
                     hook.options.alias.as_deref(),
                     hook.groups,
                 );
+                // If this run's selectors exclude the hook, it's deliberately left out of every
+                // shim being (re)installed now, so don't second-guess that with a tip.
                 if !shim_selects_hook(selectors, &configured) {
                     continue;
                 }
@@ -302,7 +325,21 @@ fn tip_unmatched_hook_stages(
                         .filter(|&stage| stage != Stage::Manual)
                         .collect::<Vec<_>>(),
                 );
-                if !required.is_empty() && !required.intersects(installed) {
+                if required.is_empty() {
+                    continue;
+                }
+
+                let covered = required.iter().any(|stage| {
+                    if installed.contains(stage) {
+                        // Already confirmed selected by the current run's selectors above.
+                        true
+                    } else if let Some(persisted) = existing_shim_selectors.get(&stage) {
+                        shim_selects_hook(Some(persisted), &configured)
+                    } else {
+                        false
+                    }
+                });
+                if !covered {
                     unmatched.push((hook.id, required));
                 }
             }
@@ -507,6 +544,40 @@ fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
         .any(|hash| content.contains(hash)))
+}
+
+/// Reconstruct the selectors persisted into an already-installed hook shim, by parsing the
+/// `[PREK_ARGS]` tokens back out of its exec line (see `HOOK_TMPL`).
+fn read_shim_selectors(hook_path: &Path, workspace_root: &Path) -> Result<Selectors> {
+    let content = fs_err::read_to_string(hook_path)?;
+    let tokens = shim_persisted_args(&content).unwrap_or_default();
+
+    let mut includes = Vec::new();
+    let mut skips = Vec::new();
+    for token in tokens {
+        if let Some(value) = token.strip_prefix("--skip=") {
+            skips.push(value.to_string());
+        } else if !token.starts_with("--") {
+            includes.push(token);
+        }
+    }
+
+    Ok(Selectors::from_persisted(
+        &includes,
+        &skips,
+        workspace_root,
+    )?)
+}
+
+/// Extract the `[PREK_ARGS]` tokens from a shim's `exec "$PREK" hook-impl ... -- "$@"` line.
+fn shim_persisted_args(content: &str) -> Option<Vec<String>> {
+    let line = content
+        .lines()
+        .find(|line| line.contains("--script-version"))?;
+    let (_, after_version) = line.split_once("--script-version")?;
+    let (_, rest) = after_version.trim_start().split_once(char::is_whitespace)?;
+    let (args, _) = rest.rsplit_once(" -- ")?;
+    shlex::split(args.trim())
 }
 
 pub(crate) async fn uninstall(
