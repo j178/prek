@@ -2259,3 +2259,106 @@ fn install_no_tip_when_foreign_hook_exists_for_other_stage() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn install_tips_when_existing_shim_scoped_to_other_project() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: root-push-hook
+            name: Root push hook
+            language: system
+            entry: echo root
+            stages: [pre-push]
+    "});
+
+    let nested = context.work_dir().child("nested");
+    nested.create_dir_all()?;
+    nested
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: nested-push-hook
+            name: Nested push hook
+            language: system
+            entry: echo nested
+            stages: [pre-push]
+    "})?;
+    context.git_add(".");
+
+    // Install the `pre-push` shim from within the nested project only, so it persists `--cd`
+    // and will only ever discover the nested project, never the rest of the workspace.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push").current_dir(nested.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `../.git/hooks/pre-push` for workspace `[TEMP_DIR]/nested`
+
+    hint: this hook installed for `[TEMP_DIR]/nested` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
+
+    ----- stderr -----
+    ");
+
+    // A later plain root install doesn't touch `pre-push`. That shim is scoped to `nested`, so it
+    // covers `nested-push-hook` but will never run `root-push-hook`, which must still be reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `root-push-hook` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn install_tips_when_existing_shim_scoped_to_explicit_config() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+    "});
+
+    // Install the `pre-push` shim with an explicit `--config`, so it persists `--config` and
+    // bypasses workspace discovery entirely; which project that corresponds to can't be
+    // recovered from the shim alone, so it must never be credited as coverage.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push").arg("--config").arg(".pre-commit-config.yaml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-push` with specified config `.pre-commit-config.yaml`
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}

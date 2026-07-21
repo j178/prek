@@ -268,9 +268,9 @@ fn tip_unmatched_hook_stages(
     };
 
     // Hook types outside `installed` still run automatically if a shim from an earlier `install`
-    // is already in place. That shim's own persisted selectors decide which hooks it runs, so a
-    // hook is only covered by it if those selectors would also select the hook.
-    let mut existing_shim_selectors: rustc_hash::FxHashMap<Stage, Selectors> =
+    // is already in place. That shim's own persisted selectors and `--cd`/`--config` scope decide
+    // which hooks it runs, so a hook is only covered by it if those would also select the hook.
+    let mut existing_shims: rustc_hash::FxHashMap<Stage, ExistingShim> =
         rustc_hash::FxHashMap::default();
     for &hook_type in HookType::value_variants() {
         let stage = Stage::from(hook_type);
@@ -279,8 +279,8 @@ fn tip_unmatched_hook_stages(
         }
         let hook_path = hooks_path.join(hook_type.as_ref());
         if hook_path.try_exists().unwrap_or(false) && is_our_script(&hook_path).unwrap_or(false) {
-            if let Ok(persisted) = read_shim_selectors(&hook_path, &root) {
-                existing_shim_selectors.insert(stage, persisted);
+            if let Ok(existing) = read_existing_shim(&hook_path, &root) {
+                existing_shims.insert(stage, existing);
             }
         }
     }
@@ -333,8 +333,9 @@ fn tip_unmatched_hook_stages(
                     if installed.contains(stage) {
                         // Already confirmed selected by the current run's selectors above.
                         true
-                    } else if let Some(persisted) = existing_shim_selectors.get(&stage) {
-                        shim_selects_hook(Some(persisted), &configured)
+                    } else if let Some(existing) = existing_shims.get(&stage) {
+                        existing.covers(project.relative_path())
+                            && shim_selects_hook(Some(&existing.selectors), &configured)
                     } else {
                         false
                     }
@@ -546,27 +547,62 @@ fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
         .any(|hash| content.contains(hash)))
 }
 
-/// Reconstruct the selectors persisted into an already-installed hook shim, by parsing the
+/// An already-installed hook shim, as reconstructed from the `[PREK_ARGS]` persisted into it.
+struct ExistingShim {
+    selectors: Selectors,
+    scope: ExistingShimScope,
+}
+
+/// Which project(s) an existing shim's `hook-impl` invocation will actually discover.
+enum ExistingShimScope {
+    /// No `--cd`/`--config` persisted: discovers the whole workspace, same as a root install.
+    Workspace,
+    /// `--cd=<path>` persisted: only discovers the project at that path (and any of its own
+    /// nested sub-projects), never the rest of the workspace.
+    Project(PathBuf),
+    /// `--config=<path>` persisted: loads that single config file directly, bypassing workspace
+    /// discovery entirely. Which project that corresponds to can't be reliably recovered here
+    /// (the path may be relative to a since-forgotten CWD), so such a shim is never counted as
+    /// coverage rather than risk crediting it for hooks it will never run.
+    Unknown,
+}
+
+impl ExistingShim {
+    /// Whether this shim's `hook-impl` invocation would even discover the given project.
+    fn covers(&self, hook_project_relative_path: &Path) -> bool {
+        match &self.scope {
+            ExistingShimScope::Workspace => true,
+            ExistingShimScope::Project(scope) => hook_project_relative_path.starts_with(scope),
+            ExistingShimScope::Unknown => false,
+        }
+    }
+}
+
+/// Reconstruct an already-installed hook shim's selectors and scope, by parsing the
 /// `[PREK_ARGS]` tokens back out of its exec line (see `HOOK_TMPL`).
-fn read_shim_selectors(hook_path: &Path, workspace_root: &Path) -> Result<Selectors> {
+fn read_existing_shim(hook_path: &Path, workspace_root: &Path) -> Result<ExistingShim> {
     let content = fs_err::read_to_string(hook_path)?;
     let tokens = shim_persisted_args(&content).unwrap_or_default();
 
     let mut includes = Vec::new();
     let mut skips = Vec::new();
+    let mut scope = ExistingShimScope::Workspace;
     for token in tokens {
         if let Some(value) = token.strip_prefix("--skip=") {
             skips.push(value.to_string());
+        } else if let Some(value) = token.strip_prefix("--cd=") {
+            scope = ExistingShimScope::Project(PathBuf::from(value));
+        } else if token.starts_with("--config=") {
+            scope = ExistingShimScope::Unknown;
         } else if !token.starts_with("--") {
             includes.push(token);
         }
     }
 
-    Ok(Selectors::from_persisted(
-        &includes,
-        &skips,
-        workspace_root,
-    )?)
+    Ok(ExistingShim {
+        selectors: Selectors::from_persisted(&includes, &skips, workspace_root)?,
+        scope,
+    })
 }
 
 /// Extract the `[PREK_ARGS]` tokens from a shim's `exec "$PREK" hook-impl ... -- "$@"` line.
