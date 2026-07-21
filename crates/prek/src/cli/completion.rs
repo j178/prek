@@ -1,276 +1,346 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::PathBuf;
 
 use clap::builder::StyledStr;
 use clap_complete::CompletionCandidate;
 
 use crate::config;
-use crate::fs::CWD;
+use crate::fs::{CWD, PathClean};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
-/// Provide completion candidates for `include` and `skip` selectors.
 pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
-    let Some(current_str) = current.to_str() else {
-        return vec![];
+    let Some(current) = current.to_str() else {
+        return Vec::new();
+    };
+    let Some(completer) = SelectorCompleter::load() else {
+        return Vec::new();
     };
 
-    let Ok(store) = Store::from_settings() else {
-        return vec![];
-    };
-    let Ok(workspace) = Workspace::find_root(None, &CWD)
-        .and_then(|root| Workspace::discover(&store, root, None, None, false))
-    else {
-        return vec![];
-    };
+    completer.complete(SelectorQuery::parse(current))
+}
 
-    let mut candidates: Vec<CompletionCandidate> = vec![];
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SelectorQuery<'a> {
+    Hook { fragment: &'a str },
+    Project { path: &'a str },
+    ProjectHook { project: &'a str, fragment: &'a str },
+    HookOrProject { fragment: &'a str },
+}
 
-    // Support optional `path:hook_prefix` form while typing.
-    let (path_part, hook_prefix_opt) = match current_str.split_once(':') {
-        Some((p, rest)) => (p, Some(rest)),
-        None => (current_str, None),
-    };
+impl<'a> SelectorQuery<'a> {
+    fn parse(current: &'a str) -> Self {
+        if let Some(fragment) = current.strip_prefix(':') {
+            return Self::Hook { fragment };
+        }
 
-    if path_part.contains('/') {
-        // Provide subdirectory matches relative to cwd for the path prefix
-        let path_obj = Path::new(path_part);
-        let (base_dir, shown_prefix, filter_prefix) = if path_part.ends_with('/') {
-            (CWD.join(path_obj), path_part.to_string(), String::new())
-        } else {
-            let parent = path_obj.parent().unwrap_or(Path::new(""));
-            let file = path_obj.file_name().and_then(OsStr::to_str).unwrap_or("");
-            let shown_prefix = if parent.as_os_str().is_empty() {
-                String::new()
-            } else {
-                format!("{}/", parent.display())
+        if let Some((project, fragment)) = current.split_once(':') {
+            return Self::ProjectHook { project, fragment };
+        }
+
+        if current == "." || current.contains('/') {
+            return Self::Project { path: current };
+        }
+
+        Self::HookOrProject { fragment: current }
+    }
+}
+
+struct SelectorCompleter {
+    workspace: Workspace,
+}
+
+impl SelectorCompleter {
+    fn load() -> Option<Self> {
+        let store = Store::from_settings().ok()?;
+        let root = Workspace::find_root(None, &CWD).ok()?;
+        let workspace = Workspace::discover(&store, root, None, None, false).ok()?;
+
+        Some(Self { workspace })
+    }
+
+    fn complete(&self, query: SelectorQuery<'_>) -> Vec<CompletionCandidate> {
+        match query {
+            SelectorQuery::Hook { fragment } => hook_candidates(
+                self.projects(),
+                fragment,
+                HookTarget::Workspace { explicit: true },
+            ),
+            SelectorQuery::Project { path } => self.project_candidates(path),
+            SelectorQuery::ProjectHook { project, fragment } => self
+                .find_project(project)
+                .map(|matched_project| {
+                    hook_candidates(
+                        std::iter::once(matched_project),
+                        fragment,
+                        HookTarget::Project(project),
+                    )
+                })
+                .unwrap_or_default(),
+            SelectorQuery::HookOrProject { fragment } => {
+                let mut candidates = self.project_candidates(fragment);
+                candidates.extend(hook_candidates(
+                    self.projects(),
+                    fragment,
+                    HookTarget::Workspace { explicit: false },
+                ));
+                candidates
+            }
+        }
+    }
+
+    fn projects(&self) -> impl Iterator<Item = &Project> {
+        self.workspace.all_projects().iter().map(AsRef::as_ref)
+    }
+
+    fn find_project(&self, selector: &str) -> Option<&Project> {
+        let path = CWD.join(selector).clean();
+        self.projects().find(|project| project.path() == path)
+    }
+
+    fn project_candidates(&self, current: &str) -> Vec<CompletionCandidate> {
+        if current == "." {
+            let mut candidates = vec![CompletionCandidate::new("./")];
+            if self.find_project(current).is_some() {
+                candidates.push(CompletionCandidate::new(".:"));
+            }
+            return candidates;
+        }
+
+        let query = ProjectPathQuery::parse(current);
+        let mut children = BTreeMap::<&OsStr, bool>::new();
+        let mut base_is_project = false;
+        let mut base_has_projects = false;
+
+        for project in self.projects() {
+            let Ok(relative) = project.path().strip_prefix(&query.base) else {
+                continue;
             };
-            (CWD.join(parent), shown_prefix, file.to_string())
-        };
-        let mut had_children = false;
-        if hook_prefix_opt.is_none() {
-            let mut child_dirs = list_subdirs(&base_dir, &shown_prefix, &filter_prefix, &workspace);
-            let mut child_colons =
-                list_direct_project_colons(&base_dir, &shown_prefix, &filter_prefix, &workspace);
-            had_children = !(child_dirs.is_empty() && child_colons.is_empty());
-            candidates.append(&mut child_dirs);
-            candidates.append(&mut child_colons);
+            let mut components = relative.components();
+            let Some(first) = components.next() else {
+                base_is_project = true;
+                continue;
+            };
+
+            base_has_projects = true;
+            let is_direct_project = components.next().is_none();
+            children
+                .entry(first.as_os_str())
+                .and_modify(|direct| *direct |= is_direct_project)
+                .or_insert(is_direct_project);
         }
 
-        // If the path refers to a project directory in the workspace and a colon is present,
-        // suggest `path:hook_id`. For pure path input (no colon), don't suggest hooks.
-        let project_dir_abs = if path_part.ends_with('/') {
-            CWD.join(path_part.trim_end_matches('/'))
+        let mut candidates = Vec::with_capacity(children.len() * 2 + 1);
+        for (name, is_project) in children {
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if !matches_fragment(name, query.fragment) {
+                continue;
+            }
+
+            let value = format!("{}{name}", query.shown_prefix);
+            candidates.push(CompletionCandidate::new(format!("{value}/")));
+            if is_project {
+                candidates.push(CompletionCandidate::new(format!("{value}:")));
+            }
+        }
+
+        if query.ends_with_slash && base_is_project && !base_has_projects {
+            candidates.push(CompletionCandidate::new(current));
+        }
+
+        candidates
+    }
+}
+
+struct ProjectPathQuery<'a> {
+    base: PathBuf,
+    shown_prefix: &'a str,
+    fragment: &'a str,
+    ends_with_slash: bool,
+}
+
+impl<'a> ProjectPathQuery<'a> {
+    fn parse(current: &'a str) -> Self {
+        let ends_with_slash = current.ends_with('/');
+        let (shown_prefix, fragment) = if ends_with_slash {
+            (current, "")
+        } else if let Some((parent, name)) = current.rsplit_once('/') {
+            (&current[..=parent.len()], name)
         } else {
-            CWD.join(path_obj)
+            ("", current)
         };
-        if hook_prefix_opt.is_some() {
-            if let Some(proj) = workspace
-                .projects()
-                .iter()
-                .find(|p| p.path() == project_dir_abs)
-            {
-                let hook_pairs = all_hooks(proj);
-                let path_prefix_display = if path_part.ends_with('/') {
-                    path_part.trim_end_matches('/')
-                } else {
-                    path_part
-                };
-                for (hid, name) in hook_pairs {
-                    if let Some(hpref) = hook_prefix_opt {
-                        if !hid.starts_with(hpref) && !hid.contains(hpref) {
-                            continue;
-                        }
-                    }
-                    let value = format!("{path_prefix_display}:{hid}");
-                    candidates
-                        .push(CompletionCandidate::new(value).help(name.map(StyledStr::from)));
-                }
-            }
-        } else if path_part.ends_with('/') {
-            // No colon and trailing slash: if this base dir is a leaf project (no child projects),
-            // suggest the directory itself (with trailing '/').
-            let is_project = workspace
-                .projects()
-                .iter()
-                .any(|p| p.path() == project_dir_abs);
-            if is_project && !had_children {
-                candidates.push(CompletionCandidate::new(path_part.to_string()));
-            }
-        }
 
-        return candidates;
-    }
-
-    // No slash: match subdirectories under cwd and hook ids across workspace
-    candidates.extend(list_subdirs(&CWD, "", current_str, &workspace));
-    // Also suggest immediate child project roots as `name:`
-    candidates.extend(list_direct_project_colons(
-        &CWD,
-        "",
-        current_str,
-        &workspace,
-    ));
-
-    // If the input ends with `:`, suggest hooks for that project
-    if let Some(hook_prefix) = hook_prefix_opt {
-        if !path_part.is_empty() {
-            let project_dir_abs = CWD.join(Path::new(path_part));
-            if let Some(proj) = workspace
-                .projects()
-                .iter()
-                .find(|p| p.path() == project_dir_abs)
-            {
-                for (hid, name) in all_hooks(proj) {
-                    if !hook_prefix.is_empty()
-                        && !hid.starts_with(hook_prefix)
-                        && !hid.contains(hook_prefix)
-                    {
-                        continue;
-                    }
-                    let value = format!("{path_part}:{hid}");
-                    candidates
-                        .push(CompletionCandidate::new(value).help(name.map(StyledStr::from)));
-                }
-            }
+        Self {
+            base: CWD.join(shown_prefix).clean(),
+            shown_prefix,
+            fragment,
+            ends_with_slash,
         }
     }
-
-    // Aggregate unique hooks and filter by id
-    let mut uniq: BTreeMap<String, Option<String>> = BTreeMap::new();
-    for proj in workspace.projects() {
-        for (id, name) in all_hooks(proj) {
-            if id.contains(current_str) || id.starts_with(current_str) {
-                uniq.entry(id).or_insert(name);
-            }
-        }
-    }
-    candidates.extend(
-        uniq.into_iter()
-            .map(|(id, name)| CompletionCandidate::new(id).help(name.map(StyledStr::from))),
-    );
-
-    candidates
 }
 
-fn all_hooks(proj: &Project) -> Vec<(String, Option<String>)> {
-    let mut out = Vec::new();
-    for repo in &proj.config().repos {
+fn hook_candidates<'a>(
+    projects: impl IntoIterator<Item = &'a Project>,
+    fragment: &str,
+    target: HookTarget<'_>,
+) -> Vec<CompletionCandidate> {
+    let mut hooks = BTreeMap::<&str, Option<&str>>::new();
+
+    for project in projects {
+        visit_hooks(project, |id, name| {
+            if !matches_fragment(id, fragment) {
+                return;
+            }
+
+            hooks
+                .entry(id)
+                .and_modify(|current_name| {
+                    if current_name.is_none() {
+                        *current_name = name;
+                    }
+                })
+                .or_insert(name);
+        });
+    }
+
+    hooks
+        .into_iter()
+        .map(|(id, name)| {
+            CompletionCandidate::new(target.render(id))
+                .help(name.map(|name| StyledStr::from(name.to_owned())))
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+enum HookTarget<'a> {
+    Workspace { explicit: bool },
+    Project(&'a str),
+}
+
+impl HookTarget<'_> {
+    fn render(self, id: &str) -> String {
+        match self {
+            Self::Workspace { explicit } => {
+                let explicit = explicit || hook_id_requires_explicit_selector(id);
+                let mut value = String::with_capacity(id.len() + usize::from(explicit));
+                if explicit {
+                    value.push(':');
+                }
+                value.push_str(id);
+                value
+            }
+            Self::Project(project) => {
+                let project = trim_selector_slash(project);
+                let mut value = String::with_capacity(project.len() + id.len() + 1);
+                value.push_str(project);
+                value.push(':');
+                value.push_str(id);
+                value
+            }
+        }
+    }
+}
+
+fn visit_hooks<'a>(project: &'a Project, mut visit: impl FnMut(&'a str, Option<&'a str>)) {
+    for repo in &project.config().repos {
         match repo {
-            config::Repo::Remote(cfg) => {
-                for h in &cfg.hooks {
-                    out.push((h.id.clone(), h.name.as_ref().map(ToString::to_string)));
+            config::Repo::Remote(repo) => {
+                for hook in &repo.hooks {
+                    visit(&hook.id, hook.name.as_deref());
                 }
             }
-            config::Repo::Local(cfg) => {
-                for h in &cfg.hooks {
-                    out.push((h.id.clone(), Some(h.name.clone())));
+            config::Repo::Local(repo) => {
+                for hook in &repo.hooks {
+                    visit(&hook.id, Some(&hook.name));
                 }
             }
-            config::Repo::Meta(cfg) => {
-                for h in &cfg.hooks {
-                    out.push((h.id.clone(), Some(h.name.clone())));
+            config::Repo::Meta(repo) => {
+                for hook in &repo.hooks {
+                    visit(&hook.id, Some(&hook.name));
                 }
             }
-            config::Repo::Builtin(cfg) => {
-                for h in &cfg.hooks {
-                    out.push((h.id.clone(), Some(h.name.clone())));
+            config::Repo::Builtin(repo) => {
+                for hook in &repo.hooks {
+                    visit(&hook.id, Some(&hook.name));
                 }
             }
         }
     }
-    out
 }
 
-// List subdirectories under base that contain projects (immediate or nested),
-// derived solely from workspace discovery; always end with '/'
-fn list_subdirs(
-    base: &Path,
-    shown_prefix: &str,
-    filter_prefix: &str,
-    workspace: &Workspace,
-) -> Vec<CompletionCandidate> {
-    let mut out = Vec::new();
-    let mut first_components: BTreeSet<String> = BTreeSet::new();
-    for proj in workspace.projects() {
-        let p = proj.path();
-        if let Ok(rel) = p.strip_prefix(base) {
-            if rel.as_os_str().is_empty() {
-                // Project is exactly at base; doesn't yield a child directory
-                continue;
-            }
-            if let Some(first) = rel.components().next() {
-                let name = first.as_os_str().to_string_lossy().into_owned();
-                first_components.insert(name);
-            }
-        }
-    }
-    for name in first_components {
-        if filter_prefix.is_empty()
-            || name.starts_with(filter_prefix)
-            || name.contains(filter_prefix)
-        {
-            let mut value = String::new();
-            value.push_str(shown_prefix);
-            value.push_str(&name);
-            if !value.ends_with('/') {
-                value.push('/');
-            }
-            out.push(CompletionCandidate::new(value));
-        }
-    }
-
-    out
+fn matches_fragment(value: &str, fragment: &str) -> bool {
+    value.contains(fragment)
 }
 
-// List immediate child directories under `base` that are themselves project roots,
-// suggesting them as `name:` (or `shown_prefix + name + :`)
-fn list_direct_project_colons(
-    base: &Path,
-    shown_prefix: &str,
-    filter_prefix: &str,
-    workspace: &Workspace,
-) -> Vec<CompletionCandidate> {
-    // Build a set of absolute project paths for quick lookup
-    let proj_paths: BTreeSet<_> = workspace
-        .projects()
-        .iter()
-        .map(|p| p.path().to_path_buf())
-        .collect();
+fn hook_id_requires_explicit_selector(id: &str) -> bool {
+    id == "." || id.starts_with('-') || id.contains(':') || id.contains('/')
+}
 
-    // Compute immediate child names that lead to at least one project (same logic as list_subdirs)
-    // then keep only those where `base/child` is itself a project root.
-    let mut names: BTreeSet<String> = BTreeSet::new();
-    for proj in workspace.projects() {
-        let p = proj.path();
-        if let Ok(rel) = p.strip_prefix(base) {
-            if rel.as_os_str().is_empty() {
-                continue;
-            }
-            if let Some(first) = rel.components().next() {
-                let name = first.as_os_str().to_string_lossy().into_owned();
-                // Only keep if this immediate child is a project root
-                let child_abs = base.join(&name);
-                if proj_paths.contains(&child_abs) {
-                    names.insert(name);
-                }
-            }
-        }
+fn trim_selector_slash(selector: &str) -> &str {
+    let trimmed = selector.trim_end_matches('/');
+    if trimmed.is_empty() && selector.starts_with('/') {
+        "/"
+    } else {
+        trimmed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SelectorQuery, hook_id_requires_explicit_selector};
+
+    #[test]
+    fn query_without_separator_completes_hooks_and_projects() {
+        assert_eq!(
+            SelectorQuery::parse("ruff"),
+            SelectorQuery::HookOrProject { fragment: "ruff" }
+        );
     }
 
-    let mut out = Vec::new();
-    for name in names {
-        if filter_prefix.is_empty()
-            || name.starts_with(filter_prefix)
-            || name.contains(filter_prefix)
-        {
-            let mut value = String::new();
-            value.push_str(shown_prefix);
-            value.push_str(&name);
-            value.push(':');
-            out.push(CompletionCandidate::new(value));
-        }
+    #[test]
+    fn query_with_slash_completes_projects() {
+        assert_eq!(
+            SelectorQuery::parse("apps/api"),
+            SelectorQuery::Project { path: "apps/api" }
+        );
     }
-    out
+
+    #[test]
+    fn query_with_project_and_colon_completes_project_hooks() {
+        assert_eq!(
+            SelectorQuery::parse("apps/api:ruff"),
+            SelectorQuery::ProjectHook {
+                project: "apps/api",
+                fragment: "ruff",
+            }
+        );
+    }
+
+    #[test]
+    fn query_with_leading_colon_completes_explicit_hook_ids() {
+        assert_eq!(
+            SelectorQuery::parse(":lint:ruff"),
+            SelectorQuery::Hook {
+                fragment: "lint:ruff"
+            }
+        );
+    }
+
+    #[test]
+    fn reserved_hook_ids_require_explicit_selectors() {
+        assert!(
+            ["lint:ruff", "lint/ruff", ".", "--help"]
+                .into_iter()
+                .all(hook_id_requires_explicit_selector)
+        );
+    }
+
+    #[test]
+    fn regular_hook_ids_use_minimal_selectors() {
+        assert!(!hook_id_requires_explicit_selector("ruff-check"));
+    }
 }
