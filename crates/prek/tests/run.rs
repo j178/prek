@@ -3049,8 +3049,11 @@ fn selectors_completion() -> Result<()> {
     let cwd = context.work_dir();
     context.init_project();
 
-    // Root project with one hook
-    write_pre_commit_config(cwd, &[("root-hook", "Root Hook")])?;
+    // Root project with regular and colon-containing hook ids
+    write_pre_commit_config(
+        cwd,
+        &[("root-hook", "Root Hook"), ("lint:ruff", "Ruff Lint")],
+    )?;
 
     // Nested project at app/ with one hook
     let app = cwd.join("app");
@@ -3084,6 +3087,7 @@ fn selectors_completion() -> Result<()> {
     app:
     app-hook	App Hook
     lib-hook	Lib Hook
+    :lint:ruff	Ruff Lint
     root-hook	Root Hook
     --skip	Skip the specified hooks or projects
     --all-files	Run on all files in the repo
@@ -3108,6 +3112,16 @@ fn selectors_completion() -> Result<()> {
     --verbose	Use verbose output
     --log-file	Write trace logs to the specified file. If not specified, trace logs will be written to `$PREK_HOME/prek.log`
     --version	Display the prek version
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ./
+    .:
 
     ----- stderr -----
     ");
@@ -3174,6 +3188,24 @@ fn selectors_completion() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     app/lib/
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(".:root"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:root-hook	Root Hook
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(":lint:"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    :lint:ruff	Ruff Lint
 
     ----- stderr -----
     ");
