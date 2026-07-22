@@ -16,7 +16,7 @@ pub(crate) async fn check_case_conflict(
     let work_dir = hook.work_dir();
 
     // Get all files in the repo.
-    let repo_files = git::ls_files(work_dir, Path::new(".")).await?;
+    let repo_files = git::ls_files(work_dir, [Path::new(".")]).await?;
     let mut repo_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for path in &repo_files {
         insert_path_and_parents(&mut repo_files_with_dirs, path);

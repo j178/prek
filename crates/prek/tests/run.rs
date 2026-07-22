@@ -1708,12 +1708,15 @@ fn global_path_options_expand_tilde() -> Result<()> {
         options: RunOptions {
             includes: [],
             skips: [],
-            all_files: false,
-            files: [],
-            directory: [],
-            from_ref: None,
-            to_ref: None,
-            last_commit: false,
+            file_selection: FileSelectionArgs {
+                all_files: false,
+                files: [],
+                glob: [],
+                directory: [],
+                from_ref: None,
+                to_ref: None,
+                last_commit: false,
+            },
             show_diff_on_failure: false,
             fail_fast: false,
             no_fail_fast: false,
@@ -2531,6 +2534,81 @@ fn run_multiple_files() -> Result<()> {
     Ok(())
 }
 
+/// Test `prek run --glob` and its interaction with other explicit file selectors.
+#[test]
+fn run_glob() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: glob
+                name: glob
+                language: system
+                entry: echo
+                verbose: true
+                types: [text]
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("root.rs").write_str("fn main() {}")?;
+    cwd.child("src/lib.rs").write_str("pub fn lib() {}")?;
+    cwd.child("src/lib.py").write_str("print('hello')")?;
+    cwd.child("src/nested/mod.rs")
+        .write_str("pub mod nested;")?;
+    cwd.child("docs/readme.md").write_str("# Readme")?;
+    context.git_add(".");
+    cwd.child("src/untracked.rs")
+        .write_str("pub fn untracked() {}")?;
+
+    cmd_snapshot!(context.filters(), context.run().arg("--glob").arg("src/**/*.rs"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    glob.....................................................................Passed
+    - hook id: glob
+    - duration: [TIME]
+
+      src/lib.rs src/nested/mod.rs
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("src").arg("--files").arg("../root.rs").arg("--directory").arg("../docs").arg("--glob").arg("**/*.rs"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    glob.....................................................................Passed
+    - hook id: glob
+    - duration: [TIME]
+
+      docs/readme.md root.rs src/nested/mod.rs src/lib.rs
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("src").arg("--glob").arg("../*.rs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    glob.................................................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--glob").arg("missing/**/*.rs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    glob.................................................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Test `prek run --files` with no files.
 #[test]
 fn run_no_files() {
@@ -3090,9 +3168,10 @@ fn selectors_completion() -> Result<()> {
     :lint:ruff	Ruff Lint
     root-hook	Root Hook
     --skip	Skip the specified hooks or projects
-    --all-files	Run on all files in the repo
-    --files	Specific filenames to run hooks on
-    --directory	Run hooks on all files in the specified directories
+    --all-files	Run hooks on all tracked files in the repository
+    --files	Run hooks on the specified file paths
+    --glob	Run hooks on tracked files matching the specified glob pattern
+    --directory	Run hooks on tracked files under the specified directory
     --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
     --to-ref	The destination ref in a `from_ref...to_ref` diff expression. Defaults to `HEAD` if `from_ref` is specified
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`

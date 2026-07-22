@@ -226,17 +226,24 @@ pub(crate) async fn get_changed_files(
     Ok(zsplit(&output.stdout)?)
 }
 
-#[instrument(level = "trace")]
-pub(crate) async fn ls_files(cwd: &Path, path: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd()?
-        .current_dir(cwd)
+#[instrument(level = "trace", skip(paths))]
+pub(crate) async fn ls_files<P>(
+    cwd: &Path,
+    paths: impl IntoIterator<Item = P>,
+) -> Result<Vec<PathBuf>, Error>
+where
+    P: AsRef<Path>,
+{
+    let mut cmd = git_cmd()?;
+    cmd.current_dir(cwd)
+        .arg("--literal-pathspecs")
         .arg("ls-files")
         .arg("-z")
-        .arg("--")
-        .arg(path)
-        .check(true)
-        .output()
-        .await?;
+        .arg("--");
+    for path in paths {
+        cmd.arg(path.as_ref());
+    }
+    let output = cmd.check(true).output().await?;
 
     Ok(zsplit(&output.stdout)?)
 }

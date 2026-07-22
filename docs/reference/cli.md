@@ -212,7 +212,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-run--all-files"><a href="#prek-run--all-files"><code>--all-files</code></a>, <code>-a</code></dt><dd><p>Run on all files in the repo</p>
+<dl class="cli-reference"><dt id="prek-run--all-files"><a href="#prek-run--all-files"><code>--all-files</code></a>, <code>-a</code></dt><dd><p>Run hooks on all tracked files in the repository</p>
 </dd><dt id="prek-run--cd"><a href="#prek-run--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
 </dd><dt id="prek-run--color"><a href="#prek-run--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
@@ -221,12 +221,15 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-run--config"><a href="#prek-run--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-run--directory"><a href="#prek-run--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on all files in the specified directories.</p>
-<p>You can specify multiple directories. It can be used in conjunction with <code>--files</code>.</p>
+</dd><dt id="prek-run--directory"><a href="#prek-run--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on tracked files under the specified directory.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. This option can be repeated and combined with <code>--files</code> and <code>--glob</code>.</p>
 </dd><dt id="prek-run--dry-run"><a href="#prek-run--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not run the hooks, but print the hooks that would have been run</p>
 </dd><dt id="prek-run--fail-fast"><a href="#prek-run--fail-fast"><code>--fail-fast</code></a></dt><dd><p>Stop running hooks after the first failure</p>
-</dd><dt id="prek-run--files"><a href="#prek-run--files"><code>--files</code></a> <i>files</i></dt><dd><p>Specific filenames to run hooks on</p>
+</dd><dt id="prek-run--files"><a href="#prek-run--files"><code>--files</code></a> <i>files</i></dt><dd><p>Run hooks on the specified file paths.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. They may be tracked or untracked. This option accepts multiple paths and can be combined with <code>--glob</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-run--from-ref"><a href="#prek-run--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
+</dd><dt id="prek-run--glob"><a href="#prek-run--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
+<p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-run--group"><a href="#prek-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to the specified group.</p>
 <p>Can be specified multiple times.</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -773,7 +776,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-try-repo--all-files"><a href="#prek-try-repo--all-files"><code>--all-files</code></a>, <code>-a</code></dt><dd><p>Run on all files in the repo</p>
+<dl class="cli-reference"><dt id="prek-try-repo--all-files"><a href="#prek-try-repo--all-files"><code>--all-files</code></a>, <code>-a</code></dt><dd><p>Run hooks on all tracked files in the repository</p>
 </dd><dt id="prek-try-repo--cd"><a href="#prek-try-repo--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
 </dd><dt id="prek-try-repo--color"><a href="#prek-try-repo--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
@@ -782,12 +785,15 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-try-repo--config"><a href="#prek-try-repo--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-try-repo--directory"><a href="#prek-try-repo--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on all files in the specified directories.</p>
-<p>You can specify multiple directories. It can be used in conjunction with <code>--files</code>.</p>
+</dd><dt id="prek-try-repo--directory"><a href="#prek-try-repo--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on tracked files under the specified directory.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. This option can be repeated and combined with <code>--files</code> and <code>--glob</code>.</p>
 </dd><dt id="prek-try-repo--dry-run"><a href="#prek-try-repo--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not run the hooks, but print the hooks that would have been run</p>
 </dd><dt id="prek-try-repo--fail-fast"><a href="#prek-try-repo--fail-fast"><code>--fail-fast</code></a></dt><dd><p>Stop running hooks after the first failure</p>
-</dd><dt id="prek-try-repo--files"><a href="#prek-try-repo--files"><code>--files</code></a> <i>files</i></dt><dd><p>Specific filenames to run hooks on</p>
+</dd><dt id="prek-try-repo--files"><a href="#prek-try-repo--files"><code>--files</code></a> <i>files</i></dt><dd><p>Run hooks on the specified file paths.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. They may be tracked or untracked. This option accepts multiple paths and can be combined with <code>--glob</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-try-repo--from-ref"><a href="#prek-try-repo--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
+</dd><dt id="prek-try-repo--glob"><a href="#prek-try-repo--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
+<p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-try-repo--last-commit"><a href="#prek-try-repo--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
 </dd><dt id="prek-try-repo--log-file"><a href="#prek-try-repo--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>

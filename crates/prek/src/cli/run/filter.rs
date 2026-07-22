@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use itertools::{Either, Itertools};
+use globset::Glob;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags_from_path};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
-use crate::config::{FilePattern, Stage};
+use crate::config::{FilePattern, GlobPatterns, Stage};
 use crate::fs::PathClean;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
@@ -420,21 +420,53 @@ impl<'a> RunFileIndex<'a> {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) enum FileSelection {
+    #[default]
+    Default,
+    All {
+        from_ref: Option<String>,
+        to_ref: Option<String>,
+    },
+    Diff {
+        from_ref: String,
+        to_ref: String,
+    },
+    Explicit {
+        files: Vec<String>,
+        globs: Vec<Glob>,
+        directories: Vec<String>,
+    },
+}
+
+impl FileSelection {
+    pub(crate) const fn requires_clean_worktree(&self) -> bool {
+        matches!(self, Self::Default | Self::Diff { .. })
+    }
+
+    pub(crate) fn refs(&self) -> (Option<&str>, Option<&str>) {
+        match self {
+            Self::Diff { from_ref, to_ref } => (Some(from_ref), Some(to_ref)),
+            Self::All { from_ref, to_ref } => (from_ref.as_deref(), to_ref.as_deref()),
+            Self::Default | Self::Explicit { .. } => (None, None),
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct CollectOptions {
     pub(crate) input_mode: RunInputMode,
-    pub(crate) from_ref: Option<String>,
-    pub(crate) to_ref: Option<String>,
-    pub(crate) all_files: bool,
-    pub(crate) files: Vec<String>,
-    pub(crate) directories: Vec<String>,
+    pub(crate) selection: FileSelection,
     pub(crate) commit_msg_filename: Option<String>,
 }
 
 impl CollectOptions {
     pub(crate) fn all_files() -> Self {
         Self {
-            all_files: true,
+            selection: FileSelection::All {
+                from_ref: None,
+                to_ref: None,
+            },
             ..Default::default()
         }
     }
@@ -488,11 +520,7 @@ impl RunInput {
 pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Result<RunInput> {
     let CollectOptions {
         input_mode,
-        from_ref,
-        to_ref,
-        all_files,
-        files,
-        directories,
+        selection,
         commit_msg_filename,
     } = opts;
 
@@ -516,16 +544,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         )
     })?;
 
-    let filenames = collect_files_from_args(
-        git_root,
-        root,
-        from_ref,
-        to_ref,
-        all_files,
-        files,
-        directories,
-    )
-    .await?;
+    let filenames = collect_files_for_selection(git_root, root, selection).await?;
 
     // Convert filenames to be relative to the workspace root.
     let mut filenames = filenames
@@ -552,89 +571,133 @@ fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::
     fs::relative_to(absolute, new_cwd)
 }
 
-/// Collect files to run hooks on.
-/// Returns a list of file paths relative to the git root.
-async fn collect_files_from_args(
+fn warn_missing_files(files: &[String]) {
+    match files {
+        [] => {}
+        [file] => {
+            warn_user!("This file does not exist and will be ignored: `{file}`");
+        }
+        files => {
+            warn_user!(
+                "These files do not exist and will be ignored: `{}`",
+                files.join(", ")
+            );
+        }
+    }
+}
+
+fn collect_file_arguments(files: Vec<String>, git_root: &Path) -> Result<FxHashSet<PathBuf>> {
+    let mut selected = FxHashSet::default();
+    let mut missing = Vec::new();
+
+    for file in files {
+        if fs_err::exists(&file)? {
+            selected.insert(fs::normalize_path(adjust_relative_path(&file, git_root)?));
+        } else {
+            missing.push(file);
+        }
+    }
+
+    warn_missing_files(&missing);
+    Ok(selected)
+}
+
+fn git_pathspec(path: &Path) -> &Path {
+    if path.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        path
+    }
+}
+
+async fn collect_explicit_files(
     git_root: &Path,
-    workspace_root: &Path,
-    from_ref: Option<String>,
-    to_ref: Option<String>,
-    all_files: bool,
     files: Vec<String>,
+    globs: Vec<Glob>,
     directories: Vec<String>,
 ) -> Result<Vec<PathBuf>> {
-    if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
-        let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
-        debug!(
-            "Files changed between {} and {}: {}",
-            from_ref,
-            to_ref,
-            files.len()
-        );
-        return Ok(files);
+    let mut selected = collect_file_arguments(files, git_root)?;
+    let patterns = GlobPatterns::from_globs(globs)?;
+    let cwd_relative = if patterns.is_empty() {
+        PathBuf::new()
+    } else {
+        fs::normalize_path(adjust_relative_path(".", git_root)?)
+    };
+    let directories = directories
+        .into_iter()
+        .map(|directory| adjust_relative_path(&directory, git_root).map(fs::normalize_path))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut pathspecs = directories
+        .iter()
+        .map(|directory| git_pathspec(directory))
+        .collect::<Vec<_>>();
+    if !patterns.is_empty() {
+        pathspecs.push(git_pathspec(&cwd_relative));
     }
 
-    if !files.is_empty() || !directories.is_empty() {
-        // By default, `pre-commit` add `types: [file]` for all hooks,
-        // so `pre-commit` will ignore user provided directories.
-        // We do the same here for compatibility.
-        // For `types: [directory]`, `pre-commit` passes the directory names to the hook directly.
-        let (exists, non_exists): (FxHashSet<_>, Vec<_>) =
-            files.into_iter().partition_map(|filename| {
-                if fs_err::exists(&filename).unwrap_or(false) {
-                    Either::Left(filename)
-                } else {
-                    Either::Right(filename)
-                }
-            });
-        if !non_exists.is_empty() {
-            if non_exists.len() == 1 {
-                warn_user!(
-                    "This file does not exist and will be ignored: `{}`",
-                    non_exists[0]
-                );
-            } else {
-                warn_user!(
-                    "These files do not exist and will be ignored: `{}`",
-                    non_exists.join(", ")
-                );
+    if !pathspecs.is_empty() {
+        for file in git::ls_files(git_root, pathspecs).await? {
+            let file = fs::normalize_path(file);
+            let matches_directory = directories
+                .iter()
+                .any(|directory| directory.as_os_str().is_empty() || file.starts_with(directory));
+            let matches_glob = !matches_directory
+                && !patterns.is_empty()
+                && file
+                    .strip_prefix(&cwd_relative)
+                    .is_ok_and(|relative| patterns.is_match(relative));
+
+            if matches_directory || matches_glob {
+                selected.insert(file);
             }
         }
+    }
 
-        let mut exists = exists
-            .into_iter()
-            .map(|filename| adjust_relative_path(&filename, git_root).map(fs::normalize_path))
-            .collect::<Result<FxHashSet<_>, _>>()?;
+    debug!("Files passed as arguments: {}", selected.len());
+    Ok(selected.into_iter().collect())
+}
 
-        for dir in directories {
-            let dir = adjust_relative_path(&dir, git_root)?;
-            let dir_files = git::ls_files(git_root, &dir).await?;
-            for file in dir_files {
-                let file = fs::normalize_path(file);
-                exists.insert(file);
-            }
+/// Collect files to run hooks on.
+/// Returns a list of file paths relative to the git root.
+async fn collect_files_for_selection(
+    git_root: &Path,
+    workspace_root: &Path,
+    selection: FileSelection,
+) -> Result<Vec<PathBuf>> {
+    match selection {
+        FileSelection::Diff { from_ref, to_ref } => {
+            let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
+            debug!(
+                "Files changed between {} and {}: {}",
+                from_ref,
+                to_ref,
+                files.len()
+            );
+            Ok(files)
         }
+        FileSelection::Explicit {
+            files,
+            globs,
+            directories,
+        } => collect_explicit_files(git_root, files, globs, directories).await,
+        FileSelection::All { .. } => {
+            let files = git::ls_files(git_root, [workspace_root]).await?;
+            debug!("All files in the workspace: {}", files.len());
+            Ok(files)
+        }
+        FileSelection::Default => {
+            if git::is_in_merge_conflict().await? {
+                let files = git::get_conflicted_files(workspace_root).await?;
+                debug!("Conflicted files: {}", files.len());
+                return Ok(files);
+            }
 
-        debug!("Files passed as arguments: {}", exists.len());
-        return Ok(exists.into_iter().collect());
+            let files = git::get_staged_files(workspace_root).await?;
+            debug!("Staged files: {}", files.len());
+            Ok(files)
+        }
     }
-
-    if all_files {
-        let files = git::ls_files(git_root, workspace_root).await?;
-        debug!("All files in the workspace: {}", files.len());
-        return Ok(files);
-    }
-
-    if git::is_in_merge_conflict().await? {
-        let files = git::get_conflicted_files(workspace_root).await?;
-        debug!("Conflicted files: {}", files.len());
-        return Ok(files);
-    }
-
-    let files = git::get_staged_files(workspace_root).await?;
-    debug!("Staged files: {}", files.len());
-
-    Ok(files)
 }
 
 pub(super) const fn stage_uses_message_file_input(stage: Stage) -> bool {
@@ -644,7 +707,20 @@ pub(super) const fn stage_uses_message_file_input(stage: Stage) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::FileSelectionArgs;
     use crate::config::GlobPatterns;
+
+    #[test]
+    fn all_file_selection_preserves_partial_refs() {
+        let selection: FileSelection = FileSelectionArgs {
+            all_files: true,
+            to_ref: Some("local-sha".to_string()),
+            ..Default::default()
+        }
+        .into();
+
+        assert_eq!(selection.refs(), (None, Some("local-sha")));
+    }
 
     fn glob_pattern(pattern: &str) -> FilePattern {
         FilePattern::Glob(GlobPatterns::new(vec![pattern.to_string()]).unwrap())

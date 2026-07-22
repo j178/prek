@@ -467,6 +467,112 @@ pub(crate) struct RunExtraArgs {
     pub(crate) rewrite_command: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct FileSelectionArgs {
+    /// Run hooks on all tracked files in the repository.
+    #[arg(short, long, conflicts_with_all = ["files", "glob", "from_ref", "to_ref"])]
+    pub(crate) all_files: bool,
+
+    /// Run hooks on the specified file paths.
+    ///
+    /// Paths are resolved relative to the current working directory after applying `--cd`. They may
+    /// be tracked or untracked. This option accepts multiple paths and can be combined with
+    /// `--glob` and `--directory`.
+    #[arg(
+        long,
+        conflicts_with_all = ["all_files", "from_ref", "to_ref"],
+        num_args = 0..,
+        value_hint = ValueHint::AnyPath)
+    ]
+    pub(crate) files: Vec<String>,
+
+    /// Run hooks on tracked files matching the specified glob pattern.
+    ///
+    /// Patterns are matched against paths relative to the current working directory after applying
+    /// `--cd`. Quote patterns to prevent shell expansion. This option can be repeated and combined
+    /// with `--files` and `--directory`.
+    #[arg(
+        long,
+        value_name = "PATTERN",
+        conflicts_with_all = ["all_files", "from_ref", "to_ref"]
+    )]
+    pub(crate) glob: Vec<Glob>,
+
+    /// Run hooks on tracked files under the specified directory.
+    ///
+    /// Paths are resolved relative to the current working directory after applying `--cd`. This
+    /// option can be repeated and combined with `--files` and `--glob`.
+    #[arg(
+        short,
+        long,
+        value_name = "DIR",
+        conflicts_with_all = ["all_files", "from_ref", "to_ref"],
+        value_hint = ValueHint::DirPath
+    )]
+    pub(crate) directory: Vec<String>,
+
+    /// The original ref in a `<from_ref>...<to_ref>` diff expression.
+    /// Files changed in this diff will be run through the hooks.
+    #[arg(short = 's', long, alias = "source", value_hint = ValueHint::Other)]
+    pub(crate) from_ref: Option<String>,
+
+    /// The destination ref in a `from_ref...to_ref` diff expression.
+    /// Defaults to `HEAD` if `from_ref` is specified.
+    #[arg(
+        short = 'o',
+        long,
+        alias = "origin",
+        requires = "from_ref",
+        value_hint = ValueHint::Other,
+        default_value_if("from_ref", ArgPredicate::IsPresent, "HEAD")
+    )]
+    pub(crate) to_ref: Option<String>,
+
+    /// Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`.
+    #[arg(long, conflicts_with_all = ["all_files", "files", "glob", "directory", "from_ref", "to_ref"])]
+    pub(crate) last_commit: bool,
+}
+
+impl From<FileSelectionArgs> for run::FileSelection {
+    fn from(args: FileSelectionArgs) -> Self {
+        let FileSelectionArgs {
+            all_files,
+            files,
+            glob,
+            directory,
+            from_ref,
+            to_ref,
+            last_commit,
+        } = args;
+
+        if last_commit {
+            return Self::Diff {
+                from_ref: "HEAD~1".to_string(),
+                to_ref: "HEAD".to_string(),
+            };
+        }
+
+        let (from_ref, to_ref) = match (from_ref, to_ref) {
+            (Some(from_ref), Some(to_ref)) => return Self::Diff { from_ref, to_ref },
+            refs => refs,
+        };
+
+        if !files.is_empty() || !glob.is_empty() || !directory.is_empty() {
+            return Self::Explicit {
+                files,
+                globs: glob,
+                directories: directory,
+            };
+        }
+
+        if all_files {
+            Self::All { from_ref, to_ref }
+        } else {
+            Self::Default
+        }
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunOptions {
@@ -502,50 +608,8 @@ pub(crate) struct RunOptions {
     #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
     pub(crate) skips: Vec<String>,
 
-    /// Run on all files in the repo.
-    #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
-    pub(crate) all_files: bool,
-    /// Specific filenames to run hooks on.
-    #[arg(
-        long,
-        conflicts_with_all = ["all_files", "from_ref", "to_ref"],
-        num_args = 0..,
-        value_hint = ValueHint::AnyPath)
-    ]
-    pub(crate) files: Vec<String>,
-
-    /// Run hooks on all files in the specified directories.
-    ///
-    /// You can specify multiple directories. It can be used in conjunction with `--files`.
-    #[arg(
-        short,
-        long,
-        value_name = "DIR",
-        conflicts_with_all = ["all_files", "from_ref", "to_ref"],
-        value_hint = ValueHint::DirPath
-    )]
-    pub(crate) directory: Vec<String>,
-
-    /// The original ref in a `<from_ref>...<to_ref>` diff expression.
-    /// Files changed in this diff will be run through the hooks.
-    #[arg(short = 's', long, alias = "source", value_hint = ValueHint::Other)]
-    pub(crate) from_ref: Option<String>,
-
-    /// The destination ref in a `from_ref...to_ref` diff expression.
-    /// Defaults to `HEAD` if `from_ref` is specified.
-    #[arg(
-        short = 'o',
-        long,
-        alias = "origin",
-        requires = "from_ref",
-        value_hint = ValueHint::Other,
-        default_value_if("from_ref", ArgPredicate::IsPresent, "HEAD")
-    )]
-    pub(crate) to_ref: Option<String>,
-
-    /// Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`.
-    #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
-    pub(crate) last_commit: bool,
+    #[command(flatten)]
+    pub(crate) file_selection: FileSelectionArgs,
 
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]
