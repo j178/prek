@@ -1,11 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
@@ -17,17 +17,20 @@ struct Args {
     ignore_case: bool,
     #[arg(long, conflicts_with = "ignore_case")]
     unique: bool,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 pub(crate) async fn file_contents_sorter(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
     let file_base = hook.project().relative_path();
 
-    run_concurrent_file_checks(
-        filenames.iter().copied(),
+    run_file_checks(
+        &args.filenames,
+        filenames,
         *INTERNAL_CONCURRENCY,
         |filename| sort_file(file_base, filename, args.ignore_case, args.unique),
     )

@@ -73,6 +73,45 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn fast_path_checks_filenames_from_entry_and_args() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-json
+                entry: check-json from-entry.json
+                args: [from-args.json]
+                files: ^selected\.json$
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("from-entry.json").write_str("invalid")?;
+    cwd.child("from-args.json").write_str("invalid")?;
+    cwd.child("selected.json").write_str("{}")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check json...............................................................Failed
+    - hook id: check-json
+    - exit code: 1
+
+      from-entry.json: Failed to json decode (expected value at line 1 column 1)
+      from-args.json: Failed to json decode (expected value at line 1 column 1)
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_preserves_stdout_stderr_order() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

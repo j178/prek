@@ -1,9 +1,12 @@
-use std::path::Path;
+use std::future::Future;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use clap::Parser;
 use tracing::debug;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 
 use super::HookFuture;
 
@@ -51,6 +54,67 @@ pub(crate) use forbid_new_submodules::forbid_new_submodules;
 pub(crate) use mixed_line_ending::mixed_line_ending;
 pub(crate) use no_commit_to_branch::no_commit_to_branch;
 pub(crate) use pretty_format_json::pretty_format_json;
+
+#[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+pub(crate) struct FilenamesArgs {
+    #[arg(value_name = "FILENAMES")]
+    pub(crate) filenames: Vec<PathBuf>,
+}
+
+pub(crate) fn parse_hook_args<T: Parser>(hook: &Hook) -> Result<T> {
+    Ok(T::try_parse_from(
+        hook.entry.expect_direct().split_with_args(&hook.args)?,
+    )?)
+}
+
+pub(crate) fn hook_filenames<'a>(
+    configured: &'a [PathBuf],
+    selected: &'a [&Path],
+) -> impl Iterator<Item = &'a Path> + 'a {
+    configured
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(selected.iter().copied())
+}
+
+pub(crate) async fn run_file_checks<'a, F, Fut>(
+    explicit: &'a [PathBuf],
+    selected: &'a [&Path],
+    concurrency: usize,
+    check: F,
+) -> Result<(i32, Vec<u8>)>
+where
+    F: Fn(&'a Path) -> Fut,
+    Fut: Future<Output = Result<(i32, Vec<u8>)>>,
+{
+    // Keep the common case on the existing concurrent path without an extra accumulator.
+    if explicit.is_empty() {
+        return run_concurrent_file_checks(selected.iter().copied(), concurrency, check).await;
+    }
+
+    // Filenames from `entry` or `args` may repeat or overlap with `selected`, so finish
+    // them serially in CLI order before starting the selected batch.
+    let mut code = 0;
+    let mut output = Vec::new();
+    for filename in explicit {
+        let (file_code, file_output) = check(filename).await?;
+        code |= file_code;
+        output.extend(file_output);
+    }
+    if selected.is_empty() {
+        return Ok((code, output));
+    }
+
+    // The explicit batch is complete, so selected filenames retain their normal concurrency.
+    let (selected_code, selected_output) =
+        run_concurrent_file_checks(selected.iter().copied(), concurrency, check).await?;
+    code |= selected_code;
+    output.extend(selected_output);
+    Ok((code, output))
+}
 
 /// Hooks from `https://github.com/pre-commit/pre-commit-hooks`.
 #[derive(strum::EnumString)]
@@ -152,4 +216,43 @@ impl PreCommitHooks {
 // TODO: compare rev
 pub(crate) fn is_pre_commit_hooks(url: &str) -> bool {
     url == "https://github.com/pre-commit/pre-commit-hooks"
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn explicit_filenames_run_serially_before_selected_filenames() {
+        let explicit = vec![PathBuf::from("shared"), PathBuf::from("shared")];
+        let selected = [Path::new("shared"), Path::new("selected")];
+        let events = Rc::new(RefCell::new(Vec::new()));
+
+        run_file_checks(&explicit, &selected, 2, |path| {
+            let events = Rc::clone(&events);
+            async move {
+                events.borrow_mut().push(format!("start {path:?}"));
+                tokio::task::yield_now().await;
+                events.borrow_mut().push(format!("end {path:?}"));
+                Ok((0, Vec::new()))
+            }
+        })
+        .await
+        .unwrap();
+
+        let events = events.borrow();
+        assert_eq!(events.len(), 8);
+        assert_eq!(
+            &events[..4],
+            [
+                "start \"shared\"",
+                "end \"shared\"",
+                "start \"shared\"",
+                "end \"shared\"",
+            ]
+        );
+    }
 }

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
@@ -10,7 +10,7 @@ use serde_json::ser::{Formatter, PrettyFormatter};
 use similar::TextDiff;
 
 use crate::hook::Hook;
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser, Debug)]
@@ -32,6 +32,8 @@ struct Args {
 
     #[arg(long, value_delimiter = ',')]
     top_keys: Vec<String>,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 struct PreparedArgs {
@@ -69,11 +71,12 @@ impl From<&Args> for PreparedArgs {
 }
 
 pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
     let prepared = PreparedArgs::from(&args);
 
-    run_concurrent_file_checks(
-        filenames.iter().copied(),
+    run_file_checks(
+        &args.filenames,
+        filenames,
         *INTERNAL_CONCURRENCY,
         |filename| check_file(hook.project().relative_path(), filename, &prepared),
     )
@@ -708,6 +711,7 @@ mod tests {
                 "version".to_string(),
                 "name".to_string(),
             ],
+            filenames: Vec::new(),
         };
         let prepared = PreparedArgs::from(&args);
 

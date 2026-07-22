@@ -8,6 +8,7 @@ use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
+use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 use rustc_hash::FxHashSet;
@@ -16,6 +17,8 @@ pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
+    let args: FilenamesArgs = parse_hook_args(hook)?;
+    let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     if filenames.is_empty() {
         return Ok((0, Vec::new()));
     }
@@ -34,10 +37,10 @@ pub(crate) async fn check_executables_have_shebangs(
     let (code, output) = if tracks_executable_bit {
         // core.fileMode=true means the platform honors the executable bit, so trust the FS metadata.
         // The `executables-have-shebangs` hook already restricts inputs to executable text files (`types: [text, executable]`).
-        os_check_shebangs(file_base, filenames).await?
+        os_check_shebangs(file_base, &filenames).await?
     } else {
         // If on win32 use git to check executable bit
-        git_check_shebangs(file_base, filenames).await?
+        git_check_shebangs(file_base, &filenames).await?
     };
 
     Ok((code, output))

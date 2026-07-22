@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,6 +9,7 @@ use memchr::memmem;
 use regex::bytes::{Match, Regex};
 
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -19,6 +20,8 @@ use crate::run::INTERNAL_CONCURRENCY;
 struct Args {
     #[arg(long = "additional-github-domain")]
     additional_github_domains: Vec<String>,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -82,14 +85,14 @@ pub(crate) async fn check_vcs_permalinks(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
     let matcher = Arc::new(GithubNonPermalinkMatcher::new(
         args.additional_github_domains,
     ));
 
     let file_base = hook.project().relative_path();
     run_concurrent_file_checks(
-        filenames.iter().copied(),
+        hook_filenames(&args.filenames, filenames),
         *INTERNAL_CONCURRENCY,
         |filename| check_file(file_base, filename, &matcher),
     )
