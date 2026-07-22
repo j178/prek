@@ -34,6 +34,7 @@ fn list_builtins_basic() {
     no-commit-to-branch
     pretty-format-json
     require-pattern
+    requirements-txt-fixer
     trailing-whitespace
 
     ----- stderr -----
@@ -119,6 +120,9 @@ fn list_builtins_verbose() {
 
     require-pattern
       fails if any file does not contain a matching regular expression.
+
+    requirements-txt-fixer
+      sorts entries in requirements.txt.
 
     trailing-whitespace
       trims trailing whitespace.
@@ -256,6 +260,11 @@ fn list_builtins_json() {
         "id": "require-pattern",
         "name": "require patterns",
         "description": "fails if any file does not contain a matching regular expression."
+      },
+      {
+        "id": "requirements-txt-fixer",
+        "name": "fix requirements.txt",
+        "description": "sorts entries in requirements.txt."
       },
       {
         "id": "trailing-whitespace",

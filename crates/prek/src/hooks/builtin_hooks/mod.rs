@@ -55,6 +55,7 @@ pub(crate) enum BuiltinHooks {
     NoCommitToBranch,
     PrettyFormatJson,
     RequirePattern,
+    RequirementsTxtFixer,
     TrailingWhitespace,
 }
 
@@ -66,6 +67,7 @@ impl BuiltinHooks {
             | Self::FixByteOrderMarker
             | Self::MixedLineEnding
             | Self::PrettyFormatJson
+            | Self::RequirementsTxtFixer
             | Self::TrailingWhitespace => true,
 
             Self::CheckAddedLargeFiles
@@ -149,6 +151,9 @@ impl BuiltinHooks {
                 Box::pin(pre_commit_hooks::pretty_format_json(hook, filenames))
             }
             Self::RequirePattern => Box::pin(pattern::require_pattern(hook, filenames)),
+            Self::RequirementsTxtFixer => {
+                Box::pin(pre_commit_hooks::requirements_txt_fixer(hook, filenames))
+            }
             Self::TrailingWhitespace => {
                 Box::pin(pre_commit_hooks::fix_trailing_whitespace(hook, filenames))
             }
@@ -489,6 +494,21 @@ impl BuiltinHook {
                             .to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::RequirementsTxtFixer => BuiltinHook {
+                id: "requirements-txt-fixer".to_string(),
+                name: "fix requirements.txt".to_string(),
+                entry: "requirements-txt-fixer".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some("sorts entries in requirements.txt.".to_string()),
+                    files: Some(
+                        FilePattern::regex(r"(requirements|constraints).*\.txt$")
+                            .expect("builtin files regex must be valid"),
+                    ),
                     ..Default::default()
                 },
             },
