@@ -113,8 +113,9 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </li>
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
-</dd><dt id="prek-install--verbose"><a href="#prek-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-install--version"><a href="#prek-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-install--verbose"><a href="#prek-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-install--version"><a href="#prek-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek prepare-hooks
@@ -178,8 +179,9 @@ prek prepare-hooks [OPTIONS] [HOOK|PROJECT]...
 </li>
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
-</dd><dt id="prek-prepare-hooks--verbose"><a href="#prek-prepare-hooks--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-prepare-hooks--version"><a href="#prek-prepare-hooks--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-prepare-hooks--verbose"><a href="#prek-prepare-hooks--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-prepare-hooks--version"><a href="#prek-prepare-hooks--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek run
@@ -273,8 +275,9 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <li><code>pre-rebase</code></li>
 <li><code>prepare-commit-msg</code></li>
 </ul></dd><dt id="prek-run--to-ref"><a href="#prek-run--to-ref"><code>--to-ref</code></a>, <code>--origin</code>, <code>-o</code> <i>to-ref</i></dt><dd><p>The destination ref in a <code>from_ref...to_ref</code> diff expression. Defaults to <code>HEAD</code> if <code>from_ref</code> is specified</p>
-</dd><dt id="prek-run--verbose"><a href="#prek-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-run--version"><a href="#prek-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-run--verbose"><a href="#prek-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-run--version"><a href="#prek-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek list
@@ -386,8 +389,9 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 </li>
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
-</dd><dt id="prek-list--verbose"><a href="#prek-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-list--version"><a href="#prek-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-list--verbose"><a href="#prek-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-list--version"><a href="#prek-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek uninstall
@@ -436,8 +440,9 @@ prek uninstall [OPTIONS]
 </dd><dt id="prek-uninstall--quiet"><a href="#prek-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-uninstall--refresh"><a href="#prek-uninstall--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-uninstall--verbose"><a href="#prek-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-uninstall--version"><a href="#prek-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-uninstall--verbose"><a href="#prek-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-uninstall--version"><a href="#prek-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek validate-config
@@ -472,8 +477,9 @@ prek validate-config [OPTIONS] [CONFIG]...
 </dd><dt id="prek-validate-config--quiet"><a href="#prek-validate-config--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-validate-config--refresh"><a href="#prek-validate-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-validate-config--verbose"><a href="#prek-validate-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-validate-config--version"><a href="#prek-validate-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-validate-config--verbose"><a href="#prek-validate-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-validate-config--version"><a href="#prek-validate-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek validate-manifest
@@ -508,8 +514,9 @@ prek validate-manifest [OPTIONS] [MANIFEST]...
 </dd><dt id="prek-validate-manifest--quiet"><a href="#prek-validate-manifest--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-validate-manifest--refresh"><a href="#prek-validate-manifest--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-validate-manifest--verbose"><a href="#prek-validate-manifest--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-validate-manifest--version"><a href="#prek-validate-manifest--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-validate-manifest--verbose"><a href="#prek-validate-manifest--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-validate-manifest--version"><a href="#prek-validate-manifest--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek sample-config
@@ -546,8 +553,9 @@ prek sample-config [OPTIONS]
 </dd><dt id="prek-sample-config--quiet"><a href="#prek-sample-config--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-sample-config--refresh"><a href="#prek-sample-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-sample-config--verbose"><a href="#prek-sample-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-sample-config--version"><a href="#prek-sample-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-sample-config--verbose"><a href="#prek-sample-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-sample-config--version"><a href="#prek-sample-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek update
@@ -597,8 +605,9 @@ prek update [OPTIONS]
 </dd><dt id="prek-update--repo-include-tag"><a href="#prek-update--repo-include-tag"><code>--repo-include-tag</code></a> <i>repo=pattern</i></dt><dd><p>Only consider tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times. Overrides the effective include filters for the named repository.</p>
 <p>When set for a repository, this overrides any global <code>--include-tag</code> filters for that repository.</p>
 <p>For example, use <code>--repo-include-tag https://github.com/example/repo=v*</code> to only consider version tags for one repository.</p>
-</dd><dt id="prek-update--verbose"><a href="#prek-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-update--version"><a href="#prek-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-update--verbose"><a href="#prek-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-update--version"><a href="#prek-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek cache
@@ -646,8 +655,9 @@ prek cache dir [OPTIONS]
 </dd><dt id="prek-cache-dir--quiet"><a href="#prek-cache-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-dir--refresh"><a href="#prek-cache-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-cache-dir--verbose"><a href="#prek-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-cache-dir--version"><a href="#prek-cache-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-cache-dir--verbose"><a href="#prek-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-cache-dir--version"><a href="#prek-cache-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek cache gc
@@ -678,8 +688,9 @@ prek cache gc [OPTIONS]
 </dd><dt id="prek-cache-gc--quiet"><a href="#prek-cache-gc--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-gc--refresh"><a href="#prek-cache-gc--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-cache-gc--verbose"><a href="#prek-cache-gc--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-cache-gc--version"><a href="#prek-cache-gc--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-cache-gc--verbose"><a href="#prek-cache-gc--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-cache-gc--version"><a href="#prek-cache-gc--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek cache clean
@@ -709,8 +720,9 @@ prek cache clean [OPTIONS]
 </dd><dt id="prek-cache-clean--quiet"><a href="#prek-cache-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-clean--refresh"><a href="#prek-cache-clean--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-cache-clean--verbose"><a href="#prek-cache-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-cache-clean--version"><a href="#prek-cache-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-cache-clean--verbose"><a href="#prek-cache-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-cache-clean--version"><a href="#prek-cache-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek cache size
@@ -741,8 +753,9 @@ prek cache size [OPTIONS]
 </dd><dt id="prek-cache-size--quiet"><a href="#prek-cache-size--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-size--refresh"><a href="#prek-cache-size--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-cache-size--verbose"><a href="#prek-cache-size--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-cache-size--version"><a href="#prek-cache-size--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-cache-size--verbose"><a href="#prek-cache-size--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-cache-size--version"><a href="#prek-cache-size--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek try-repo
@@ -834,8 +847,9 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 <li><code>pre-rebase</code></li>
 <li><code>prepare-commit-msg</code></li>
 </ul></dd><dt id="prek-try-repo--to-ref"><a href="#prek-try-repo--to-ref"><code>--to-ref</code></a>, <code>--origin</code>, <code>-o</code> <i>to-ref</i></dt><dd><p>The destination ref in a <code>from_ref...to_ref</code> diff expression. Defaults to <code>HEAD</code> if <code>from_ref</code> is specified</p>
-</dd><dt id="prek-try-repo--verbose"><a href="#prek-try-repo--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-try-repo--version"><a href="#prek-try-repo--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-try-repo--verbose"><a href="#prek-try-repo--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-try-repo--version"><a href="#prek-try-repo--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek util
@@ -893,8 +907,9 @@ prek util identify [OPTIONS] [PATH]...
 </ul></dd><dt id="prek-util-identify--quiet"><a href="#prek-util-identify--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-identify--refresh"><a href="#prek-util-identify--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-util-identify--verbose"><a href="#prek-util-identify--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-util-identify--version"><a href="#prek-util-identify--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-util-identify--verbose"><a href="#prek-util-identify--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-util-identify--version"><a href="#prek-util-identify--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek util list-builtins
@@ -929,8 +944,9 @@ prek util list-builtins [OPTIONS]
 </ul></dd><dt id="prek-util-list-builtins--quiet"><a href="#prek-util-list-builtins--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-list-builtins--refresh"><a href="#prek-util-list-builtins--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-util-list-builtins--verbose"><a href="#prek-util-list-builtins--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-util-list-builtins--version"><a href="#prek-util-list-builtins--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-util-list-builtins--verbose"><a href="#prek-util-list-builtins--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-util-list-builtins--version"><a href="#prek-util-list-builtins--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek util init-template-dir
@@ -981,8 +997,9 @@ prek util init-template-dir [OPTIONS] <DIRECTORY>
 </dd><dt id="prek-util-init-template-dir--quiet"><a href="#prek-util-init-template-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-init-template-dir--refresh"><a href="#prek-util-init-template-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-util-init-template-dir--verbose"><a href="#prek-util-init-template-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-util-init-template-dir--version"><a href="#prek-util-init-template-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-util-init-template-dir--verbose"><a href="#prek-util-init-template-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-util-init-template-dir--version"><a href="#prek-util-init-template-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek util yaml-to-toml
@@ -1019,8 +1036,9 @@ prek util yaml-to-toml [OPTIONS] [CONFIG]
 </dd><dt id="prek-util-yaml-to-toml--quiet"><a href="#prek-util-yaml-to-toml--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-yaml-to-toml--refresh"><a href="#prek-util-yaml-to-toml--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-util-yaml-to-toml--verbose"><a href="#prek-util-yaml-to-toml--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-util-yaml-to-toml--version"><a href="#prek-util-yaml-to-toml--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-util-yaml-to-toml--verbose"><a href="#prek-util-yaml-to-toml--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-util-yaml-to-toml--version"><a href="#prek-util-yaml-to-toml--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek self
@@ -1071,6 +1089,7 @@ prek self update [OPTIONS] [TARGET_VERSION]
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-self-update--refresh"><a href="#prek-self-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-self-update--token"><a href="#prek-self-update--token"><code>--token</code></a> <i>token</i></dt><dd><p>A GitHub token for authentication. A token is not required but can be used to reduce the chance of encountering rate limits</p>
-<p>May also be set with the <code>GITHUB_TOKEN</code> environment variable.</p></dd><dt id="prek-self-update--verbose"><a href="#prek-self-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-self-update--version"><a href="#prek-self-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+<p>May also be set with the <code>GITHUB_TOKEN</code> environment variable.</p></dd><dt id="prek-self-update--verbose"><a href="#prek-self-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>When running hooks, this also prints a hook's <code>description</code>, if set, whenever the hook fails, to help explain the failure.</p>
+<p>May also be set with the <code>PREK_VERBOSE</code> environment variable.</p></dd><dt id="prek-self-update--version"><a href="#prek-self-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>

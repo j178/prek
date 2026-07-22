@@ -33,6 +33,7 @@ pub(crate) async fn hook_impl(
     skip_on_missing_config: bool,
     script_version: Option<usize>,
     args: Vec<OsString>,
+    verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let stdin = read_hook_stdin(hook_type).await?;
@@ -134,7 +135,7 @@ pub(crate) async fn hook_impl(
         false,
         false,
         run_args.extra,
-        false,
+        verbose,
         printer,
     )
     .await?;

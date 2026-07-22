@@ -34,7 +34,7 @@ each manifest hook:
 | `always_run` | No | No | boolean | Run even when no files match. |
 | `fail_fast` | No | No | boolean | Stop the run immediately if this hook fails. |
 | `pass_filenames` | No | No | boolean or positive integer | Control whether, or how many, matching filenames are passed. |
-| `description` | No | No | string | Free-form metadata shown in listings. |
+| `description` | No | No | string | Free-form metadata shown in listings; printed on failure when `--verbose` is enabled. |
 | `language_version` | No | No | string | Language/toolchain version request. |
 | `log_file` | No | No | string path | Write hook output to a file when the hook fails or is verbose. |
 | `require_serial` | No | No | boolean | Avoid concurrent invocations of this hook. |

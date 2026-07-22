@@ -1653,6 +1653,105 @@ fn fail_fast_cli_flag() {
     ");
 }
 
+/// Test that `--verbose` prints a hook's `description` when it fails, to help
+/// explain the failure without needing to inspect the config file.
+#[test]
+fn verbose_prints_hook_description_on_failure() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: failing-hook
+                name: failing-hook
+                description: Checks that things are correct.
+                language: system
+                entry: python3 -c 'print("Failed"); exit(1)'
+                always_run: true
+              - id: passing-hook
+                name: passing-hook
+                description: This one always passes.
+                language: system
+                entry: python3 -c 'print("Passed")'
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    // Without `--verbose`, the description is not shown.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+
+      Failed
+    passing-hook.............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // With `--verbose`, the description is shown only for the failing hook.
+    cmd_snapshot!(context.filters(), context.run().arg("--verbose"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - description: Checks that things are correct.
+    - duration: [TIME]
+    - exit code: 1
+
+      Failed
+    passing-hook.............................................................Passed
+    - hook id: passing-hook
+    - duration: [TIME]
+
+      Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that `PREK_VERBOSE` environment variable enables the same behavior as `--verbose`,
+/// which is needed since Git-triggered hooks (e.g. `git commit`) can't be passed CLI flags.
+#[test]
+fn prek_verbose_env_var_prints_hook_description_on_failure() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: failing-hook
+                name: failing-hook
+                description: Checks that things are correct.
+                language: system
+                entry: python3 -c 'print("Failed"); exit(1)'
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_VERBOSE, "1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - description: Checks that things are correct.
+    - duration: [TIME]
+    - exit code: 1
+
+      Failed
+
+    ----- stderr -----
+    ");
+}
+
 /// Test --no-fail-fast CLI flag overrides config-level `fail_fast`.
 #[test]
 fn no_fail_fast_cli_flag() {

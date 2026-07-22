@@ -1364,7 +1364,9 @@ Write hook output to a file when the hook fails (and also when `verbose: true`).
 
 ### `description`
 
-Free-form description shown in listings / metadata.
+Free-form description shown in listings / metadata. When `--verbose` (or the `PREK_VERBOSE`
+environment variable) is enabled, this description is also printed if the hook fails, to help
+explain why the hook exists and what it checks.
 
 - Type: string
 
