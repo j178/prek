@@ -30,7 +30,7 @@ repos:
         args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
         additional_dependencies:
           - mdformat-frontmatter==2.1.2
-          - mdformat-mkdocs==5.2.0
+          - mdformat-mkdocs==5.2.1
           - mdformat-simple-breaks==0.1.0
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
