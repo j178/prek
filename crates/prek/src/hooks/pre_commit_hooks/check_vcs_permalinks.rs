@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
 use memchr::memmem;
 use regex::bytes::{Match, Regex};
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -83,7 +83,9 @@ pub(crate) async fn check_vcs_permalinks(
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
-    let matcher = GithubNonPermalinkMatcher::new(args.additional_github_domains);
+    let matcher = Arc::new(GithubNonPermalinkMatcher::new(
+        args.additional_github_domains,
+    ));
 
     let file_base = hook.project().relative_path();
     run_concurrent_file_checks(
@@ -97,10 +99,20 @@ pub(crate) async fn check_vcs_permalinks(
 async fn check_file(
     file_base: &Path,
     filename: &Path,
-    matcher: &GithubNonPermalinkMatcher,
+    matcher: &Arc<GithubNonPermalinkMatcher>,
 ) -> Result<(i32, Vec<u8>)> {
     let path = file_base.join(filename);
-    let file = fs_err::tokio::File::open(&path).await?;
+    let filename = filename.to_path_buf();
+    let matcher = Arc::clone(matcher);
+    tokio::task::spawn_blocking(move || check_file_sync(&path, &filename, &matcher)).await?
+}
+
+fn check_file_sync(
+    path: &Path,
+    filename: &Path,
+    matcher: &GithubNonPermalinkMatcher,
+) -> Result<(i32, Vec<u8>)> {
+    let file = fs_err::File::open(path)?;
     let mut reader = BufReader::new(file);
 
     let mut retval = 0;
@@ -108,7 +120,7 @@ async fn check_file(
     let mut line = Vec::new();
     let mut line_number = 0;
 
-    while reader.read_until(b'\n', &mut line).await? != 0 {
+    while reader.read_until(b'\n', &mut line)? != 0 {
         line_number += 1;
         for m in matcher.find_non_permalink(&line) {
             retval = 1;
@@ -226,7 +238,7 @@ mod tests {
         )
         .await?;
 
-        let matcher = matcher(&["github.example.com"]);
+        let matcher = Arc::new(matcher(&["github.example.com"]));
         let relative = PathBuf::from("links.md");
         let (code, output) = check_file(dir.path(), &relative, &matcher).await?;
 

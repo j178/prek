@@ -1,11 +1,11 @@
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use memchr::memchr_iter;
 use regex_automata::{MatchKind, meta::Regex, util::syntax};
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -37,7 +37,7 @@ enum ScanMode {
 }
 
 struct Matcher {
-    regex: Regex,
+    regex: Arc<Regex>,
     scan_mode: ScanMode,
 }
 
@@ -70,7 +70,10 @@ impl Matcher {
             ScanMode::Lines
         };
 
-        Ok(Self { regex, scan_mode })
+        Ok(Self {
+            regex: Arc::new(regex),
+            scan_mode,
+        })
     }
 }
 
@@ -110,17 +113,30 @@ async fn check_file(
 async fn check_lines(
     file_base: &Path,
     filename: &Path,
+    patterns: &Arc<Regex>,
+    policy: MatchPolicy,
+) -> Result<(i32, Vec<u8>)> {
+    let file_path = file_base.join(filename);
+    let filename = filename.to_path_buf();
+    let patterns = Arc::clone(patterns);
+    tokio::task::spawn_blocking(move || check_lines_sync(&file_path, &filename, &patterns, policy))
+        .await?
+}
+
+fn check_lines_sync(
+    file_path: &Path,
+    filename: &Path,
     patterns: &Regex,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
-    let file = fs_err::tokio::File::open(file_base.join(filename)).await?;
+    let file = fs_err::File::open(file_path)?;
     let mut reader = BufReader::new(file);
     let mut matched = false;
     let mut output = Vec::new();
     let mut line = Vec::new();
     let mut line_number = 0;
 
-    while reader.read_until(b'\n', &mut line).await? != 0 {
+    while reader.read_until(b'\n', &mut line)? != 0 {
         line_number += 1;
         let contents = trim_line_ending(&line);
         if patterns.is_match(contents) {

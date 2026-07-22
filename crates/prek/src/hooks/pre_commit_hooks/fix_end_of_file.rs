@@ -1,7 +1,7 @@
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use anyhow::Result;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -18,43 +18,50 @@ pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<
 
 async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
+    // Keep a file's blocking I/O in one task instead of re-entering the blocking pool per operation.
+    let modified = tokio::task::spawn_blocking(move || fix_file_sync(&file_path)).await??;
+    if modified {
+        Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+    } else {
+        Ok((0, Vec::new()))
+    }
+}
+
+fn fix_file_sync(file_path: &Path) -> Result<bool> {
     // If the file is empty, do nothing and avoid opening a write handle.
-    let file_size = fs_err::tokio::metadata(&file_path).await?.len();
+    let file_size = fs_err::metadata(file_path)?.len();
     if file_size == 0 {
-        return Ok((0, Vec::new()));
+        return Ok(false);
     }
 
-    let mut file = fs_err::tokio::OpenOptions::new()
+    let mut file = fs_err::OpenOptions::new()
         .read(true)
         .write(true)
-        .open(file_path)
-        .await?;
+        .open(file_path)?;
 
-    match find_last_non_ending(&mut file).await? {
+    match find_last_non_ending(&mut file)? {
         (None, _) => {
             // File contains only line endings, so we can just set it to empty.
-            file.set_len(0).await?;
-            file.flush().await?;
-            file.shutdown().await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            file.set_len(0)?;
+            file.flush()?;
+            Ok(true)
         }
         (Some(pos), None) => {
             // File has some content, but no line ending at the end.
-            file.seek(SeekFrom::Start(pos + 1)).await?;
-            file.write_all(b"\n").await?;
-            file.flush().await?;
-            file.shutdown().await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            file.seek(SeekFrom::Start(pos + 1))?;
+            file.write_all(b"\n")?;
+            file.flush()?;
+            Ok(true)
         }
         (Some(pos), Some(line_ending)) => {
             // File has some content and at least one line ending.
             let new_size = pos + 1 + line_ending.len() as u64;
             if file_size == new_size {
                 // File already has the correct line ending.
-                return Ok((0, Vec::new()));
+                return Ok(false);
             }
-            file.set_len(new_size).await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            file.set_len(new_size)?;
+            Ok(true)
         }
     }
 }
@@ -73,13 +80,13 @@ fn determine_line_ending(first: u8, second: u8) -> Option<&'static str> {
 
 /// Searches for the last non-line-ending character in the file.
 /// Returns the position of the last non-line-ending character and the line ending type.
-async fn find_last_non_ending<T>(reader: &mut T) -> Result<(Option<u64>, Option<&str>)>
+fn find_last_non_ending<T>(reader: &mut T) -> Result<(Option<u64>, Option<&str>)>
 where
-    T: AsyncRead + AsyncSeek + Unpin,
+    T: Read + Seek,
 {
     const MAX_SCAN_SIZE: usize = 4 * 1024; // 4KB
 
-    let data_len = reader.seek(SeekFrom::End(0)).await?;
+    let data_len = reader.seek(SeekFrom::End(0))?;
     if data_len == 0 {
         return Ok((None, None));
     }
@@ -92,10 +99,8 @@ where
     while read_len < data_len {
         let block_size = MAX_SCAN_SIZE.min(usize::try_from(data_len - read_len)?);
         // SAFETY: block_size is guaranteed to be less than or equal to MAX_SCAN_SIZE
-        reader
-            .seek(SeekFrom::Current(-i64::try_from(block_size).unwrap()))
-            .await?;
-        reader.read_exact(&mut buf[..block_size]).await?;
+        reader.seek(SeekFrom::Current(-i64::try_from(block_size).unwrap()))?;
+        reader.read_exact(&mut buf[..block_size])?;
         read_len += block_size as u64;
 
         let mut pos = block_size;

@@ -1,9 +1,9 @@
+use std::io::Read;
 use std::path::Path;
 use std::sync::LazyLock;
 
 use aho_corasick::AhoCorasick;
 use anyhow::Result;
-use tokio::io::AsyncReadExt;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -56,12 +56,24 @@ pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Resu
 /// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
 /// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
-    let mut file = fs_err::tokio::File::open(file_base.join(filename)).await?;
+    let file_path = file_base.join(filename);
+    // Keep a file's blocking I/O in one task instead of re-entering the blocking pool per read.
+    let found = tokio::task::spawn_blocking(move || check_file_sync(&file_path)).await??;
+    if found {
+        let error_message = format!("Private key found: {}\n", filename.display());
+        Ok((1, error_message.into_bytes()))
+    } else {
+        Ok((0, Vec::new()))
+    }
+}
+
+fn check_file_sync(file_path: &Path) -> Result<bool> {
+    let mut file = fs_err::File::open(file_path)?;
     let mut buf = [0u8; BUFFER_SIZE + CARRY_CAPACITY];
     let mut carry_len = 0;
 
     loop {
-        let bytes_read = file.read(&mut buf[carry_len..]).await?;
+        let bytes_read = file.read(&mut buf[carry_len..])?;
         if bytes_read == 0 {
             break;
         }
@@ -70,8 +82,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         let search_buf = &buf[..search_len];
 
         if PRIVATE_KEY_MATCHER.find(search_buf).is_some() {
-            let error_message = format!("Private key found: {}\n", filename.display());
-            return Ok((1, error_message.into_bytes()));
+            return Ok(true);
         }
 
         // Move the tail of this chunk to the front of the buffer so a key marker
@@ -82,7 +93,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         }
     }
 
-    Ok((0, Vec::new()))
+    Ok(false)
 }
 
 #[cfg(test)]
