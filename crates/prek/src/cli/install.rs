@@ -516,7 +516,7 @@ pub(crate) async fn init_template_dir(
 
     if template_dir.is_empty() || !is_same_file(&directory, &template_dir)? {
         warn_user!(
-            "git config `init.templateDir` not set to the target directory, try `{}`",
+            "`init.templateDir` does not point to the target directory. Run `{}` to set it",
             format!(
                 "git config --global init.templateDir '{}'",
                 directory.display()

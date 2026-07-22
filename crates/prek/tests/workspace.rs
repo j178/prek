@@ -385,12 +385,12 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The following configuration files are not staged, `git add` them first:
-      .pre-commit-config.yaml
-      nested/project4/.pre-commit-config.yaml
-      project2/.pre-commit-config.yaml
-      project3/.pre-commit-config.yaml
-      project3/project5/.pre-commit-config.yaml
+    error: The following configuration files are not staged. Stage them with `git add` and try again:
+      - `.pre-commit-config.yaml`
+      - `nested/project4/.pre-commit-config.yaml`
+      - `project2/.pre-commit-config.yaml`
+      - `project3/.pre-commit-config.yaml`
+      - `project3/project5/.pre-commit-config.yaml`
     ");
 
     // Run from a subdirectory
@@ -400,9 +400,9 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The following configuration files are not staged, `git add` them first:
-      .pre-commit-config.yaml
-      project5/.pre-commit-config.yaml
+    error: The following configuration files are not staged. Stage them with `git add` and try again:
+      - `.pre-commit-config.yaml`
+      - `project5/.pre-commit-config.yaml`
     ");
 
     cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")), @r"
@@ -411,7 +411,7 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: prek configuration file is not staged, run `git add .pre-commit-config.yaml` to stage it
+    error: Configuration file `.pre-commit-config.yaml` is not staged. Stage it with `git add` and try again
     ");
 
     Ok(())

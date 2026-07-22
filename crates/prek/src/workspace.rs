@@ -41,7 +41,9 @@ pub(crate) enum Error {
     )]
     MissingConfigFile,
 
-    #[error("Hook `{hook}` not present in repo `{repo}`")]
+    #[error(
+        "Hook `{hook}` was not found in repository `{repo}`. Check the hook ID or choose a `rev` that includes it"
+    )]
     HookNotFound { hook: String, repo: String },
 
     #[error(transparent)]
@@ -1043,14 +1045,14 @@ impl Workspace {
                 .collect::<Vec<_>>();
             match non_staged.as_slice() {
                 [filename] => anyhow::bail!(
-                    "prek configuration file is not staged, run `{}` to stage it",
-                    format!("git add {}", filename.user_display()).cyan()
+                    "Configuration file `{}` is not staged. Stage it with `git add` and try again",
+                    filename.user_display().cyan()
                 ),
                 _ => anyhow::bail!(
-                    "The following configuration files are not staged, `git add` them first:\n{}",
+                    "The following configuration files are not staged. Stage them with `git add` and try again:\n{}",
                     non_staged
                         .iter()
-                        .map(|p| format!("  {}", p.user_display()))
+                        .map(|p| format!("  - `{}`", p.user_display()))
                         .collect::<Vec<_>>()
                         .join("\n")
                 ),

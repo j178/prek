@@ -79,7 +79,9 @@ pub(crate) async fn run(
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {
-        anyhow::bail!("You have unmerged paths. Resolve them before running prek");
+        anyhow::bail!(
+            "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
+        );
     }
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
