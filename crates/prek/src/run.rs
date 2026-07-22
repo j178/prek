@@ -254,15 +254,32 @@ impl<'a> Iterator for Partitions<'a> {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct HookRunOutput {
+    exit_code: i32,
+    output: Vec<u8>,
+}
+
+impl HookRunOutput {
+    pub(crate) fn new(exit_code: i32, output: Vec<u8>) -> Self {
+        Self { exit_code, output }
+    }
+
+    fn append(&mut self, output: Self) {
+        self.exit_code |= output.exit_code;
+        self.output.extend(output.output);
+    }
+}
+
 pub(crate) async fn run_by_batch<T, F>(
     hook: &Hook,
     filenames: &[&Path],
     entry: &[OsString],
     run: F,
-) -> anyhow::Result<Vec<T>>
+) -> anyhow::Result<(i32, Vec<u8>)>
 where
     F: for<'a> AsyncFn(&'a [&'a Path]) -> anyhow::Result<T>,
-    T: Send + 'static,
+    T: Into<HookRunOutput> + Send + 'static,
 {
     let concurrency = if hook.require_serial {
         1
@@ -280,19 +297,43 @@ where
     );
 
     #[allow(clippy::redundant_closure)]
-    let results: Vec<_> = futures_util::stream::iter(partitions)
+    let output = futures_util::stream::iter(partitions)
         .map(|batch| run(batch))
         .buffered(concurrency)
-        .try_collect()
+        .try_fold(
+            HookRunOutput::default(),
+            |mut combined, output| async move {
+                combined.append(output.into());
+                anyhow::Ok(combined)
+            },
+        )
         .await?;
 
-    Ok(results)
+    Ok((output.exit_code, output.output))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn hook_run_output_append_bitwise_ors_exit_codes() {
+        let mut output = HookRunOutput::new(1, Vec::new());
+
+        output.append(HookRunOutput::new(3, Vec::new()));
+
+        assert_eq!(output.exit_code, 3);
+    }
+
+    #[test]
+    fn hook_run_output_append_preserves_output_order() {
+        let mut output = HookRunOutput::new(0, b"first".to_vec());
+
+        output.append(HookRunOutput::new(0, b"second".to_vec()));
+
+        assert_eq!(output.output, b"firstsecond");
+    }
 
     fn resolve_concurrency_from_map(values: &[(&str, &str)], primary_env_var: &str) -> usize {
         resolve_concurrency(&EnvVars::from_map(values), primary_env_var)
