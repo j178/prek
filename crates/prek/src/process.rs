@@ -27,6 +27,7 @@
 /// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
 use std::ffi::OsStr;
 use std::fmt::Display;
+use std::io::PipeReader;
 use std::ops::Range;
 use std::path::Path;
 use std::process::Output;
@@ -36,6 +37,10 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tracing::{enabled, trace};
+
+use crate::run::HookRunOutput;
+#[cfg(not(windows))]
+use crate::run::USE_COLOR;
 
 /// An error from executing a command.
 #[derive(Debug, Error)]
@@ -114,9 +119,56 @@ pub(crate) trait OutputSink {
     fn write_chunk(&mut self, chunk: &[u8]);
 }
 
+#[derive(Debug)]
+pub(crate) struct MergedOutput {
+    status: ExitStatus,
+    bytes: Vec<u8>,
+}
+
+impl From<MergedOutput> for HookRunOutput {
+    fn from(output: MergedOutput) -> Self {
+        Self::new(output.status.code().unwrap_or(1), output.bytes)
+    }
+}
+
 fn write_output_chunk(output: &mut Vec<u8>, sink: &mut impl OutputSink, chunk: &[u8]) {
     output.extend_from_slice(chunk);
     sink.write_chunk(chunk);
+}
+
+struct AsyncPipeReader {
+    #[cfg(unix)]
+    inner: tokio::net::unix::pipe::Receiver,
+    #[cfg(windows)]
+    inner: tokio::fs::File,
+}
+
+impl AsyncPipeReader {
+    #[cfg(unix)]
+    fn new(reader: PipeReader) -> std::io::Result<Self> {
+        use std::os::fd::OwnedFd;
+
+        let inner = tokio::net::unix::pipe::Receiver::from_owned_fd(OwnedFd::from(reader))?;
+        Ok(Self { inner })
+    }
+
+    #[cfg(windows)]
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "keep the constructor fallible on every platform"
+    )]
+    fn new(reader: PipeReader) -> std::io::Result<Self> {
+        use std::os::windows::io::OwnedHandle;
+
+        let file = std::fs::File::from(OwnedHandle::from(reader));
+        Ok(Self {
+            inner: tokio::fs::File::from_std(file),
+        })
+    }
+
+    async fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buffer).await
+    }
 }
 
 /// Constructors
@@ -188,75 +240,57 @@ impl Cmd {
         self.maybe_check_output(output)
     }
 
-    /// Like [`Cmd::output`], but streams stdout and stderr chunks into `sink` as
-    /// they are read. The sink receives both pipes in arrival order; the returned
-    /// output keeps stdout and stderr separated.
+    /// Captures stdout and stderr through the same pipe and streams chunks into
+    /// `sink` as they are read.
     pub(crate) async fn output_with_sink<S: OutputSink>(
         &mut self,
         mut sink: S,
-    ) -> Result<Output, Error> {
+    ) -> Result<MergedOutput, Error> {
         self.log_command();
+        let (mut child, mut reader) = self.spawn_with_output()?;
+
+        let mut buffer = [0u8; 4096];
+        let mut bytes = Vec::new();
+        loop {
+            let n = reader
+                .read(&mut buffer)
+                .await
+                .map_err(|cause| self.exec_error(cause))?;
+            if n == 0 {
+                break;
+            }
+            write_output_chunk(&mut bytes, &mut sink, &buffer[..n]);
+        }
+
+        let status = child.wait().await.map_err(|cause| self.exec_error(cause))?;
+        self.maybe_check_captured_output(MergedOutput { status, bytes })
+    }
+
+    fn spawn_with_output(&mut self) -> Result<(tokio::process::Child, AsyncPipeReader), Error> {
+        let (reader, writer) = std::io::pipe().map_err(|cause| self.exec_error(cause))?;
+        let reader = AsyncPipeReader::new(reader).map_err(|cause| self.exec_error(cause))?;
+        let stdout = writer.try_clone().map_err(|cause| self.exec_error(cause))?;
+
         self.inner.stdin(Stdio::null());
+        self.inner.stdout(stdout);
+        self.inner.stderr(writer);
+
+        let child = self.inner.spawn();
+
+        // Command retains configured handles for reuse. Drop the parent's pipe
+        // writers so EOF depends only on the child process tree.
         self.inner.stdout(Stdio::piped());
         self.inner.stderr(Stdio::piped());
 
-        let mut child = self.inner.spawn().map_err(|cause| self.exec_error(cause))?;
-
-        let mut stdout = child
-            .stdout
-            .take()
-            .expect("child stdout must be piped before spawn");
-        let mut stderr = child
-            .stderr
-            .take()
-            .expect("child stderr must be piped before spawn");
-        let mut stdout_done = false;
-        let mut stderr_done = false;
-        let mut stdout_buffer = [0u8; 4096];
-        let mut stderr_buffer = [0u8; 4096];
-        let mut stdout_output = Vec::new();
-        let mut stderr_output = Vec::new();
-
-        while !stdout_done || !stderr_done {
-            tokio::select! {
-                result = stdout.read(&mut stdout_buffer), if !stdout_done => {
-                    match result {
-                        Ok(0) => stdout_done = true,
-                        Ok(n) => write_output_chunk(&mut stdout_output, &mut sink, &stdout_buffer[..n]),
-                        Err(cause) => {
-                            return Err(self.exec_error(cause));
-                        }
-                    }
-                }
-                result = stderr.read(&mut stderr_buffer), if !stderr_done => {
-                    match result {
-                        Ok(0) => stderr_done = true,
-                        Ok(n) => write_output_chunk(&mut stderr_output, &mut sink, &stderr_buffer[..n]),
-                        Err(cause) => {
-                            return Err(self.exec_error(cause));
-                        }
-                    }
-                }
-            }
-        }
-
-        // For regular pipes, EOF on both streams is the point where output capture is complete.
-        // Waiting earlier must not make us return before trailing pipe bytes are read.
-        let status = child.wait().await.map_err(|cause| self.exec_error(cause))?;
-        let output = Output {
-            status,
-            stdout: stdout_output,
-            stderr: stderr_output,
-        };
-
-        self.maybe_check_output(output)
+        let child = child.map_err(|cause| self.exec_error(cause))?;
+        Ok((child, reader))
     }
 
     #[cfg(windows)]
     pub(crate) async fn pty_output_with_sink<S: OutputSink>(
         &mut self,
         sink: S,
-    ) -> Result<Output, Error> {
+    ) -> Result<MergedOutput, Error> {
         self.output_with_sink(sink).await
     }
 
@@ -264,9 +298,9 @@ impl Cmd {
     pub(crate) async fn pty_output_with_sink<S: OutputSink>(
         &mut self,
         sink: S,
-    ) -> Result<Output, Error> {
+    ) -> Result<MergedOutput, Error> {
         // If color is not used, fallback to piped output.
-        if !*crate::run::USE_COLOR {
+        if !*USE_COLOR {
             return self.output_with_sink(sink).await;
         }
 
@@ -274,7 +308,7 @@ impl Cmd {
     }
 
     #[cfg(not(windows))]
-    async fn run_on_pty<S: OutputSink>(&mut self, mut sink: S) -> Result<Output, Error> {
+    async fn run_on_pty<S: OutputSink>(&mut self, mut sink: S) -> Result<MergedOutput, Error> {
         let (mut pty, pts) = prek_pty::open()?;
         let (_, stdout, stderr) = pts.setup_subprocess()?;
 
@@ -303,14 +337,14 @@ impl Cmd {
         drop(pts);
 
         let mut buffer = [0u8; 4096];
-        let mut output = Vec::new();
+        let mut bytes = Vec::new();
 
         let status = loop {
             tokio::select! {
                 read_result = pty.read(&mut buffer) => {
                     match read_result {
                         Ok(0) => break child.wait().await.map_err(|cause| self.exec_error(cause))?,
-                        Ok(n) => write_output_chunk(&mut output, &mut sink, &buffer[..n]),
+                        Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
                         // Linux reports PTY master EOF as EIO after all slave handles close.
                         Err(err) if err.raw_os_error() == Some(libc::EIO) => {
                             break child.wait().await.map_err(|cause| self.exec_error(cause))?;
@@ -325,7 +359,7 @@ impl Cmd {
                     loop {
                         match pty.try_read(&mut buffer) {
                             Ok(0) => break,
-                            Ok(n) => write_output_chunk(&mut output, &mut sink, &buffer[..n]),
+                            Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
                             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
                             // Linux reports PTY master EOF as EIO after all slave handles close.
                             Err(err) if err.raw_os_error() == Some(libc::EIO) => break,
@@ -341,13 +375,7 @@ impl Cmd {
         child.stdout.take();
         child.stderr.take();
 
-        let output = Output {
-            status,
-            stdout: output,
-            stderr: Vec::new(),
-        };
-
-        self.maybe_check_output(output)
+        self.maybe_check_captured_output(MergedOutput { status, bytes })
     }
 
     /// Equivalent to [`std::process::Command::status`]
@@ -557,6 +585,20 @@ impl Cmd {
         }
     }
 
+    fn maybe_check_captured_output(&self, output: MergedOutput) -> Result<MergedOutput, Error> {
+        if self.check_status && !output.status.success() {
+            let status = output.status;
+            let output = Output {
+                status,
+                stdout: output.bytes,
+                stderr: Vec::new(),
+            };
+            Err(self.status_error(status, Some(output)))
+        } else {
+            Ok(output)
+        }
+    }
+
     /// Log the current command with [`tracing::trace!`].
     pub fn log_command(&self) {
         if !enabled!(tracing::Level::TRACE) {
@@ -760,27 +802,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn output_with_sink_streams_piped_stdout_and_stderr() {
-        let chunks = Arc::new(Mutex::new(0));
-        let output = Cmd::new("/bin/sh")
-            .arg("-c")
-            .arg("printf 'OUT\\n'; printf 'ERR\\n' >&2")
-            .check(false)
-            .output_with_sink(RecordingSink {
-                chunks: Arc::clone(&chunks),
-            })
-            .await
-            .expect("piped command should succeed");
-
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stdout.contains("OUT\n"));
-        assert!(stderr.contains("ERR\n"));
-        assert_ne!(*chunks.lock().unwrap(), 0);
-    }
-
-    #[tokio::test]
     async fn pty_output_captures_trailing_output_after_fast_exit() {
         for _ in 0..20 {
             let output = Cmd::new("/bin/sh")
@@ -792,9 +813,8 @@ mod tests {
                 .expect("pty command should succeed");
 
             assert!(output.status.success());
-            let stdout = String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n");
-            assert_eq!(stdout, "FINAL\n");
-            assert!(output.stderr.is_empty());
+            let output = String::from_utf8_lossy(&output.bytes).replace("\r\n", "\n");
+            assert_eq!(output, "FINAL\n");
         }
     }
 }
