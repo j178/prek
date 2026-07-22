@@ -456,6 +456,9 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
+                    description: Some(
+                        "protects specific branches from direct commits.".to_string(),
+                    ),
                     pass_filenames: Some(PassFilenames::None),
                     always_run: Some(true),
                     ..Default::default()
