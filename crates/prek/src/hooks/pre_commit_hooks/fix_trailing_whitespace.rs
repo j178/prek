@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -6,7 +6,7 @@ use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 const MARKDOWN_LINE_BREAK: &[u8] = b"  ";
@@ -33,6 +33,8 @@ struct Args {
     // so, we use Chars to achieve it.
     #[arg(long)]
     chars: Option<Chars>,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 impl Args {
@@ -62,7 +64,7 @@ pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
 
     let force_markdown = args.force_markdown();
     let markdown_exts = args.markdown_exts()?;
@@ -71,8 +73,9 @@ pub(crate) async fn fix_trailing_whitespace(
         .as_ref()
         .map_or(&[][..], |chars| chars.0.as_slice());
 
-    run_concurrent_file_checks(
-        filenames.iter().copied(),
+    run_file_checks(
+        &args.filenames,
+        filenames,
         *INTERNAL_CONCURRENCY,
         |filename| {
             fix_file(

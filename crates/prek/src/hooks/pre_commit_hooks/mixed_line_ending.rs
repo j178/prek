@@ -1,11 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
 
 use crate::hook::Hook;
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 const CRLF: &[u8] = b"\r\n";
@@ -21,6 +21,8 @@ struct Args {
     /// or a specified line ending.
     #[clap(long, short, value_enum, default_value_t = FixMode::Auto)]
     fix: FixMode,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 #[derive(Copy, Clone, Debug, Default, ValueEnum)]
@@ -59,10 +61,11 @@ impl LineEndingCounts {
 }
 
 pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
 
-    run_concurrent_file_checks(
-        filenames.iter().copied(),
+    run_file_checks(
+        &args.filenames,
+        filenames,
         *INTERNAL_CONCURRENCY,
         |filename| fix_file(hook.project().relative_path(), filename, args.fix),
     )

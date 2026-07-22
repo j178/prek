@@ -374,6 +374,46 @@ fn file_contents_sorter_hook() -> Result<()> {
 }
 
 #[test]
+fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: file-contents-sorter
+                args: [--ignore-case, configured.txt, configured.txt, selected.txt]
+                files: ^selected\.txt$
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("configured.txt").write_str("beta\nAlpha\n")?;
+    cwd.child("selected.txt").write_str("Beta\nalpha\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    file contents sorter.....................................................Failed
+    - hook id: file-contents-sorter
+    - exit code: 1
+    - files were modified by this hook
+
+      Sorting configured.txt
+      Sorting selected.txt
+
+    ----- stderr -----
+    ");
+
+    assert_eq!(context.read("configured.txt"), "Alpha\nbeta\n");
+    assert_eq!(context.read("selected.txt"), "alpha\nBeta\n");
+
+    Ok(())
+}
+
+#[test]
 fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();

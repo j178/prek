@@ -1,10 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use rustc_hash::FxHashSet;
 
 use crate::git::{get_added_files, get_lfs_files};
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -17,13 +18,17 @@ struct Args {
     enforce_all: bool,
     #[arg(long = "maxkb", default_value = "500")]
     max_kb: u64,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
+    let all_filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
+    let filenames = all_filenames.as_slice();
 
     let candidate_filenames;
     let filenames = if args.enforce_all {

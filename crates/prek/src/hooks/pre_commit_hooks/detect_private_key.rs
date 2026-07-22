@@ -6,6 +6,7 @@ use aho_corasick::AhoCorasick;
 use anyhow::Result;
 
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -42,8 +43,9 @@ static PRIVATE_KEY_MATCHER: LazyLock<AhoCorasick> = LazyLock::new(|| {
 });
 
 pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+    let args: FilenamesArgs = parse_hook_args(hook)?;
     run_concurrent_file_checks(
-        filenames.iter().copied(),
+        hook_filenames(&args.filenames, filenames),
         *INTERNAL_CONCURRENCY,
         |filename| check_file(hook.project().relative_path(), filename),
     )

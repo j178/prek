@@ -7,12 +7,15 @@ use rustc_hash::FxHashSet;
 
 use crate::git;
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 
 const ORDINARY_CHANGED_ENTRY_MARKER: &str = "1";
 const PERMS_LINK: u32 = 0o120_000;
 const PERMS_NONEXIST: u32 = 0;
 
 pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+    let args: FilenamesArgs = parse_hook_args(hook)?;
+    let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let status_output = git_status_output(hook.work_dir()).await?;
     let entries = status_output
         .split(|&byte| byte == b'\0')
@@ -22,7 +25,7 @@ pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Resu
             Err(err) => Some(Err(err)),
         });
 
-    let destroyed_links = find_destroyed_symlinks(hook, filenames, entries).await?;
+    let destroyed_links = find_destroyed_symlinks(hook, &filenames, entries).await?;
     if destroyed_links.is_empty() {
         return Ok((0, Vec::new()));
     }

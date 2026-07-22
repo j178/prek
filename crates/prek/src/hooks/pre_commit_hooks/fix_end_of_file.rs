@@ -4,12 +4,14 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    run_concurrent_file_checks(
-        filenames.iter().copied(),
+    let args: FilenamesArgs = parse_hook_args(hook)?;
+    run_file_checks(
+        &args.filenames,
+        filenames,
         *INTERNAL_CONCURRENCY,
         |filename| fix_file(hook.project().relative_path(), filename),
     )

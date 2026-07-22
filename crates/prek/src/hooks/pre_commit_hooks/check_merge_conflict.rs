@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
@@ -7,6 +7,7 @@ use tokio::io::AsyncBufReadExt;
 
 use crate::git::get_git_dir;
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -22,13 +23,15 @@ const SEPARATOR_PATTERNS: &[&[u8]] = &[b"======= ", b"=======\r\n", b"=======\n"
 struct Args {
     #[arg(long)]
     assume_in_merge: bool,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
 }
 
 pub(crate) async fn check_merge_conflict(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
 
     // Check if we're in a merge state or assuming merge
     if !args.assume_in_merge && !is_in_merge().await? {
@@ -36,7 +39,7 @@ pub(crate) async fn check_merge_conflict(
     }
 
     run_concurrent_file_checks(
-        filenames.iter().copied(),
+        hook_filenames(&args.filenames, filenames),
         *INTERNAL_CONCURRENCY,
         |filename| check_file(hook.project().relative_path(), filename),
     )

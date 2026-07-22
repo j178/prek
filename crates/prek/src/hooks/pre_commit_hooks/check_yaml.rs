@@ -1,10 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
 use serde::de::IgnoredAny;
 
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -15,16 +16,18 @@ use crate::run::INTERNAL_CONCURRENCY;
 struct Args {
     #[arg(long, short = 'm', alias = "multi")]
     allow_multiple_documents: bool,
+    #[arg(value_name = "FILENAMES")]
+    filenames: Vec<PathBuf>,
     // `--unsafe` flag is not supported yet.
     // #[arg(long)]
     // r#unsafe: bool,
 }
 
 pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args: Args = parse_hook_args(hook)?;
 
     run_concurrent_file_checks(
-        filenames.iter().copied(),
+        hook_filenames(&args.filenames, filenames),
         *INTERNAL_CONCURRENCY,
         |filename| {
             check_file(
