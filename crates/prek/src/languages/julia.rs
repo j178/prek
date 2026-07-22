@@ -1,8 +1,10 @@
+use std::ffi::OsString;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use prek_consts::env_vars::EnvVars;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -11,10 +13,16 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
-use crate::store::Store;
+use crate::store::{CacheBucket, Store};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Julia;
+
+fn depot_path(store: &Store) -> Result<OsString> {
+    let depot = store.cache_path(CacheBucket::Julia);
+    std::env::join_paths([depot.as_path(), Path::new("")])
+        .context("Failed to join Julia depot path")
+}
 
 #[async_trait::async_trait(?Send)]
 impl LanguageBackend for Julia {
@@ -31,6 +39,9 @@ impl LanguageBackend for Julia {
         debug!(%hook, target = %info.env_path.display(), "Installing Julia environment");
 
         fs_err::tokio::create_dir_all(&info.env_path).await?;
+        let depot = store.cache_path(CacheBucket::Julia);
+        fs_err::tokio::create_dir_all(&depot).await?;
+        let depot_path = depot_path(store)?;
         let search_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
 
         let find_src = |names: &[&str]| {
@@ -70,6 +81,7 @@ impl LanguageBackend for Julia {
             .arg(julia_code)
             .arg("--")
             .args(&hook.additional_dependencies)
+            .env(EnvVars::JULIA_DEPOT_PATH, &depot_path)
             .check(true)
             .output()
             .await
@@ -97,7 +109,7 @@ impl LanguageBackend for Julia {
 
     async fn run(
         &self,
-        _store: &Store,
+        store: &Store,
         hook: &InstalledHook,
         filenames: &[&Path],
         reporter: &HookRunReporter,
@@ -105,6 +117,7 @@ impl LanguageBackend for Julia {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Julia must have env path");
+        let depot_path = depot_path(store)?;
 
         let mut entry = hook.entry.expect_direct().split()?;
         if let Some(repo_path) = hook.repo_path() {
@@ -121,6 +134,7 @@ impl LanguageBackend for Julia {
                 .arg(format!("--project={}", env_dir.display()))
                 .args(&entry)
                 .envs(&hook.env)
+                .env(EnvVars::JULIA_DEPOT_PATH, &depot_path)
                 .args(&hook.args)
                 .file_args(batch)
                 .check(false)
