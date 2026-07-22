@@ -414,6 +414,67 @@ fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
 }
 
 #[test]
+fn requirements_txt_fixer_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: requirements-txt-fixer
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("requirements.txt").write_str(indoc::indoc! {"
+        requests==2
+        # Flask is needed by the web application.
+        Flask==3
+        requests==2
+        pkg-resources==0.0.0
+    "})?;
+    cwd.child("requirements.in")
+        .write_str("z-project\na-project\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix requirements.txt.....................................................Failed
+    - hook id: requirements-txt-fixer
+    - exit code: 1
+    - files were modified by this hook
+
+      Sorting requirements.txt
+
+    ----- stderr -----
+    ");
+
+    assert_eq!(
+        context.read("requirements.txt"),
+        indoc::indoc! {"
+            # Flask is needed by the web application.
+            Flask==3
+            requests==2
+        "}
+    );
+    assert_eq!(context.read("requirements.in"), "z-project\na-project\n");
+
+    context.git_add(".");
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix requirements.txt.....................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();

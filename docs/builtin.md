@@ -39,6 +39,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`check-case-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
 - [`end-of-file-fixer`](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer) (Ensure newline at EOF)
 - [`file-contents-sorter`](https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter) (Sort lines in explicitly targeted files)
+- [`requirements-txt-fixer`](https://github.com/pre-commit/pre-commit-hooks#requirements-txt-fixer) (Sort Python requirement and constraint files)
 - [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`forbid-new-submodules`](https://github.com/pre-commit/pre-commit-hooks#forbid-new-submodules) (Prevent addition of new git submodules.)
 - [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Validate JSON files)
@@ -101,6 +102,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-illegal-windows-names`](#check-illegal-windows-names) (Check for filenames invalid on Windows)
 - [`end-of-file-fixer`](#end-of-file-fixer) (Ensure newline at EOF)
 - [`file-contents-sorter`](#file-contents-sorter) (Sort lines in explicitly targeted files)
+- [`requirements-txt-fixer`](#requirements-txt-fixer) (Sort Python requirement and constraint files)
 - [`fix-byte-order-marker`](#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](#check-json) (Validate JSON files)
 - [`check-json5`](#check-json5) (Validate JSON5 files)
@@ -256,6 +258,20 @@ repos:
       - id: file-contents-sorter
         files: ^requirements(-dev)?\.txt$
 ```
+
+---
+
+#### `requirements-txt-fixer`
+
+Sorts entries in Python `requirements*.txt` and `constraints*.txt` files by their case-insensitive requirement name.
+
+**Behavior / caveats**
+
+- The default file pattern is `(requirements|constraints).*\.txt$`.
+- Leading comments and continuation lines stay attached to their requirement while sorting. Top-of-file and trailing comment blocks are preserved.
+- Exact duplicate entries are collapsed, preferring the copy with an attached comment.
+- Exact `pkg-resources==0.0.0` and `pkg_resources==0.0.0` entries are removed, matching upstream.
+- This is a sorter, not a full PEP 508 validator. It uses the same lightweight name extraction as `pre-commit-hooks`.
 
 ---
 
