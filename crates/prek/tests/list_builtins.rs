@@ -112,6 +112,7 @@ fn list_builtins_verbose() {
       replaces or checks mixed line ending.
 
     no-commit-to-branch
+      protects specific branches from direct commits.
 
     pretty-format-json
       checks that JSON files are pretty-formatted.
@@ -244,7 +245,7 @@ fn list_builtins_json() {
       {
         "id": "no-commit-to-branch",
         "name": "don't commit to branch",
-        "description": null
+        "description": "protects specific branches from direct commits."
       },
       {
         "id": "pretty-format-json",
