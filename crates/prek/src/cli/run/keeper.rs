@@ -132,7 +132,7 @@ impl UnstagedChangesRestorer {
                 eprintln!(
                     "{}",
                     format!(
-                        "Unstaged changes detected, stashing unstaged changes to `{}`",
+                        "Unstaged changes detected. Temporarily saving them to `{}`",
                         patch_path.user_display()
                     )
                     .yellow()
@@ -198,7 +198,7 @@ impl UnstagedChangesRestorer {
             error!("{e}");
             eprintln!(
                 "{}",
-                "Stashed changes conflicted with changes made by hook, rolling back the hook changes".red().bold()
+                "Hook changes conflicted with the saved unstaged changes. Reverting the hook changes".red().bold()
             );
 
             // Discard any changes made by hooks, and try applying the patch again.
@@ -208,12 +208,9 @@ impl UnstagedChangesRestorer {
 
         eprintln!(
             "{}",
-            format!(
-                "Restored working tree changes from `{}`",
-                patch.user_display()
-            )
-            .yellow()
-            .bold()
+            format!("Restored unstaged changes from `{}`", patch.user_display())
+                .yellow()
+                .bold()
         );
 
         Ok(())
@@ -225,7 +222,7 @@ impl Drop for UnstagedChangesRestorer {
         if let Err(err) = self.restore() {
             eprintln!(
                 "{}",
-                format!("Failed to restore working tree changes: {err}").red()
+                format!("Failed to restore unstaged changes: {err}").red()
             );
         }
     }

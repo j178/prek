@@ -329,7 +329,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     Uncommitted Hook.........................................................Passed
 
     ----- stderr -----
-    warning: Creating temporary repo with uncommitted changes...
+    warning: Local repository has uncommitted changes. Creating a temporary copy...
     "#);
 
     Ok(())

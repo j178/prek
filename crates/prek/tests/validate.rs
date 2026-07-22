@@ -66,6 +66,31 @@ fn validate_config() -> anyhow::Result<()> {
 }
 
 #[test]
+fn mutable_revision_warning_has_actionable_guidance() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://example.com/hooks
+            rev: main
+            hooks: []
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The following repositories use mutable `rev` values (branches or moving tags):
+    https://example.com/hooks: main
+    `prek` does not automatically detect changes to these references after the first install.
+    Use a tag or commit SHA for each `rev`, or run `prek update` to select the latest eligible tag.
+    See https://prek.j178.dev/reference/configuration/#rev for details.
+    success: All configs are valid
+    ");
+}
+
+#[test]
 fn invalid_config_error() {
     let context = TestContext::new();
     context.write_pre_commit_config(indoc::indoc! {r"

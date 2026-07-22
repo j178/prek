@@ -1633,13 +1633,12 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     if !mutable_revs.is_empty() {
         warn_user!(
             "{}",
-            indoc::formatdoc! { r#"
-            The following repos have mutable `rev` fields (moving tag / branch):
+            indoc::formatdoc! { r"
+            The following repositories use mutable `rev` values (branches or moving tags):
             {}
-            Mutable references are never updated after first install and are not supported.
-            See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-            hint: `prek update` often fixes this",
-            "#,
+            `prek` does not automatically detect changes to these references after the first install.
+            Use a tag or commit SHA for each `rev`, or run `prek update` to select the latest eligible tag.
+            See https://prek.j178.dev/reference/configuration/#rev for details.",
             mutable_revs
             }
         );
@@ -1683,10 +1682,10 @@ where
     if version > cur_version {
         let hint = InstallSource::detect()
             .map(|s| format!("To update, run `{}`.", s.update_instructions()))
-            .unwrap_or("Please consider updating prek".to_string());
+            .unwrap_or("Upgrade `prek` and try again.".to_string());
 
         return Err(serde::de::Error::custom(format!(
-            "Required minimum prek version `{version}` is greater than current version `{cur_version}`; {hint}",
+            "`prek` version `{version}` or newer is required, but version `{cur_version}` is installed. {hint}",
         )));
     }
 
@@ -1701,8 +1700,8 @@ mod tests {
 
     /// Filter to replace dynamic version in snapshots
     const VERSION_FILTER: (&str, &str) = (
-        r"current version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?`",
-        "current version `[CURRENT_VERSION]`",
+        r"but version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?` is installed",
+        "but version `[CURRENT_VERSION]` is installed",
     );
 
     #[test]
@@ -2472,13 +2471,13 @@ mod tests {
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+            error: line 8 column 23: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
              --> <input>:8:23
               |
             6 |         entry: echo test
             7 |         language: system
             8 | minimum_prek_version: '10.0.0'
-              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+              |                       ^ `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
             ");
         });
 
@@ -2493,11 +2492,11 @@ mod tests {
         let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+            error: line 1 column 3: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
              --> <input>:1:3
               |
             1 | - id: test-hook
-              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+              |   ^ `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
             2 |   name: Test Hook
             3 |   entry: echo test
               |

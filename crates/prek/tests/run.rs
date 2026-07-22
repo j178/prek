@@ -1018,7 +1018,7 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: prek configuration file is not staged, run `git add .pre-commit-config.yaml` to stage it
+    error: Configuration file `.pre-commit-config.yaml` is not staged. Stage it with `git add` and try again
     "#);
 
     Ok(())
@@ -1855,8 +1855,8 @@ fn staged_files_only() -> Result<()> {
       Hello, world!
 
     ----- stderr -----
-    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
-    Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
     ");
 
     let content = context.read("file.txt");
@@ -1910,9 +1910,9 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     - files were modified by this hook
 
     ----- stderr -----
-    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
-    Stashed changes conflicted with changes made by hook, rolling back the hook changes
-    Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
     "#);
 
     assert_eq!(context.read("intent.txt"), "preserve me\n");
@@ -2037,7 +2037,7 @@ fn merge_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: You have unmerged paths. Resolve them before running prek
+    error: Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again
     "#);
 
     // Fix the conflict and run again.
@@ -2715,8 +2715,8 @@ fn minimum_prek_version() {
         .filters()
         .into_iter()
         .chain([(
-            r"current version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?`",
-            "current version `[CURRENT_VERSION]`",
+            r"but version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?` is installed",
+            "but version `[CURRENT_VERSION]` is installed",
         )])
         .collect::<Vec<_>>();
 
@@ -2727,11 +2727,11 @@ fn minimum_prek_version() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+      caused by: error: line 1 column 23: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
      --> <input>:1:23
       |
     1 | minimum_prek_version: 10.0.0
-      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+      |                       ^ `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
     2 | repos:
     3 |   - repo: local
       |

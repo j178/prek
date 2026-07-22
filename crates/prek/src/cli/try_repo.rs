@@ -147,7 +147,7 @@ async fn prepare_repo<'a>(
 
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
     if is_local && git::has_diff("HEAD", repo_path).await? {
-        warn_user!("Creating temporary repo with uncommitted changes...");
+        warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
         let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
         let head_rev = get_head_rev(&shadow).await?;
         Ok(PreparedRepo {

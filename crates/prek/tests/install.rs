@@ -1222,7 +1222,7 @@ fn init_template_dir() -> anyhow::Result<()> {
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir '.git'` to set it
     "#);
 
     insta::with_settings!(
@@ -1257,7 +1257,7 @@ fn init_template_dir() -> anyhow::Result<()> {
     prek installed at `temp-dir/hooks/pre-commit`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir 'temp-dir'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir 'temp-dir'` to set it
     "#);
     insta::with_settings!(
         { filters => context.filters() },
@@ -1288,7 +1288,7 @@ fn init_template_dir() -> anyhow::Result<()> {
     prek installed at `subdir2/hooks/pre-commit` with specified config `non-exist-config`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir 'subdir2'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir 'subdir2'` to set it
     ");
     insta::with_settings!(
         { filters => context.filters() },
@@ -1327,7 +1327,7 @@ fn util_init_template_dir() {
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir '.git'` to set it
     "#);
 
     insta::with_settings!(
@@ -1364,7 +1364,7 @@ fn init_template_dir_non_git_repo() {
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir '.git'` to set it
     "#);
 
     context.write_pre_commit_config(indoc::indoc! {"
@@ -1384,7 +1384,7 @@ fn init_template_dir_non_git_repo() {
     prek installed at `.git/hooks/pre-push` with specified config `[TEMP_DIR]/.pre-commit-config.yaml`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir '.git'` to set it
     ");
 }
 
@@ -1746,7 +1746,7 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
     prek installed at `template/hooks/pre-commit`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '[TEMP_DIR]/template'`
+    warning: `init.templateDir` does not point to the target directory. Run `git config --global init.templateDir '[TEMP_DIR]/template'` to set it
     ");
 
     // Check that hooks are created in the template directory
