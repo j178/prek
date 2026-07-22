@@ -21,8 +21,8 @@ use crate::cli::run::filter::{RunInputMode, stage_uses_message_file_input};
 use crate::cli::run::install::{InstallCache, install_hooks};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
-    CollectOptions, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter, ProjectFiles,
-    RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
+    CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
+    ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
 };
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{PassFilenames, Stage};
@@ -44,12 +44,7 @@ pub(crate) async fn run(
     groups: Vec<String>,
     no_groups: Vec<String>,
     hook_stage: Option<Stage>,
-    from_ref: Option<String>,
-    to_ref: Option<String>,
-    all_files: bool,
-    files: Vec<String>,
-    directories: Vec<String>,
-    last_commit: bool,
+    selection: FileSelection,
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
@@ -58,13 +53,6 @@ pub(crate) async fn run(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Convert `--last-commit` to `HEAD~1..HEAD`
-    let (from_ref, to_ref) = if last_commit {
-        (Some("HEAD~1".to_string()), Some("HEAD".to_string()))
-    } else {
-        (from_ref, to_ref)
-    };
-
     // Prevent recursive post-checkout hooks.
     if hook_stage == Some(Stage::PostCheckout)
         && EnvVars.is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
@@ -75,7 +63,7 @@ pub(crate) async fn run(
     // Ensure we are in a git repository.
     LazyLock::force(&GIT_ROOT).as_ref()?;
 
-    let should_stash = !all_files && files.is_empty() && directories.is_empty();
+    let should_stash = selection.requires_clean_worktree();
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {
@@ -186,17 +174,14 @@ pub(crate) async fn run(
         );
     }
 
-    set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
+    let (from_ref, to_ref) = selection.refs();
+    set_env_vars(from_ref, to_ref, &extra_args);
 
     let input = collect_run_input(
         workspace.root(),
         CollectOptions {
             input_mode,
-            from_ref,
-            to_ref,
-            all_files,
-            files,
-            directories,
+            selection,
             commit_msg_filename: extra_args.commit_msg_filename,
         },
     )
@@ -271,7 +256,7 @@ fn uses_only_message_file_input(hook: &Hook) -> bool {
 }
 
 // `pre-commit` sets these environment variables for other git hooks.
-fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunExtraArgs) {
+fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArgs) {
     unsafe {
         std::env::set_var("PRE_COMMIT", "1");
 

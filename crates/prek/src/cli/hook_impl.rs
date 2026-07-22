@@ -118,6 +118,7 @@ pub(crate) async fn hook_impl(
     let Some(run_args) = to_run_args(hook_type, &args, &stdin).await? else {
         return Ok(legacy_code.into());
     };
+    let file_selection = run_args.file_selection.into();
 
     let status = cli::run(
         store,
@@ -127,12 +128,7 @@ pub(crate) async fn hook_impl(
         vec![],
         vec![],
         Some(hook_type.into()),
-        run_args.from_ref,
-        run_args.to_ref,
-        run_args.all_files,
-        vec![],
-        vec![],
-        false,
+        file_selection,
         false,
         flag(run_args.fail_fast, run_args.no_fail_fast),
         false,
@@ -254,9 +250,9 @@ async fn to_run_args(
             run_args.extra.remote_url = Some(args[1].to_string_lossy().into_owned());
 
             if let Some(push_info) = parse_pre_push_info(&args[0].to_string_lossy(), stdin).await? {
-                run_args.from_ref = push_info.from_ref;
-                run_args.to_ref = push_info.to_ref;
-                run_args.all_files = push_info.all_files;
+                run_args.file_selection.from_ref = push_info.from_ref;
+                run_args.file_selection.to_ref = push_info.to_ref;
+                run_args.file_selection.all_files = push_info.all_files;
                 run_args.extra.remote_branch = push_info.remote_branch;
                 run_args.extra.local_branch = push_info.local_branch;
             } else {
@@ -278,8 +274,8 @@ async fn to_run_args(
             }
         }
         HookType::PostCheckout => {
-            run_args.from_ref = Some(args[0].to_string_lossy().into_owned());
-            run_args.to_ref = Some(args[1].to_string_lossy().into_owned());
+            run_args.file_selection.from_ref = Some(args[0].to_string_lossy().into_owned());
+            run_args.file_selection.to_ref = Some(args[1].to_string_lossy().into_owned());
             run_args.extra.checkout_type = Some(args[2].to_string_lossy().into_owned());
         }
         HookType::PostMerge => run_args.extra.is_squash_merge = args[0] == "1",

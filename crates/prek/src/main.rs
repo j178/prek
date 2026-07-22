@@ -276,6 +276,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
             let args = *args;
             let options = args.options;
+            let file_selection = options.file_selection.into();
 
             cli::run(
                 &store,
@@ -285,12 +286,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.groups,
                 args.no_groups,
                 args.stage,
-                options.from_ref,
-                options.to_ref,
-                options.all_files,
-                options.files,
-                options.directory,
-                options.last_commit,
+                file_selection,
                 options.show_diff_on_failure,
                 flag(options.fail_fast, options.no_fail_fast),
                 options.dry_run,
