@@ -73,6 +73,55 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn run_preserves_stdout_stderr_order() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child("output.py")
+        .write_str(indoc::indoc! {r#"
+            import os
+
+            os.write(2, b"__PREK_STDERR_1__\n")
+            os.write(1, b"__PREK_STDOUT_1__\n")
+            os.write(2, b"__PREK_STDERR_2__\n")
+            os.write(1, b"__PREK_STDOUT_2__\n")
+        "#})?;
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: output-order
+                name: output-order
+                language: system
+                entry: python3 output.py
+                always_run: true
+                pass_filenames: false
+                verbose: true
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().args(["--all-files", "--color=never"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    output-order.............................................................Passed
+    - hook id: output-order
+    - duration: [TIME]
+
+      __PREK_STDERR_1__
+      __PREK_STDOUT_1__
+      __PREK_STDERR_2__
+      __PREK_STDOUT_2__
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_does_not_rewrite_unchanged_config_tracking_file() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

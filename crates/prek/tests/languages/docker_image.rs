@@ -51,6 +51,12 @@ fn docker_image() -> Result<()> {
     - hook id: gitleaks-docker
     - exit code: 1
 
+      ○
+          │╲
+          │ ○
+          ○ ░
+          ░    gitleaks
+
       Finding:     aws_access_key_id = REDACTED
       Secret:      REDACTED
       RuleID:      generic-api-key
@@ -66,13 +72,6 @@ fn docker_image() -> Result<()> {
       File:        gitleaks_bad_01.txt
       Line:        2
       Fingerprint: gitleaks_bad_01.txt:generic-api-key:2
-
-
-          ○
-          │╲
-          │ ○
-          ○ ░
-          ░    gitleaks
 
       [TIME] INF 1 commits scanned.
       [TIME] INF scan completed in [TIME]

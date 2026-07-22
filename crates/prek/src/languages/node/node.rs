@@ -170,7 +170,7 @@ impl LanguageBackend for Node {
                 .env(EnvVars::NODE_PATH, lib_dir(env_dir))
                 .envs(&hook.env);
             apply_npm_config_env(&mut cmd, env_dir, &npm_cache);
-            let mut output = cmd
+            let output = cmd
                 .args(&hook.args)
                 .file_args(batch)
                 .check(false)
@@ -180,25 +180,14 @@ impl LanguageBackend for Node {
 
             reporter.on_run_progress(progress, batch.len() as u64);
 
-            output.stdout.extend(output.stderr);
-            let code = output.status.code().unwrap_or(1);
-            anyhow::Ok((code, output.stdout))
+            anyhow::Ok(output)
         };
 
-        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
-
-        // Collect results
-        let mut combined_status = 0;
-        let mut combined_output = Vec::new();
-
-        for (code, output) in results {
-            combined_status |= code;
-            combined_output.extend(output);
-        }
+        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 
-        Ok((combined_status, combined_output))
+        Ok(output)
     }
 }
 
