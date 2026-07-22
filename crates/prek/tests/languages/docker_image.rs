@@ -25,6 +25,8 @@ fn docker_image() -> Result<()> {
         .assert()
         .success();
 
+    // Gitleaks writes findings to stdout and its banner/status logs to stderr.
+    // Suppress the latter because Docker does not guarantee their relative order.
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -32,30 +34,18 @@ fn docker_image() -> Result<()> {
               - id: gitleaks-docker
                 name: Detect hardcoded secrets
                 language: docker_image
-                entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose
+                entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose --no-banner --log-level=error
                 pass_filenames: false
     "});
     context.git_add(".");
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\d\d?:\d\d(AM|PM)", "[TIME]")])
-        .collect::<Vec<_>>();
-
-    cmd_snapshot!(filters, context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
     Detect hardcoded secrets.................................................Failed
     - hook id: gitleaks-docker
     - exit code: 1
-
-      ○
-          │╲
-          │ ○
-          ○ ░
-          ░    gitleaks
 
       Finding:     aws_access_key_id = REDACTED
       Secret:      REDACTED
@@ -72,10 +62,6 @@ fn docker_image() -> Result<()> {
       File:        gitleaks_bad_01.txt
       Line:        2
       Fingerprint: gitleaks_bad_01.txt:generic-api-key:2
-
-      [TIME] INF 1 commits scanned.
-      [TIME] INF scan completed in [TIME]
-      [TIME] WRN leaks found: 2
 
     ----- stderr -----
     "#);
