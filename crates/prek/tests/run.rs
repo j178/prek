@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::process::Command;
 use std::time::SystemTime;
 
 use anyhow::Result;
@@ -14,6 +15,15 @@ use prek_consts::{
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
+
+/// Build a `jj` command in `dir`, or `None` when `jj` is not installed so tests can
+/// skip gracefully on machines without Jujutsu.
+fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
+    let jj = which::which("jj").ok()?;
+    let mut cmd = Command::new(jj);
+    cmd.current_dir(dir);
+    Some(cmd)
+}
 
 #[test]
 fn run_basic() -> Result<()> {
@@ -68,6 +78,142 @@ fn run_basic() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+/// A secondary (non-colocated) jj workspace has no `.git` directory at all; prek must
+/// still resolve the backing Git store and select the working-copy changeset.
+#[test]
+fn run_in_non_colocated_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sys.argv[1:]))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("file.txt").write_str("hello")?;
+    context.work_dir().child("ignored.md").write_str("nope")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:file.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// In a colocated jj workspace the default `prek run` mode must select the working-copy
+/// changeset. Git's index is empty (jj does not stage), so the old staged-files path
+/// would run on nothing.
+#[test]
+fn run_default_in_colocated_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sys.argv[1:]))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("file.txt").write_str("hello")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:file.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--all-files` in a jj workspace must list every tracked file via the jj backend.
+#[test]
+fn run_all_files_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("a.txt").write_str("a")?;
+    context.work_dir().child("b.txt").write_str("b")?;
+
+    // `jj file list` auto-snapshots the working copy, so newly written files are
+    // tracked without an explicit commit.
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:a.txt b.txt
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -276,7 +422,7 @@ fn run_in_non_git_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `[GIT] rev-parse --show-toplevel` exited with an error:
+    error: Not inside a Git or Jujutsu repository: Command `[GIT] rev-parse --show-toplevel` exited with an error:
 
     [status]
     exit status: 128

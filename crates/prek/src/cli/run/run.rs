@@ -30,6 +30,7 @@ use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
+use crate::repo;
 use crate::run::{HOOK_CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project, Workspace};
@@ -60,10 +61,12 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    // Ensure we are in a git repository.
+    // Ensure we are in a supported repository (Git or Jujutsu).
     LazyLock::force(&GIT_ROOT).as_ref()?;
 
-    let should_stash = selection.requires_clean_worktree();
+    // Jujutsu has no index/stash, so its default run mode operates on the working-copy
+    // changeset directly; the Git-only clean-worktree dance does not apply there.
+    let should_stash = selection.requires_clean_worktree() && repo::should_stash_by_default_run();
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {

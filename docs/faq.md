@@ -27,6 +27,18 @@ Running `prek install` installs the first type: it writes the Git shim so that G
 
 Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time Git invokes prek through the shim, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
 
+## Does prek work with Jujutsu (jj)?
+
+Yes. prek detects [Jujutsu](https://jj-vcs.github.io/jj/) workspaces automatically, including secondary workspaces created with `jj workspace add`. No extra configuration is needed.
+
+When running inside a jj workspace, prek:
+
+- Resolves the backing Git directory from `.jj/repo/store/git_target`, so all internal git commands work even when there is no `.git` directory.
+- Selects the files changed in the current working-copy changeset (via `jj diff --name-only`) for the default `prek run`, because jj has no separate staging area like `git diff --staged`.
+- Disables git-index stashing, which does not apply to jj.
+
+The `--all-files`, `--files`, and `--from-ref`/`--to-ref` modes work the same way as in a regular git repository.
+
 ## How does `prek install` interact with `core.hooksPath` and worktrees?
 
 If `core.hooksPath` is set in repo-local (`git config --local`) or worktree-local (`git config --worktree`) config, `prek install` and `prek uninstall` will honor it and operate on Git's effective hooks directory.

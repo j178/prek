@@ -32,6 +32,9 @@ pub(crate) enum Error {
         "Git resolved hooks directory to the current directory (`{0}`). Unset `core.hooksPath` or set it to a real directory path."
     )]
     InvalidHooksPath(PathBuf),
+
+    #[error("{0}")]
+    Message(String),
 }
 
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
@@ -61,13 +64,18 @@ fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
 }
 
-pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
-    get_root()
-        .map(|root| dunce::canonicalize(&root).unwrap_or(root))
-        .inspect(|root| {
-            debug!("Git root: {}", root.display());
-        })
-});
+// Delegates to the repository backend so Git and Jujutsu workspaces share a single
+// notion of "the workspace root". `get_root()` still does the raw Git detection that
+// `RepoContext` builds on, so this never re-enters the backend during initialization.
+pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> =
+    LazyLock::new(|| match crate::repo::REPO_CONTEXT.as_ref() {
+        Ok(repo) => {
+            let root = repo.root().to_path_buf();
+            debug!("Repository root: {}", root.display());
+            Ok(root)
+        }
+        Err(err) => Err(Error::Message(format!("{err:#}"))),
+    });
 
 /// Remove some `GIT_` environment variables exposed by `git`.
 ///
@@ -112,13 +120,14 @@ pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
 
 impl GitCommandExt for Cmd {
     fn isolate_from_git_env(&mut self) -> &mut Self {
-        // `git_cmd()` adds this synthetic value as a command-local env. Commands
-        // that call `isolate_from_git_env()` are intentionally detached from the
-        // current repo, so remove it here; inherited `GIT_WORK_TREE` is handled
-        // by `GIT_ENVS_TO_REMOVE`.
-        if git_work_tree().is_some() {
-            self.env_remove(EnvVars::GIT_WORK_TREE);
-        }
+        // `git_cmd()` may inject command-local `GIT_DIR`/`GIT_WORK_TREE` values:
+        // the synthetic work tree derived from an inherited `GIT_DIR`, and, in a
+        // Jujutsu workspace, the backing Git store pointers set by
+        // `repo::apply_git_env()`. Commands that call `isolate_from_git_env()` are
+        // intentionally detached from the current repo, so strip both here;
+        // inherited env vars are handled by `GIT_ENVS_TO_REMOVE`.
+        self.env_remove(EnvVars::GIT_DIR);
+        self.env_remove(EnvVars::GIT_WORK_TREE);
         for (key, _) in GIT_ENVS_TO_REMOVE.iter() {
             self.env_remove(key);
         }
@@ -132,6 +141,9 @@ pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     if let Some(work_tree) = git_work_tree() {
         cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
     }
+    // For a Jujutsu workspace this points Git at the backing Git store; for a plain
+    // Git repo it is a no-op.
+    crate::repo::apply_git_env(&mut cmd);
 
     Ok(cmd)
 }
@@ -997,10 +1009,13 @@ mod tests {
     #[cfg(unix)]
     use super::zsplit;
     use super::{
-        Error, GIT, TerminalPrompt, full_clone, init_repo, shared_repository_file_mode,
-        should_update_submodules, update_submodules,
+        Error, GIT, GitCommandExt, TerminalPrompt, full_clone, init_repo,
+        shared_repository_file_mode, should_update_submodules, update_submodules,
     };
+    use crate::process::Cmd;
     use assert_cmd::assert::OutputAssertExt;
+    use prek_consts::env_vars::EnvVars;
+    use std::collections::BTreeMap;
     use std::path::Path;
     use std::process::Command;
 
@@ -1009,6 +1024,30 @@ mod tests {
         command.current_dir(path).args(args);
 
         command.assert().success();
+    }
+
+    // A Jujutsu workspace injects `GIT_DIR`/`GIT_WORK_TREE` as command-local env vars
+    // (via `repo::apply_git_env`). Commands that isolate themselves from the current
+    // repo must strip those overrides, not just inherited env vars.
+    #[test]
+    fn isolate_from_git_env_clears_repo_context_overrides() {
+        let mut cmd = Cmd::new("/bin/sh");
+        cmd.env(EnvVars::GIT_DIR, "/tmp/repo/.git")
+            .env(EnvVars::GIT_WORK_TREE, "/tmp/repo")
+            .isolate_from_git_env();
+
+        let envs = cmd
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(envs.get(EnvVars::GIT_DIR), Some(&None));
+        assert_eq!(envs.get(EnvVars::GIT_WORK_TREE), Some(&None));
     }
 
     #[tokio::test]
