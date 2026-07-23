@@ -22,3 +22,7 @@ site/
 # NPM packages
 npm-artifacts/
 npm/.output/
+
+# Nix build result symlinks
+/result
+/result-*
