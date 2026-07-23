@@ -36,6 +36,13 @@ impl Args {
 pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
 
+    // jj has no "current branch" mapping to Git's HEAD: colocated repos keep HEAD
+    // detached and non-colocated backing stores have an unborn HEAD pointing at
+    // `main`, which would otherwise block every run. Skip rather than false-fail.
+    if crate::repo::is_jujutsu() {
+        return Ok((0, Vec::new()));
+    }
+
     let output = git_cmd()?
         .arg("symbolic-ref")
         .arg("HEAD")

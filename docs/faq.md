@@ -39,9 +39,17 @@ When running inside a jj workspace, prek:
 
 The `--all-files`, `--files`, and `--from-ref`/`--to-ref` modes work the same way as in a regular git repository.
 
+In a colocated workspace, prek detects jj, so even when invoked as an installed Git hook it checks the jj working-copy changeset rather than Git's staged files.
+
 !!! note
 
-    Hooks that inspect Git index or merge state directly rather than a file list have limited support in jj workspaces, because jj has no staging area and records conflicts in the working-copy commit rather than as a Git merge. In particular, `forbid-new-submodules` relies on `git diff --staged` and will not detect newly added submodules, and `check-merge-conflict` relies on Git merge-state files and will not fire during a jj conflict unless run with `--assume-in-merge`.
+    A few checks that read Git's index or merge state directly (rather than a file list) have limited support in jj workspaces, because jj has no staging area and records conflicts in the working-copy commit rather than as a Git merge:
+
+    - `no-commit-to-branch` is skipped, since jj has no single "current branch" mapping to Git's `HEAD`.
+    - `forbid-new-submodules` does not detect newly added submodules (it reads `git diff --staged`).
+    - `check-merge-conflict` does not fire during a jj conflict unless run with `--assume-in-merge` (it reads Git merge-state files).
+
+    In a non-colocated workspace (no `.git`), the backing Git index is empty, so more behavior degrades: `destroyed-symlinks` and the Windows fallback of the shebang checks no-op, and prek cannot report files modified by a hook or show the diff on failure (`--show-diff-on-failure`). Colocated workspaces keep the Git index in sync and are unaffected.
 
 ## How does `prek install` interact with `core.hooksPath` and worktrees?
 

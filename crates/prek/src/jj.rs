@@ -139,10 +139,44 @@ fn scope_fileset(cwd: &Path, path: &Path) -> String {
     literal_fileset(relative_to_cwd(cwd, path))
 }
 
-/// A single entry from `jj diff --types`: the file's kind before and after the
-/// change, plus its path (relative to the command's working directory). The kind
-/// bytes are jj's status letters, e.g. `F` file, `L` symlink, `C` conflict, `-`
-/// absent.
+/// Template for `jj diff` that emits one `<status> <path>` line per changed file.
+/// This avoids `--types`, whose git-style `{a => b}` rename compaction yields a
+/// "path" that names no real file; `path` here is always the real target path.
+///
+/// Note `path` is repo-root-relative (a `RepoPath`), regardless of the command's
+/// working directory. Use this only where output is consumed repo-root-relative
+/// (the changed-file queries run from the repo root); `--types` is cwd-relative.
+const DIFF_TEMPLATE: &str = r#"status_char ++ " " ++ path ++ "\n""#;
+
+/// One entry from a `jj diff` rendered with `DIFF_TEMPLATE`: the status letter
+/// (`A`/`D`/`M`/`R`/`C`) and the target path.
+struct DiffEntry {
+    status: u8,
+    path: PathBuf,
+}
+
+fn parse_diff_entries(output: &[u8]) -> Vec<DiffEntry> {
+    String::from_utf8_lossy(output)
+        .lines()
+        .filter_map(|line| {
+            let (status, path) = line.split_once(' ')?;
+            let &status = status.as_bytes().first()?;
+            if path.is_empty() {
+                return None;
+            }
+            Some(DiffEntry {
+                status,
+                path: PathBuf::from(path),
+            })
+        })
+        .collect()
+}
+
+/// One entry from `jj diff --types`: the file kind before and after the change, and
+/// its path *relative to the command's working directory* (unlike `DIFF_TEMPLATE`).
+/// Kind bytes are jj status letters: `F` file, `L` symlink, `C` conflict, `-` absent.
+/// Renames render as the compacted `{a => b}` form, so only use this where renames
+/// are filtered out (added-file detection keys on `before == '-'`).
 struct TypedChange {
     before: u8,
     after: u8,
@@ -213,7 +247,8 @@ pub(crate) async fn get_changed_files(
         .arg("diff")
         .arg("-r")
         .arg("@")
-        .arg("--types");
+        .arg("-T")
+        .arg(DIFF_TEMPLATE);
     if let Some(scope_path) = scope {
         cmd.arg(scope_fileset(root, scope_path));
     }
@@ -223,9 +258,12 @@ pub(crate) async fn get_changed_files(
 
 /// Files newly added in the current working-copy revision (absent before).
 ///
-/// Mirrors `git diff --staged --diff-filter=A`: only files that did not exist in
-/// the parent, so hooks like `check-added-large-files` do not flag pre-existing
-/// files that were merely modified.
+/// Mirrors `git diff --staged --relative --diff-filter=A`: only files absent in the
+/// parent, reported relative to and scoped under `root`, so hooks like
+/// `check-added-large-files` and `check-case-conflict` (which compare against
+/// `root`-relative filenames) match in nested projects. Uses `--types` rather than
+/// `DIFF_TEMPLATE` because its output is cwd-relative; renames are `FF`, so the
+/// `before == '-'` filter naturally excludes them (no compacted paths leak through).
 #[instrument(level = "trace")]
 pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = jj_cmd()?
@@ -234,6 +272,9 @@ pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> 
         .arg("-r")
         .arg("@")
         .arg("--types")
+        // Scope to the `root` subtree so out-of-project files are excluded, matching
+        // git's `--relative`.
+        .arg(literal_fileset(Path::new(".")))
         .check(true)
         .output()
         .await?;
@@ -276,7 +317,8 @@ pub(crate) async fn get_changed_files_between(
         .arg(&from)
         .arg("--to")
         .arg(new)
-        .arg("--types");
+        .arg("-T")
+        .arg(DIFF_TEMPLATE);
     if let Some(scope_path) = scope {
         cmd.arg(scope_fileset(root, scope_path));
     }
@@ -285,10 +327,10 @@ pub(crate) async fn get_changed_files_between(
 }
 
 fn changed_paths(output: &[u8]) -> Vec<PathBuf> {
-    parse_typed_changes(output)
+    parse_diff_entries(output)
         .into_iter()
-        .filter(|change| change.after != b'-')
-        .map(|change| change.path)
+        .filter(|entry| entry.status != b'D') // exclude deletions, like git's --diff-filter
+        .map(|entry| entry.path)
         .collect()
 }
 
@@ -463,23 +505,39 @@ mod tests {
     }
 
     #[test]
-    fn parse_typed_changes_reads_status_and_path() {
-        let changes = parse_typed_changes(b"-F added.txt\nFF modified.txt\nF- deleted.txt\n");
-        assert_eq!(changes.len(), 3);
-        assert_eq!(changes[0].before, b'-');
-        assert_eq!(changes[0].after, b'F');
-        assert_eq!(changes[0].path, PathBuf::from("added.txt"));
-        assert_eq!(changes[2].before, b'F');
-        assert_eq!(changes[2].after, b'-');
+    fn parse_diff_entries_reads_status_and_path() {
+        // Renames render as the real target path (not the `{a => b}` compaction).
+        let entries =
+            parse_diff_entries(b"A added.txt\nM modified.txt\nD deleted.txt\nR dir/renamed.txt\n");
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[0].status, b'A');
+        assert_eq!(entries[0].path, PathBuf::from("added.txt"));
+        assert_eq!(entries[3].status, b'R');
+        assert_eq!(entries[3].path, PathBuf::from("dir/renamed.txt"));
     }
 
     #[test]
-    fn changed_paths_excludes_deletions() {
-        let paths = changed_paths(b"-F added.txt\nFF modified.txt\nF- deleted.txt\n");
+    fn changed_paths_excludes_deletions_and_keeps_renames() {
+        let paths =
+            changed_paths(b"A added.txt\nM modified.txt\nD deleted.txt\nR dir/renamed.txt\n");
         assert_eq!(
             paths,
-            vec![PathBuf::from("added.txt"), PathBuf::from("modified.txt")]
+            vec![
+                PathBuf::from("added.txt"),
+                PathBuf::from("modified.txt"),
+                PathBuf::from("dir/renamed.txt"),
+            ]
         );
+    }
+
+    #[test]
+    fn parse_typed_changes_reads_kinds() {
+        // `--types` powers added-file detection (`before == '-'`).
+        let changes = parse_typed_changes(b"-F added.txt\nFF modified.txt\nF- deleted.txt\n");
+        assert_eq!(changes.len(), 3);
+        assert_eq!((changes[0].before, changes[0].after), (b'-', b'F'));
+        assert_eq!(changes[0].path, PathBuf::from("added.txt"));
+        assert_eq!((changes[2].before, changes[2].after), (b'F', b'-'));
     }
 
     #[test]

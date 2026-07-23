@@ -2510,6 +2510,41 @@ fn no_commit_to_branch_hook() -> Result<()> {
     Ok(())
 }
 
+/// `no-commit-to-branch` is skipped in a jj workspace: jj has no "current branch"
+/// mapping to Git's HEAD, and the backing store's unborn HEAD would otherwise make
+/// the hook block every run. Regression test for that false positive.
+#[test]
+fn no_commit_to_branch_skipped_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: no-commit-to-branch
+    "});
+    context.work_dir().child("test.txt").write_str("hello")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
     let context = TestContext::new();
@@ -3290,6 +3325,52 @@ fn check_added_large_files_ignores_modified_in_jj_workspace() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// In a nested jj project (config in a subdirectory), added files must be reported
+/// relative to the project directory so `check-added-large-files` matches them. The
+/// jj diff template's paths are repo-root-relative, so `added_files` uses `--types`
+/// (cwd-relative) instead; this guards against that regressing.
+#[test]
+fn check_added_large_files_in_nested_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    let project = context.work_dir().child("project");
+    project.create_dir_all()?;
+    project
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "})?;
+    // A newly added >1 KB file inside the nested project.
+    project.child("big.txt").write_binary(&[0; 2048])?;
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(project.path()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - exit code: 1
+
+      big.txt (2 KB) exceeds 1 KB
 
     ----- stderr -----
     ");

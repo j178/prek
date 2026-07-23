@@ -435,6 +435,128 @@ fn run_from_ref_to_ref_in_jj_workspace() -> Result<()> {
     Ok(())
 }
 
+/// A renamed file must be selected by its real (new) path. `jj diff --types` renders
+/// renames with git-style `{a => b}` compaction, which would produce a bogus path
+/// that names no file and silently bypass hooks; the diff template avoids that.
+#[test]
+fn run_selects_renamed_file_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    let cwd = context.work_dir();
+    cwd.child("orig.txt").write_str("content\n")?;
+    jj_cmd(cwd.path())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    // Rename the tracked file in the working copy.
+    fs_err::rename(
+        cwd.child("orig.txt").path(),
+        cwd.child("renamed.txt").path(),
+    )?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      renamed.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// End-to-end coverage for a real secondary workspace (`jj workspace add`), which has
+/// a `.jj` but no `.git`: the backing Git directory must be resolved from the main
+/// workspace so `prek run` works with no `.git` present.
+#[test]
+fn run_in_secondary_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+    let main = context.work_dir();
+
+    init.current_dir(main.path())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+    // Commit so the config is on an ancestor the secondary workspace checks out.
+    jj_cmd(main.path())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    // Add a secondary workspace as a sibling directory (no `.git` of its own).
+    let secondary = main.path().parent().unwrap().join(format!(
+        "{}-secondary",
+        main.path().file_name().unwrap().to_string_lossy()
+    ));
+    jj_cmd(main.path())
+        .unwrap()
+        .args(["workspace", "add", &secondary.to_string_lossy()])
+        .assert()
+        .success();
+    assert!(secondary.join(".jj").exists());
+    assert!(!secondary.join(".git").exists());
+
+    fs_err::write(secondary.join("second.txt"), "hi\n")?;
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(&secondary), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      second.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn fast_path_checks_filenames_from_entry_and_args() -> Result<()> {
     let context = TestContext::new();

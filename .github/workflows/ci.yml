@@ -439,6 +439,8 @@ jobs:
           jj config set --user user.name "prek ci" || true
           jj config set --user user.email "prek-ci@example.com" || true
           jj --version
+          # Fail the jj tests instead of silently skipping if jj ever goes missing.
+          echo "PREK_TEST_REQUIRE_JJ=1" >> "$GITHUB_ENV"
 
       - name: "Cargo test"
         env:
@@ -528,6 +530,8 @@ jobs:
           & $jj config set --user user.name "prek ci"
           & $jj config set --user user.email "prek-ci@example.com"
           & $jj --version
+          # Fail the jj tests instead of silently skipping if jj ever goes missing.
+          Add-Content -Path $env:GITHUB_ENV -Value "PREK_TEST_REQUIRE_JJ=1"
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}

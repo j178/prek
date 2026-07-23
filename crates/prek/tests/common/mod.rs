@@ -44,8 +44,17 @@ pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
 
 /// Build a `jj` command in `dir`, or `None` when `jj` is not installed so tests can
 /// skip gracefully on machines without Jujutsu.
+///
+/// Set `PREK_TEST_REQUIRE_JJ` (CI does this after installing jj) to turn a missing
+/// `jj` into a hard failure, so the jj tests can never silently no-op.
 pub fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
-    let jj = which::which("jj").ok()?;
+    let Ok(jj) = which::which("jj") else {
+        assert!(
+            !EnvVars.is_set("PREK_TEST_REQUIRE_JJ"),
+            "PREK_TEST_REQUIRE_JJ is set but `jj` was not found on PATH"
+        );
+        return None;
+    };
     let mut cmd = Command::new(jj);
     cmd.current_dir(dir);
     // Give jj a deterministic identity so `jj commit` does not depend on host config.

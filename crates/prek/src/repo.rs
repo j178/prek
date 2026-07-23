@@ -157,6 +157,13 @@ pub(crate) fn root() -> Result<&'static Path> {
     Ok(current()?.root())
 }
 
+/// Whether the active repository backend is Jujutsu.
+pub(crate) fn is_jujutsu() -> bool {
+    current()
+        .map(|repo| repo.kind() == RepoKind::Jujutsu)
+        .unwrap_or(false)
+}
+
 /// Whether `prek run` should preserve Git's stash/clean-worktree behavior by default.
 ///
 /// Git's default mode is index-driven, so stashing protects unstaged changes from
