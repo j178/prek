@@ -13,14 +13,33 @@ use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunOptions, flag};
 use crate::config::{self, Stage};
 use crate::git;
-use crate::git::GIT_ROOT;
+use crate::git::{GIT_ROOT, GitCommandExt};
 use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
+// try-repo always targets an external repo (a local path or the shadow copy),
+// never the current workspace, so its git queries must be isolated from any
+// ambient repo env (e.g. the backing Git store injected in a jj workspace).
+
+/// Whether `repo` has a diff against `rev`, isolated from the ambient repo env.
+async fn has_diff_isolated(rev: &str, repo: &Path) -> Result<bool> {
+    let status = git::git_cmd()?
+        .isolate_from_git_env()
+        .arg("diff")
+        .arg("--quiet")
+        .arg(rev)
+        .current_dir(repo)
+        .check(false)
+        .status()
+        .await?;
+    Ok(status.code() == Some(1))
+}
+
 async fn get_head_rev(repo: &Path) -> Result<String> {
     let head_rev = git::git_cmd()?
+        .isolate_from_git_env()
         .arg("rev-parse")
         .arg("HEAD")
         .current_dir(repo)
@@ -34,12 +53,14 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
 async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
     let shadow = tmp_dir.join("shadow-repo");
     git::git_cmd()?
+        .isolate_from_git_env()
         .arg("clone")
         .arg(repo_path)
         .arg(&shadow)
         .output()
         .await?;
     git::git_cmd()?
+        .isolate_from_git_env()
         .arg("checkout")
         .arg(head_rev)
         .arg("-b")
@@ -51,9 +72,10 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
     let index_path = shadow.join(".git/index");
     let objects_path = shadow.join(".git/objects");
 
-    let staged_files = git::get_staged_files(repo_path).await?;
+    let staged_files = git::get_staged_files(repo_path, true).await?;
     if !staged_files.is_empty() {
         git::git_cmd()?
+            .isolate_from_git_env()
             .arg("add")
             .arg("--")
             .file_args(&staged_files)
@@ -66,6 +88,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
 
     let mut add_u_cmd = git::git_cmd()?;
     add_u_cmd
+        .isolate_from_git_env()
         .arg("add")
         .arg("--update") // Update tracked files
         .current_dir(repo_path)
@@ -75,6 +98,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .await?;
 
     git::git_cmd()?
+        .isolate_from_git_env()
         .arg("commit")
         .arg("-m")
         .arg("Temporary commit by prek try-repo")
@@ -131,6 +155,7 @@ async fn prepare_repo<'a>(
     } else {
         // For remote repositories, use ls-remote
         let head_rev = git::git_cmd()?
+            .isolate_from_git_env()
             .arg("ls-remote")
             .arg("--exit-code")
             .arg(runtime_source.as_ref())
@@ -146,7 +171,7 @@ async fn prepare_repo<'a>(
     };
 
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
-    if is_local && git::has_diff("HEAD", repo_path).await? {
+    if is_local && has_diff_isolated("HEAD", repo_path).await? {
         warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
         let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
         let head_rev = get_head_rev(&shadow).await?;

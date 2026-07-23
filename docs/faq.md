@@ -27,6 +27,30 @@ Running `prek install` installs the first type: it writes the Git shim so that G
 
 Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time Git invokes prek through the shim, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
 
+## Does prek work with Jujutsu (jj)?
+
+Yes. prek detects [Jujutsu](https://jj-vcs.github.io/jj/) workspaces automatically, including secondary workspaces created with `jj workspace add`. No extra configuration is needed.
+
+When running inside a jj workspace, prek:
+
+- Resolves the backing Git directory from `.jj/repo/store/git_target`, so all internal git commands work even when there is no `.git` directory.
+- Selects the files changed in the current working-copy changeset (via `jj diff`) for the default `prek run`, because jj has no separate staging area like `git diff --staged`.
+- Disables git-index stashing, which does not apply to jj.
+
+The `--all-files`, `--files`, and `--from-ref`/`--to-ref` modes work the same way as in a regular git repository.
+
+In a colocated workspace, prek detects jj, so even when invoked as an installed Git hook it checks the jj working-copy changeset rather than Git's staged files.
+
+!!! note
+
+    A few checks that read Git's index or merge state directly (rather than a file list) have limited support in jj workspaces, because jj has no staging area and records conflicts in the working-copy commit rather than as a Git merge:
+
+    - `no-commit-to-branch` is skipped, since jj has no single "current branch" mapping to Git's `HEAD`.
+    - `forbid-new-submodules` does not detect newly added submodules (it reads `git diff --staged`).
+    - `check-merge-conflict` does not fire during a jj conflict unless run with `--assume-in-merge` (it reads Git merge-state files).
+
+    In a non-colocated workspace (no `.git`), the backing Git index is empty, so more behavior degrades: `destroyed-symlinks` and the Windows fallback of the shebang checks no-op, and prek cannot report files modified by a hook or show the diff on failure (`--show-diff-on-failure`). Colocated workspaces keep the Git index in sync and are unaffected.
+
 ## How does `prek install` interact with `core.hooksPath` and worktrees?
 
 If `core.hooksPath` is set in repo-local (`git config --local`) or worktree-local (`git config --worktree`) config, `prek install` and `prek uninstall` will honor it and operate on Git's effective hooks directory.

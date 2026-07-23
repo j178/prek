@@ -11,7 +11,7 @@ use prek_consts::{
     PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
 };
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, jj_cmd};
 
 mod common;
 
@@ -68,6 +68,491 @@ fn run_basic() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+/// A secondary (non-colocated) jj workspace has no `.git` directory at all; prek must
+/// still resolve the backing Git store and select the working-copy changeset.
+#[test]
+fn run_in_non_colocated_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sys.argv[1:]))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("file.txt").write_str("hello")?;
+    context.work_dir().child("ignored.md").write_str("nope")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:file.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// In a colocated jj workspace the default `prek run` mode must select the working-copy
+/// changeset. Git's index is empty (jj does not stage), so the old staged-files path
+/// would run on nothing.
+#[test]
+fn run_default_in_colocated_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sys.argv[1:]))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("file.txt").write_str("hello")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:file.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--all-files` in a jj workspace must list every tracked file via the jj backend.
+#[test]
+fn run_all_files_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("a.txt").write_str("a")?;
+    context.work_dir().child("b.txt").write_str("b")?;
+
+    // `jj file list` auto-snapshots the working copy, so newly written files are
+    // tracked without an explicit commit.
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:a.txt b.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// When the prek workspace root is a subdirectory of the jj workspace root, jj
+/// reports repo-root-relative paths that must be stripped to project-relative
+/// ones. Regression test for running with the config in a nested directory.
+#[test]
+fn run_in_nested_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    let project = context.work_dir().child("project");
+    project.create_dir_all()?;
+    project
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#})?;
+    project.child("app.txt").write_str("in project")?;
+    context.work_dir().child("root.txt").write_str("outside")?;
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      app.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Deleted files must not be passed to hooks in a jj workspace, matching git's
+/// `--diff-filter` which drops deletions.
+#[test]
+fn run_excludes_deleted_files_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("keep.txt").write_str("keep")?;
+    context.work_dir().child("del.txt").write_str("gone")?;
+
+    // Commit the baseline so the deletion below is a real change against the parent.
+    jj_cmd(context.work_dir())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    fs_err::remove_file(context.work_dir().child("del.txt").path())?;
+    context.work_dir().child("keep.txt").write_str("changed")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      keep.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// The default run must select files with unresolved conflicts in a jj workspace,
+/// which are reported by `jj resolve --list` (not by `jj diff`, since the merge
+/// commit auto-merges cleanly against its parents).
+#[test]
+fn run_selects_conflicted_files_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    let cwd = context.work_dir();
+    let jj = |args: &[&str]| {
+        jj_cmd(cwd.path()).unwrap().args(args).assert().success();
+    };
+
+    // Build a real conflict: a base revision and two divergent edits, then merge.
+    cwd.child("c.txt").write_str("line1\nline2\nline3\n")?;
+    jj(&["describe", "-m", "base"]);
+    jj(&["bookmark", "create", "base", "-r", "@"]);
+    jj(&["new", "-m", "x"]);
+    cwd.child("c.txt").write_str("line1\nXXX\nline3\n")?;
+    jj(&["bookmark", "create", "x", "-r", "@"]);
+    jj(&["new", "base", "-m", "y"]);
+    cwd.child("c.txt").write_str("line1\nYYY\nline3\n")?;
+    jj(&["bookmark", "create", "y", "-r", "@"]);
+    jj(&["new", "x", "y", "-m", "merge"]);
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      c.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--from-ref`/`--to-ref` in a jj workspace selects files changed between two
+/// revisions using merge-base (`from...to`) semantics, matching the Git backend.
+/// With divergent refs, edits made only on the `from` side must NOT be selected.
+#[test]
+fn run_from_ref_to_ref_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    let cwd = context.work_dir();
+    let jj = |args: &[&str]| {
+        jj_cmd(cwd.path()).unwrap().args(args).assert().success();
+    };
+
+    // base, then two divergent branches from it.
+    cwd.child("base.txt").write_str("base")?;
+    jj(&["describe", "-m", "base"]);
+    jj(&["bookmark", "create", "base", "-r", "@"]);
+    // `from` branch adds a file that only exists on its side.
+    jj(&["new", "-m", "from"]);
+    cwd.child("from_only.txt").write_str("from")?;
+    jj(&["bookmark", "create", "from", "-r", "@"]);
+    // `to` branch diverges from base with its own file.
+    jj(&["new", "base", "-m", "to"]);
+    cwd.child("to_only.txt").write_str("to")?;
+    jj(&["bookmark", "create", "to", "-r", "@"]);
+
+    // Merge-base semantics: only to_only.txt is in `from...to`. A direct from->to
+    // diff would also report from_only.txt (as a deletion), which must not happen.
+    cmd_snapshot!(context.filters(), context.run().arg("--from-ref").arg("from").arg("--to-ref").arg("to"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      to_only.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A renamed file must be selected by its real (new) path. `jj diff --types` renders
+/// renames with git-style `{a => b}` compaction, which would produce a bogus path
+/// that names no file and silently bypass hooks; the diff template avoids that.
+#[test]
+fn run_selects_renamed_file_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    let cwd = context.work_dir();
+    cwd.child("orig.txt").write_str("content\n")?;
+    jj_cmd(cwd.path())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    // Rename the tracked file in the working copy.
+    fs_err::rename(
+        cwd.child("orig.txt").path(),
+        cwd.child("renamed.txt").path(),
+    )?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      renamed.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// End-to-end coverage for a real secondary workspace (`jj workspace add`), which has
+/// a `.jj` but no `.git`: the backing Git directory must be resolved from the main
+/// workspace so `prek run` works with no `.git` present.
+#[test]
+fn run_in_secondary_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+    let main = context.work_dir();
+
+    init.current_dir(main.path())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print(chr(10).join(sorted(sys.argv[1:])))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+    // Commit so the config is on an ancestor the secondary workspace checks out.
+    jj_cmd(main.path())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    // Add a secondary workspace as a sibling directory (no `.git` of its own).
+    let secondary = main.path().parent().unwrap().join(format!(
+        "{}-secondary",
+        main.path().file_name().unwrap().to_string_lossy()
+    ));
+    jj_cmd(main.path())
+        .unwrap()
+        .args(["workspace", "add", &secondary.to_string_lossy()])
+        .assert()
+        .success();
+    assert!(secondary.join(".jj").exists());
+    assert!(!secondary.join(".git").exists());
+
+    fs_err::write(secondary.join("second.txt"), "hi\n")?;
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(&secondary), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      second.txt
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -276,7 +761,7 @@ fn run_in_non_git_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `[GIT] rev-parse --show-toplevel` exited with an error:
+    error: Not inside a Git or Jujutsu repository: Command `[GIT] rev-parse --show-toplevel` exited with an error:
 
     [status]
     exit status: 128

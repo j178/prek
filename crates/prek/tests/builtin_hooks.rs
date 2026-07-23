@@ -9,7 +9,7 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, jj_cmd};
 
 mod common;
 
@@ -2510,6 +2510,41 @@ fn no_commit_to_branch_hook() -> Result<()> {
     Ok(())
 }
 
+/// `no-commit-to-branch` is skipped in a jj workspace: jj has no "current branch"
+/// mapping to Git's HEAD, and the backing store's unborn HEAD would otherwise make
+/// the hook block every run. Regression test for that false positive.
+#[test]
+fn no_commit_to_branch_skipped_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: no-commit-to-branch
+    "});
+    context.work_dir().child("test.txt").write_str("hello")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
     let context = TestContext::new();
@@ -3199,6 +3234,146 @@ fn check_case_conflict_directory() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_case_conflict_in_non_colocated_jujutsu_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        return Ok(());
+    }
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
+    let cwd = context.work_dir();
+    cwd.child("src/foo.txt").write_str("existing file")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-case-conflict
+    "});
+
+    cwd.child("src/FOO.txt").write_str("conflicting case")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+
+      Case-insensitivity conflict found: src/FOO.txt
+      Case-insensitivity conflict found: src/foo.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+/// In a jj workspace, `check-added-large-files` must only flag newly added files,
+/// not pre-existing ones that were merely modified (jj has no staging area, so
+/// "added" is derived from the working-copy changeset).
+#[test]
+fn check_added_large_files_ignores_modified_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    let cwd = context.work_dir();
+    // Commit a large file as a pre-existing baseline.
+    cwd.child("large_file.txt").write_binary(&[0; 2048])?; // 2 KB
+    jj_cmd(cwd.path())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "});
+
+    // Modify the pre-existing large file (still over the limit) and add a small file.
+    cwd.child("large_file.txt").write_binary(&[1; 2048])?;
+    cwd.child("small.txt").write_str("hello\n")?;
+
+    // large_file.txt is modified, not added, so it must not be flagged.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// In a nested jj project (config in a subdirectory), added files must be reported
+/// relative to the project directory so `check-added-large-files` matches them. The
+/// jj diff template's paths are repo-root-relative, so `added_files` uses `--types`
+/// (cwd-relative) instead; this guards against that regressing.
+#[test]
+fn check_added_large_files_in_nested_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    let project = context.work_dir().child("project");
+    project.create_dir_all()?;
+    project
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "})?;
+    // A newly added >1 KB file inside the nested project.
+    project.child("big.txt").write_binary(&[0; 2048])?;
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(project.path()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - exit code: 1
+
+      big.txt (2 KB) exceeds 1 KB
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }

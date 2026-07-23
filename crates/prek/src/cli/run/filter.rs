@@ -15,8 +15,9 @@ use crate::config::{FilePattern, GlobPatterns, Stage};
 use crate::fs::PathClean;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
+use crate::repo;
 use crate::workspace::Project;
-use crate::{fs, git, warn_user};
+use crate::{fs, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
@@ -637,7 +638,7 @@ async fn collect_explicit_files(
     }
 
     if !pathspecs.is_empty() {
-        for file in git::ls_files(git_root, pathspecs).await? {
+        for file in repo::ls_files(git_root, pathspecs).await? {
             let file = fs::normalize_path(file);
             let matches_directory = directories
                 .iter()
@@ -667,7 +668,7 @@ async fn collect_files_for_selection(
 ) -> Result<Vec<PathBuf>> {
     match selection {
         FileSelection::Diff { from_ref, to_ref } => {
-            let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
+            let files = repo::changed_files_between(&from_ref, &to_ref, workspace_root).await?;
             debug!(
                 "Files changed between {} and {}: {}",
                 from_ref,
@@ -682,19 +683,18 @@ async fn collect_files_for_selection(
             directories,
         } => collect_explicit_files(git_root, files, globs, directories).await,
         FileSelection::All { .. } => {
-            let files = git::ls_files(git_root, [workspace_root]).await?;
+            let files = repo::ls_files(git_root, [workspace_root]).await?;
             debug!("All files in the workspace: {}", files.len());
             Ok(files)
         }
         FileSelection::Default => {
-            if git::is_in_merge_conflict().await? {
-                let files = git::get_conflicted_files(workspace_root).await?;
+            if let Some(files) = repo::conflicted_files(workspace_root).await? {
                 debug!("Conflicted files: {}", files.len());
                 return Ok(files);
             }
 
-            let files = git::get_staged_files(workspace_root).await?;
-            debug!("Staged files: {}", files.len());
+            let files = repo::default_files(workspace_root).await?;
+            debug!("Default files from repository backend: {}", files.len());
             Ok(files)
         }
     }

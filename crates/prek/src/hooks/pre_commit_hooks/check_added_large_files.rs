@@ -3,10 +3,11 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use rustc_hash::FxHashSet;
 
-use crate::git::{get_added_files, get_lfs_files};
+use crate::git::get_lfs_files;
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
+use crate::repo;
 use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
@@ -34,7 +35,7 @@ pub(crate) async fn check_added_large_files(
     let filenames = if args.enforce_all {
         filenames
     } else {
-        let added_files = get_added_files(hook.work_dir())
+        let added_files = repo::added_files(hook.work_dir())
             .await?
             .into_iter()
             .collect::<FxHashSet<_>>();

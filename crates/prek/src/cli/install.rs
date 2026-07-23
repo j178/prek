@@ -100,7 +100,9 @@ pub(crate) async fn install(
     let selectors = if let Some(project) = &project {
         Some(Selectors::load(&includes, &skips, project.path())?)
     } else if !includes.is_empty() || !skips.is_empty() {
-        anyhow::bail!("Cannot use `--include` or `--skip` outside of a git repository");
+        anyhow::bail!(
+            "Cannot use `--include` or `--skip` outside of a Git or Jujutsu (jj) repository"
+        );
     } else {
         None
     };
