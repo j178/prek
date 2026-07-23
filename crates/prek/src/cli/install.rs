@@ -13,9 +13,9 @@ use same_file::is_same_file;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::InstallCache;
-use crate::cli::run::{SelectorSource, Selectors};
+use crate::cli::run::{ConfiguredHook, SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::config::load_config;
+use crate::config::{Repo, Stage, Stages, load_config};
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
@@ -104,6 +104,18 @@ pub(crate) async fn install(
     } else {
         None
     };
+
+    if project.is_some() {
+        tip_unmatched_hook_stages(
+            store,
+            config.as_deref(),
+            selectors.as_ref(),
+            refresh,
+            &hook_types,
+            &hooks_path,
+            printer,
+        )?;
+    }
 
     for hook_type in hook_types {
         install_hook_script(
@@ -200,6 +212,159 @@ fn get_hook_types(
     }
 
     hook_types
+}
+
+/// Return whether the selectors persisted into the installed hook scripts will run this hook.
+///
+/// Mirrors `install_hook_script`: every include is persisted, but only CLI-flag skips are
+/// (env-var skips are ignored at install time). An include that only matches a remote hook
+/// through its manifest alias can't be recognized from the config alone, so such a hook is
+/// treated as not selected.
+fn shim_selects_hook(selectors: Option<&Selectors>, hook: &ConfiguredHook<'_>) -> bool {
+    let Some(selectors) = selectors else {
+        return true;
+    };
+
+    if selectors
+        .skips()
+        .iter()
+        .filter(|skip| matches!(skip.source(), SelectorSource::CliFlag(_)))
+        .any(|skip| skip.matches_configured_hook(hook))
+    {
+        return false;
+    }
+
+    let includes = selectors.includes();
+    includes.is_empty()
+        || includes
+            .iter()
+            .any(|include| include.matches_configured_hook(hook))
+}
+
+/// Print a tip about configured hooks whose stages aren't covered by any shim that will exist
+/// once this install finishes, since they won't run automatically.
+///
+/// This is intentionally not a warning: skipping a stage (e.g. to only run a hook manually by
+/// id, or from CI) is a valid setup, not something that needs fixing.
+fn tip_unmatched_hook_stages(
+    store: &Store,
+    config: Option<&Path>,
+    selectors: Option<&Selectors>,
+    refresh: bool,
+    hook_types: &[HookType],
+    hooks_path: &Path,
+    printer: Printer,
+) -> Result<()> {
+    let installed = Stages::from(
+        hook_types
+            .iter()
+            .map(|&hook_type| Stage::from(hook_type))
+            .collect::<Vec<_>>(),
+    );
+
+    // A plain root install runs every workspace project, so scan them all, the same way `run` does.
+    let Ok(root) = Workspace::find_root(config, &CWD) else {
+        return Ok(());
+    };
+
+    // Hook types outside `installed` still run automatically if a shim from an earlier `install`
+    // is already in place. That shim's own persisted selectors and `--cd`/`--config` scope decide
+    // which hooks it runs, so a hook is only covered by it if those would also select the hook.
+    let mut existing_shims: rustc_hash::FxHashMap<Stage, ExistingShim> =
+        rustc_hash::FxHashMap::default();
+    for &hook_type in HookType::value_variants() {
+        let stage = Stage::from(hook_type);
+        if installed.contains(stage) {
+            continue;
+        }
+        let hook_path = hooks_path.join(hook_type.as_ref());
+        if hook_path.try_exists().unwrap_or(false) && is_our_script(&hook_path).unwrap_or(false) {
+            if let Ok(existing) = read_existing_shim(&hook_path, &root) {
+                existing_shims.insert(stage, existing);
+            }
+        }
+    }
+
+    let Ok(workspace) =
+        Workspace::discover(store, root, config.map(Path::to_path_buf), None, refresh)
+    else {
+        return Ok(());
+    };
+
+    let mut unmatched: Vec<(&str, Stages)> = Vec::new();
+    for project in workspace.projects() {
+        let config = project.config();
+        for repo in &config.repos {
+            let is_remote = matches!(repo, Repo::Remote(_));
+            for hook in repo.iter_hooks() {
+                let configured = ConfiguredHook::new(
+                    project.relative_path(),
+                    hook.id,
+                    hook.options.alias.as_deref(),
+                    hook.groups,
+                );
+                // If this run's selectors exclude the hook, it's deliberately left out of every
+                // shim being (re)installed now, so don't second-guess that with a tip.
+                if !shim_selects_hook(selectors, &configured) {
+                    continue;
+                }
+
+                // A remote hook that omits `stages` may inherit them from its manifest, which
+                // install never fetches, so skip it rather than risk a false positive. An explicit
+                // value (even an empty list) overrides the manifest and resolves through
+                // `default_stages`, the same way the hook builder does.
+                if is_remote && hook.options.stages.is_none() {
+                    continue;
+                }
+                let stages = Stages::resolve(hook.options.stages, config.default_stages);
+
+                // `Stage::Manual` has no git shim, so it is ignored here.
+                let required = Stages::from(
+                    stages
+                        .iter()
+                        .filter(|&stage| stage != Stage::Manual)
+                        .collect::<Vec<_>>(),
+                );
+                if required.is_empty() {
+                    continue;
+                }
+
+                let covered = required.iter().any(|stage| {
+                    if installed.contains(stage) {
+                        // Already confirmed selected by the current run's selectors above.
+                        true
+                    } else if let Some(existing) = existing_shims.get(&stage) {
+                        existing.covers(project.relative_path())
+                            && shim_selects_hook(Some(&existing.selectors), &configured)
+                    } else {
+                        false
+                    }
+                });
+                if !covered {
+                    unmatched.push((hook.id, required));
+                }
+            }
+        }
+    }
+
+    if unmatched.is_empty() {
+        return Ok(());
+    }
+
+    let list = unmatched
+        .iter()
+        .map(|(id, stages)| format!("  - `{}` ({})", id.cyan(), stages.yellow()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    writeln!(
+        printer.stdout(),
+        "{} the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:\n{list}\nIf that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `{}`, or set `{}` in your config.",
+        "tip:".cyan().bold(),
+        "prek install --hook-type <type>".cyan(),
+        "default_install_hook_types".cyan(),
+    )?;
+
+    Ok(())
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
@@ -380,6 +545,75 @@ fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
         .any(|hash| content.contains(hash)))
+}
+
+/// An already-installed hook shim, as reconstructed from the `[PREK_ARGS]` persisted into it.
+struct ExistingShim {
+    selectors: Selectors,
+    scope: ExistingShimScope,
+}
+
+/// Which project(s) an existing shim's `hook-impl` invocation will actually discover.
+enum ExistingShimScope {
+    /// No `--cd`/`--config` persisted: discovers the whole workspace, same as a root install.
+    Workspace,
+    /// `--cd=<path>` persisted: only discovers the project at that path (and any of its own
+    /// nested sub-projects), never the rest of the workspace.
+    Project(PathBuf),
+    /// `--config=<path>` persisted: loads that single config file directly, bypassing workspace
+    /// discovery entirely. Which project that corresponds to can't be reliably recovered here
+    /// (the path may be relative to a since-forgotten CWD), so such a shim is never counted as
+    /// coverage rather than risk crediting it for hooks it will never run.
+    Unknown,
+}
+
+impl ExistingShim {
+    /// Whether this shim's `hook-impl` invocation would even discover the given project.
+    fn covers(&self, hook_project_relative_path: &Path) -> bool {
+        match &self.scope {
+            ExistingShimScope::Workspace => true,
+            ExistingShimScope::Project(scope) => hook_project_relative_path.starts_with(scope),
+            ExistingShimScope::Unknown => false,
+        }
+    }
+}
+
+/// Reconstruct an already-installed hook shim's selectors and scope, by parsing the
+/// `[PREK_ARGS]` tokens back out of its exec line (see `HOOK_TMPL`).
+fn read_existing_shim(hook_path: &Path, workspace_root: &Path) -> Result<ExistingShim> {
+    let content = fs_err::read_to_string(hook_path)?;
+    let tokens = shim_persisted_args(&content).unwrap_or_default();
+
+    let mut includes = Vec::new();
+    let mut skips = Vec::new();
+    let mut scope = ExistingShimScope::Workspace;
+    for token in tokens {
+        if let Some(value) = token.strip_prefix("--skip=") {
+            skips.push(value.to_string());
+        } else if let Some(value) = token.strip_prefix("--cd=") {
+            scope = ExistingShimScope::Project(PathBuf::from(value));
+        } else if token.starts_with("--config=") {
+            scope = ExistingShimScope::Unknown;
+        } else if !token.starts_with("--") {
+            includes.push(token);
+        }
+    }
+
+    Ok(ExistingShim {
+        selectors: Selectors::from_persisted(&includes, &skips, workspace_root)?,
+        scope,
+    })
+}
+
+/// Extract the `[PREK_ARGS]` tokens from a shim's `exec "$PREK" hook-impl ... -- "$@"` line.
+fn shim_persisted_args(content: &str) -> Option<Vec<String>> {
+    let line = content
+        .lines()
+        .find(|line| line.contains("--script-version"))?;
+    let (_, after_version) = line.split_once("--script-version")?;
+    let (_, rest) = after_version.trim_start().split_once(char::is_whitespace)?;
+    let (args, _) = rest.rsplit_once(" -- ")?;
+    shlex::split(args.trim())
 }
 
 pub(crate) async fn uninstall(

@@ -1810,3 +1810,555 @@ fn install_invalid_config_warning() {
       |
     ");
 }
+
+#[test]
+fn install_tips_on_unmatched_hook_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+          - id: every-stage
+            name: Every stage
+            language: system
+            entry: echo all
+    "});
+
+    // Default install only sets up the `pre-commit` shim, so `push-only` won't run,
+    // while `every-stage` (no stages, runs everywhere) is not reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    // Installing the `pre-push` shim covers `push-only`, so no tip is emitted.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-push`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_no_tip_for_manual_only_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: manual-only
+            name: Manual only
+            language: system
+            entry: echo manual
+            stages: [manual]
+    "});
+
+    // `manual` has no git shim, so a manual-only hook is never reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_tips_on_unmatched_default_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    default_stages: [pre-push]
+    repos:
+      - repo: local
+        hooks:
+          - id: inherits-default
+            name: Inherits default
+            language: system
+            entry: echo default
+    "});
+
+    // The hook inherits `default_stages: [pre-push]`, which the default install doesn't cover.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `inherits-default` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_skips_remote_hook_without_config_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // A remote hook may set its stages in the manifest, so `default_stages` must not be
+    // assumed to apply here; the hook should not be reported.
+    context.write_pre_commit_config(indoc! {r"
+    default_stages: [pre-push]
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v5.0.0
+        hooks:
+          - id: trailing-whitespace
+    "});
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_tips_on_unmatched_remote_hook_with_config_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Explicit config-level stages override the manifest, so they can be trusted.
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v5.0.0
+        hooks:
+          - id: trailing-whitespace
+            stages: [pre-push]
+    "});
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `trailing-whitespace` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_tips_for_workspace_subproject_hooks() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: root-hook
+            name: Root hook
+            language: system
+            entry: echo root
+    "});
+
+    let nested = context.work_dir().child("nested");
+    nested.create_dir_all()?;
+    nested
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: nested-push-hook
+            name: Nested push hook
+            language: system
+            entry: echo nested
+            stages: [pre-push]
+    "})?;
+    context.git_add(".");
+
+    // A plain root install runs the nested project too, so its pre-push-only hook is reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `nested-push-hook` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    // Skipping the nested project excludes its hooks from the installed shims, so no tip.
+    cmd_snapshot!(context.filters(), context.install().arg("--skip").arg("nested/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn install_tips_on_remote_hook_with_empty_config_stages() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // An explicit `stages: []` overrides the manifest and resolves through `default_stages`,
+    // so the hook is effectively pre-push-only and must be reported.
+    context.write_pre_commit_config(indoc! {r"
+    default_stages: [pre-push]
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v5.0.0
+        hooks:
+          - id: trailing-whitespace
+            stages: []
+    "});
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `trailing-whitespace` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_no_tip_for_unselected_hooks() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+          - id: other-hook
+            name: Other hook
+            language: system
+            entry: echo other
+    "});
+
+    // The installed shim persists `--skip=push-only`, so the hook never runs and isn't reported.
+    cmd_snapshot!(context.filters(), context.install().arg("--skip").arg("push-only"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    // `--include other-hook` rules out `push-only` from the shim entirely.
+    cmd_snapshot!(context.filters(), context.install().arg("other-hook"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    // Including the unmatched hook itself keeps the tip.
+    cmd_snapshot!(context.filters(), context.install().arg("push-only"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_tips_despite_env_var_skip() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+    "});
+
+    // Env-var skips are not persisted into the shim, so the hook would still run on
+    // pre-push and the tip must not be suppressed.
+    cmd_snapshot!(context.filters(), context.install().env(EnvVars::PREK_SKIP, "push-only"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    warning: Skip selectors from environment variables `PREK_SKIP` are ignored during installing hooks.
+    ");
+}
+
+#[test]
+fn install_no_tip_when_existing_shim_already_covers_stage() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+    "});
+
+    // Install the `pre-push` shim first, with no selectors, so it runs every pre-push hook.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-push`
+
+    ----- stderr -----
+    ");
+
+    // A later plain install only (re)installs `pre-commit`, but the `pre-push` shim from the
+    // earlier invocation is still in place and already covers `push-only`, so no tip.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_tips_when_existing_shim_selectors_exclude_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: hook-a
+            name: Hook A
+            language: system
+            entry: echo a
+            stages: [pre-push]
+          - id: hook-b
+            name: Hook B
+            language: system
+            entry: echo b
+            stages: [pre-push]
+    "});
+
+    // Install the `pre-push` shim with an include selector, so only `hook-a` is persisted into it.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push").arg("hook-a"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-push`
+
+    ----- stderr -----
+    ");
+
+    // A later plain install doesn't touch the `pre-push` shim. It already covers `hook-a`, but
+    // its persisted `hook-a` selector rules out `hook-b`, so `hook-b` is still reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `hook-b` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_no_tip_when_foreign_hook_exists_for_other_stage() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+    "});
+
+    // A `pre-push` hook exists but wasn't generated by prek, so it isn't trusted to run our hooks.
+    context
+        .work_dir()
+        .child(".git/hooks/pre-push")
+        .write_str("#!/bin/sh\necho not ours\n")
+        .unwrap();
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn install_tips_when_existing_shim_scoped_to_other_project() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: root-push-hook
+            name: Root push hook
+            language: system
+            entry: echo root
+            stages: [pre-push]
+    "});
+
+    let nested = context.work_dir().child("nested");
+    nested.create_dir_all()?;
+    nested
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: nested-push-hook
+            name: Nested push hook
+            language: system
+            entry: echo nested
+            stages: [pre-push]
+    "})?;
+    context.git_add(".");
+
+    // Install the `pre-push` shim from within the nested project only, so it persists `--cd`
+    // and will only ever discover the nested project, never the rest of the workspace.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push").current_dir(nested.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `../.git/hooks/pre-push` for workspace `[TEMP_DIR]/nested`
+
+    hint: this hook installed for `[TEMP_DIR]/nested` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
+
+    ----- stderr -----
+    ");
+
+    // A later plain root install doesn't touch `pre-push`. That shim is scoped to `nested`, so it
+    // covers `nested-push-hook` but will never run `root-push-hook`, which must still be reported.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `root-push-hook` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn install_tips_when_existing_shim_scoped_to_explicit_config() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: push-only
+            name: Push only
+            language: system
+            entry: echo push
+            stages: [pre-push]
+    "});
+
+    // Install the `pre-push` shim with an explicit `--config`, so it persists `--config` and
+    // bypasses workspace discovery entirely; which project that corresponds to can't be
+    // recovered from the shim alone, so it must never be credited as coverage.
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push").arg("--config").arg(".pre-commit-config.yaml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-push` with specified config `.pre-commit-config.yaml`
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tip: the following hooks are configured for stages that aren't installed, so they'll only run when invoked manually or from CI, not automatically:
+      - `push-only` (pre-push)
+    If that's intentional, no action is needed. Otherwise, install the missing hook type(s) with `prek install --hook-type <type>`, or set `default_install_hook_types` in your config.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+}
