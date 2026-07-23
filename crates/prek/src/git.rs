@@ -148,7 +148,7 @@ pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     Ok(cmd)
 }
 
-pub(crate) fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
+fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
         .map(path_from_git_bytes)
@@ -320,8 +320,15 @@ pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd()?
+/// Staged files under `root`. Set `isolated` to detach from any ambient repository
+/// env (e.g. the backing Git store injected in a jj workspace) when `root` is an
+/// external repo, as `try-repo` does.
+pub(crate) async fn get_staged_files(root: &Path, isolated: bool) -> Result<Vec<PathBuf>, Error> {
+    let mut cmd = git_cmd()?;
+    if isolated {
+        cmd.isolate_from_git_env();
+    }
+    let output = cmd
         .current_dir(root)
         .arg("diff")
         .arg("--cached")

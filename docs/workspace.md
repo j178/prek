@@ -25,7 +25,7 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
     **Workspace root**
 
-    - The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+    - The workspace root is not necessarily the same as the repository root; a workspace can exist within a subdirectory of a Git or Jujutsu repository.
     - The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
 
     **Discovery exclusions**

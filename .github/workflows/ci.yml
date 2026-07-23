@@ -42,6 +42,8 @@ env:
   # jj-vcs/jj publishes no build attestations, so the archives are pinned by SHA-256.
   JJ_SHA256_LINUX_X86_64: "59e5588583ac82b623239929368c65b90735931c0f26b5a16c1f04d5bb97643d"
   JJ_SHA256_MACOS_AARCH64: "84336bbe5673a36ccc6395c494021ba632794da078eb8c8c513a60f8e1cc3083"
+  JJ_SHA256_MACOS_X86_64: "f1a7fec046b816132318c07a9c096680f7aae78b008709c7166a57efd9c579ec"
+  JJ_SHA256_WINDOWS_X86_64: "582f63e55310eaa397782fcb528c3feff5b943a4e2db70666d105972a381f80e"
 
 jobs:
   plan:
@@ -403,23 +405,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          case "$RUNNER_OS" in
-            Linux)
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)
               target="x86_64-unknown-linux-musl"
               sha256="$JJ_SHA256_LINUX_X86_64"
               ;;
-            macOS)
+            macOS-ARM64)
               target="aarch64-apple-darwin"
               sha256="$JJ_SHA256_MACOS_AARCH64"
               ;;
+            macOS-X64)
+              target="x86_64-apple-darwin"
+              sha256="$JJ_SHA256_MACOS_X86_64"
+              ;;
             *)
-              echo "Unsupported runner OS for jj install: $RUNNER_OS" >&2
+              echo "Unsupported runner for jj install: $RUNNER_OS-$RUNNER_ARCH" >&2
               exit 1
               ;;
           esac
           asset="jj-v${JJ_VERSION}-${target}.tar.gz"
           gh release download "v${JJ_VERSION}" --repo jj-vcs/jj --pattern "${asset}" --dir /tmp --clobber
-          echo "${sha256}  /tmp/${asset}" | shasum -a 256 -c -
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "${sha256}  /tmp/${asset}" | sha256sum -c -
+          else
+            echo "${sha256}  /tmp/${asset}" | shasum -a 256 -c -
+          fi
           extracted="$(mktemp -d)"
           tar xzf "/tmp/${asset}" -C "${extracted}"
           mkdir -p "$HOME/.local/bin"
@@ -496,6 +506,28 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Install jj (Jujutsu)"
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $asset = "jj-v$env:JJ_VERSION-x86_64-pc-windows-msvc.zip"
+          gh release download "v$env:JJ_VERSION" --repo jj-vcs/jj --pattern $asset --dir $env:RUNNER_TEMP --clobber
+          $zip = Join-Path $env:RUNNER_TEMP $asset
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          if ($hash -ne $env:JJ_SHA256_WINDOWS_X86_64) {
+            Write-Error "jj checksum mismatch: expected $env:JJ_SHA256_WINDOWS_X86_64, got $hash"
+            exit 1
+          }
+          $dest = Join-Path $env:USERPROFILE ".local\bin"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $dest
+          $jj = Join-Path $dest "jj.exe"
+          & $jj config set --user user.name "prek ci"
+          & $jj config set --user user.email "prek-ci@example.com"
+          & $jj --version
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}

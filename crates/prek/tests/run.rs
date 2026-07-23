@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Command;
 use std::time::SystemTime;
 
 use anyhow::Result;
@@ -12,21 +11,9 @@ use prek_consts::{
     PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
 };
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, jj_cmd};
 
 mod common;
-
-/// Build a `jj` command in `dir`, or `None` when `jj` is not installed so tests can
-/// skip gracefully on machines without Jujutsu.
-fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
-    let jj = which::which("jj").ok()?;
-    let mut cmd = Command::new(jj);
-    cmd.current_dir(dir);
-    // Give jj a deterministic identity so `jj commit` does not depend on host config.
-    cmd.env("JJ_USER", "prek test");
-    cmd.env("JJ_EMAIL", "prek-test@example.com");
-    Some(cmd)
-}
 
 #[test]
 fn run_basic() -> Result<()> {
@@ -386,7 +373,8 @@ fn run_selects_conflicted_files_in_jj_workspace() -> Result<()> {
 }
 
 /// `--from-ref`/`--to-ref` in a jj workspace selects files changed between two
-/// revisions via `jj diff --from --to`.
+/// revisions using merge-base (`from...to`) semantics, matching the Git backend.
+/// With divergent refs, edits made only on the `from` side must NOT be selected.
 #[test]
 fn run_from_ref_to_ref_in_jj_workspace() -> Result<()> {
     let Some(mut init) = jj_cmd(".") else {
@@ -416,15 +404,22 @@ fn run_from_ref_to_ref_in_jj_workspace() -> Result<()> {
         jj_cmd(cwd.path()).unwrap().args(args).assert().success();
     };
 
-    cwd.child("x.txt").write_str("1")?;
-    jj(&["describe", "-m", "c1"]);
-    jj(&["bookmark", "create", "r1", "-r", "@"]);
-    jj(&["new", "-m", "c2"]);
-    cwd.child("y.txt").write_str("2")?;
-    jj(&["bookmark", "create", "r2", "-r", "@"]);
+    // base, then two divergent branches from it.
+    cwd.child("base.txt").write_str("base")?;
+    jj(&["describe", "-m", "base"]);
+    jj(&["bookmark", "create", "base", "-r", "@"]);
+    // `from` branch adds a file that only exists on its side.
+    jj(&["new", "-m", "from"]);
+    cwd.child("from_only.txt").write_str("from")?;
+    jj(&["bookmark", "create", "from", "-r", "@"]);
+    // `to` branch diverges from base with its own file.
+    jj(&["new", "base", "-m", "to"]);
+    cwd.child("to_only.txt").write_str("to")?;
+    jj(&["bookmark", "create", "to", "-r", "@"]);
 
-    // Only y.txt changed between r1 and r2; x.txt and the config are unchanged.
-    cmd_snapshot!(context.filters(), context.run().arg("--from-ref").arg("r1").arg("--to-ref").arg("r2"), @r"
+    // Merge-base semantics: only to_only.txt is in `from...to`. A direct from->to
+    // diff would also report from_only.txt (as a deletion), which must not happen.
+    cmd_snapshot!(context.filters(), context.run().arg("--from-ref").arg("from").arg("--to-ref").arg("to"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -432,7 +427,7 @@ fn run_from_ref_to_ref_in_jj_workspace() -> Result<()> {
     - hook id: echo-files
     - duration: [TIME]
 
-      y.txt
+      to_only.txt
 
     ----- stderr -----
     ");

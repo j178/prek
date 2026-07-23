@@ -34,10 +34,14 @@ Yes. prek detects [Jujutsu](https://jj-vcs.github.io/jj/) workspaces automatical
 When running inside a jj workspace, prek:
 
 - Resolves the backing Git directory from `.jj/repo/store/git_target`, so all internal git commands work even when there is no `.git` directory.
-- Selects the files changed in the current working-copy changeset (via `jj diff --name-only`) for the default `prek run`, because jj has no separate staging area like `git diff --staged`.
+- Selects the files changed in the current working-copy changeset (via `jj diff`) for the default `prek run`, because jj has no separate staging area like `git diff --staged`.
 - Disables git-index stashing, which does not apply to jj.
 
 The `--all-files`, `--files`, and `--from-ref`/`--to-ref` modes work the same way as in a regular git repository.
+
+!!! note
+
+    Hooks that inspect Git index or merge state directly rather than a file list have limited support in jj workspaces, because jj has no staging area and records conflicts in the working-copy commit rather than as a Git merge. In particular, `forbid-new-submodules` relies on `git diff --staged` and will not detect newly added submodules, and `check-merge-conflict` relies on Git merge-state files and will not fire during a jj conflict unless run with `--assume-in-merge`.
 
 ## How does `prek install` interact with `core.hooksPath` and worktrees?
 

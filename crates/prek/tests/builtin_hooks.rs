@@ -2,8 +2,6 @@
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -11,16 +9,9 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, jj_cmd};
 
 mod common;
-
-fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
-    let jj = which::which("jj").ok()?;
-    let mut cmd = Command::new(jj);
-    cmd.current_dir(dir);
-    Some(cmd)
-}
 
 /// Tests that `repo: builtin` hooks doesn't create hook env.
 #[test]

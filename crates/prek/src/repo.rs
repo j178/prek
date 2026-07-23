@@ -23,36 +23,68 @@ pub(crate) struct RepoContext {
 }
 
 impl RepoContext {
-    /// Detect the repository model for the current working directory once at startup.
+    /// Detect the repository model for the current working directory, once at startup.
     ///
-    /// The intent here is to give the rest of the codebase a single answer to
-    /// "what kind of repo am I in?" after `--cd` and other cwd changes have already
-    /// taken effect. Jujutsu is checked first because a Jujutsu workspace may not be
-    /// discoverable via plain Git root detection from the current directory.
+    /// Resolves both a `.jj` workspace root and a `.git` root and picks the nearest
+    /// (deepest): a Git repo nested inside a jj workspace is treated as Git; equal
+    /// roots are a colocated jj repo, so Jujutsu wins.
     fn detect_current() -> Result<Self> {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
-        if let Some(root) = jj::find_workspace_root(&cwd) {
-            let git_dir = jj::resolve_backing_git_dir(&root)
+
+        let jj_root = jj::find_workspace_root(&cwd).map(canonicalize_root);
+        let git_root_result = git::get_root();
+        let git_root = git_root_result
+            .as_ref()
+            .ok()
+            .map(|root| canonicalize_root(root.clone()));
+
+        // Prefer jj unless the Git root is strictly deeper than the jj workspace root
+        // (a nested Git repo inside a jj workspace).
+        let prefer_jj = match (&jj_root, &git_root) {
+            (Some(jj), Some(git)) => {
+                let git_is_strictly_deeper = git.starts_with(jj) && git != jj;
+                !git_is_strictly_deeper
+            }
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
+
+        if let Some(root) = jj_root.filter(|_| prefer_jj) {
+            match jj::resolve_backing_git_dir(&root)
                 .context("Failed to resolve backing Git directory for Jujutsu workspace")?
-                .context(
-                    "Detected a Jujutsu workspace, but could not resolve its backing Git directory",
-                )?;
-            let root = canonicalize_root(root);
-            debug!(
-                root = %root.display(),
-                git_dir = %git_dir.display(),
-                "Detected Jujutsu workspace",
-            );
-            return Ok(Self {
-                kind: RepoKind::Jujutsu,
-                root,
-                backing_git_dir: Some(git_dir),
-            });
+            {
+                Some(git_dir) => {
+                    debug!(
+                        root = %root.display(),
+                        git_dir = %git_dir.display(),
+                        "Detected Jujutsu workspace",
+                    );
+                    return Ok(Self {
+                        kind: RepoKind::Jujutsu,
+                        root,
+                        backing_git_dir: Some(git_dir),
+                    });
+                }
+                // jj metadata exists but has no usable backing Git store (native backend
+                // or a broken `.jj`). Fall back to the Git backend when a Git root was
+                // found, so an otherwise-valid Git checkout keeps working.
+                None if git_root.is_none() => {
+                    return Err(anyhow::anyhow!(
+                        "Detected a Jujutsu workspace, but could not resolve its backing Git directory"
+                    ));
+                }
+                None => {
+                    debug!("Jujutsu metadata is unusable; falling back to the Git backend");
+                }
+            }
         }
 
-        let root = git::get_root()
-            .map_err(|err| anyhow::anyhow!("Not inside a Git or Jujutsu repository: {err}"))?;
-        let root = canonicalize_root(root);
+        let Some(root) = git_root else {
+            let err = git_root_result.expect_err("git_root is None only when detection failed");
+            return Err(anyhow::anyhow!(
+                "Not inside a Git or Jujutsu repository: {err}"
+            ));
+        };
         debug!(root = %root.display(), "Detected Git repository");
 
         Ok(Self {
@@ -147,11 +179,8 @@ pub(crate) fn requires_staged_configs() -> bool {
         .unwrap_or(true)
 }
 
-/// Return files that should be treated as newly introduced for hook logic.
-///
-/// In Git this maps to added files in the index. In Jujutsu there is no staging
-/// area, so the closest useful intent is "files changed in the current working
-/// copy changeset".
+/// Files to treat as newly introduced: added-in-index for Git, absent-in-parent
+/// for Jujutsu (which has no staging area).
 pub(crate) async fn added_files(workspace_root: &Path) -> Result<Vec<PathBuf>> {
     // Both backends report paths relative to `workspace_root` here (git via
     // `--relative`, jj by running in that directory), matching the project-relative
@@ -166,19 +195,19 @@ pub(crate) async fn added_files(workspace_root: &Path) -> Result<Vec<PathBuf>> {
     }
 }
 
-/// Return the default file set for `prek run` when the user did not specify one.
-///
-/// The goal is to preserve each VCS's natural workflow:
-/// Git uses staged files, while Jujutsu uses the current working-copy changeset.
+/// Default file set for `prek run`: staged files for Git, the working-copy
+/// changeset for Jujutsu.
 pub(crate) async fn default_files(workspace_root: &Path) -> Result<Vec<PathBuf>> {
     let repo = current()?;
     match repo.kind() {
-        RepoKind::Git => git::get_staged_files(workspace_root)
+        RepoKind::Git => git::get_staged_files(workspace_root, false)
             .await
             .map_err(Into::into),
-        // Run jj from the workspace root so paths are root-relative, matching git's
+        // Run jj from the repository root (`repo.root()`) so paths are repo-relative, matching git's
         // output; `collect_run_input` then strips the project prefix.
-        RepoKind::Jujutsu => jj::get_changed_files(repo.root()).await.map_err(Into::into),
+        RepoKind::Jujutsu => jj::get_changed_files(repo.root(), Some(workspace_root))
+            .await
+            .map_err(Into::into),
     }
 }
 
@@ -197,16 +226,15 @@ pub(crate) async fn changed_files_between(
         RepoKind::Git => git::get_changed_files(old, new, workspace_root)
             .await
             .map_err(Into::into),
-        RepoKind::Jujutsu => jj::get_changed_files_between(old, new, repo.root())
-            .await
-            .map_err(Into::into),
+        RepoKind::Jujutsu => {
+            jj::get_changed_files_between(old, new, repo.root(), Some(workspace_root))
+                .await
+                .map_err(Into::into)
+        }
     }
 }
 
-/// List tracked files under the given pathspecs using the active repository backend.
-///
-/// This keeps callers focused on "which files belong to the repo here?" rather
-/// than the mechanics of `git ls-files` versus the Jujutsu equivalent.
+/// List tracked files under `paths` using the active repository backend.
 pub(crate) async fn ls_files<P>(
     cwd: &Path,
     paths: impl IntoIterator<Item = P>,
@@ -220,11 +248,8 @@ where
     }
 }
 
-/// Return conflicted files if the current repo backend reports a conflict state.
-///
-/// Git exposes a repo-wide merge-conflict mode, while Jujutsu exposes conflicted
-/// paths in the working copy. This helper normalizes both into "Some(files)" or
-/// `None` so higher-level run logic can stay backend-agnostic.
+/// Conflicted files for the active backend, or `None` when not in a conflict state.
+/// Git uses its repo-wide merge-conflict mode; Jujutsu uses working-copy conflicts.
 pub(crate) async fn conflicted_files(workspace_root: &Path) -> Result<Option<Vec<PathBuf>>> {
     let repo = current()?;
     match repo.kind() {

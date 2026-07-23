@@ -42,6 +42,18 @@ pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
     cmd
 }
 
+/// Build a `jj` command in `dir`, or `None` when `jj` is not installed so tests can
+/// skip gracefully on machines without Jujutsu.
+pub fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
+    let jj = which::which("jj").ok()?;
+    let mut cmd = Command::new(jj);
+    cmd.current_dir(dir);
+    // Give jj a deterministic identity so `jj commit` does not depend on host config.
+    cmd.env("JJ_USER", "prek test");
+    cmd.env("JJ_EMAIL", "prek-test@example.com");
+    Some(cmd)
+}
+
 pub struct TestContext {
     temp_dir: ChildPath,
     home_dir: ChildPath,

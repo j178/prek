@@ -23,23 +23,6 @@ use crate::warn_user;
 // never the current workspace, so its git queries must be isolated from any
 // ambient repo env (e.g. the backing Git store injected in a jj workspace).
 
-/// Staged files in `repo`, isolated from the ambient repository env.
-async fn staged_files_isolated(repo: &Path) -> Result<Vec<PathBuf>> {
-    let output = git::git_cmd()?
-        .isolate_from_git_env()
-        .arg("diff")
-        .arg("--cached")
-        .arg("--name-only")
-        .arg("--diff-filter=ACMRTUXB") // Everything except for D
-        .hidden_args(["--no-ext-diff"])
-        .arg("-z")
-        .current_dir(repo)
-        .check(true)
-        .output()
-        .await?;
-    Ok(git::zsplit(&output.stdout)?)
-}
-
 /// Whether `repo` has a diff against `rev`, isolated from the ambient repo env.
 async fn has_diff_isolated(rev: &str, repo: &Path) -> Result<bool> {
     let status = git::git_cmd()?
@@ -89,7 +72,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
     let index_path = shadow.join(".git/index");
     let objects_path = shadow.join(".git/objects");
 
-    let staged_files = staged_files_isolated(repo_path).await?;
+    let staged_files = git::get_staged_files(repo_path, true).await?;
     if !staged_files.is_empty() {
         git::git_cmd()?
             .isolate_from_git_env()
