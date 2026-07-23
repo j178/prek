@@ -86,7 +86,8 @@ pub(crate) fn resolve_backing_git_dir(workspace_root: &Path) -> Result<Option<Pa
     }
 
     // Canonicalize to resolve any `..` components now that we know it exists.
-    let git_dir = git_dir.canonicalize()?;
+    // `dunce` avoids Windows `\\?\` UNC paths, which git handles poorly.
+    let git_dir = dunce::canonicalize(&git_dir)?;
     Ok(Some(git_dir))
 }
 
@@ -111,6 +112,49 @@ fn parse_path_lines(output: &[u8]) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Build a jj fileset expression matching `path` literally, relative to the
+/// command's working directory. jj interprets bare path arguments as fileset
+/// expressions, so metacharacters like `[` must be quoted; this mirrors git's
+/// `--literal-pathspecs`.
+fn literal_fileset(path: &Path) -> String {
+    // jj uses forward slashes in filesets, and string literals use double quotes
+    // with backslash escaping (matching Rust's debug formatting).
+    let path = path.to_string_lossy().replace('\\', "/");
+    format!("cwd:{path:?}")
+}
+
+/// A single entry from `jj diff --types`: the file's kind before and after the
+/// change, plus its path (relative to the command's working directory). The kind
+/// bytes are jj's status letters, e.g. `F` file, `L` symlink, `C` conflict, `-`
+/// absent.
+struct TypedChange {
+    before: u8,
+    after: u8,
+    path: PathBuf,
+}
+
+fn parse_typed_changes(output: &[u8]) -> Vec<TypedChange> {
+    String::from_utf8_lossy(output)
+        .lines()
+        .filter_map(|line| {
+            let (types, path) = line.trim_end().split_once(char::is_whitespace)?;
+            let bytes = types.as_bytes();
+            if bytes.len() < 2 {
+                return None;
+            }
+            let path = path.trim_start();
+            if path.is_empty() {
+                return None;
+            }
+            Some(TypedChange {
+                before: bytes[0],
+                after: bytes[1],
+                path: PathBuf::from(path),
+            })
+        })
+        .collect()
+}
+
 /// List tracked files in the current Jujutsu workspace revision under `paths`.
 ///
 /// Paths are interpreted relative to `cwd`, mirroring `git::ls_files`. `jj file list`
@@ -127,16 +171,22 @@ where
     cmd.current_dir(cwd).arg("file").arg("list");
     for path in paths {
         let relative = relative_to_cwd(cwd, path.as_ref());
-        if !relative.as_os_str().is_empty() && relative != Path::new(".") {
-            cmd.arg(relative);
-        }
+        let relative = if relative.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            relative
+        };
+        cmd.arg(literal_fileset(relative));
     }
 
     let output = cmd.check(true).output().await?;
     Ok(parse_path_lines(&output.stdout))
 }
 
-/// Get the list of changed files in the current Jujutsu working copy.
+/// Files changed in the current working-copy revision, excluding deletions.
+///
+/// Deletions are dropped to match the Git backend, whose `--diff-filter` never
+/// reports deleted paths (running hooks on nonexistent files is pointless).
 #[instrument(level = "trace")]
 pub(crate) async fn get_changed_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = jj_cmd()?
@@ -144,14 +194,37 @@ pub(crate) async fn get_changed_files(root: &Path) -> Result<Vec<PathBuf>, Error
         .arg("diff")
         .arg("-r")
         .arg("@")
-        .arg("--name-only")
+        .arg("--types")
         .check(true)
         .output()
         .await?;
-    Ok(parse_path_lines(&output.stdout))
+    Ok(changed_paths(&output.stdout))
 }
 
-/// Get the list of changed files between two Jujutsu revisions.
+/// Files newly added in the current working-copy revision (absent before).
+///
+/// Mirrors `git diff --staged --diff-filter=A`: only files that did not exist in
+/// the parent, so hooks like `check-added-large-files` do not flag pre-existing
+/// files that were merely modified.
+#[instrument(level = "trace")]
+pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+    let output = jj_cmd()?
+        .current_dir(root)
+        .arg("diff")
+        .arg("-r")
+        .arg("@")
+        .arg("--types")
+        .check(true)
+        .output()
+        .await?;
+    Ok(parse_typed_changes(&output.stdout)
+        .into_iter()
+        .filter(|change| change.before == b'-' && change.after != b'-')
+        .map(|change| change.path)
+        .collect())
+}
+
+/// Get the list of changed files between two Jujutsu revisions (excluding deletions).
 #[instrument(level = "trace")]
 pub(crate) async fn get_changed_files_between(
     old: &str,
@@ -165,41 +238,50 @@ pub(crate) async fn get_changed_files_between(
         .arg(old)
         .arg("--to")
         .arg(new)
-        .arg("--name-only")
-        .check(true)
-        .output()
-        .await?;
-    Ok(parse_path_lines(&output.stdout))
-}
-
-/// Get conflicted files in the current Jujutsu working copy.
-#[instrument(level = "trace")]
-pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = jj_cmd()?
-        .current_dir(root)
-        .arg("diff")
-        .arg("-r")
-        .arg("@")
         .arg("--types")
         .check(true)
         .output()
         .await?;
+    Ok(changed_paths(&output.stdout))
+}
 
+fn changed_paths(output: &[u8]) -> Vec<PathBuf> {
+    parse_typed_changes(output)
+        .into_iter()
+        .filter(|change| change.after != b'-')
+        .map(|change| change.path)
+        .collect()
+}
+
+/// Get files with unresolved conflicts in the current Jujutsu working copy.
+///
+/// Uses `jj resolve --list`, which is the authoritative list of unresolved
+/// conflicts. It exits non-zero when there are none, so failures are treated as
+/// "no conflicts".
+#[instrument(level = "trace")]
+pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+    let output = jj_cmd()?
+        .current_dir(root)
+        .arg("resolve")
+        .arg("--list")
+        .check(false)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    // Each line is `<path><padding><N>-sided conflict`. Paths do not contain runs
+    // of two or more spaces, so split on the first such run.
     let files = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() {
-                return None;
-            }
-
-            let mut parts = line.splitn(2, char::is_whitespace);
-            let status = parts.next()?;
-            let path = parts.next()?.trim_start();
-            if status.contains('C') && !path.is_empty() {
-                Some(PathBuf::from(path))
-            } else {
+            let path = line.split("  ").next()?.trim();
+            if path.is_empty() {
                 None
+            } else {
+                Some(PathBuf::from(path))
             }
         })
         .collect();
@@ -281,5 +363,62 @@ mod tests {
 
         let resolved = resolve_backing_git_dir(&secondary_root).unwrap();
         assert_eq!(resolved, Some(main_git.canonicalize().unwrap()));
+    }
+
+    #[test]
+    fn resolve_backing_git_dir_returns_none_without_git_target() {
+        // A non-Git jj backend has a store directory but no `git_target` file.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs_err::create_dir_all(root.join(".jj").join("repo").join("store")).unwrap();
+
+        let resolved = resolve_backing_git_dir(root).unwrap();
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn resolve_backing_git_dir_returns_none_for_dangling_git_target() {
+        // `git_target` points at a path that does not exist; this should be reported
+        // as "no backing dir", not surface as an error from `canonicalize`.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let store_dir = root.join(".jj").join("repo").join("store");
+        fs_err::create_dir_all(&store_dir).unwrap();
+        fs_err::write(store_dir.join("git_target"), "../../../.git").unwrap();
+        // Note: no `.git` directory is created.
+
+        let resolved = resolve_backing_git_dir(root).unwrap();
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn literal_fileset_quotes_paths() {
+        assert_eq!(literal_fileset(Path::new("foo.txt")), r#"cwd:"foo.txt""#);
+        assert_eq!(literal_fileset(Path::new(".")), r#"cwd:".""#);
+        // Fileset metacharacters must be preserved literally, not treated as globs.
+        assert_eq!(
+            literal_fileset(Path::new("glob[1].txt")),
+            r#"cwd:"glob[1].txt""#
+        );
+    }
+
+    #[test]
+    fn parse_typed_changes_reads_status_and_path() {
+        let changes = parse_typed_changes(b"-F added.txt\nFF modified.txt\nF- deleted.txt\n");
+        assert_eq!(changes.len(), 3);
+        assert_eq!(changes[0].before, b'-');
+        assert_eq!(changes[0].after, b'F');
+        assert_eq!(changes[0].path, PathBuf::from("added.txt"));
+        assert_eq!(changes[2].before, b'F');
+        assert_eq!(changes[2].after, b'-');
+    }
+
+    #[test]
+    fn changed_paths_excludes_deletions() {
+        let paths = changed_paths(b"-F added.txt\nFF modified.txt\nF- deleted.txt\n");
+        assert_eq!(
+            paths,
+            vec![PathBuf::from("added.txt"), PathBuf::from("modified.txt")]
+        );
     }
 }

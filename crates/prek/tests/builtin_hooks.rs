@@ -3257,6 +3257,55 @@ fn check_case_conflict_in_non_colocated_jujutsu_workspace() -> Result<()> {
     Ok(())
 }
 
+/// In a jj workspace, `check-added-large-files` must only flag newly added files,
+/// not pre-existing ones that were merely modified (jj has no staging area, so
+/// "added" is derived from the working-copy changeset).
+#[test]
+fn check_added_large_files_ignores_modified_in_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--colocate"])
+        .assert()
+        .success();
+
+    let cwd = context.work_dir();
+    // Commit a large file as a pre-existing baseline.
+    cwd.child("large_file.txt").write_binary(&[0; 2048])?; // 2 KB
+    jj_cmd(cwd.path())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "});
+
+    // Modify the pre-existing large file (still over the limit) and add a small file.
+    cwd.child("large_file.txt").write_binary(&[1; 2048])?;
+    cwd.child("small.txt").write_str("hello\n")?;
+
+    // large_file.txt is modified, not added, so it must not be flagged.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn check_case_conflict_among_new_files() -> Result<()> {
     let context = TestContext::new();

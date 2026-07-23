@@ -148,7 +148,7 @@ pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     Ok(cmd)
 }
 
-fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
+pub(crate) fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
         .map(path_from_git_bytes)
@@ -362,18 +362,6 @@ pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
         .output()
         .await?;
     Ok(!output.stdout.trim_ascii().is_empty())
-}
-
-pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
-    let status = git_cmd()?
-        .arg("diff")
-        .arg("--quiet")
-        .arg(rev)
-        .current_dir(path)
-        .check(false)
-        .status()
-        .await?;
-    Ok(status.code() == Some(1))
 }
 
 pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {

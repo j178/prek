@@ -153,11 +153,14 @@ pub(crate) fn requires_staged_configs() -> bool {
 /// area, so the closest useful intent is "files changed in the current working
 /// copy changeset".
 pub(crate) async fn added_files(workspace_root: &Path) -> Result<Vec<PathBuf>> {
+    // Both backends report paths relative to `workspace_root` here (git via
+    // `--relative`, jj by running in that directory), matching the project-relative
+    // filenames hooks expect.
     match current()?.kind() {
         RepoKind::Git => git::get_added_files(workspace_root)
             .await
             .map_err(Into::into),
-        RepoKind::Jujutsu => jj::get_changed_files(workspace_root)
+        RepoKind::Jujutsu => jj::get_added_files(workspace_root)
             .await
             .map_err(Into::into),
     }
@@ -168,13 +171,14 @@ pub(crate) async fn added_files(workspace_root: &Path) -> Result<Vec<PathBuf>> {
 /// The goal is to preserve each VCS's natural workflow:
 /// Git uses staged files, while Jujutsu uses the current working-copy changeset.
 pub(crate) async fn default_files(workspace_root: &Path) -> Result<Vec<PathBuf>> {
-    match current()?.kind() {
+    let repo = current()?;
+    match repo.kind() {
         RepoKind::Git => git::get_staged_files(workspace_root)
             .await
             .map_err(Into::into),
-        RepoKind::Jujutsu => jj::get_changed_files(workspace_root)
-            .await
-            .map_err(Into::into),
+        // Run jj from the workspace root so paths are root-relative, matching git's
+        // output; `collect_run_input` then strips the project prefix.
+        RepoKind::Jujutsu => jj::get_changed_files(repo.root()).await.map_err(Into::into),
     }
 }
 
@@ -188,11 +192,12 @@ pub(crate) async fn changed_files_between(
     new: &str,
     workspace_root: &Path,
 ) -> Result<Vec<PathBuf>> {
-    match current()?.kind() {
+    let repo = current()?;
+    match repo.kind() {
         RepoKind::Git => git::get_changed_files(old, new, workspace_root)
             .await
             .map_err(Into::into),
-        RepoKind::Jujutsu => jj::get_changed_files_between(old, new, workspace_root)
+        RepoKind::Jujutsu => jj::get_changed_files_between(old, new, repo.root())
             .await
             .map_err(Into::into),
     }
@@ -221,7 +226,8 @@ where
 /// paths in the working copy. This helper normalizes both into "Some(files)" or
 /// `None` so higher-level run logic can stay backend-agnostic.
 pub(crate) async fn conflicted_files(workspace_root: &Path) -> Result<Option<Vec<PathBuf>>> {
-    match current()?.kind() {
+    let repo = current()?;
+    match repo.kind() {
         RepoKind::Git => {
             if git::is_in_merge_conflict().await? {
                 Ok(Some(git::get_conflicted_files(workspace_root).await?))
@@ -230,7 +236,7 @@ pub(crate) async fn conflicted_files(workspace_root: &Path) -> Result<Option<Vec
             }
         }
         RepoKind::Jujutsu => {
-            let files = jj::get_conflicted_files(workspace_root).await?;
+            let files = jj::get_conflicted_files(repo.root()).await?;
             if files.is_empty() {
                 Ok(None)
             } else {

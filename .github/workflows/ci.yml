@@ -31,12 +31,17 @@ env:
   DENO_VERSION: "2"
   DART_VERSION: "3.10.4"
   R_VERSION: "4.6.0"
+  JJ_VERSION: "0.43.0"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+
+  # jj-vcs/jj publishes no build attestations, so the archives are pinned by SHA-256.
+  JJ_SHA256_LINUX_X86_64: "59e5588583ac82b623239929368c65b90735931c0f26b5a16c1f04d5bb97643d"
+  JJ_SHA256_MACOS_AARCH64: "84336bbe5673a36ccc6395c494021ba632794da078eb8c8c513a60f8e1cc3083"
 
 jobs:
   plan:
@@ -392,6 +397,38 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Install jj (Jujutsu)"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              target="x86_64-unknown-linux-musl"
+              sha256="$JJ_SHA256_LINUX_X86_64"
+              ;;
+            macOS)
+              target="aarch64-apple-darwin"
+              sha256="$JJ_SHA256_MACOS_AARCH64"
+              ;;
+            *)
+              echo "Unsupported runner OS for jj install: $RUNNER_OS" >&2
+              exit 1
+              ;;
+          esac
+          asset="jj-v${JJ_VERSION}-${target}.tar.gz"
+          gh release download "v${JJ_VERSION}" --repo jj-vcs/jj --pattern "${asset}" --dir /tmp --clobber
+          echo "${sha256}  /tmp/${asset}" | shasum -a 256 -c -
+          extracted="$(mktemp -d)"
+          tar xzf "/tmp/${asset}" -C "${extracted}"
+          mkdir -p "$HOME/.local/bin"
+          mv "${extracted}/jj" "$HOME/.local/bin/jj"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          jj config set --user user.name "prek ci" || true
+          jj config set --user user.email "prek-ci@example.com" || true
+          jj --version
 
       - name: "Cargo test"
         env:
