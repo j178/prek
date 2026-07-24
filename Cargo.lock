@@ -2033,6 +2033,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-width 0.2.2",
+ "url",
  "walkdir",
  "webpki-root-certs",
  "which",
