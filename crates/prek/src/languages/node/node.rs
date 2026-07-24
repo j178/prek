@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::process::Stdio;
+use std::str;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
@@ -263,14 +264,6 @@ impl LanguageBackend for Node {
     }
 }
 
-/// Build the npm package specs for a Node hook installation.
-///
-/// `Hook::repo_path` returns a path only for remote hooks, and remote repositories are
-/// always materialized by cloning them with Git. Do not probe for `.git` or
-/// `package.json` here: the former duplicates that invariant and couples this code to
-/// the checkout representation, while the latter would silently skip an invalid hook
-/// package instead of letting npm report the installation error. Local hooks have no
-/// repository path, so they install only their explicit additional dependencies.
 fn node_install_dependencies(hook: &Hook) -> Result<(Vec<String>, bool)> {
     let mut deps = Vec::with_capacity(hook.additional_dependencies.len() + 1);
     let mut includes_git_hook_repo = false;
@@ -297,8 +290,7 @@ async fn query_npm_version(npm: &Path, path: &std::ffi::OsStr) -> Result<Version
         .check(true)
         .output()
         .await?;
-    Version::parse(String::from_utf8_lossy(&output.stdout).trim())
-        .context("Failed to parse npm version")
+    Version::parse(str::from_utf8(&output.stdout)?.trim()).context("Failed to parse npm version")
 }
 
 fn apply_npm_config_env(cmd: &mut Cmd, prefix: &Path, cache: &Path) {

@@ -66,8 +66,10 @@ pub struct Store {
 }
 
 impl Store {
-    pub(crate) fn from_path(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        Ok(Self {
+            path: std::path::absolute(path)?,
+        })
     }
 
     /// Create a store from environment variables or default paths.
@@ -83,7 +85,7 @@ impl Store {
         let Some(path) = path else {
             return Err(Error::HomeNotFound);
         };
-        let store = Store::from_path(path).init()?;
+        let store = Store::from_path(path)?.init()?;
 
         Ok(store)
     }

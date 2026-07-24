@@ -254,7 +254,7 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
     ", hook_repo.work_dir().display()});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_HOME, ".prek-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

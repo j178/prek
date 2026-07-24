@@ -434,7 +434,7 @@ YyRIHN8wfdVoOw==
     #[tokio::test]
     async fn downloads_file_without_checksum() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
+        let store = Store::from_path(temp.path())?.init()?;
         let (url, server) = serve_once(b"data").await?;
 
         let (download, _computed_digest) =
@@ -448,7 +448,7 @@ YyRIHN8wfdVoOw==
     #[tokio::test]
     async fn download_artifact_keeps_plain_file() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
+        let store = Store::from_path(temp.path())?.init()?;
         let (url, server) = serve_once(b"data").await?;
 
         let download = super::download_artifact(&url, "rustup-init", &store, async || {
@@ -468,7 +468,7 @@ YyRIHN8wfdVoOw==
     #[tokio::test]
     async fn download_artifact_rejects_mismatched_checksum() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
+        let store = Store::from_path(temp.path())?.init()?;
         let (url, server) = serve_once(b"data").await?;
 
         let result = super::download_artifact(&url, "archive.tar.gz", &store, async || {
@@ -487,7 +487,7 @@ YyRIHN8wfdVoOw==
     #[tokio::test]
     async fn downloads_file_and_computes_checksum() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
+        let store = Store::from_path(temp.path())?.init()?;
         let (url, server) = serve_once(b"data").await?;
 
         let (download, sha256_digest) =
@@ -502,7 +502,7 @@ YyRIHN8wfdVoOw==
     #[tokio::test]
     async fn downloads_chunked_file_and_computes_checksum() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let store = Store::from_path(temp.path()).init()?;
+        let store = Store::from_path(temp.path())?.init()?;
         let (url, server) = serve_chunked(&[b"da", b"ta"]).await?;
 
         let (download, sha256_digest) =
