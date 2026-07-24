@@ -202,7 +202,7 @@ fn additional_dependencies() {
 /// This runs on every supported npm version. In particular, npm 11.9 through
 /// 11.12 must not receive `--allow-git=root` because npm's missing `_isRoot`
 /// propagation bug rejects root-level Git dependencies with EALLOWGIT:
-/// https://github.com/npm/cli/issues/9189
+/// <https://github.com/npm/cli/issues/9189>
 #[test]
 fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
     let hook_repo = TestContext::new();
