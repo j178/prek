@@ -13,12 +13,14 @@ For `repo: local` hooks, `language` is required. For remote hooks, it is read fr
 
 ## Toolchain management and `language_version`
 
-prek resolves toolchains in two steps:
+prek resolves toolchains in two stages:
 
-1. **Discover system toolchains** (PATH and common version manager locations).
-2. **Download a toolchain** when the language supports it and the request cannot be satisfied locally.
+1. **Reuse a compatible local toolchain**, including toolchains already managed by prek and system installations.
+2. **Download a toolchain** when the language supports it, downloads are allowed, and the request cannot be satisfied locally.
 
-If `language_version` is `system`, prek skips downloads and requires a system-installed toolchain. If `language_version` is `default`, prek uses the language’s default resolution logic (often preferring system installs, then downloading if supported).
+If `language_version` is `system`, prek does not download a new toolchain. It may still reuse a compatible toolchain already managed by prek before searching system installations. Version constraints derived from project metadata, such as Python’s `requires-python` or Go’s `go` directive, still apply without re-enabling downloads.
+
+If `language_version` is `default`, prek uses the language’s default resolution logic and may download a compatible toolchain when none is available locally.
 
 !!! note "prek-only"
 

@@ -223,18 +223,15 @@ impl LanguageBackend for Python {
 }
 
 fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
+    let request: &PythonRequest = request.version();
     match request {
-        LanguageRequest::Any { .. } => None,
-        LanguageRequest::Python(request) => match request {
-            PythonRequest::Any => None,
-            PythonRequest::Major(major) => Some(format!("{major}")),
-            PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
-            PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                Some(format!("{major}.{minor}.{patch}"))
-            }
-            PythonRequest::Range(_, raw) => Some(raw.clone()),
-        },
-        _ => unreachable!(),
+        PythonRequest::Any => None,
+        PythonRequest::Major(major) => Some(format!("{major}")),
+        PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
+        PythonRequest::MajorMinorPatch(major, minor, patch) => {
+            Some(format!("{major}.{minor}.{patch}"))
+        }
+        PythonRequest::Range(_, raw) => Some(raw.clone()),
     }
 }
 
@@ -460,7 +457,7 @@ mod tests {
         uses_prek_managed_store: bool,
     ) {
         let (_temp, uv, store, info) = setup_test_install();
-        let request = LanguageRequest::Any { system_only: false };
+        let request = LanguageRequest::default();
         let cmd = Python::create_venv_command(&uv, &store, &info, &request, attempt);
         let args = cmd
             .get_args()
@@ -485,7 +482,7 @@ mod tests {
     #[test]
     fn create_venv_command_removes_uv_system_python_override() {
         let (_temp, uv, store, info) = setup_test_install();
-        let request = LanguageRequest::Any { system_only: false };
+        let request = LanguageRequest::default();
         let cmd = Python::create_venv_command(&uv, &store, &info, &request, VenvAttempt::External);
         let envs = env_map(&cmd);
 

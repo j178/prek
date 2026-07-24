@@ -1384,7 +1384,7 @@ If not set, `prek` may use [`default_language_version`](#default_language_versio
     Special values:
 
     - `default`: use the language’s default resolution logic.
-    - `system`: require a system-installed toolchain (no downloads).
+    - `system`: do not download a new toolchain. A compatible toolchain already managed by prek may still be reused, and project metadata can further constrain the required version.
 
     Language-specific behavior:
 
