@@ -315,12 +315,11 @@ fn tags_from_filename(filename: &Path) -> TagSet {
         return result;
     }
 
-    // Allow e.g. "Dockerfile.xenial" to match "Dockerfile", but only when
-    // the real extension is unknown.
+    // Allow e.g. ".pylintrc" and "xenial.Dockerfile" to match their
+    // registered name parts, but only when the real extension is unknown.
     filename
         .split('.')
-        .next()
-        .and_then(|name| tags::NAMES.get(name))
+        .find_map(|name| tags::NAMES.get(name))
         .copied()
         .unwrap_or_default()
 }
@@ -630,6 +629,20 @@ mod tests {
         let tags = super::tags_from_filename(Path::new("Dockerfile.xenial"));
 
         assert_tagset(&tags, &["dockerfile", "text"]);
+    }
+
+    #[test]
+    fn tags_from_filename_falls_back_to_later_name_part_for_unknown_extension() {
+        let tags = super::tags_from_filename(Path::new("xenial.Dockerfile"));
+
+        assert_tagset(&tags, &["dockerfile", "text"]);
+    }
+
+    #[test]
+    fn tags_from_filename_falls_back_to_name_after_leading_dot() {
+        let tags = super::tags_from_filename(Path::new(".pylintrc"));
+
+        assert_tagset(&tags, &["ini", "pylintrc", "text"]);
     }
 
     #[test]
