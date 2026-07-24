@@ -15,7 +15,6 @@ use crate::languages::LanguageBackend;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
 use crate::languages::ruby::installer::{RubyInstaller, query_ruby_version};
-use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
@@ -37,14 +36,10 @@ impl LanguageBackend for Ruby {
         let ruby_dir = store.tools_path(ToolBucket::Ruby);
         let installer = RubyInstaller::new(ruby_dir);
 
-        let (request, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (&RubyRequest::Any, !system_only),
-            LanguageRequest::Ruby(req) => (req, true),
-            _ => unreachable!(),
-        };
+        let request: &RubyRequest = hook.language_request.version();
 
         let ruby = installer
-            .install(store, request, allows_download)
+            .install(store, request, hook.language_request.allows_download())
             .await
             .context("Failed to install Ruby")?;
 

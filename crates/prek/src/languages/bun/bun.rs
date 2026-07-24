@@ -14,7 +14,6 @@ use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageBackend;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::installer::{BunInstaller, BunResult, bin_dir, lib_dir};
-use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
@@ -43,13 +42,9 @@ impl LanguageBackend for Bun {
         let bun_dir = store.tools_path(ToolBucket::Bun);
         let installer = BunInstaller::new(bun_dir);
 
-        let (bun_request, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (&BunRequest::Any, !system_only),
-            LanguageRequest::Bun(bun_request) => (bun_request, true),
-            _ => unreachable!(),
-        };
+        let bun_request: &BunRequest = hook.language_request.version();
         let bun = installer
-            .install(store, bun_request, allows_download)
+            .install(store, bun_request, hook.language_request.allows_download())
             .await
             .context("Failed to install bun")?;
 

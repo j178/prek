@@ -17,9 +17,16 @@ pub(crate) enum Error {
     InvalidVersion(String),
 }
 
+/// A version constraint together with the policy for acquiring a matching toolchain.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum LanguageRequest {
-    Any { system_only: bool },
+pub(crate) struct LanguageRequest {
+    version: VersionRequest,
+    allows_download: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum VersionRequest {
+    Any,
     Bun(BunRequest),
     Dotnet(DotnetRequest),
     Deno(DenoRequest),
@@ -32,40 +39,63 @@ pub(crate) enum LanguageRequest {
     Semver(SemverRequest),
 }
 
+pub(crate) trait LanguageVersionRequest {
+    fn from_version_request(request: &VersionRequest) -> &Self;
+}
+
+macro_rules! impl_language_version_request {
+    ($request:ty, $variant:ident) => {
+        impl LanguageVersionRequest for $request {
+            fn from_version_request(request: &VersionRequest) -> &Self {
+                match request {
+                    VersionRequest::Any => &Self::Any,
+                    VersionRequest::$variant(request) => request,
+                    _ => unreachable!("language-specific version request mismatch"),
+                }
+            }
+        }
+    };
+}
+
+impl_language_version_request!(BunRequest, Bun);
+impl_language_version_request!(DotnetRequest, Dotnet);
+impl_language_version_request!(DenoRequest, Deno);
+impl_language_version_request!(GoRequest, Golang);
+impl_language_version_request!(RubyRequest, Ruby);
+impl_language_version_request!(NodeRequest, Node);
+impl_language_version_request!(PythonRequest, Python);
+impl_language_version_request!(RustRequest, Rust);
+
+impl Default for LanguageRequest {
+    fn default() -> Self {
+        Self {
+            version: VersionRequest::Any,
+            allows_download: true,
+        }
+    }
+}
+
 impl LanguageRequest {
     pub(crate) fn is_any(&self) -> bool {
-        match self {
-            LanguageRequest::Any { .. } => true,
-            LanguageRequest::Bun(req) => req.is_any(),
-            LanguageRequest::Dotnet(req) => req.is_any(),
-            LanguageRequest::Deno(req) => req.is_any(),
-            LanguageRequest::Golang(req) => req.is_any(),
-            LanguageRequest::Node(req) => req.is_any(),
-            LanguageRequest::Python(req) => req.is_any(),
-            LanguageRequest::Ruby(req) => req.is_any(),
-            LanguageRequest::Rust(req) => req.is_any(),
-            LanguageRequest::Semver(_) => false,
-        }
+        self.version.is_any()
     }
 
     /// Returns true if this request allows downloading a version.
-    ///
-    /// Currently, only `system` disallows downloading. In the future,
-    /// we may add more specific version requests that also disallow downloading.
-    /// For example `language_version: 3.12; system_only`.
     pub(crate) fn allows_download(&self) -> bool {
-        match self {
-            LanguageRequest::Any { system_only } => !system_only,
-            LanguageRequest::Bun(_)
-            | LanguageRequest::Dotnet(_)
-            | LanguageRequest::Deno(_)
-            | LanguageRequest::Golang(_)
-            | LanguageRequest::Node(_)
-            | LanguageRequest::Python(_)
-            | LanguageRequest::Ruby(_)
-            | LanguageRequest::Rust(_)
-            | LanguageRequest::Semver(_) => true,
-        }
+        self.allows_download
+    }
+
+    pub(crate) fn version_request(&self) -> &VersionRequest {
+        &self.version
+    }
+
+    pub(crate) fn version<T: LanguageVersionRequest>(&self) -> &T {
+        T::from_version_request(&self.version)
+    }
+
+    /// Replace only the version constraint, preserving download policy.
+    pub(crate) fn set_version(&mut self, version: VersionRequest) {
+        self.version = version;
     }
 
     pub(crate) fn parse(lang: Language, request: &str) -> Result<Self, Error> {
@@ -74,16 +104,26 @@ impl LanguageRequest {
         //   In `get_default_version`, if a system version is available, it will return `system`.
         //   For Python, it will find from sys.executable, `pythonX.Y`, or versions `py` can find.
         //   Otherwise, it will still return `default`.
-        // - `system`: use current system installed version
+        // - `system`: use a locally available version without downloading
         // - Python version passed down to `virtualenv`, e.g. `python`, `python3`, `python3.8`
         // - Node.js version passed down to `nodeenv`
         // - Rust version passed down to `rustup`
 
-        if request == "default" || request.is_empty() {
-            return Ok(LanguageRequest::Any { system_only: false });
-        }
-        if request == "system" {
-            return Ok(LanguageRequest::Any { system_only: true });
+        Ok(Self {
+            version: VersionRequest::parse(lang, request)?,
+            allows_download: request != "system",
+        })
+    }
+
+    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        self.version.satisfied_by(install_info)
+    }
+}
+
+impl VersionRequest {
+    pub(crate) fn parse(lang: Language, request: &str) -> Result<Self, Error> {
+        if request == "default" || request == "system" || request.is_empty() {
+            return Ok(Self::Any);
         }
 
         Ok(match lang {
@@ -114,18 +154,33 @@ impl LanguageRequest {
         })
     }
 
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+    fn is_any(&self) -> bool {
         match self {
-            LanguageRequest::Any { .. } => true,
-            LanguageRequest::Bun(req) => req.satisfied_by(install_info),
-            LanguageRequest::Dotnet(req) => req.satisfied_by(install_info),
-            LanguageRequest::Deno(req) => req.satisfied_by(install_info),
-            LanguageRequest::Golang(req) => req.satisfied_by(install_info),
-            LanguageRequest::Node(req) => req.satisfied_by(install_info),
-            LanguageRequest::Python(req) => req.satisfied_by(install_info),
-            LanguageRequest::Ruby(req) => req.satisfied_by(install_info),
-            LanguageRequest::Rust(req) => req.satisfied_by(install_info),
-            LanguageRequest::Semver(req) => req.satisfied_by(install_info),
+            Self::Any => true,
+            Self::Bun(req) => req.is_any(),
+            Self::Dotnet(req) => req.is_any(),
+            Self::Deno(req) => req.is_any(),
+            Self::Golang(req) => req.is_any(),
+            Self::Node(req) => req.is_any(),
+            Self::Python(req) => req.is_any(),
+            Self::Ruby(req) => req.is_any(),
+            Self::Rust(req) => req.is_any(),
+            Self::Semver(_) => false,
+        }
+    }
+
+    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Bun(req) => req.satisfied_by(install_info),
+            Self::Dotnet(req) => req.satisfied_by(install_info),
+            Self::Deno(req) => req.satisfied_by(install_info),
+            Self::Golang(req) => req.satisfied_by(install_info),
+            Self::Node(req) => req.satisfied_by(install_info),
+            Self::Python(req) => req.satisfied_by(install_info),
+            Self::Ruby(req) => req.satisfied_by(install_info),
+            Self::Rust(req) => req.satisfied_by(install_info),
+            Self::Semver(req) => req.satisfied_by(install_info),
         }
     }
 }

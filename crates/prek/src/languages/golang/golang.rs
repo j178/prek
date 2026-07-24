@@ -14,7 +14,6 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
-use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -36,13 +35,9 @@ impl LanguageBackend for Golang {
         let go_dir = store.tools_path(ToolBucket::Go);
         let installer = GoInstaller::new(go_dir);
 
-        let (version, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (&GoRequest::Any, !system_only),
-            LanguageRequest::Golang(version) => (version, true),
-            _ => unreachable!(),
-        };
+        let version: &GoRequest = hook.language_request.version();
         let go = installer
-            .install(store, version, allows_download)
+            .install(store, version, hook.language_request.allows_download())
             .await
             .context("Failed to install go")?;
 

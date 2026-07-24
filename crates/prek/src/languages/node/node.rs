@@ -15,7 +15,6 @@ use crate::languages::LanguageBackend;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir, query_node_version};
 use crate::languages::node::version::EXTRA_KEY_LTS;
-use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -61,13 +60,9 @@ impl LanguageBackend for Node {
         let node_dir = store.tools_path(ToolBucket::Node);
         let installer = NodeInstaller::new(node_dir);
 
-        let (node_request, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (&NodeRequest::Any, !system_only),
-            LanguageRequest::Node(node_request) => (node_request, true),
-            _ => unreachable!(),
-        };
+        let node_request: &NodeRequest = hook.language_request.version();
         let node = installer
-            .install(store, node_request, allows_download)
+            .install(store, node_request, hook.language_request.allows_download())
             .await
             .context("Failed to install node")?;
 
