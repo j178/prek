@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -595,21 +594,6 @@ impl Hook {
             dependencies: &self.additional_dependencies,
             language_request: &self.language_request,
         })
-    }
-
-    /// Dependencies to pass to language dependency installers.
-    ///
-    /// For remote hooks, this includes the local path to the cloned repository so that
-    /// installers can install the hook's package/project itself.
-    pub(crate) fn install_dependencies(&self) -> Cow<'_, [String]> {
-        if let Some(repo_path) = self.repo_path() {
-            let mut deps = Vec::with_capacity(self.additional_dependencies.len() + 1);
-            deps.push(repo_path.to_string_lossy().into_owned());
-            deps.extend(self.additional_dependencies.iter().cloned());
-            Cow::Owned(deps)
-        } else {
-            Cow::Borrowed(&self.additional_dependencies)
-        }
     }
 }
 
@@ -1254,18 +1238,11 @@ mod tests {
         let hook = HookBuilder::new(project, repo, hook_spec, 0)
             .build()
             .await?;
-        let install_dependencies = hook.install_dependencies();
-        let mut expected_install_dependencies = vec![repo_path.to_string_lossy().into_owned()];
-        expected_install_dependencies.extend(additional_dependencies.iter().cloned());
         let requirement = hook
             .environment_requirement()
             .expect("Python hook installs an environment");
 
         assert_eq!(hook.additional_dependencies, additional_dependencies);
-        assert_eq!(
-            install_dependencies.as_ref(),
-            expected_install_dependencies.as_slice()
-        );
         assert_eq!(requirement.repo, Some(repo_identity));
         assert_eq!(requirement.dependencies, additional_dependencies);
 

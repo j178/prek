@@ -66,7 +66,12 @@ impl LanguageBackend for Bun {
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
         // 3. Install dependencies
-        let deps = hook.install_dependencies();
+        let mut deps = Vec::with_capacity(hook.additional_dependencies.len() + 1);
+        if let Some(repo_path) = hook.repo_path() {
+            deps.push(repo_path.to_string_lossy().into_owned());
+        }
+        deps.extend(hook.additional_dependencies.iter().cloned());
+
         if deps.is_empty() {
             debug!("No dependencies to install");
         } else {
@@ -79,7 +84,7 @@ impl LanguageBackend for Bun {
             Cmd::new(bun.bun())
                 .arg("install")
                 .arg("-g")
-                .args(&*deps)
+                .args(&deps)
                 .env(EnvVars::PATH, new_path)
                 .env(EnvVars::BUN_INSTALL, &info.env_path)
                 .check(true)
