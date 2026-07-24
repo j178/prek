@@ -437,7 +437,7 @@ mod tests {
 
         let info = InstallInfo::create(Language::Python, None, Vec::new(), &hooks_dir)
             .expect("create install info");
-        let store = Store::from_path(temp.path().join("store"));
+        let store = Store::from_path(temp.path().join("store")).expect("create store");
         let uv = Uv::new(PathBuf::from("uv"));
 
         (temp, uv, store, info)
