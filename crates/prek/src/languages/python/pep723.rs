@@ -30,7 +30,7 @@ use serde::Deserialize;
 use tracing::trace;
 
 use crate::hook::Hook;
-use crate::languages::version::LanguageRequest;
+use crate::languages::version::VersionRequest;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
@@ -285,10 +285,11 @@ pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
     if let Some(language_request) = script.metadata.requires_python {
         if !hook.language_request.is_any() {
             trace!(
-                "`language_version` is ignored because `requires_python` is specified in the PEP 723 metadata"
+                "The `language_version` constraint is replaced by `requires_python` from PEP 723 metadata; its download policy is preserved"
             );
         }
-        hook.language_request = LanguageRequest::parse(hook.language, &language_request)?;
+        let version = VersionRequest::parse(hook.language, &language_request)?;
+        hook.language_request.set_version(version);
     }
 
     Ok(())
