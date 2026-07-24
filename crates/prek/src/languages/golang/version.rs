@@ -5,9 +5,9 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 use crate::hook::InstallInfo;
-use crate::languages::version::{Error, try_into_u64_slice};
+use crate::languages::version::{Error, parse_prerelease_version, try_into_u64_slice};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub(crate) struct GoVersion(semver::Version);
 
 impl Deref for GoVersion {
@@ -27,10 +27,45 @@ impl Display for GoVersion {
 impl FromStr for GoVersion {
     type Err = semver::Error;
 
-    // TODO: go1.20.0b1, go1.20.0rc1?
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.strip_prefix("go").unwrap_or(s).trim();
+        if let Some(version) = parse_prerelease_version(s) {
+            if is_valid_go_prerelease(&version) {
+                return Ok(GoVersion(version));
+            }
+        }
+        // Fall back to plain semver parsing so exotic inputs still yield a real error. This
+        // also rejects shapes `parse_prerelease_version` accepts but Go never publishes (a
+        // patch alongside a prerelease, or a non-Go label), since they aren't valid semver.
         semver::Version::parse(s).map(GoVersion)
+    }
+}
+
+/// Go only ever publishes patchless `beta`/`rc` prereleases (`go1.24rc1`, `go1.18beta1`); other
+/// shapes `parse_prerelease_version` would otherwise accept can't be mapped to a real download.
+fn is_valid_go_prerelease(version: &semver::Version) -> bool {
+    if version.pre.is_empty() {
+        return true;
+    }
+    version.patch == 0 && matches!(version.pre.as_str().split('.').next(), Some("beta" | "rc"))
+}
+
+impl GoVersion {
+    /// Go-native version string (no `go` prefix), e.g. `1.24.5` or `1.24rc1`. go.dev
+    /// uses this, not semver's `1.24.0-rc.1`, so downloads must go through here.
+    pub(crate) fn to_go_string(&self) -> String {
+        let v = &self.0;
+        if !v.pre.is_empty() {
+            // Go writes a prerelease without the patch: `1.24.0-rc.1` -> `1.24rc1`.
+            let pre: String = v.pre.as_str().split('.').collect();
+            format!("{}.{}{}", v.major, v.minor, pre)
+        } else if v.patch == 0 && v.major == 1 && v.minor <= 20 {
+            // Through 1.20 Go named a minor's initial release patchless (`go1.20`); 1.21 onward
+            // carries the patch (`go1.21.0`, `go1.24.0`), so only collapse the older ones.
+            format!("{}.{}", v.major, v.minor)
+        } else {
+            format!("{}.{}.{}", v.major, v.minor, v.patch)
+        }
     }
 }
 
@@ -40,7 +75,6 @@ impl FromStr for GoVersion {
 /// `go`
 /// `go1.20` or `1.20`
 /// `go1.20.3` or `1.20.3`
-/// `go1.20.0b1` or `1.20.0b1`
 /// `go1.20rc1` or `1.20rc1`
 /// `go1.18beta1` or `1.18beta1`
 /// `>= 1.20, < 1.22`
@@ -50,9 +84,9 @@ pub(crate) enum GoRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
+    /// An explicit prerelease request, e.g. `go1.24rc1` or `go1.18beta1`.
+    Prerelease(GoVersion, String),
     Range(semver::VersionReq, String),
-    // TODO: support prerelease versions like `go1.20.0b1`, `go1.20rc1`
-    // MajorMinorPrerelease(u64, u64, String),
 }
 
 impl Display for GoRequest {
@@ -64,7 +98,7 @@ impl Display for GoRequest {
             GoRequest::MajorMinorPatch(major, minor, patch) => {
                 write!(f, "go{major}.{minor}.{patch}")
             }
-            GoRequest::Range(_, raw) => write!(f, "{raw}"),
+            GoRequest::Prerelease(_, raw) | GoRequest::Range(_, raw) => write!(f, "{raw}"),
         }
     }
 }
@@ -77,20 +111,32 @@ impl FromStr for GoRequest {
             return Ok(GoRequest::Any);
         }
 
-        // Check if it starts with "go" - parse as specific version
-        if let Some(version_part) = s.strip_prefix("go") {
-            if version_part.is_empty() {
-                return Ok(GoRequest::Any);
-            }
-
-            return Self::parse_version_numbers(version_part, s);
+        let (version_part, has_go_prefix) = match s.strip_prefix("go") {
+            Some(rest) => (rest, true),
+            None => (s, false),
+        };
+        if has_go_prefix && version_part.is_empty() {
+            return Ok(GoRequest::Any);
         }
 
-        Self::parse_version_numbers(s, s).or_else(|_| {
-            semver::VersionReq::parse(s)
-                .map(|version_req| GoRequest::Range(version_req, s.into()))
-                .map_err(|_| Error::InvalidVersion(s.to_string()))
-        })
+        if let Ok(request) = Self::parse_version_numbers(version_part, s) {
+            return Ok(request);
+        }
+
+        if let Some(version) = parse_prerelease_version(version_part) {
+            if !version.pre.is_empty() && is_valid_go_prerelease(&version) {
+                return Ok(GoRequest::Prerelease(GoVersion(version), s.to_string()));
+            }
+        }
+
+        // A range like `>= 1.20, < 1.22`, but not `go`-prefixed (`go>=1.20` is nonsense).
+        if !has_go_prefix {
+            if let Ok(version_req) = semver::VersionReq::parse(s) {
+                return Ok(GoRequest::Range(version_req, s.to_string()));
+            }
+        }
+
+        Err(Error::InvalidVersion(s.to_string()))
     }
 }
 
@@ -122,14 +168,18 @@ impl GoRequest {
 
     pub(crate) fn matches(&self, version: &GoVersion) -> bool {
         match self {
-            GoRequest::Any => true,
-            GoRequest::Major(major) => version.0.major == *major,
+            GoRequest::Any => version.0.pre.is_empty(),
+            GoRequest::Major(major) => version.0.pre.is_empty() && version.0.major == *major,
             GoRequest::MajorMinor(major, minor) => {
-                version.0.major == *major && version.0.minor == *minor
+                version.0.pre.is_empty() && version.0.major == *major && version.0.minor == *minor
             }
             GoRequest::MajorMinorPatch(major, minor, patch) => {
-                version.0.major == *major && version.0.minor == *minor && version.0.patch == *patch
+                version.0.pre.is_empty()
+                    && version.0.major == *major
+                    && version.0.minor == *minor
+                    && version.0.patch == *patch
             }
+            GoRequest::Prerelease(requested, _) => version.0 == requested.0,
             GoRequest::Range(req, _) => req.matches(&version.0),
         }
     }
@@ -167,7 +217,18 @@ mod tests {
 
     #[test]
     fn test_go_request_invalid() {
-        let invalid_cases = vec!["go1.20.3.4", "go1.beta", "invalid_version"];
+        let invalid_cases = vec![
+            "go1.20.3.4",
+            "go1.beta",
+            "invalid_version",
+            // Go never publishes a patch alongside a prerelease.
+            "go1.24.5rc1",
+            // Go only uses `beta`/`rc`, not Python-style `a`/`alpha`/`c`/`pre`/`preview`.
+            "go1.24a1",
+            "go1.24alpha1",
+            "go1.24c1",
+            "go1.24pre1",
+        ];
         for input in invalid_cases {
             let req = GoRequest::from_str(input);
             assert!(req.is_err(), "Input: {input}");
@@ -225,6 +286,78 @@ mod tests {
         for (req, expected) in cases {
             let req_str = req.to_string();
             assert_eq!(req_str, expected, "Request: {req:?}");
+        }
+    }
+
+    #[test]
+    fn test_go_request_prerelease() {
+        let rc = GoRequest::from_str("go1.24rc1").unwrap();
+        assert_eq!(
+            rc,
+            GoRequest::Prerelease(
+                GoVersion(semver::Version::parse("1.24.0-rc.1").unwrap()),
+                "go1.24rc1".to_string(),
+            )
+        );
+        assert!(matches!(
+            GoRequest::from_str("1.18beta1").unwrap(),
+            GoRequest::Prerelease(..)
+        ));
+
+        // A prerelease request matches only that exact prerelease.
+        let rc1 = GoVersion::from_str("go1.24rc1").unwrap();
+        let rc2 = GoVersion::from_str("go1.24rc2").unwrap();
+        let release = GoVersion::from_str("go1.24.0").unwrap();
+        assert!(rc.matches(&rc1));
+        assert!(!rc.matches(&rc2));
+        assert!(!rc.matches(&release));
+
+        // Neither a stable request nor `Any` (the default) selects a prerelease.
+        let stable = GoRequest::from_str("go1.24").unwrap();
+        assert!(!stable.matches(&rc1));
+        assert!(stable.matches(&release));
+        assert!(!GoRequest::Any.matches(&rc1));
+        assert!(GoRequest::Any.matches(&release));
+    }
+
+    #[test]
+    fn test_go_version_to_go_string() {
+        for input in [
+            "go1.24rc1",
+            "1.18beta1",
+            "go1.24.5",
+            "1.20.3",
+            "go1.20",
+            "go1.24.0",
+        ] {
+            let expected = input.strip_prefix("go").unwrap_or(input);
+            assert_eq!(GoVersion::from_str(input).unwrap().to_go_string(), expected);
+        }
+        // Go has no `go1.20.0` (<=1.20 initial releases are patchless), but `go1.24.0` is real.
+        assert_eq!(
+            GoVersion::from_str("go1.20.0").unwrap().to_go_string(),
+            "1.20"
+        );
+    }
+
+    #[test]
+    fn test_go_version_prerelease_parsing() {
+        assert_eq!(
+            *GoVersion::from_str("go1.24rc1").unwrap(),
+            semver::Version::parse("1.24.0-rc.1").unwrap()
+        );
+        // Numeric (not lexical) ordering, and prerelease < release.
+        assert!(
+            *GoVersion::from_str("1.24rc9").unwrap() < *GoVersion::from_str("1.24rc10").unwrap()
+        );
+        assert!(*GoVersion::from_str("1.24rc1").unwrap() < *GoVersion::from_str("1.24.0").unwrap());
+    }
+
+    #[test]
+    fn go_version_rejects_non_go_prerelease_shapes() {
+        // A patch alongside a prerelease, and Python-style labels, are not real Go versions.
+        for input in ["1.24.5rc1", "1.24a1", "1.24alpha1", "1.24c1", "1.24pre1"] {
+            assert!(GoVersion::from_str(input).is_err(), "Input: {input}");
         }
     }
 }

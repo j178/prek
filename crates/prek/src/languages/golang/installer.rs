@@ -228,9 +228,11 @@ impl GoInstaller {
         };
 
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
-        let filename = format!("go{version}.{os}-{arch}.{ext}");
+        // go.dev uses Go-native strings (`go1.24rc1`), not semver (`go1.24.0-rc.1`).
+        let go_string = version.to_go_string();
+        let filename = format!("go{go_string}.{os}-{arch}.{ext}");
         let url = format!("https://go.dev/dl/{filename}");
-        let checksum_version = version.to_string();
+        let checksum_version = go_string;
         let target = self.root.join(version.to_string());
 
         let download = download_artifact(&url, &filename, store, async || {
@@ -355,6 +357,27 @@ mod tests {
 
         let digest = digest_from_go_releases(&releases, "1.24.1", "go1.24.1.darwin-arm64.tar.gz")?
             .expect("expected checksum");
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn finds_go_checksum_for_prerelease_release_file() -> Result<()> {
+        // Exercises the actual download path: the lookup key is `GoVersion::to_go_string()`
+        // (the Go-native tag, `go1.24rc1`), not the semver `1.24.0-rc.1`.
+        let releases = vec![go_release(
+            "go1.24rc1",
+            vec![go_file("go1.24rc1.linux-amd64.tar.gz", EMPTY_SHA256)],
+        )];
+
+        let version = GoVersion::from_str("go1.24rc1")?;
+        let digest = digest_from_go_releases(
+            &releases,
+            &version.to_go_string(),
+            "go1.24rc1.linux-amd64.tar.gz",
+        )?
+        .expect("expected checksum");
 
         assert_eq!(digest.to_string(), EMPTY_SHA256);
         Ok(())

@@ -53,10 +53,17 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
         base_exec_prefix: PathBuf,
     }
 
+    // Encode the PEP 440 prerelease level+serial as a semver prerelease so a `3.13.0rc1`
+    // request isn't silently satisfied by a final `3.13.0` (or a different rc) interpreter.
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
     import sys, json
+    v = sys.version_info
+    version = ".".join(map(str, v[:3]))
+    pre = {"alpha": "a", "beta": "b", "candidate": "rc"}.get(v.releaselevel)
+    if pre:
+        version += f"-{pre}.{v.serial}"
     info = {
-        "version": ".".join(map(str, sys.version_info[:3])),
+        "version": version,
         "base_exec_prefix": sys.base_exec_prefix,
     }
     print(json.dumps(info))
@@ -232,6 +239,8 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
                 Some(format!("{major}.{minor}.{patch}"))
             }
+            // uv understands PEP 440 prerelease requests.
+            PythonRequest::Prerelease(_, raw) => Some(raw.clone()),
             PythonRequest::Range(_, raw) => Some(raw.clone()),
         },
         _ => unreachable!(),
