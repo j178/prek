@@ -7,7 +7,7 @@ use tracing::trace;
 
 use crate::config::Language;
 use crate::hook::Hook;
-use crate::languages::version::LanguageRequest;
+use crate::languages::version::VersionRequest;
 
 #[derive(Debug, Deserialize)]
 struct PyProjectToml {
@@ -41,8 +41,8 @@ async fn extract_pyproject_requires_python(repo_path: &Path) -> Result<Option<St
 
 /// Extract `requires-python` from the hook repo's `pyproject.toml`.
 ///
-/// Only acts when `language_request` is still `Any` (i.e. no explicit
-/// `language_version` was configured by the user).
+/// Only acts when the version request is still `Any`. This lets metadata refine
+/// `default` or `system` while preserving the request's download policy.
 pub(crate) async fn extract_pyproject_metadata(hook: &mut Hook) -> Result<()> {
     if !hook.language_request.is_any() {
         trace!(
@@ -61,7 +61,7 @@ pub(crate) async fn extract_pyproject_metadata(hook: &mut Hook) -> Result<()> {
         return Ok(());
     };
 
-    let req = match LanguageRequest::parse(Language::Python, &req_str) {
+    let version = match VersionRequest::parse(Language::Python, &req_str) {
         Ok(req) => req,
         Err(err) => {
             trace!(%req_str, error = %err, "Ignoring invalid pyproject.toml requires-python");
@@ -70,7 +70,7 @@ pub(crate) async fn extract_pyproject_metadata(hook: &mut Hook) -> Result<()> {
     };
 
     trace!(hook = %hook, version = %req_str, "Using pyproject.toml-derived language_version");
-    hook.language_request = req;
+    hook.language_request.set_version(version);
 
     Ok(())
 }
@@ -155,9 +155,9 @@ mod tests {
         let req = extract_pyproject_requires_python(dir.path()).await?;
         assert_eq!(req.as_deref(), Some("not a valid specifier"));
 
-        // The string is returned, but LanguageRequest::parse would reject it.
+        // The string is returned, but VersionRequest::parse would reject it.
         // extract_pyproject_metadata handles that gracefully (trace + return Ok(())).
-        let parse_result = LanguageRequest::parse(Language::Python, "not a valid specifier");
+        let parse_result = VersionRequest::parse(Language::Python, "not a valid specifier");
         assert!(parse_result.is_err());
 
         Ok(())

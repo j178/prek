@@ -13,7 +13,6 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::languages::dotnet::DotnetRequest;
 use crate::languages::dotnet::installer::{DotnetInstaller, DotnetResult};
-use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
@@ -49,13 +48,9 @@ impl LanguageBackend for Dotnet {
         let progress = reporter.on_install_start(&hook);
 
         let installer = DotnetInstaller::new(store.tools_path(ToolBucket::Dotnet));
-        let (request, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (&DotnetRequest::Any, !system_only),
-            LanguageRequest::Dotnet(request) => (request, true),
-            _ => unreachable!(),
-        };
+        let request: &DotnetRequest = hook.language_request.version();
         let dotnet = installer
-            .install(request, allows_download)
+            .install(request, hook.language_request.allows_download())
             .await
             .context("Failed to install dotnet SDK")?;
 

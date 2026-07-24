@@ -6,7 +6,7 @@ use tracing::trace;
 
 use crate::config::Language;
 use crate::hook::Hook;
-use crate::languages::version::LanguageRequest;
+use crate::languages::version::VersionRequest;
 
 fn parse_go_mod_directives(contents: &str) -> (Option<String>, Option<String>) {
     let mut go_version: Option<String> = None;
@@ -105,7 +105,8 @@ async fn extract_go_mod_language_request(repo_path: &Path) -> Result<Option<Stri
 }
 
 pub(crate) async fn extract_go_mod_metadata(hook: &mut Hook) -> Result<()> {
-    // Respect an explicitly configured `language_version`.
+    // Respect an explicitly configured concrete version request. `system` is still an
+    // unconstrained version request, so go.mod may refine it without enabling downloads.
     if !hook.language_request.is_any() {
         trace!(hook = %hook, "Skipping go.mod metadata extraction because language_version is already configured");
         return Ok(());
@@ -120,7 +121,7 @@ pub(crate) async fn extract_go_mod_metadata(hook: &mut Hook) -> Result<()> {
         return Ok(());
     };
 
-    let req = match LanguageRequest::parse(Language::Golang, &req_str) {
+    let version = match VersionRequest::parse(Language::Golang, &req_str) {
         Ok(req) => req,
         Err(err) => {
             trace!(%req_str, error = %err, "Ignoring invalid go.mod-derived language_version");
@@ -129,7 +130,7 @@ pub(crate) async fn extract_go_mod_metadata(hook: &mut Hook) -> Result<()> {
     };
 
     trace!(hook = %hook, version = %req_str, "Using go.mod-derived language_version");
-    hook.language_request = req;
+    hook.language_request.set_version(version);
 
     Ok(())
 }

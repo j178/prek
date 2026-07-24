@@ -22,7 +22,6 @@ use crate::languages::rust::RustRequest;
 use crate::languages::rust::installer::RustInstaller;
 use crate::languages::rust::rustup::Rustup;
 use crate::languages::rust::version::{Channel, EXTRA_KEY_CHANNEL};
-use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -408,14 +407,10 @@ impl LanguageBackend for Rust {
         let rustup = Rustup::install(store, &rustup_dir).await?;
         let installer = RustInstaller::new(rustup);
 
-        let (version, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (&RustRequest::Any, !system_only),
-            LanguageRequest::Rust(version) => (version, true),
-            _ => unreachable!(),
-        };
+        let version: &RustRequest = hook.language_request.version();
 
         let rust = installer
-            .install(version, allows_download)
+            .install(version, hook.language_request.allows_download())
             .await
             .context("Failed to install rust")?;
         let rustc_bin = bin_dir(rust.toolchain());
