@@ -265,18 +265,17 @@ impl LanguageBackend for Node {
 
 /// Build the npm package specs for a Node hook installation.
 ///
-/// A remote hook repo is included only when it is both a Git checkout and an npm
-/// package. Mirror-style hook repos without a root `package.json` can still install
-/// their declared `additional_dependencies`. Local hooks never install the user's
-/// project as a package; they install only their explicit additional dependencies.
+/// `Hook::repo_path` returns a path only for remote hooks, and remote repositories are
+/// always materialized by cloning them with Git. Do not probe for `.git` or
+/// `package.json` here: the former duplicates that invariant and couples this code to
+/// the checkout representation, while the latter would silently skip an invalid hook
+/// package instead of letting npm report the installation error. Local hooks have no
+/// repository path, so they install only their explicit additional dependencies.
 fn node_install_dependencies(hook: &Hook) -> Result<(Vec<String>, bool)> {
     let mut deps = Vec::with_capacity(hook.additional_dependencies.len() + 1);
     let mut includes_git_hook_repo = false;
 
-    if let Some(repo_path) = hook.repo_path()
-        && repo_path.join(".git").exists()
-        && repo_path.join("package.json").exists()
-    {
+    if let Some(repo_path) = hook.repo_path() {
         let file_url = Url::from_file_path(repo_path).map_err(|()| {
             anyhow!(
                 "Failed to convert Node hook repository path to a file URL: {}",
