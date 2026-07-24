@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.4.11
+
+Released on 2026-07-25.
+
+### Highlights
+
+- This release adds two new builtin hooks, `deny-pattern` and `require-pattern`,
+  as native alternatives for `pygrep` use cases. `deny-pattern` fails when a
+  configured pattern is found, while `require-pattern` ensures every selected
+  file contains a match. By matching natively without spawning a Python
+  subprocess, they run over 4x faster than `pygrep` in benchmarks. Note that
+  they use
+  [Rust `regex` syntax](https://docs.rs/regex/latest/regex/#syntax), which does
+  not support look-around features such as negative lookbehind.
+
+- `prek run` now supports `--glob <PATTERN>` to run hooks on tracked files
+  matching a glob. It can be repeated or combined with `--files` and
+  `--directory`.
+
+- Hook priorities now support reusable aliases:
+
+    ```toml
+    [priorities]
+    checks = 10
+
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "check-json", priority = "checks" },
+      { id = "check-yaml", priority = "checks" },
+    ]
+    ```
+
+    This makes parallel scheduling easier to read and maintain.
+
+### Enhancements
+
+- Add `deny-pattern` and `require-pattern` builtin hooks ([#2359](https://github.com/j178/prek/pull/2359))
+- Support `--glob` patterns in `prek run` ([#2381](https://github.com/j178/prek/pull/2381))
+- Support reusable aliases for hook priorities ([#2331](https://github.com/j178/prek/pull/2331))
+- Implement `requirements-txt-fixer` as a builtin hook ([#2390](https://github.com/j178/prek/pull/2390))
+- Improve user-facing warnings and errors ([#2380](https://github.com/j178/prek/pull/2380))
+- Install Node hooks through git url ([#2394](https://github.com/j178/prek/pull/2394))
+
+### Performance
+
+- Reduce blocking-pool overhead in file hooks ([#2384](https://github.com/j178/prek/pull/2384))
+- Speed up mixed-line-ending scans with memchr2 ([#2391](https://github.com/j178/prek/pull/2391))
+
+### Bug fixes
+
+- Honor filenames in builtin hook entry and args ([#2389](https://github.com/j178/prek/pull/2389))
+- Match identify tags across filename parts ([#2399](https://github.com/j178/prek/pull/2399))
+- Preserve hook output order with a shared pipe ([#2385](https://github.com/j178/prek/pull/2385))
+- Preserve system download policy when applying metadata ([#2395](https://github.com/j178/prek/pull/2395))
+
+### Contributors
+
+- @j178
+- @chrisoro
+
 ## 0.4.10
 
 Released on 2026-07-16.
