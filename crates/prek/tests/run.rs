@@ -28,10 +28,12 @@ fn run_basic() -> Result<()> {
             hooks:
               - id: trailing-whitespace
               - id: end-of-file-fixer
+              - id: requirements-txt-fixer
+                files: ^file\.txt$
               - id: check-json
     "});
 
-    cwd.child("file.txt").write_str("Hello, world!\n")?;
+    cwd.child("file.txt").write_str("z-project\na-project\n")?;
     cwd.child("valid.json").write_str("{}")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
@@ -54,9 +56,17 @@ fn run_basic() -> Result<()> {
 
       Fixing valid.json
       Fixing main.py
+    fix requirements.txt.....................................................Failed
+    - hook id: requirements-txt-fixer
+    - exit code: 1
+    - files were modified by this hook
+
+      Sorting file.txt
 
     ----- stderr -----
     ");
+
+    assert_eq!(context.read("file.txt"), "a-project\nz-project\n");
 
     context.git_add(".");
 

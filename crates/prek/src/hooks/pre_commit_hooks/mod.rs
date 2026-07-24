@@ -31,6 +31,7 @@ mod forbid_new_submodules;
 mod mixed_line_ending;
 mod no_commit_to_branch;
 mod pretty_format_json;
+mod requirements_txt_fixer;
 mod shebangs;
 
 pub(crate) use check_added_large_files::check_added_large_files;
@@ -54,6 +55,7 @@ pub(crate) use forbid_new_submodules::forbid_new_submodules;
 pub(crate) use mixed_line_ending::mixed_line_ending;
 pub(crate) use no_commit_to_branch::no_commit_to_branch;
 pub(crate) use pretty_format_json::pretty_format_json;
+pub(crate) use requirements_txt_fixer::requirements_txt_fixer;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -139,6 +141,7 @@ pub(crate) enum PreCommitHooks {
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
+    RequirementsTxtFixer,
     // `pretty-format-json` is intentionally builtin-only for now. Do not enable
     // automatic fast-path replacement until parity coverage against upstream
     // Python is broad enough to trust it as the default implementation.
@@ -161,6 +164,7 @@ impl PreCommitHooks {
             | Self::FileContentsSorter
             | Self::FixByteOrderMarker
             | Self::MixedLineEnding
+            | Self::RequirementsTxtFixer
             | Self::TrailingWhitespace => true,
 
             Self::CheckAddedLargeFiles
@@ -207,6 +211,7 @@ impl PreCommitHooks {
             Self::MixedLineEnding => Box::pin(mixed_line_ending(hook, filenames)),
             Self::DetectPrivateKey => Box::pin(detect_private_key(hook, filenames)),
             Self::NoCommitToBranch => Box::pin(no_commit_to_branch(hook)),
+            Self::RequirementsTxtFixer => Box::pin(requirements_txt_fixer(hook, filenames)),
             Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace(hook, filenames)),
         };
         future.await
