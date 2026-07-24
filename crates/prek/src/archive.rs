@@ -57,7 +57,6 @@ pub enum ArchiveExtension {
     TarXz,
     TarZst,
     TarLzma,
-    Tar,
 }
 
 impl ArchiveExtension {
@@ -79,7 +78,6 @@ impl ArchiveExtension {
         match extension {
             "zip" => Ok(Self::Zip),
             "whl" => Ok(Self::Zip), // Wheel files are zip files
-            "tar" => Ok(Self::Tar),
             "tgz" => Ok(Self::TarGz),
             "tbz" => Ok(Self::TarBz2),
             "txz" => Ok(Self::TarXz),
@@ -103,7 +101,6 @@ impl Display for ArchiveExtension {
             Self::TarXz => f.write_str("tar.xz"),
             Self::TarZst => f.write_str("tar.zst"),
             Self::TarLzma => f.write_str("tar.lzma"),
-            Self::Tar => f.write_str("tar"),
         }
     }
 }
@@ -306,22 +303,6 @@ pub async fn untar_xz<R: AsyncRead + Unpin>(
     Ok(())
 }
 
-/// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
-///
-/// This is useful for unpacking files as they're being downloaded.
-pub async fn untar<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) -> Result<(), Error> {
-    let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-
-    let mut archive = ArchiveBuilder::new(reader)
-        .set_preserve_mtime(true)
-        .set_preserve_permissions(true)
-        .set_allow_external_symlinks(false)
-        .build();
-
-    archive.unpack(target.as_ref()).await?;
-    Ok(())
-}
-
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
 pub async fn unpack<R: AsyncRead + Unpin>(
@@ -331,7 +312,6 @@ pub async fn unpack<R: AsyncRead + Unpin>(
 ) -> Result<(), Error> {
     match ext {
         ArchiveExtension::Zip => unzip(reader, target).await,
-        ArchiveExtension::Tar => untar(reader, target).await,
         ArchiveExtension::TarGz => untar_gz(reader, target).await,
         ArchiveExtension::TarXz => untar_xz(reader, target).await,
         _ => Err(Error::UnsupportedArchive(target.as_ref().to_path_buf())),
