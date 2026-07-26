@@ -11,7 +11,7 @@ use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
-use super::HookFuture;
+use super::{HookFuture, HookOutput};
 
 mod check_illegal_windows_names;
 mod check_json5;
@@ -85,45 +85,13 @@ impl BuiltinHooks {
         if help.is_empty() { None } else { Some(help) }
     }
 
-    pub(crate) fn may_modify_files(self) -> bool {
-        match self {
-            Self::EndOfFileFixer
-            | Self::FileContentsSorter
-            | Self::FixByteOrderMarker
-            | Self::MixedLineEnding
-            | Self::PrettyFormatJson
-            | Self::RequirementsTxtFixer
-            | Self::TrailingWhitespace => true,
-
-            Self::CheckAddedLargeFiles
-            | Self::CheckCaseConflict
-            | Self::CheckExecutablesHaveShebangs
-            | Self::CheckIllegalWindowsNames
-            | Self::CheckJson
-            | Self::CheckJson5
-            | Self::CheckMergeConflict
-            | Self::CheckShebangScriptsAreExecutable
-            | Self::CheckSymlinks
-            | Self::CheckToml
-            | Self::CheckVcsPermalinks
-            | Self::CheckXml
-            | Self::CheckYaml
-            | Self::DenyPattern
-            | Self::DestroyedSymlinks
-            | Self::DetectPrivateKey
-            | Self::ForbidNewSubmodules
-            | Self::NoCommitToBranch
-            | Self::RequirePattern => false,
-        }
-    }
-
     pub(crate) async fn run(
         self,
         _store: &Store,
         hook: &Hook,
         filenames: &[&Path],
         reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<HookOutput> {
         let progress = reporter.on_run_start(hook, filenames.len());
         let future: HookFuture<'_> = match self {
             Self::CheckAddedLargeFiles => {

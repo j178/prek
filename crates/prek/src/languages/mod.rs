@@ -15,7 +15,7 @@ use crate::cli::run::HookRunReporter;
 use crate::config::Language;
 use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
-use crate::hooks;
+use crate::hooks::{self, HookOutput};
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 mod bun;
@@ -329,11 +329,11 @@ impl Language {
         hook: &'a InstalledHook,
         filenames: &'a [&'p Path],
         reporter: &'a HookRunReporter,
-    ) -> impl Future<Output = Result<(i32, Vec<u8>)>> + 'a
+    ) -> impl Future<Output = Result<HookOutput>> + 'a
     where
         'p: 'a,
     {
-        let future: LanguageFuture<'a, (i32, Vec<u8>)> = match hook.repo() {
+        let future: LanguageFuture<'a, HookOutput> = match hook.repo() {
             Repo::Meta { .. } => Box::pin(
                 hooks::MetaHooks::from_str(&hook.id)
                     .unwrap()
@@ -348,9 +348,11 @@ impl Language {
             Repo::Remote { .. } if hooks::check_fast_path(hook) => {
                 Box::pin(hooks::run_fast_path(store, hook, filenames, reporter))
             }
-            Repo::Remote { .. } | Repo::Local { .. } => {
-                self.backend().run(store, hook, filenames, reporter)
-            }
+            Repo::Remote { .. } | Repo::Local { .. } => Box::pin(async move {
+                let (exit_status, output) =
+                    self.backend().run(store, hook, filenames, reporter).await?;
+                Ok(HookOutput::unknown(exit_status, output))
+            }),
         };
 
         future.instrument(trace_span!(

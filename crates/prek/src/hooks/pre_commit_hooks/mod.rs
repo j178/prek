@@ -6,7 +6,7 @@ use clap::Parser;
 use tracing::debug;
 
 use crate::hook::Hook;
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::{HookOutput, run_concurrent_file_checks};
 
 use super::HookFuture;
 
@@ -87,35 +87,31 @@ pub(crate) async fn run_file_checks<'a, F, Fut>(
     selected: &'a [&Path],
     concurrency: usize,
     check: F,
-) -> Result<(i32, Vec<u8>)>
+) -> Result<HookOutput>
 where
     F: Fn(&'a Path) -> Fut,
-    Fut: Future<Output = Result<(i32, Vec<u8>)>>,
+    Fut: Future<Output = Result<HookOutput>>,
 {
-    // Keep the common case on the existing concurrent path without an extra accumulator.
+    // Keep the common case on the concurrent path without an extra accumulator.
     if explicit.is_empty() {
         return run_concurrent_file_checks(selected.iter().copied(), concurrency, check).await;
     }
 
     // Filenames from `entry` or `args` may repeat or overlap with `selected`, so finish
     // them serially in CLI order before starting the selected batch.
-    let mut code = 0;
-    let mut output = Vec::new();
+    let mut result = HookOutput::unchanged(0, Vec::new());
     for filename in explicit {
-        let (file_code, file_output) = check(filename).await?;
-        code |= file_code;
-        output.extend(file_output);
+        result.merge_known(check(filename).await?);
     }
     if selected.is_empty() {
-        return Ok((code, output));
+        return Ok(result);
     }
 
     // The explicit batch is complete, so selected filenames retain their normal concurrency.
-    let (selected_code, selected_output) =
+    let selected_result =
         run_concurrent_file_checks(selected.iter().copied(), concurrency, check).await?;
-    code |= selected_code;
-    output.extend(selected_output);
-    Ok((code, output))
+    result.merge_known(selected_result);
+    Ok(result)
 }
 
 /// Hooks from `https://github.com/pre-commit/pre-commit-hooks`.
@@ -158,34 +154,7 @@ impl PreCommitHooks {
         }
     }
 
-    pub(crate) fn may_modify_files(&self) -> bool {
-        match self {
-            Self::EndOfFileFixer
-            | Self::FileContentsSorter
-            | Self::FixByteOrderMarker
-            | Self::MixedLineEnding
-            | Self::RequirementsTxtFixer
-            | Self::TrailingWhitespace => true,
-
-            Self::CheckAddedLargeFiles
-            | Self::CheckCaseConflict
-            | Self::CheckExecutablesHaveShebangs
-            | Self::CheckShebangScriptsAreExecutable
-            | Self::CheckVcsPermalinks
-            | Self::ForbidNewSubmodules
-            | Self::CheckJson
-            | Self::CheckSymlinks
-            | Self::CheckMergeConflict
-            | Self::CheckToml
-            | Self::CheckXml
-            | Self::CheckYaml
-            | Self::DestroyedSymlinks
-            | Self::DetectPrivateKey
-            | Self::NoCommitToBranch => false,
-        }
-    }
-
-    pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+    pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
         debug!("Running hook `{}` in fast path", hook.id);
         let future: HookFuture<'_> = match self {
             Self::CheckAddedLargeFiles => Box::pin(check_added_large_files(hook, filenames)),
@@ -242,7 +211,7 @@ mod tests {
                 events.borrow_mut().push(format!("start {path:?}"));
                 tokio::task::yield_now().await;
                 events.borrow_mut().push(format!("end {path:?}"));
-                Ok((0, Vec::new()))
+                Ok(HookOutput::unchanged(0, Vec::new()))
             }
         })
         .await

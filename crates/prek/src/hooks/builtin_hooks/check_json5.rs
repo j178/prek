@@ -1,14 +1,12 @@
 use std::path::Path;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::check_json::JsonDuplicateKeyChecker;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
-pub(crate) async fn check_json5(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> anyhow::Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_json5(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<HookOutput> {
     run_concurrent_file_checks(
         filenames.iter().copied(),
         *INTERNAL_CONCURRENCY,
@@ -17,18 +15,18 @@ pub(crate) async fn check_json5(
     .await
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> anyhow::Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Path, filename: &Path) -> anyhow::Result<HookOutput> {
     let file_path = file_base.join(filename);
     let content = fs_err::tokio::read_to_string(file_path).await?;
     if content.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     match json5::from_str::<JsonDuplicateKeyChecker>(&content) {
-        Ok(_) => Ok((0, Vec::new())),
+        Ok(_) => Ok(HookOutput::unchanged(0, Vec::new())),
         Err(e) => {
             let error_message = format!("{}: Failed to json5 decode ({})\n", filename.display(), e);
-            Ok((1, error_message.into_bytes()))
+            Ok(HookOutput::unchanged(1, error_message.into_bytes()))
         }
     }
 }
@@ -69,9 +67,9 @@ mod tests {
         }
         "#};
         let file_path = create_test_file(&dir, "valid.json5", content.as_bytes()).await?;
-        let (code, output) = check_file(dir.path(), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(dir.path(), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         Ok(())
     }
@@ -89,9 +87,9 @@ mod tests {
         }
         "#};
         let file_path = create_test_file(&dir, "duplicate.json5", content.as_bytes()).await?;
-        let (code, output) = check_file(dir.path(), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("duplicate key"));
+        let result = check_file(dir.path(), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("duplicate key"));
 
         Ok(())
     }
@@ -100,9 +98,9 @@ mod tests {
     async fn test_invalid_json5() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "invalid.json5", b"{ key: 'value' ").await?;
-        let (code, output) = check_file(dir.path(), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(dir.path(), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
 
         Ok(())
     }

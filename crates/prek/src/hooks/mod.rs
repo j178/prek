@@ -18,7 +18,58 @@ mod meta_hooks;
 mod pre_commit_hooks;
 
 // Erase hook implementation futures before awaiting them so dispatchers have one suspension point.
-type HookFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<(i32, Vec<u8>)>> + 'a>>;
+type HookFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<HookOutput>> + 'a>>;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum FileChanges {
+    Unchanged,
+    Modified,
+    Unknown,
+}
+
+#[derive(Debug)]
+pub(crate) struct HookOutput {
+    pub(crate) exit_status: i32,
+    pub(crate) output: Vec<u8>,
+    pub(crate) file_changes: FileChanges,
+}
+
+impl HookOutput {
+    pub(crate) fn known(exit_status: i32, output: Vec<u8>, modified: bool) -> Self {
+        Self {
+            exit_status,
+            output,
+            file_changes: if modified {
+                FileChanges::Modified
+            } else {
+                FileChanges::Unchanged
+            },
+        }
+    }
+
+    pub(crate) fn unchanged(exit_status: i32, output: Vec<u8>) -> Self {
+        Self::known(exit_status, output, false)
+    }
+
+    pub(crate) fn unknown(exit_status: i32, output: Vec<u8>) -> Self {
+        Self {
+            exit_status,
+            output,
+            file_changes: FileChanges::Unknown,
+        }
+    }
+
+    fn merge_known(&mut self, other: Self) {
+        debug_assert_ne!(self.file_changes, FileChanges::Unknown);
+        debug_assert_ne!(other.file_changes, FileChanges::Unknown);
+
+        self.exit_status |= other.exit_status;
+        self.output.extend(other.output);
+        if other.file_changes == FileChanges::Modified {
+            self.file_changes = FileChanges::Modified;
+        }
+    }
+}
 
 static NO_FAST_PATH: LazyLock<bool> = LazyLock::new(|| EnvVars.is_set(EnvVars::PREK_NO_FAST_PATH));
 
@@ -47,15 +98,11 @@ fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
     }
 }
 
-pub(crate) fn may_modify_files(hook: &Hook) -> bool {
+pub(crate) fn requires_diff_tracking(hook: &Hook) -> bool {
     match hook.repo() {
-        Repo::Builtin { .. } => {
-            BuiltinHooks::from_str(hook.id.as_str()).map_or(true, BuiltinHooks::may_modify_files)
-        }
-        Repo::Remote { .. } => {
-            fast_path_hook(hook).is_none_or(|implemented| implemented.may_modify_files())
-        }
-        _ => true,
+        Repo::Meta { .. } | Repo::Builtin { .. } => false,
+        Repo::Remote { .. } => fast_path_hook(hook).is_none(),
+        Repo::Local { .. } => true,
     }
 }
 
@@ -64,7 +111,7 @@ pub async fn run_fast_path(
     hook: &Hook,
     filenames: &[&Path],
     reporter: &HookRunReporter,
-) -> anyhow::Result<(i32, Vec<u8>)> {
+) -> anyhow::Result<HookOutput> {
     let progress = reporter.on_run_start(hook, filenames.len());
 
     let Some(implemented) = fast_path_hook(hook) else {
@@ -81,11 +128,11 @@ pub(crate) async fn run_concurrent_file_checks<'a, I, F, Fut>(
     filenames: I,
     concurrency: usize,
     check: F,
-) -> anyhow::Result<(i32, Vec<u8>)>
+) -> anyhow::Result<HookOutput>
 where
     I: IntoIterator<Item = &'a Path>,
     F: Fn(&'a Path) -> Fut,
-    Fut: Future<Output = anyhow::Result<(i32, Vec<u8>)>>,
+    Fut: Future<Output = anyhow::Result<HookOutput>>,
 {
     use futures_util::StreamExt;
 
@@ -93,14 +140,10 @@ where
         .map(check)
         .buffered(concurrency);
 
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
+    let mut result = HookOutput::unchanged(0, Vec::new());
+    while let Some(file_result) = tasks.next().await {
+        result.merge_known(file_result?);
     }
 
-    Ok((code, output))
+    Ok(result)
 }

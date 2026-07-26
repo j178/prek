@@ -13,6 +13,7 @@ use crate::cli::run::{
 };
 use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project};
 
@@ -50,7 +51,7 @@ impl MetaHooks {
         hook: &Hook,
         filenames: &[&Path],
         reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<HookOutput> {
         let progress = reporter.on_run_start(hook, filenames.len());
         let result = match self {
             Self::CheckHooksApply => check_hooks_apply(store, hook, filenames).await,
@@ -108,10 +109,10 @@ pub(crate) async fn check_hooks_apply(
     store: &Store,
     hook: &Hook,
     filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+) -> Result<HookOutput> {
     let projects = load_meta_projects(hook, filenames)?;
     if projects.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let relative_path = hook.project().relative_path();
@@ -177,7 +178,7 @@ pub(crate) async fn check_hooks_apply(
         }
     }
 
-    Ok((code, output))
+    Ok(HookOutput::unchanged(code, output))
 }
 
 fn load_meta_projects(hook: &Hook, filenames: &[&Path]) -> Result<Vec<Project>> {
@@ -247,13 +248,10 @@ fn excludes_any(
 }
 
 /// Ensures that exclude directives apply to any file in the repository.
-pub(crate) async fn check_useless_excludes(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_useless_excludes(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let projects = load_meta_projects(hook, filenames)?;
     if projects.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let relative_path = hook.project().relative_path();
@@ -352,12 +350,12 @@ pub(crate) async fn check_useless_excludes(
         }
     }
 
-    Ok((code, output))
+    Ok(HookOutput::unchanged(code, output))
 }
 
 /// Prints all arguments passed to the hook. Useful for debugging.
-pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
-    (
+pub fn identity(_hook: &Hook, filenames: &[&Path]) -> HookOutput {
+    HookOutput::unchanged(
         0,
         filenames
             .iter()

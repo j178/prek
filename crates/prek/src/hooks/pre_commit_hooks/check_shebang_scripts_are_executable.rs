@@ -4,6 +4,7 @@ use std::path::Path;
 use owo_colors::OwoColorize;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
@@ -15,11 +16,11 @@ use rustc_hash::FxHashSet;
 pub(crate) async fn check_shebang_scripts_are_executable(
     hook: &Hook,
     filenames: &[&Path],
-) -> Result<(i32, Vec<u8>), anyhow::Error> {
+) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     if filenames.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let file_base = hook.project().relative_path();
@@ -30,9 +31,12 @@ pub(crate) async fn check_shebang_scripts_are_executable(
     run_concurrent_file_checks(entries, *INTERNAL_CONCURRENCY, |file| async move {
         let file_path = file_base.join(file);
         if file_has_shebang(&file_path).await? {
-            Ok((1, build_non_executable_shebang_warning(file)?.into_bytes()))
+            Ok(HookOutput::unchanged(
+                1,
+                build_non_executable_shebang_warning(file)?.into_bytes(),
+            ))
         } else {
-            Ok((0, Vec::new()))
+            Ok(HookOutput::unchanged(0, Vec::new()))
         }
     })
     .await

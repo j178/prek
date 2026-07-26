@@ -6,6 +6,7 @@ use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -65,7 +66,7 @@ impl Args {
 pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
     filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     let force_markdown = args.force_markdown();
@@ -98,7 +99,7 @@ async fn fix_file(
     chars: &[char],
     force_markdown: bool,
     markdown_exts: &[&str],
-) -> Result<(i32, Vec<u8>)> {
+) -> Result<HookOutput> {
     let is_markdown = force_markdown || is_markdown_file(filename, markdown_exts);
 
     let file_path = file_base.join(filename);
@@ -148,9 +149,13 @@ async fn fix_file(
 
     if let Some(output) = output {
         fs_err::tokio::write(&file_path, &output).await?;
-        Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+        Ok(HookOutput::known(
+            1,
+            format!("Fixing {}\n", filename.display()).into_bytes(),
+            true,
+        ))
     } else {
-        Ok((0, Vec::new()))
+        Ok(HookOutput::unchanged(0, Vec::new()))
     }
 }
 
@@ -205,11 +210,11 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md"];
 
-        let (code, msg) = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
+        let result = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
 
         // modified
-        assert_eq!(code, 1);
-        let msg_str = String::from_utf8_lossy(&msg);
+        assert_eq!(result.exit_status, 1);
+        let msg_str = String::from_utf8_lossy(&result.output);
         assert!(msg_str.contains("file.txt"));
 
         // file content updated: trailing spaces removed
@@ -233,10 +238,10 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md"];
 
-        let (code, _msg) = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
+        let result = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
 
         // second line changed 3 -> 2 spaces, so modified
-        assert_eq!(code, 1);
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = "line_keep_two  \nline_reduce_three  \nother_line\n";
@@ -259,10 +264,10 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![]; // irrelevant because force_markdown = true
 
-        let (code, _msg) = fix_file(Path::new(""), &file_path, &chars, true, &md_exts).await?;
+        let result = fix_file(Path::new(""), &file_path, &chars, true, &md_exts).await?;
 
         // modified because one line had 3 spaces -> reduced to 2
-        assert_eq!(code, 1);
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = "keep_two_spaces  \nthree_spaces_line  \n";
@@ -279,9 +284,9 @@ mod tests {
         let md_exts = vec!["md"];
 
         // file already trimmed -> no changes
-        let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 0);
-        assert!(msg.is_empty());
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "already_trimmed\nline_two\n");
@@ -296,9 +301,9 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 0);
-        assert!(msg.is_empty());
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "");
 
@@ -313,9 +318,9 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md"];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
         // trimming whitespace-only lines will change them to empty lines -> modified true
-        assert_eq!(code, 1);
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         // Expect empty lines (newline preserved per implementation)
@@ -332,8 +337,8 @@ mod tests {
         let chars = vec![]; // will hit trim_ascii_end()
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         let expected = "foo\nbar\n";
@@ -350,8 +355,8 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["txt"]; // treat as markdown for this test
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         // read file and check logical lines presence (line endings may be normalized by lines())
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -369,8 +374,8 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         // Expect trailing spaces removed
@@ -387,8 +392,8 @@ mod tests {
         let chars = vec!['。', '　'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "hello\n");
@@ -404,8 +409,8 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md"];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         // markdown rules: trailing >2 -> reduce to two spaces
@@ -421,8 +426,8 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         let expected = "ok\nneedtrim\nalso_ok\n";
@@ -439,9 +444,9 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 0);
-        assert!(msg.is_empty());
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "foo\nbar");
@@ -457,8 +462,8 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["*"];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let expected = "foo  \nbar\nbaz  \n\n\n";
         let new_content = fs_err::tokio::read_to_string(&path).await?;
@@ -474,8 +479,8 @@ mod tests {
         let chars = vec![' '];
         let md_exts = vec!["*"];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let expected = "\ta \t  \n";
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -491,8 +496,8 @@ mod tests {
         let chars = vec!['x'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
-        assert_eq!(code, 0);
+        let result = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        assert_eq!(result.exit_status, 0);
 
         let expected = "a\nb\r\r\r\n";
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -508,8 +513,8 @@ mod tests {
         let chars = vec!['x'];
         let md_exts = vec!["md"];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
-        assert_eq!(code, 1);
+        let result = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        assert_eq!(result.exit_status, 1);
 
         let expected = "a  \n";
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -536,8 +541,8 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
-        assert_eq!(code, 0);
+        let result = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        assert_eq!(result.exit_status, 0);
 
         let new_content = fs_err::tokio::read(&path).await?;
         // The invalid byte should still be present, but trailing whitespace should be trimmed

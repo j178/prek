@@ -7,6 +7,7 @@ use tokio::io::AsyncBufReadExt;
 
 use crate::git::get_git_dir;
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
@@ -28,15 +29,12 @@ pub(crate) struct Args {
     filenames: Vec<PathBuf>,
 }
 
-pub(crate) async fn check_merge_conflict(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_merge_conflict(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     // Check if we're in a merge state or assuming merge
     if !args.assume_in_merge && !is_in_merge().await? {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     run_concurrent_file_checks(
@@ -63,7 +61,7 @@ async fn is_in_merge() -> Result<bool> {
         || git_dir.join("rebase-merge").exists())
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     let file = fs_err::tokio::File::open(&file_path).await?;
     let mut reader = tokio::io::BufReader::new(file);
@@ -101,7 +99,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         line_number += 1;
     }
 
-    Ok((code, output))
+    Ok(HookOutput::unchanged(code, output))
 }
 
 fn write_conflict_message(
@@ -138,9 +136,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This is a normal file\nWith no conflict markers\n";
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -149,10 +147,10 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\n<<<<<<< HEAD\nConflicting line\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("<<<<<<< "));
         assert!(output_str.contains("conflict.txt:2"));
         Ok(())
@@ -163,10 +161,10 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\n>>>>>>> branch\nMore content\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains(">>>>>>> "));
         Ok(())
     }
@@ -176,10 +174,10 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n=======\nTheir changes\n>>>>>>> branch\nAfter conflict\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         // Should find all three markers
         assert!(output_str.contains("<<<<<<< "));
         assert!(output_str.contains("======="));
@@ -192,10 +190,10 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n||||||| base\nCommon ancestor\n=======\nTheir changes\n>>>>>>> branch\nAfter conflict\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("<<<<<<< "));
         assert!(output_str.contains("||||||| "));
         assert!(output_str.contains("======="));
@@ -208,10 +206,10 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content <<<<<<< HEAD\n";
         let file_path = create_test_file(&dir, "no_conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(Path::new(""), &file_path).await?;
         // Should not detect conflict since marker is not at line start
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -220,9 +218,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\r\n<<<<<<< HEAD\r\nConflicting line\r\n=======\r\nOther line\r\n>>>>>>> branch\r\n";
         let file_path = create_test_file(&dir, "conflict_crlf.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
         Ok(())
     }
 
@@ -232,9 +230,9 @@ mod tests {
         let content =
             b"Some content\n<<<<<<< HEAD\nConflicting line\n=======\nOther line\n>>>>>>> branch\n";
         let file_path = create_test_file(&dir, "conflict_lf.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
         Ok(())
     }
 
@@ -243,9 +241,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n=======\n";
         let file_path = create_test_file(&dir, "partial_conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("<<<<<<< "));
         assert!(output_str.contains("======="));
         Ok(())
@@ -256,9 +254,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Before conflict\n||||||| base\n";
         let file_path = create_test_file(&dir, "partial_conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -267,9 +265,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Depends\n=======\n";
         let file_path = create_test_file(&dir, "doc.rst", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -278,9 +276,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -289,9 +287,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"<<<<<<< HEAD\nFirst\n=======\nSecond\n>>>>>>> branch\nMiddle\n<<<<<<< HEAD\nThird\n=======\nFourth\n>>>>>>> other\n";
         let file_path = create_test_file(&dir, "multiple.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         // Should find all markers from both conflicts (one per line with marker)
         let marker_count = output_str.matches("Merge conflict string").count();
         assert_eq!(marker_count, 6); // 3 markers per conflict * 2 conflicts
@@ -304,9 +302,9 @@ mod tests {
         let mut content = vec![0xFF, 0xFE, 0xFD];
         content.extend_from_slice(b"\n<<<<<<< HEAD\n");
         let file_path = create_test_file(&dir, "binary.bin", &content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
         Ok(())
     }
 }

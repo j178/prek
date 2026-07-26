@@ -5,6 +5,7 @@ use rustc_hash::FxHashSet;
 
 use crate::git::{get_added_files, get_lfs_files};
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
@@ -27,7 +28,7 @@ pub(crate) struct Args {
 pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&Path],
-) -> anyhow::Result<(i32, Vec<u8>)> {
+) -> anyhow::Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let all_filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let filenames = all_filenames.as_slice();
@@ -49,7 +50,7 @@ pub(crate) async fn check_added_large_files(
     };
 
     if filenames.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     // Builtin hooks receive project-relative filenames, so git attribute lookups need to run
@@ -65,7 +66,7 @@ pub(crate) async fn check_added_large_files(
         let file_path = hook.project().relative_path().join(filename);
         let size = fs_err::tokio::metadata(file_path).await?.len() / 1024;
         if size > args.max_kb {
-            anyhow::Ok((
+            anyhow::Ok(HookOutput::unchanged(
                 1,
                 format!(
                     "{} ({size} KB) exceeds {} KB\n",
@@ -75,7 +76,7 @@ pub(crate) async fn check_added_large_files(
                 .into_bytes(),
             ))
         } else {
-            anyhow::Ok((0, Vec::new()))
+            anyhow::Ok(HookOutput::unchanged(0, Vec::new()))
         }
     })
     .await

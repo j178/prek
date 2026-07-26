@@ -5,6 +5,7 @@ use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -23,10 +24,7 @@ pub(crate) struct Args {
     filenames: Vec<PathBuf>,
 }
 
-pub(crate) async fn file_contents_sorter(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn file_contents_sorter(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let file_base = hook.project().relative_path();
 
@@ -44,17 +42,21 @@ async fn sort_file(
     filename: &Path,
     ignore_case: bool,
     unique: bool,
-) -> Result<(i32, Vec<u8>)> {
+) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     let before = fs_err::tokio::read(&file_path).await?;
     let after = sorted_contents(&before, ignore_case, unique);
 
     if before == after {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     fs_err::tokio::write(&file_path, &after).await?;
-    Ok((1, format!("Sorting {}\n", filename.display()).into_bytes()))
+    Ok(HookOutput::known(
+        1,
+        format!("Sorting {}\n", filename.display()).into_bytes(),
+        true,
+    ))
 }
 
 fn sorted_contents(before: &[u8], ignore_case: bool, unique: bool) -> Vec<u8> {
@@ -147,10 +149,10 @@ mod tests {
         let relative = PathBuf::from("allowlist.txt");
         let file_path = create_test_file(&dir, "allowlist.txt", b"beta\nalpha\n").await?;
 
-        let (code, output) = sort_file(dir.path(), &relative, false, false).await?;
+        let result = sort_file(dir.path(), &relative, false, false).await?;
 
-        assert_eq!(code, 1);
-        assert_eq!(String::from_utf8(output)?, "Sorting allowlist.txt\n");
+        assert_eq!(result.exit_status, 1);
+        assert_eq!(String::from_utf8(result.output)?, "Sorting allowlist.txt\n");
         assert_eq!(fs_err::tokio::read(&file_path).await?, b"alpha\nbeta\n");
 
         Ok(())
@@ -162,10 +164,10 @@ mod tests {
         let relative = PathBuf::from("allowlist.txt");
         let file_path = create_test_file(&dir, "allowlist.txt", b"alpha\nbeta\n").await?;
 
-        let (code, output) = sort_file(dir.path(), &relative, false, false).await?;
+        let result = sort_file(dir.path(), &relative, false, false).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         assert_eq!(fs_err::tokio::read(&file_path).await?, b"alpha\nbeta\n");
 
         Ok(())
