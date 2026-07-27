@@ -44,7 +44,7 @@ repos:
         additional_dependencies: ['json5']
 
   - repo: https://github.com/tombi-toml/tombi-pre-commit
-    rev: fcb0ac886b00dd0305756b1e8466432e11601b5a  # frozen: v1.2.0
+    rev: 5421ca8ca3d6a659b6c097512b486395676a6af1  # frozen: v1.2.4
     hooks:
       - id: tombi-format
         args: ["--offline"]
