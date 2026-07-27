@@ -20,7 +20,8 @@ const SEPARATOR_PATTERNS: &[&[u8]] = &[b"======= ", b"=======\r\n", b"=======\n"
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
+pub(crate) struct Args {
+    /// Run even when no merge or rebase is detected.
     #[arg(long)]
     assume_in_merge: bool,
     #[arg(value_name = "FILENAMES")]

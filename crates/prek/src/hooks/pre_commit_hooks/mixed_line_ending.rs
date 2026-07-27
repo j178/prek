@@ -17,7 +17,7 @@ const CR: &[u8] = b"\r";
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
+pub(crate) struct Args {
     /// Fix mixed line endings by converting to the most common line ending
     /// or a specified line ending.
     #[clap(long, short, value_enum, default_value_t = FixMode::Auto)]

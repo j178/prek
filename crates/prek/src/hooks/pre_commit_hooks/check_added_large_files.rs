@@ -13,9 +13,11 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
+pub(crate) struct Args {
+    /// Check all files, not just those staged for addition.
     #[arg(long)]
     enforce_all: bool,
+    /// Maximum allowed file size in KiB.
     #[arg(long = "maxkb", default_value = "500")]
     max_kb: u64,
     #[arg(value_name = "FILENAMES")]

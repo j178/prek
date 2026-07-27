@@ -13,8 +13,9 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
-    #[arg(long, short = 'm', alias = "multi")]
+pub(crate) struct Args {
+    /// Allow multiple YAML documents.
+    #[arg(long, short = 'm', visible_alias = "multi")]
     allow_multiple_documents: bool,
     #[arg(value_name = "FILENAMES")]
     filenames: Vec<PathBuf>,

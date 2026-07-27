@@ -15,9 +15,11 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
+pub(crate) struct Args {
+    /// Match patterns case-insensitively.
     #[arg(short = 'i', long)]
     ignore_case: bool,
+    /// Search each file as a whole.
     #[arg(short = 'm', long)]
     multiline: bool,
     #[arg(required = true, value_name = "PATTERN")]

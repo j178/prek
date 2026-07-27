@@ -12,9 +12,11 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
+pub(crate) struct Args {
+    /// Sort lines case-insensitively.
     #[arg(long, conflicts_with = "unique")]
     ignore_case: bool,
+    /// Remove duplicate lines.
     #[arg(long, conflicts_with = "ignore_case")]
     unique: bool,
     #[arg(value_name = "FILENAMES")]

@@ -17,8 +17,9 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
-    #[arg(long = "additional-github-domain")]
+pub(crate) struct Args {
+    /// Additional GitHub-style domain to check (repeatable).
+    #[arg(long = "additional-github-domain", value_name = "DOMAIN")]
     additional_github_domains: Vec<String>,
     #[arg(value_name = "FILENAMES")]
     filenames: Vec<PathBuf>,

@@ -50,82 +50,115 @@ fn list_builtins_verbose() {
     exit_code: 0
     ----- stdout -----
     check-added-large-files
-      prevents giant files from being committed.
+      Prevents giant files from being committed.
+      flags:
+            --enforce-all     Check all files, not just those staged for addition
+            --maxkb <MAX_KB>  Maximum allowed file size in KiB [default: 500]
 
     check-case-conflict
-      checks for files that would conflict in case-insensitive filesystems
+      Checks for files that would conflict in case-insensitive filesystems.
 
     check-executables-have-shebangs
-      ensures that (non-binary) executables have a shebang.
+      Ensures that (non-binary) executables have a shebang.
 
     check-illegal-windows-names
-      checks for filenames which cannot be created on Windows.
+      Checks for filenames which cannot be created on Windows.
 
     check-json
-      checks json files for parseable syntax.
+      Checks JSON files for parseable syntax.
 
     check-json5
-      checks json5 files for parseable syntax.
+      Checks JSON5 files for parseable syntax.
 
     check-merge-conflict
-      checks for files that contain merge conflict strings.
+      Checks for files that contain merge conflict strings.
+      flags:
+            --assume-in-merge  Run even when no merge or rebase is detected
 
     check-shebang-scripts-are-executable
-      ensures that (non-binary) files with a shebang are executable.
+      Ensures that (non-binary) files with a shebang are executable.
 
     check-symlinks
-      checks for symlinks which do not point to anything.
+      Checks for symlinks which do not point to anything.
 
     check-toml
-      checks toml files for parseable syntax.
+      Checks TOML files for parseable syntax.
 
     check-vcs-permalinks
-      ensures that links to vcs websites are permalinks.
+      Ensures that links to VCS websites are permalinks.
+      flags:
+            --additional-github-domain <DOMAIN>  Additional GitHub-style domain to check (repeatable)
 
     check-xml
-      checks xml files for parseable syntax.
+      Checks XML files for parseable syntax.
 
     check-yaml
-      checks yaml files for parseable syntax.
+      Checks YAML files for parseable syntax.
+      flags:
+        -m, --allow-multiple-documents  Allow multiple YAML documents [alias: --multi]
 
     deny-pattern
-      fails if any file contains a matching regular expression.
+      Fails if any file contains a matching regular expression.
+      flags:
+        -i, --ignore-case  Match patterns case-insensitively
+        -m, --multiline    Search each file as a whole
 
     destroyed-symlinks
-      detects symlinks that were replaced with regular files whose contents are the original symlink target path.
+      Detects symlinks that were replaced with regular files whose contents are the original symlink target path.
 
     detect-private-key
-      detects the presence of private keys.
+      Detects the presence of private keys.
 
     end-of-file-fixer
-      ensures that a file is either empty, or ends with one newline.
+      Ensures that a file is either empty, or ends with one newline.
 
     file-contents-sorter
-      sorts the lines in specified files (defaults to alphabetical).
+      Sorts the lines in specified files (defaults to alphabetical).
+      flags:
+            --ignore-case  Sort lines case-insensitively
+            --unique       Remove duplicate lines
 
     fix-byte-order-marker
-      removes utf-8 byte order marker.
+      Removes UTF-8 byte order marker.
 
     forbid-new-submodules
-      Prevent addition of new git submodules.
+      Prevents the addition of new Git submodules.
 
     mixed-line-ending
-      replaces or checks mixed line ending.
+      Replaces or checks mixed line endings.
+      flags:
+        -f, --fix <FIX>  Fix mixed line endings by converting to the most common line ending or a
+                         specified line ending [default: auto] [possible values: auto, no, lf, crlf, cr]
 
     no-commit-to-branch
-      protects specific branches from direct commits.
+      Protects specific branches from direct commits.
+      flags:
+        -b, --branch <BRANCH>  Branch to protect (repeatable) [default: main master]
+        -p, --pattern <REGEX>  Regular expression matching branches to protect (repeatable)
 
     pretty-format-json
-      checks that JSON files are pretty-formatted.
+      Checks that JSON files are pretty-formatted.
+      flags:
+            --autofix          Rewrite files in place
+            --indent <INDENT>  Indentation width or string [default: 2]
+            --no-ensure-ascii  Keep non-ASCII characters as UTF-8
+            --no-sort-keys     Preserve object key order
+            --top-keys <KEYS>  Object keys to move to the front, comma-separated
 
     require-pattern
-      fails if any file does not contain a matching regular expression.
+      Fails if any file does not contain a matching regular expression.
+      flags:
+        -i, --ignore-case  Match patterns case-insensitively
+        -m, --multiline    Search each file as a whole
 
     requirements-txt-fixer
-      sorts entries in requirements.txt.
+      Sorts entries in requirements.txt.
 
     trailing-whitespace
-      trims trailing whitespace.
+      Trims trailing whitespace.
+      flags:
+            --markdown-linebreak-ext <EXT>  Preserve Markdown hard line breaks for EXT (repeatable)
+            --chars <CHARS>                 Trim only these characters
 
 
     ----- stderr -----
@@ -144,132 +177,132 @@ fn list_builtins_json() {
       {
         "id": "check-added-large-files",
         "name": "check for added large files",
-        "description": "prevents giant files from being committed."
+        "description": "Prevents giant files from being committed."
       },
       {
         "id": "check-case-conflict",
         "name": "check for case conflicts",
-        "description": "checks for files that would conflict in case-insensitive filesystems"
+        "description": "Checks for files that would conflict in case-insensitive filesystems."
       },
       {
         "id": "check-executables-have-shebangs",
         "name": "check that executables have shebangs",
-        "description": "ensures that (non-binary) executables have a shebang."
+        "description": "Ensures that (non-binary) executables have a shebang."
       },
       {
         "id": "check-illegal-windows-names",
         "name": "check illegal windows names",
-        "description": "checks for filenames which cannot be created on Windows."
+        "description": "Checks for filenames which cannot be created on Windows."
       },
       {
         "id": "check-json",
         "name": "check json",
-        "description": "checks json files for parseable syntax."
+        "description": "Checks JSON files for parseable syntax."
       },
       {
         "id": "check-json5",
         "name": "check json5",
-        "description": "checks json5 files for parseable syntax."
+        "description": "Checks JSON5 files for parseable syntax."
       },
       {
         "id": "check-merge-conflict",
         "name": "check for merge conflicts",
-        "description": "checks for files that contain merge conflict strings."
+        "description": "Checks for files that contain merge conflict strings."
       },
       {
         "id": "check-shebang-scripts-are-executable",
         "name": "check that scripts with shebangs are executable",
-        "description": "ensures that (non-binary) files with a shebang are executable."
+        "description": "Ensures that (non-binary) files with a shebang are executable."
       },
       {
         "id": "check-symlinks",
         "name": "check for broken symlinks",
-        "description": "checks for symlinks which do not point to anything."
+        "description": "Checks for symlinks which do not point to anything."
       },
       {
         "id": "check-toml",
         "name": "check toml",
-        "description": "checks toml files for parseable syntax."
+        "description": "Checks TOML files for parseable syntax."
       },
       {
         "id": "check-vcs-permalinks",
         "name": "check vcs permalinks",
-        "description": "ensures that links to vcs websites are permalinks."
+        "description": "Ensures that links to VCS websites are permalinks."
       },
       {
         "id": "check-xml",
         "name": "check xml",
-        "description": "checks xml files for parseable syntax."
+        "description": "Checks XML files for parseable syntax."
       },
       {
         "id": "check-yaml",
         "name": "check yaml",
-        "description": "checks yaml files for parseable syntax."
+        "description": "Checks YAML files for parseable syntax."
       },
       {
         "id": "deny-pattern",
         "name": "deny patterns",
-        "description": "fails if any file contains a matching regular expression."
+        "description": "Fails if any file contains a matching regular expression."
       },
       {
         "id": "destroyed-symlinks",
         "name": "detect destroyed symlinks",
-        "description": "detects symlinks that were replaced with regular files whose contents are the original symlink target path."
+        "description": "Detects symlinks that were replaced with regular files whose contents are the original symlink target path."
       },
       {
         "id": "detect-private-key",
         "name": "detect private key",
-        "description": "detects the presence of private keys."
+        "description": "Detects the presence of private keys."
       },
       {
         "id": "end-of-file-fixer",
         "name": "fix end of files",
-        "description": "ensures that a file is either empty, or ends with one newline."
+        "description": "Ensures that a file is either empty, or ends with one newline."
       },
       {
         "id": "file-contents-sorter",
         "name": "file contents sorter",
-        "description": "sorts the lines in specified files (defaults to alphabetical)."
+        "description": "Sorts the lines in specified files (defaults to alphabetical)."
       },
       {
         "id": "fix-byte-order-marker",
         "name": "fix utf-8 byte order marker",
-        "description": "removes utf-8 byte order marker."
+        "description": "Removes UTF-8 byte order marker."
       },
       {
         "id": "forbid-new-submodules",
         "name": "forbid new submodules",
-        "description": "Prevent addition of new git submodules."
+        "description": "Prevents the addition of new Git submodules."
       },
       {
         "id": "mixed-line-ending",
         "name": "mixed line ending",
-        "description": "replaces or checks mixed line ending."
+        "description": "Replaces or checks mixed line endings."
       },
       {
         "id": "no-commit-to-branch",
         "name": "don't commit to branch",
-        "description": "protects specific branches from direct commits."
+        "description": "Protects specific branches from direct commits."
       },
       {
         "id": "pretty-format-json",
         "name": "pretty format json",
-        "description": "checks that JSON files are pretty-formatted."
+        "description": "Checks that JSON files are pretty-formatted."
       },
       {
         "id": "require-pattern",
         "name": "require patterns",
-        "description": "fails if any file does not contain a matching regular expression."
+        "description": "Fails if any file does not contain a matching regular expression."
       },
       {
         "id": "requirements-txt-fixer",
         "name": "fix requirements.txt",
-        "description": "sorts entries in requirements.txt."
+        "description": "Sorts entries in requirements.txt."
       },
       {
         "id": "trailing-whitespace",
         "name": "trim trailing whitespace",
-        "description": "trims trailing whitespace."
+        "description": "Trims trailing whitespace."
       }
     ]
 
