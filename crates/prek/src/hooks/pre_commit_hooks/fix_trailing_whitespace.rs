@@ -26,11 +26,13 @@ impl FromStr for Chars {
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
-    #[arg(long)]
+pub(crate) struct Args {
+    /// Preserve Markdown hard line breaks for EXT (repeatable).
+    #[arg(long, value_name = "EXT")]
     markdown_linebreak_ext: Vec<String>,
     // `clap` cannot parse `--chars= \t` into vec<char> correctly.
     // so, we use Chars to achieve it.
+    /// Trim only these characters.
     #[arg(long)]
     chars: Option<Chars>,
     #[arg(value_name = "FILENAMES")]

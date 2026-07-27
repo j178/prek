@@ -17,20 +17,25 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
+pub(crate) struct Args {
+    /// Rewrite files in place.
     #[arg(long = "autofix")]
     auto_fix: bool,
 
+    /// Indentation width or string.
     #[arg(long, default_value = "2")]
     indent: String,
 
+    /// Keep non-ASCII characters as UTF-8.
     #[arg(long)]
     no_ensure_ascii: bool,
 
+    /// Preserve object key order.
     #[arg(long)]
     no_sort_keys: bool,
 
-    #[arg(long, value_delimiter = ',')]
+    /// Object keys to move to the front, comma-separated.
+    #[arg(long, value_name = "KEYS", value_delimiter = ',')]
     top_keys: Vec<String>,
     #[arg(value_name = "FILENAMES")]
     filenames: Vec<PathBuf>,

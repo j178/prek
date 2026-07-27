@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
+use clap::{Command, CommandFactory};
 use prek_identify::tags;
 
 use crate::cli::run::HookRunReporter;
@@ -60,6 +61,30 @@ pub(crate) enum BuiltinHooks {
 }
 
 impl BuiltinHooks {
+    fn flags_command(self) -> Option<Command> {
+        Some(match self {
+            Self::CheckAddedLargeFiles => {
+                pre_commit_hooks::check_added_large_files::Args::command()
+            }
+            Self::CheckMergeConflict => pre_commit_hooks::check_merge_conflict::Args::command(),
+            Self::CheckVcsPermalinks => pre_commit_hooks::check_vcs_permalinks::Args::command(),
+            Self::CheckYaml => pre_commit_hooks::check_yaml::Args::command(),
+            Self::DenyPattern | Self::RequirePattern => pattern::Args::command(),
+            Self::FileContentsSorter => pre_commit_hooks::file_contents_sorter::Args::command(),
+            Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending::Args::command(),
+            Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch::Args::command(),
+            Self::PrettyFormatJson => pre_commit_hooks::pretty_format_json::Args::command(),
+            Self::TrailingWhitespace => pre_commit_hooks::fix_trailing_whitespace::Args::command(),
+            _ => return None,
+        })
+    }
+
+    pub(crate) fn flags_help(self) -> Option<String> {
+        let mut command = self.flags_command()?.help_template("{options}");
+        let help = command.render_help().to_string();
+        if help.is_empty() { None } else { Some(help) }
+    }
+
     pub(crate) fn may_modify_files(self) -> bool {
         match self {
             Self::EndOfFileFixer
@@ -175,7 +200,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("prevents giant files from being committed.".to_string()),
+                    description: Some("Prevents giant files from being committed.".to_string()),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
@@ -188,7 +213,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "checks for files that would conflict in case-insensitive filesystems"
+                        "Checks for files that would conflict in case-insensitive filesystems."
                             .to_string(),
                     ),
                     ..Default::default()
@@ -202,7 +227,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "ensures that (non-binary) executables have a shebang.".to_string(),
+                        "Ensures that (non-binary) executables have a shebang.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_EXECUTABLE_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
@@ -217,7 +242,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "checks for filenames which cannot be created on Windows.".to_string(),
+                        "Checks for filenames which cannot be created on Windows.".to_string(),
                     ),
                     files: Some(
                         FilePattern::regex(
@@ -235,7 +260,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("checks json files for parseable syntax.".to_string()),
+                    description: Some("Checks JSON files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
                     ..Default::default()
                 },
@@ -247,7 +272,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("checks json5 files for parseable syntax.".to_string()),
+                    description: Some("Checks JSON5 files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_JSON5),
                     ..Default::default()
                 },
@@ -260,7 +285,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "checks for files that contain merge conflict strings.".to_string(),
+                        "Checks for files that contain merge conflict strings.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
@@ -274,7 +299,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "ensures that (non-binary) files with a shebang are executable."
+                        "Ensures that (non-binary) files with a shebang are executable."
                             .to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
@@ -290,7 +315,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "checks for symlinks which do not point to anything.".to_string(),
+                        "Checks for symlinks which do not point to anything.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_SYMLINK),
                     ..Default::default()
@@ -303,7 +328,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("checks toml files for parseable syntax.".to_string()),
+                    description: Some("Checks TOML files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_TOML),
                     ..Default::default()
                 },
@@ -316,7 +341,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "ensures that links to vcs websites are permalinks.".to_string(),
+                        "Ensures that links to VCS websites are permalinks.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
@@ -329,7 +354,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("checks xml files for parseable syntax.".to_string()),
+                    description: Some("Checks XML files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_XML),
                     ..Default::default()
                 },
@@ -341,7 +366,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("checks yaml files for parseable syntax.".to_string()),
+                    description: Some("Checks YAML files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_YAML),
                     ..Default::default()
                 },
@@ -354,7 +379,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "fails if any file contains a matching regular expression.".to_string(),
+                        "Fails if any file contains a matching regular expression.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
@@ -368,7 +393,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "detects symlinks that were replaced with regular files whose contents are the original symlink target path.".to_string(),
+                        "Detects symlinks that were replaced with regular files whose contents are the original symlink target path.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_FILE),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
@@ -382,7 +407,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("detects the presence of private keys.".to_string()),
+                    description: Some("Detects the presence of private keys.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
@@ -395,7 +420,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "ensures that a file is either empty, or ends with one newline."
+                        "Ensures that a file is either empty, or ends with one newline."
                             .to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
@@ -411,7 +436,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "sorts the lines in specified files (defaults to alphabetical)."
+                        "Sorts the lines in specified files (defaults to alphabetical)."
                             .to_string(),
                     ),
                     files: Some(FilePattern::Never),
@@ -425,7 +450,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("removes utf-8 byte order marker.".to_string()),
+                    description: Some("Removes UTF-8 byte order marker.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
@@ -437,7 +462,7 @@ impl BuiltinHook {
                  priority: None,
                  groups: None,
                  options: HookOptions {
-                    description: Some("Prevent addition of new git submodules.".to_string()),
+                    description: Some("Prevents the addition of new Git submodules.".to_string()),
                     types: Some(tags::TAG_SET_DIRECTORY),
                     ..Default::default()
                  },
@@ -449,7 +474,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("replaces or checks mixed line ending.".to_string()),
+                    description: Some("Replaces or checks mixed line endings.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
@@ -462,7 +487,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "protects specific branches from direct commits.".to_string(),
+                        "Protects specific branches from direct commits.".to_string(),
                     ),
                     pass_filenames: Some(PassFilenames::None),
                     always_run: Some(true),
@@ -476,7 +501,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("checks that JSON files are pretty-formatted.".to_string()),
+                    description: Some("Checks that JSON files are pretty-formatted.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
@@ -490,7 +515,7 @@ impl BuiltinHook {
                 groups: None,
                 options: HookOptions {
                     description: Some(
-                        "fails if any file does not contain a matching regular expression."
+                        "Fails if any file does not contain a matching regular expression."
                             .to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
@@ -504,7 +529,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("sorts entries in requirements.txt.".to_string()),
+                    description: Some("Sorts entries in requirements.txt.".to_string()),
                     files: Some(
                         FilePattern::regex(r"(requirements|constraints).*\.txt$")
                             .expect("builtin files regex must be valid"),
@@ -519,7 +544,7 @@ impl BuiltinHook {
                 priority: None,
                 groups: None,
                 options: HookOptions {
-                    description: Some("trims trailing whitespace.".to_string()),
+                    description: Some("Trims trailing whitespace.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()

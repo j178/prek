@@ -9,10 +9,17 @@ use anyhow::{Context, Result};
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
-struct Args {
-    #[arg(short, long = "branch", default_values = &["main", "master"])]
+pub(crate) struct Args {
+    /// Branch to protect (repeatable).
+    #[arg(
+        short,
+        long = "branch",
+        value_name = "BRANCH",
+        default_values = &["main", "master"]
+    )]
     branches: Vec<String>,
-    #[arg(short, long = "pattern")]
+    /// Regular expression matching branches to protect (repeatable).
+    #[arg(short, long = "pattern", value_name = "REGEX")]
     patterns: Vec<String>,
 }
 

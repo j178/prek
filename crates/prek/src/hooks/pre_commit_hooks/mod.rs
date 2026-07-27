@@ -10,27 +10,27 @@ use crate::hooks::run_concurrent_file_checks;
 
 use super::HookFuture;
 
-mod check_added_large_files;
+pub(super) mod check_added_large_files;
 mod check_case_conflict;
 mod check_executables_have_shebangs;
 pub(crate) mod check_json;
-mod check_merge_conflict;
+pub(super) mod check_merge_conflict;
 mod check_shebang_scripts_are_executable;
 mod check_symlinks;
 mod check_toml;
-mod check_vcs_permalinks;
+pub(super) mod check_vcs_permalinks;
 mod check_xml;
-mod check_yaml;
+pub(super) mod check_yaml;
 mod destroyed_symlinks;
 mod detect_private_key;
-mod file_contents_sorter;
+pub(super) mod file_contents_sorter;
 mod fix_byte_order_marker;
 mod fix_end_of_file;
-mod fix_trailing_whitespace;
+pub(super) mod fix_trailing_whitespace;
 mod forbid_new_submodules;
-mod mixed_line_ending;
-mod no_commit_to_branch;
-mod pretty_format_json;
+pub(super) mod mixed_line_ending;
+pub(super) mod no_commit_to_branch;
+pub(super) mod pretty_format_json;
 mod requirements_txt_fixer;
 mod shebangs;
 
