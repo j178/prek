@@ -12,7 +12,24 @@ Both formats are first-class and will be supported long-term. They describe the 
     ```toml
     [[repos]]
     repo = "https://github.com/pre-commit/pre-commit-hooks"
-    hooks = [{ id = "trailing-whitespace" }]
+    rev = "v6.0.0"
+    hooks = [
+      { id = "trailing-whitespace" },
+      { id = "check-toml" },
+    ]
+
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "cargo-fmt",
+        name = "cargo fmt",
+        language = "system",
+        entry = "cargo fmt --",
+        types = ["rust"],
+        pass_filenames = false,
+      },
+    ]
     ```
 
 === ".pre-commit-config.yaml"
@@ -20,8 +37,19 @@ Both formats are first-class and will be supported long-term. They describe the 
     ```yaml
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v6.0.0
         hooks:
           - id: trailing-whitespace
+          - id: check-toml
+
+      - repo: local
+        hooks:
+          - id: cargo-fmt
+            name: cargo fmt
+            language: system
+            entry: cargo fmt --
+            types: [rust]
+            pass_filenames: false
     ```
 
 ## Global configuration
