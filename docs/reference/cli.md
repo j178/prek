@@ -12,26 +12,26 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git shims into Git's effective hooks directory</p></dd>
-<dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for all hooks used in the config file</p></dd>
-<dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
-<dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current workspace</p></dd>
-<dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek Git shims</p></dd>
-<dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate configuration files (prek.toml or .pre-commit-config.yaml)</p></dd>
-<dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
-<dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)</p></dd>
-<dt><a href="#prek-update"><code>prek update</code></a></dt><dd><p>Update the <code>rev</code> field of repositories in the config file to the latest version</p></dd>
+<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git hook shims</p></dd>
+<dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for configured hooks</p></dd>
+<dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run configured hooks</p></dd>
+<dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List configured hooks</p></dd>
+<dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek Git hook shims</p></dd>
+<dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate prek configuration files</p></dd>
+<dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate pre-commit hook manifests (<code>.pre-commit-hooks.yaml</code>)</p></dd>
+<dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Generate a sample prek configuration file</p></dd>
+<dt><a href="#prek-update"><code>prek update</code></a></dt><dd><p>Update configured repositories</p></dd>
 <dt><a href="#prek-cache"><code>prek cache</code></a></dt><dd><p>Manage the prek cache</p></dd>
-<dt><a href="#prek-try-repo"><code>prek try-repo</code></a></dt><dd><p>Try the pre-commit hooks in the current repo</p></dd>
-<dt><a href="#prek-util"><code>prek util</code></a></dt><dd><p>Utility commands</p></dd>
-<dt><a href="#prek-self"><code>prek self</code></a></dt><dd><p><code>prek</code> self management</p></dd>
+<dt><a href="#prek-try-repo"><code>prek try-repo</code></a></dt><dd><p>Try hooks from a repository</p></dd>
+<dt><a href="#prek-util"><code>prek util</code></a></dt><dd><p>Run utility commands</p></dd>
+<dt><a href="#prek-self"><code>prek self</code></a></dt><dd><p>Manage the prek installation</p></dd>
 </dl>
 
 ## prek install
 
-Install prek Git shims into Git's effective hooks directory.
+Install prek Git hook shims.
 
-By default this is `.git/hooks/`, but repo-local or worktree-local `core.hooksPath` is honored when set.
+The effective hooks directory defaults to `.git/hooks/`, but repo-local or worktree-local `core.hooksPath` is honored when set.
 
 The Git shims installed by this command are determined by `--hook-type` or `default_install_hook_types` in the config file, falling back to `pre-commit` when neither is set.
 
@@ -119,7 +119,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 
 ## prek prepare-hooks
 
-Prepare environments for all hooks used in the config file.
+Prepare environments for configured hooks.
 
 This command does not install Git shims. To install the Git shims along with the hook environments in one command, use `prek install --prepare-hooks`.
 
@@ -184,7 +184,7 @@ prek prepare-hooks [OPTIONS] [HOOK|PROJECT]...
 
 ## prek run
 
-Run hooks
+Run configured hooks
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -279,7 +279,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 
 ## prek list
 
-List hooks configured in the current workspace
+List configured hooks
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -392,7 +392,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 
 ## prek uninstall
 
-Uninstall prek Git shims
+Uninstall prek Git hook shims
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -442,7 +442,7 @@ prek uninstall [OPTIONS]
 
 ## prek validate-config
 
-Validate configuration files (prek.toml or .pre-commit-config.yaml)
+Validate prek configuration files
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -478,7 +478,7 @@ prek validate-config [OPTIONS] [CONFIG]...
 
 ## prek validate-manifest
 
-Validate `.pre-commit-hooks.yaml` files
+Validate pre-commit hook manifests (`.pre-commit-hooks.yaml`)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -514,7 +514,7 @@ prek validate-manifest [OPTIONS] [MANIFEST]...
 
 ## prek sample-config
 
-Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
+Generate a sample prek configuration file
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -552,7 +552,7 @@ prek sample-config [OPTIONS]
 
 ## prek update
 
-Update the `rev` field of repositories in the config file to the latest version
+Update configured repositories
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -747,7 +747,7 @@ prek cache size [OPTIONS]
 
 ## prek try-repo
 
-Try the pre-commit hooks in the current repo
+Try hooks from a repository
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -840,7 +840,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 
 ## prek util
 
-Utility commands
+Run utility commands
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1025,7 +1025,7 @@ prek util yaml-to-toml [OPTIONS] [CONFIG]
 
 ## prek self
 
-`prek` self management
+Manage the prek installation
 
 <h3 class="cli-reference">Usage</h3>
 

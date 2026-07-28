@@ -3246,19 +3246,19 @@ fn selectors_completion() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    install	Install prek Git shims into Git's effective hooks directory
-    prepare-hooks	Prepare environments for all hooks used in the config file
-    run	Run hooks
-    list	List hooks configured in the current workspace
-    uninstall	Uninstall prek Git shims
-    validate-config	Validate configuration files (prek.toml or .pre-commit-config.yaml)
-    validate-manifest	Validate `.pre-commit-hooks.yaml` files
-    sample-config	Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
-    update	Update the `rev` field of repositories in the config file to the latest version
+    install	Install prek Git hook shims
+    prepare-hooks	Prepare environments for configured hooks
+    run	Run configured hooks
+    list	List configured hooks
+    uninstall	Uninstall prek Git hook shims
+    validate-config	Validate prek configuration files
+    validate-manifest	Validate pre-commit hook manifests (`.pre-commit-hooks.yaml`)
+    sample-config	Generate a sample prek configuration file
+    update	Update configured repositories
     cache	Manage the prek cache
-    try-repo	Try the pre-commit hooks in the current repo
-    util	Utility commands
-    self	`prek` self management
+    try-repo	Try hooks from a repository
+    util	Run utility commands
+    self	Manage the prek installation
     app/
     app:
     app-hook	App Hook

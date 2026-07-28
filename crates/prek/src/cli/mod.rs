@@ -239,10 +239,10 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install prek Git shims into Git's effective hooks directory.
+    /// Install prek Git hook shims.
     ///
-    /// By default this is `.git/hooks/`, but repo-local or worktree-local
-    /// `core.hooksPath` is honored when set.
+    /// The effective hooks directory defaults to `.git/hooks/`, but repo-local
+    /// or worktree-local `core.hooksPath` is honored when set.
     ///
     /// The Git shims installed by this command are determined by `--hook-type`
     /// or `default_install_hook_types` in the config file, falling back to
@@ -251,30 +251,30 @@ pub(crate) enum Command {
     /// A hook's `stages` field does not affect which Git shims this
     /// command installs.
     Install(InstallArgs),
-    /// Prepare environments for all hooks used in the config file.
+    /// Prepare environments for configured hooks.
     ///
     /// This command does not install Git shims. To install the Git shims
     /// along with the hook environments in one command, use `prek install --prepare-hooks`.
     #[command(alias = "install-hooks")]
     PrepareHooks(PrepareHooksArgs),
-    /// Run hooks.
+    /// Run configured hooks.
     Run(Box<RunArgs>),
-    /// List hooks configured in the current workspace.
+    /// List configured hooks.
     List(ListArgs),
-    /// Uninstall prek Git shims.
+    /// Uninstall prek Git hook shims.
     Uninstall(UninstallArgs),
-    /// Validate configuration files (prek.toml or .pre-commit-config.yaml).
+    /// Validate prek configuration files.
     ValidateConfig(ValidateConfigArgs),
-    /// Validate `.pre-commit-hooks.yaml` files.
+    /// Validate pre-commit hook manifests (`.pre-commit-hooks.yaml`).
     ValidateManifest(ValidateManifestArgs),
-    /// Produce a sample configuration file (prek.toml or .pre-commit-config.yaml).
+    /// Generate a sample prek configuration file.
     SampleConfig(SampleConfigArgs),
-    /// Update the `rev` field of repositories in the config file to the latest version.
-    #[command(name = "update", aliases = ["auto-update", "autoupdate"])]
+    /// Update configured repositories.
+    #[command(aliases = ["auto-update", "autoupdate"])]
     Update(UpdateArgs),
     /// Manage the prek cache.
     Cache(CacheNamespace),
-    /// Clean unused cached repos.
+    /// Remove unused cached repositories, hook environments, and other data.
     #[command(hide = true)]
     GC(CacheGcArgs),
     /// Remove all prek cached data.
@@ -283,14 +283,14 @@ pub(crate) enum Command {
     /// Install Git shims in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir", hide = true)]
     InitTemplateDir(InitTemplateDirArgs),
-    /// Try the pre-commit hooks in the current repo.
+    /// Try hooks from a repository.
     TryRepo(Box<TryRepoArgs>),
     /// The implementation of the prek Git shim that is installed in Git's effective hooks directory.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
-    /// Utility commands.
+    /// Run utility commands.
     Util(UtilNamespace),
-    /// `prek` self management.
+    /// Manage the prek installation.
     #[command(name = "self")]
     Self_(SelfNamespace),
 }
