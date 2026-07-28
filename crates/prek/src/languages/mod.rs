@@ -128,6 +128,10 @@ impl Language {
         }
     }
 
+    pub(crate) fn can_modify_files(self) -> bool {
+        !matches!(self, Self::Fail | Self::Pygrep)
+    }
+
     pub(crate) fn supports_install_env(self) -> bool {
         match self {
             Self::Bun
@@ -351,7 +355,11 @@ impl Language {
             Repo::Remote { .. } | Repo::Local { .. } => Box::pin(async move {
                 let (exit_status, output) =
                     self.backend().run(store, hook, filenames, reporter).await?;
-                Ok(HookOutput::unknown(exit_status, output))
+                if self.can_modify_files() {
+                    Ok(HookOutput::unknown(exit_status, output))
+                } else {
+                    Ok(HookOutput::unchanged(exit_status, output))
+                }
             }),
         };
 

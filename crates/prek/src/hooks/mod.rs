@@ -102,8 +102,8 @@ fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
 pub(crate) fn requires_diff_tracking(hook: &Hook) -> bool {
     match hook.repo() {
         Repo::Meta { .. } | Repo::Builtin { .. } => false,
-        Repo::Remote { .. } => fast_path_hook(hook).is_none(),
-        Repo::Local { .. } => true,
+        Repo::Remote { .. } => fast_path_hook(hook).is_none() && hook.language.can_modify_files(),
+        Repo::Local { .. } => hook.language.can_modify_files(),
     }
 }
 
