@@ -839,6 +839,61 @@ fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
 }
 
 #[test]
+fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail
+                name: fail
+                language: fail
+                entry: expected failure
+                files: \.txt$
+              - id: pygrep
+                name: pygrep
+                language: pygrep
+                entry: not-present
+                files: \.txt$
+    "});
+
+    cwd.child("file.txt").write_str("original\n")?;
+    context.git_add(".");
+
+    let output = context
+        .run()
+        .arg("--all-files")
+        .env("RUST_LOG", "prek::git=trace")
+        .output()?;
+
+    assert!(!output.status.success(), "the fail hook should fail");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("fail") && stdout.contains("Failed"));
+    assert!(stdout.contains("pygrep") && stdout.contains("Passed"));
+    assert!(!stdout.contains("files were modified by this hook"));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("has_worktree_diff").count(),
+        0,
+        "Read-only languages should not require a worktree diff check.\n\
+         Trace output:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("diff_worktree").count(),
+        0,
+        "Read-only languages should not require a full worktree diff.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
