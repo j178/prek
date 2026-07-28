@@ -5,7 +5,8 @@ use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use futures_util::stream::{FuturesUnordered, StreamExt};
+use futures_util::TryStreamExt;
+use futures_util::stream::FuturesUnordered;
 use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
@@ -651,7 +652,7 @@ impl<'a> HookRunSession<'a> {
         clean_baseline: bool,
     ) -> Result<Vec<ProjectRunResult<'project>>> {
         let semaphore = Rc::new(Semaphore::new(*HOOK_CONCURRENCY));
-        let mut runs = FuturesUnordered::new();
+        let runs = FuturesUnordered::new();
         for (idx, project_run) in project_runs.into_iter().enumerate() {
             let semaphore = Rc::clone(&semaphore);
             runs.push(async move {
@@ -666,11 +667,7 @@ impl<'a> HookRunSession<'a> {
             });
         }
 
-        let mut results = Vec::new();
-        while let Some(result) = runs.next().await {
-            results.push(result?);
-        }
-
+        let mut results: Vec<_> = runs.try_collect().await?;
         results.sort_unstable_by_key(|(idx, _)| *idx);
         Ok(results.into_iter().map(|(_, result)| result).collect())
     }
@@ -768,7 +765,7 @@ impl<'a> HookRunSession<'a> {
             group_hooks.iter().map(|hook| &hook.id).collect::<Vec<_>>()
         );
 
-        let mut runs = FuturesUnordered::new();
+        let runs = FuturesUnordered::new();
         for hook in group_hooks {
             runs.push(run_hook(
                 hook,
@@ -781,11 +778,7 @@ impl<'a> HookRunSession<'a> {
             ));
         }
 
-        let mut group_results = Vec::new();
-        while let Some(result) = runs.next().await {
-            group_results.push(result?);
-        }
-        Ok(group_results)
+        runs.try_collect().await
     }
 
     fn update_live_priority_group(&self, group: &ProjectGroupRunResult) {
