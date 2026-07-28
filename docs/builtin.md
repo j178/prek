@@ -34,27 +34,28 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 ### <https://github.com/pre-commit/pre-commit-hooks>
 
-- [`trailing-whitespace`](https://github.com/pre-commit/pre-commit-hooks#trailing-whitespace) (Trim trailing whitespace)
-- [`check-added-large-files`](https://github.com/pre-commit/pre-commit-hooks#check-added-large-files) (Prevent committing large files)
-- [`check-case-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
-- [`end-of-file-fixer`](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer) (Ensure newline at EOF)
-- [`file-contents-sorter`](https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter) (Sort lines in explicitly targeted files)
-- [`requirements-txt-fixer`](https://github.com/pre-commit/pre-commit-hooks#requirements-txt-fixer) (Sort Python requirement and constraint files)
-- [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Remove UTF-8 byte order marker)
-- [`forbid-new-submodules`](https://github.com/pre-commit/pre-commit-hooks#forbid-new-submodules) (Prevent addition of new git submodules.)
-- [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Validate JSON files)
-- [`check-toml`](https://github.com/pre-commit/pre-commit-hooks#check-toml) (Validate TOML files)
-- [`check-vcs-permalinks`](https://github.com/pre-commit/pre-commit-hooks#check-vcs-permalinks) (Check that VCS links are permalinks)
-- [`check-yaml`](https://github.com/pre-commit/pre-commit-hooks#check-yaml) (Validate YAML files)
-- [`check-xml`](https://github.com/pre-commit/pre-commit-hooks#check-xml) (Validate XML files)
-- [`mixed-line-ending`](https://github.com/pre-commit/pre-commit-hooks#mixed-line-ending) (Normalize or check line endings)
-- [`check-symlinks`](https://github.com/pre-commit/pre-commit-hooks#check-symlinks) (Check for broken symlinks)
-- [`destroyed-symlinks`](https://github.com/pre-commit/pre-commit-hooks#destroyed-symlinks) (Detect destroyed symlinks)
-- [`check-merge-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-merge-conflict) (Check for merge conflicts)
-- [`detect-private-key`](https://github.com/pre-commit/pre-commit-hooks#detect-private-key) (Detect private keys)
-- [`no-commit-to-branch`](https://github.com/pre-commit/pre-commit-hooks#no-commit-to-branch) (Prevent committing to protected branches)
-- [`check-shebang-scripts-are-executable`](https://github.com/pre-commit/pre-commit-hooks#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable)
-- [`check-executables-have-shebangs`](https://github.com/pre-commit/pre-commit-hooks#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
+- [`trailing-whitespace`](https://github.com/pre-commit/pre-commit-hooks#trailing-whitespace) (Trims trailing whitespace.)
+- [`check-added-large-files`](https://github.com/pre-commit/pre-commit-hooks#check-added-large-files) (Prevents giant files from being committed.)
+- [`check-case-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-case-conflict) (Checks for files that would conflict in case-insensitive filesystems.)
+- [`check-illegal-windows-names`](https://github.com/pre-commit/pre-commit-hooks#check-illegal-windows-names) (Checks for filenames which cannot be created on Windows.)
+- [`end-of-file-fixer`](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer) (Ensures that a file is either empty, or ends with one newline.)
+- [`file-contents-sorter`](https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter) (Sorts the lines in specified files (defaults to alphabetical).)
+- [`requirements-txt-fixer`](https://github.com/pre-commit/pre-commit-hooks#requirements-txt-fixer) (Sorts entries in requirements.txt.)
+- [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Removes UTF-8 byte order marker.)
+- [`forbid-new-submodules`](https://github.com/pre-commit/pre-commit-hooks#forbid-new-submodules) (Prevents the addition of new Git submodules.)
+- [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Checks JSON files for parseable syntax.)
+- [`check-toml`](https://github.com/pre-commit/pre-commit-hooks#check-toml) (Checks TOML files for parseable syntax.)
+- [`check-vcs-permalinks`](https://github.com/pre-commit/pre-commit-hooks#check-vcs-permalinks) (Ensures that links to VCS websites are permalinks.)
+- [`check-yaml`](https://github.com/pre-commit/pre-commit-hooks#check-yaml) (Checks YAML files for parseable syntax.)
+- [`check-xml`](https://github.com/pre-commit/pre-commit-hooks#check-xml) (Checks XML files for parseable syntax.)
+- [`mixed-line-ending`](https://github.com/pre-commit/pre-commit-hooks#mixed-line-ending) (Replaces or checks mixed line endings.)
+- [`check-symlinks`](https://github.com/pre-commit/pre-commit-hooks#check-symlinks) (Checks for symlinks which do not point to anything.)
+- [`destroyed-symlinks`](https://github.com/pre-commit/pre-commit-hooks#destroyed-symlinks) (Detects symlinks that were replaced with regular files whose contents are the original symlink target path.)
+- [`check-merge-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-merge-conflict) (Checks for files that contain merge conflict strings.)
+- [`detect-private-key`](https://github.com/pre-commit/pre-commit-hooks#detect-private-key) (Detects the presence of private keys.)
+- [`no-commit-to-branch`](https://github.com/pre-commit/pre-commit-hooks#no-commit-to-branch) (Protects specific branches from direct commits.)
+- [`check-shebang-scripts-are-executable`](https://github.com/pre-commit/pre-commit-hooks#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable.)
+- [`check-executables-have-shebangs`](https://github.com/pre-commit/pre-commit-hooks#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang.)
 
 #### Notes
 
@@ -96,31 +97,32 @@ repos:
 
 For `repo: builtin`, the following hooks are supported:
 
-- [`trailing-whitespace`](#trailing-whitespace) (Trim trailing whitespace)
-- [`check-added-large-files`](#check-added-large-files) (Prevent committing large files)
-- [`check-case-conflict`](#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
-- [`check-illegal-windows-names`](#check-illegal-windows-names) (Check for filenames invalid on Windows)
-- [`end-of-file-fixer`](#end-of-file-fixer) (Ensure newline at EOF)
-- [`file-contents-sorter`](#file-contents-sorter) (Sort lines in explicitly targeted files)
-- [`requirements-txt-fixer`](#requirements-txt-fixer) (Sort Python requirement and constraint files)
-- [`fix-byte-order-marker`](#fix-byte-order-marker) (Remove UTF-8 byte order marker)
-- [`check-json`](#check-json) (Validate JSON files)
-- [`check-json5`](#check-json5) (Validate JSON5 files)
-- [`pretty-format-json`](#pretty-format-json) (Pretty format JSON files)
-- [`check-toml`](#check-toml) (Validate TOML files)
-- [`check-vcs-permalinks`](#check-vcs-permalinks) (Check that VCS links are permalinks)
-- [`check-yaml`](#check-yaml) (Validate YAML files)
-- [`check-xml`](#check-xml) (Validate XML files)
-- [`deny-pattern`](#deny-pattern) (Reject configured regular expression matches)
-- [`require-pattern`](#require-pattern) (Require each file to match a configured regular expression)
-- [`mixed-line-ending`](#mixed-line-ending) (Normalize or check line endings)
-- [`check-symlinks`](#check-symlinks) (Check for broken symlinks)
-- [`destroyed-symlinks`](#destroyed-symlinks) (Detect destroyed symlinks)
-- [`check-merge-conflict`](#check-merge-conflict) (Check for merge conflicts)
-- [`detect-private-key`](#detect-private-key) (Detect private keys)
-- [`no-commit-to-branch`](#no-commit-to-branch) (Prevent committing to protected branches)
-- [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable)
-- [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
+- [`trailing-whitespace`](#trailing-whitespace) (Trims trailing whitespace.)
+- [`check-added-large-files`](#check-added-large-files) (Prevents giant files from being committed.)
+- [`check-case-conflict`](#check-case-conflict) (Checks for files that would conflict in case-insensitive filesystems.)
+- [`check-illegal-windows-names`](#check-illegal-windows-names) (Checks for filenames which cannot be created on Windows.)
+- [`end-of-file-fixer`](#end-of-file-fixer) (Ensures that a file is either empty, or ends with one newline.)
+- [`file-contents-sorter`](#file-contents-sorter) (Sorts the lines in specified files (defaults to alphabetical).)
+- [`requirements-txt-fixer`](#requirements-txt-fixer) (Sorts entries in requirements.txt.)
+- [`fix-byte-order-marker`](#fix-byte-order-marker) (Removes UTF-8 byte order marker.)
+- [`forbid-new-submodules`](#forbid-new-submodules) (Prevents the addition of new Git submodules.)
+- [`check-json`](#check-json) (Checks JSON files for parseable syntax.)
+- [`check-json5`](#check-json5) (Checks JSON5 files for parseable syntax.)
+- [`pretty-format-json`](#pretty-format-json) (Checks that JSON files are pretty-formatted.)
+- [`check-toml`](#check-toml) (Checks TOML files for parseable syntax.)
+- [`check-vcs-permalinks`](#check-vcs-permalinks) (Ensures that links to VCS websites are permalinks.)
+- [`check-yaml`](#check-yaml) (Checks YAML files for parseable syntax.)
+- [`check-xml`](#check-xml) (Checks XML files for parseable syntax.)
+- [`deny-pattern`](#deny-pattern) (Fails if any file contains a matching regular expression.)
+- [`require-pattern`](#require-pattern) (Fails if any file does not contain a matching regular expression.)
+- [`mixed-line-ending`](#mixed-line-ending) (Replaces or checks mixed line endings.)
+- [`check-symlinks`](#check-symlinks) (Checks for symlinks which do not point to anything.)
+- [`destroyed-symlinks`](#destroyed-symlinks) (Detects symlinks that were replaced with regular files whose contents are the original symlink target path.)
+- [`check-merge-conflict`](#check-merge-conflict) (Checks for files that contain merge conflict strings.)
+- [`detect-private-key`](#detect-private-key) (Detects the presence of private keys.)
+- [`no-commit-to-branch`](#no-commit-to-branch) (Protects specific branches from direct commits.)
+- [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable.)
+- [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang.)
 
 ### Hook Reference
 
@@ -286,6 +288,21 @@ Removes a UTF-8 byte order marker (BOM) from the beginning of a file.
 **Caveats**
 
 - Only removes the UTF-8 BOM (`EF BB BF`).
+
+---
+
+#### `forbid-new-submodules`
+
+Prevents the addition of new Git submodules.
+
+**Supported arguments**
+
+- None.
+
+**Behavior / caveats**
+
+- Existing submodules are allowed; only submodules newly added by the checked changes are reported.
+- Staged changes are checked by default. When `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` are both set, their revision range is checked instead.
 
 ---
 

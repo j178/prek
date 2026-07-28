@@ -9,18 +9,17 @@ use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks::{
-    check_added_large_files, check_case_conflict, check_executables_have_shebangs, check_json,
-    check_merge_conflict, check_shebang_scripts_are_executable, check_symlinks, check_toml,
-    check_vcs_permalinks, check_xml, check_yaml, destroyed_symlinks, detect_private_key,
-    file_contents_sorter, fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace,
-    forbid_new_submodules, mixed_line_ending, no_commit_to_branch, pretty_format_json,
-    requirements_txt_fixer,
+    check_added_large_files, check_case_conflict, check_executables_have_shebangs,
+    check_illegal_windows_names, check_json, check_merge_conflict,
+    check_shebang_scripts_are_executable, check_symlinks, check_toml, check_vcs_permalinks,
+    check_xml, check_yaml, destroyed_symlinks, detect_private_key, file_contents_sorter,
+    fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace, forbid_new_submodules,
+    mixed_line_ending, no_commit_to_branch, pretty_format_json, requirements_txt_fixer,
 };
 use crate::store::Store;
 
 use super::{HookFuture, HookOutput};
 
-mod check_illegal_windows_names;
 mod check_json5;
 mod pattern;
 
@@ -104,9 +103,9 @@ impl BuiltinHooks {
             Self::CheckExecutablesHaveShebangs => {
                 Box::pin(check_executables_have_shebangs::run(hook, filenames))
             }
-            Self::CheckIllegalWindowsNames => Box::pin(std::future::ready(Ok(
-                check_illegal_windows_names::check_illegal_windows_names(hook, filenames),
-            ))),
+            Self::CheckIllegalWindowsNames => {
+                Box::pin(check_illegal_windows_names::run(hook, filenames))
+            }
             Self::CheckJson => Box::pin(check_json::run(hook, filenames)),
             Self::CheckJson5 => Box::pin(check_json5::check_json5(hook, filenames)),
             Self::CheckMergeConflict => Box::pin(check_merge_conflict::run(hook, filenames)),

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::parse_shebang;
-use tracing::{Instrument, trace, trace_span};
+use tracing::{instrument, trace};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
@@ -327,32 +327,35 @@ impl Language {
         self.backend().check_health(info)
     }
 
-    pub(crate) fn run<'a, 'p>(
+    #[instrument(skip_all, fields(hook_id=%hook.id, language=%hook.language))]
+    pub(crate) async fn run<'a, 'p>(
         &'a self,
         store: &'a Store,
         hook: &'a InstalledHook,
         filenames: &'a [&'p Path],
         reporter: &'a HookRunReporter,
-    ) -> impl Future<Output = Result<HookOutput>> + 'a
+    ) -> Result<HookOutput>
     where
         'p: 'a,
     {
-        let future: LanguageFuture<'a, HookOutput> = match hook.repo() {
-            Repo::Meta { .. } => Box::pin(
+        match hook.repo() {
+            Repo::Meta { .. } => {
                 hooks::MetaHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames, reporter),
-            ),
-            Repo::Builtin { .. } => Box::pin(
+                    .run(store, hook, filenames, reporter)
+                    .await
+            }
+            Repo::Builtin { .. } => {
                 hooks::BuiltinHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames, reporter),
-            ),
+                    .run(store, hook, filenames, reporter)
+                    .await
+            }
             // Fast path for hooks implemented in Rust
             Repo::Remote { .. } if hooks::check_fast_path(hook) => {
-                Box::pin(hooks::run_fast_path(store, hook, filenames, reporter))
+                hooks::run_fast_path(store, hook, filenames, reporter).await
             }
-            Repo::Remote { .. } | Repo::Local { .. } => Box::pin(async move {
+            Repo::Remote { .. } | Repo::Local { .. } => {
                 let (exit_status, output) =
                     self.backend().run(store, hook, filenames, reporter).await?;
                 if self.can_modify_files() {
@@ -360,14 +363,8 @@ impl Language {
                 } else {
                     Ok(HookOutput::unchanged(exit_status, output))
                 }
-            }),
-        };
-
-        future.instrument(trace_span!(
-            "run",
-            hook_id = %hook.id,
-            language = %hook.language,
-        ))
+            }
+        }
     }
 }
 
