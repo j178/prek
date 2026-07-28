@@ -24,7 +24,8 @@ pub(crate) struct Args {
     filenames: Vec<PathBuf>,
 }
 
-pub(crate) async fn file_contents_sorter(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `file-contents-sorter` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let file_base = hook.project().relative_path();
 

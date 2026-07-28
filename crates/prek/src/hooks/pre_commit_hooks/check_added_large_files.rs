@@ -25,10 +25,8 @@ pub(crate) struct Args {
     filenames: Vec<PathBuf>,
 }
 
-pub(crate) async fn check_added_large_files(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> anyhow::Result<HookOutput> {
+/// Runs the `check-added-large-files` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let all_filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let filenames = all_filenames.as_slice();

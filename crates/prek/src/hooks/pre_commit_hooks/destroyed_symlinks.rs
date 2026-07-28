@@ -14,7 +14,8 @@ const ORDINARY_CHANGED_ENTRY_MARKER: &str = "1";
 const PERMS_LINK: u32 = 0o120_000;
 const PERMS_NONEXIST: u32 = 0;
 
-pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `destroyed-symlinks` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let status_output = git_status_output(hook.work_dir()).await?;

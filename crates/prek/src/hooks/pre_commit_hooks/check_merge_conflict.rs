@@ -29,7 +29,8 @@ pub(crate) struct Args {
     filenames: Vec<PathBuf>,
 }
 
-pub(crate) async fn check_merge_conflict(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `check-merge-conflict` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     // Check if we're in a merge state or assuming merge

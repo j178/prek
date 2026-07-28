@@ -83,7 +83,8 @@ fn is_probable_commit_hash(reference: &[u8]) -> bool {
     (4..=64).contains(&reference.len()) && reference.iter().all(u8::is_ascii_hexdigit)
 }
 
-pub(crate) async fn check_vcs_permalinks(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `check-vcs-permalinks` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let matcher = Arc::new(GithubNonPermalinkMatcher::new(
         args.additional_github_domains,

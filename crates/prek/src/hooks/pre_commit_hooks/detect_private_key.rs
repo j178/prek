@@ -43,7 +43,8 @@ static PRIVATE_KEY_MATCHER: LazyLock<AhoCorasick> = LazyLock::new(|| {
     AhoCorasick::new(BLACKLIST).expect("private key blacklist patterns should be valid")
 });
 
-pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `detect-private-key` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_concurrent_file_checks(
         hook_filenames(&args.filenames, filenames),

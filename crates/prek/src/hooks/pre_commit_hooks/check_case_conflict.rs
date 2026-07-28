@@ -11,7 +11,8 @@ use crate::hook::Hook;
 use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 
-pub(crate) async fn check_case_conflict(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `check-case-conflict` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let work_dir = hook.work_dir();

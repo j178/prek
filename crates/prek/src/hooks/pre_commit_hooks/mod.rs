@@ -10,52 +10,29 @@ use crate::hooks::{HookOutput, run_concurrent_file_checks};
 
 use super::HookFuture;
 
-pub(super) mod check_added_large_files;
-mod check_case_conflict;
-mod check_executables_have_shebangs;
+pub(crate) mod check_added_large_files;
+pub(crate) mod check_case_conflict;
+pub(crate) mod check_executables_have_shebangs;
 pub(crate) mod check_json;
-pub(super) mod check_merge_conflict;
-mod check_shebang_scripts_are_executable;
-mod check_symlinks;
-mod check_toml;
-pub(super) mod check_vcs_permalinks;
-mod check_xml;
-pub(super) mod check_yaml;
-mod destroyed_symlinks;
-mod detect_private_key;
-pub(super) mod file_contents_sorter;
-mod fix_byte_order_marker;
-mod fix_end_of_file;
-pub(super) mod fix_trailing_whitespace;
-mod forbid_new_submodules;
-pub(super) mod mixed_line_ending;
-pub(super) mod no_commit_to_branch;
-pub(super) mod pretty_format_json;
-mod requirements_txt_fixer;
-mod shebangs;
-
-pub(crate) use check_added_large_files::check_added_large_files;
-pub(crate) use check_case_conflict::check_case_conflict;
-pub(crate) use check_executables_have_shebangs::check_executables_have_shebangs;
-pub(crate) use check_json::check_json;
-pub(crate) use check_merge_conflict::check_merge_conflict;
-pub(crate) use check_shebang_scripts_are_executable::check_shebang_scripts_are_executable;
-pub(crate) use check_symlinks::check_symlinks;
-pub(crate) use check_toml::check_toml;
-pub(crate) use check_vcs_permalinks::check_vcs_permalinks;
-pub(crate) use check_xml::check_xml;
-pub(crate) use check_yaml::check_yaml;
-pub(crate) use destroyed_symlinks::destroyed_symlinks;
-pub(crate) use detect_private_key::detect_private_key;
-pub(crate) use file_contents_sorter::file_contents_sorter;
-pub(crate) use fix_byte_order_marker::fix_byte_order_marker;
-pub(crate) use fix_end_of_file::fix_end_of_file;
-pub(crate) use fix_trailing_whitespace::fix_trailing_whitespace;
-pub(crate) use forbid_new_submodules::forbid_new_submodules;
-pub(crate) use mixed_line_ending::mixed_line_ending;
-pub(crate) use no_commit_to_branch::no_commit_to_branch;
-pub(crate) use pretty_format_json::pretty_format_json;
-pub(crate) use requirements_txt_fixer::requirements_txt_fixer;
+pub(crate) mod check_merge_conflict;
+pub(crate) mod check_shebang_scripts_are_executable;
+pub(crate) mod check_symlinks;
+pub(crate) mod check_toml;
+pub(crate) mod check_vcs_permalinks;
+pub(crate) mod check_xml;
+pub(crate) mod check_yaml;
+pub(crate) mod destroyed_symlinks;
+pub(crate) mod detect_private_key;
+pub(crate) mod file_contents_sorter;
+pub(crate) mod fix_byte_order_marker;
+pub(crate) mod fix_end_of_file;
+pub(crate) mod fix_trailing_whitespace;
+pub(crate) mod forbid_new_submodules;
+pub(crate) mod mixed_line_ending;
+pub(crate) mod no_commit_to_branch;
+pub(crate) mod pretty_format_json;
+pub(crate) mod requirements_txt_fixer;
+pub(crate) mod shebangs;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -82,6 +59,9 @@ pub(crate) fn hook_filenames<'a>(
         .chain(selected.iter().copied())
 }
 
+/// Runs explicit filenames serially, followed by selected filenames concurrently.
+///
+/// Duplicates and overlaps between the two inputs are intentionally preserved.
 pub(crate) async fn run_file_checks<'a, F, Fut>(
     explicit: &'a [PathBuf],
     selected: &'a [&Path],
@@ -157,31 +137,31 @@ impl PreCommitHooks {
     pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
         debug!("Running hook `{}` in fast path", hook.id);
         let future: HookFuture<'_> = match self {
-            Self::CheckAddedLargeFiles => Box::pin(check_added_large_files(hook, filenames)),
-            Self::CheckCaseConflict => Box::pin(check_case_conflict(hook, filenames)),
+            Self::CheckAddedLargeFiles => Box::pin(check_added_large_files::run(hook, filenames)),
+            Self::CheckCaseConflict => Box::pin(check_case_conflict::run(hook, filenames)),
             Self::CheckExecutablesHaveShebangs => {
-                Box::pin(check_executables_have_shebangs(hook, filenames))
+                Box::pin(check_executables_have_shebangs::run(hook, filenames))
             }
             Self::CheckShebangScriptsAreExecutable => {
-                Box::pin(check_shebang_scripts_are_executable(hook, filenames))
+                Box::pin(check_shebang_scripts_are_executable::run(hook, filenames))
             }
-            Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks(hook, filenames)),
-            Self::FileContentsSorter => Box::pin(file_contents_sorter(hook, filenames)),
-            Self::EndOfFileFixer => Box::pin(fix_end_of_file(hook, filenames)),
-            Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker(hook, filenames)),
-            Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules(hook, filenames)),
-            Self::CheckJson => Box::pin(check_json(hook, filenames)),
-            Self::CheckSymlinks => Box::pin(check_symlinks(hook, filenames)),
-            Self::CheckMergeConflict => Box::pin(check_merge_conflict(hook, filenames)),
-            Self::CheckToml => Box::pin(check_toml(hook, filenames)),
-            Self::CheckYaml => Box::pin(check_yaml(hook, filenames)),
-            Self::CheckXml => Box::pin(check_xml(hook, filenames)),
-            Self::DestroyedSymlinks => Box::pin(destroyed_symlinks(hook, filenames)),
-            Self::MixedLineEnding => Box::pin(mixed_line_ending(hook, filenames)),
-            Self::DetectPrivateKey => Box::pin(detect_private_key(hook, filenames)),
-            Self::NoCommitToBranch => Box::pin(no_commit_to_branch(hook)),
-            Self::RequirementsTxtFixer => Box::pin(requirements_txt_fixer(hook, filenames)),
-            Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace(hook, filenames)),
+            Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks::run(hook, filenames)),
+            Self::FileContentsSorter => Box::pin(file_contents_sorter::run(hook, filenames)),
+            Self::EndOfFileFixer => Box::pin(fix_end_of_file::run(hook, filenames)),
+            Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker::run(hook, filenames)),
+            Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules::run(hook, filenames)),
+            Self::CheckJson => Box::pin(check_json::run(hook, filenames)),
+            Self::CheckSymlinks => Box::pin(check_symlinks::run(hook, filenames)),
+            Self::CheckMergeConflict => Box::pin(check_merge_conflict::run(hook, filenames)),
+            Self::CheckToml => Box::pin(check_toml::run(hook, filenames)),
+            Self::CheckYaml => Box::pin(check_yaml::run(hook, filenames)),
+            Self::CheckXml => Box::pin(check_xml::run(hook, filenames)),
+            Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
+            Self::MixedLineEnding => Box::pin(mixed_line_ending::run(hook, filenames)),
+            Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
+            Self::NoCommitToBranch => Box::pin(no_commit_to_branch::run(hook)),
+            Self::RequirementsTxtFixer => Box::pin(requirements_txt_fixer::run(hook, filenames)),
+            Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace::run(hook, filenames)),
         };
         future.await
     }

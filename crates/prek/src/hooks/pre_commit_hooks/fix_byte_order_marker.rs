@@ -11,7 +11,8 @@ use crate::run::INTERNAL_CONCURRENCY;
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const BUFFER_SIZE: usize = 8192; // 8KB buffer for streaming
 
-pub(crate) async fn fix_byte_order_marker(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `fix-byte-order-marker` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_file_checks(
         &args.filenames,

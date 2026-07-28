@@ -76,7 +76,8 @@ impl From<&Args> for PreparedArgs {
     }
 }
 
-pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `pretty-format-json` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let prepared = PreparedArgs::from(&args);
 

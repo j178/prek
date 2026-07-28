@@ -25,7 +25,8 @@ pub(crate) struct Args {
     // r#unsafe: bool,
 }
 
-pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `check-yaml` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     run_concurrent_file_checks(

@@ -14,10 +14,8 @@ use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 use rustc_hash::FxHashSet;
 
-pub(crate) async fn check_executables_have_shebangs(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<HookOutput, anyhow::Error> {
+/// Runs the `check-executables-have-shebangs` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     if filenames.is_empty() {

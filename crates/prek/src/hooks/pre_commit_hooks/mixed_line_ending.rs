@@ -62,7 +62,8 @@ impl LineEndingCounts {
     }
 }
 
-pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `mixed-line-ending` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     run_file_checks(

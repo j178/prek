@@ -4,7 +4,8 @@ use anyhow::Result;
 
 use crate::git;
 
-pub(super) struct DiffTracker<'a> {
+/// Tracks project worktree changes across hook priority groups.
+pub(crate) struct DiffTracker<'a> {
     path: &'a Path,
     baseline: DiffBaseline,
 }
@@ -16,28 +17,32 @@ enum DiffBaseline {
 }
 
 impl<'a> DiffTracker<'a> {
-    pub(super) fn clean_baseline(path: &'a Path) -> Self {
+    /// Creates a tracker for a worktree known to have no unstaged changes.
+    pub(crate) fn clean_baseline(path: &'a Path) -> Self {
         Self {
             path,
             baseline: DiffBaseline::Clean,
         }
     }
 
-    pub(super) fn unknown_baseline(path: &'a Path) -> Self {
+    /// Creates a tracker whose initial worktree state is unknown.
+    pub(crate) fn unknown_baseline(path: &'a Path) -> Self {
         Self {
             path,
             baseline: DiffBaseline::Unknown,
         }
     }
 
-    pub(super) async fn prepare_for_group(&mut self, track_changes: bool) -> Result<()> {
+    /// Captures an unknown baseline before a group that requires diff tracking.
+    pub(crate) async fn prepare_for_group(&mut self, track_changes: bool) -> Result<()> {
         if track_changes && let DiffBaseline::Unknown = self.baseline {
             self.baseline = DiffBaseline::Snapshot(git::diff_worktree(self.path).await?);
         }
         Ok(())
     }
 
-    pub(super) async fn changed_after_group(&mut self, track_changes: bool) -> Result<bool> {
+    /// Checks for worktree changes and advances the tracked baseline.
+    pub(crate) async fn changed_after_group(&mut self, track_changes: bool) -> Result<bool> {
         if !track_changes {
             return Ok(false);
         }
@@ -78,7 +83,8 @@ impl<'a> DiffTracker<'a> {
         }
     }
 
-    pub(super) fn invalidate(&mut self) {
+    /// Discards the baseline after a hook reports a modification directly.
+    pub(crate) fn invalidate(&mut self) {
         self.baseline = DiffBaseline::Unknown;
     }
 }

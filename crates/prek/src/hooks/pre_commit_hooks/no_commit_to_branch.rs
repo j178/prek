@@ -41,7 +41,8 @@ impl Args {
     }
 }
 
-pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<HookOutput> {
+/// Runs the `no-commit-to-branch` hook.
+pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
 
     let output = git_cmd()?

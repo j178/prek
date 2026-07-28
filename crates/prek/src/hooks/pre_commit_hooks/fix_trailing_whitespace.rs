@@ -63,10 +63,8 @@ impl Args {
     }
 }
 
-pub(crate) async fn fix_trailing_whitespace(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<HookOutput> {
+/// Runs the `trailing-whitespace` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     let force_markdown = args.force_markdown();

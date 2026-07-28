@@ -8,7 +8,8 @@ use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
-pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `end-of-file-fixer` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_file_checks(
         &args.filenames,

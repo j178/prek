@@ -719,6 +719,7 @@ impl<'a> HookRunSession<'a> {
                     Rc::clone(&semaphore),
                 )
                 .await?;
+
             let needs_diff = group_results
                 .iter()
                 .any(|result| result.file_changes == hooks::FileChanges::Unknown);

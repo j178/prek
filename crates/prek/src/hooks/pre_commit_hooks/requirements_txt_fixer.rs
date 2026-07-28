@@ -182,7 +182,8 @@ impl<'a> ParsedRequirements<'a> {
     }
 }
 
-pub(crate) async fn requirements_txt_fixer(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+/// Runs the `requirements-txt-fixer` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let file_base = hook.project().relative_path();
 

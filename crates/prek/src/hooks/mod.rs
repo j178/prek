@@ -98,6 +98,7 @@ fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
     }
 }
 
+/// Returns whether a hook requires a Git diff to determine file changes.
 pub(crate) fn requires_diff_tracking(hook: &Hook) -> bool {
     match hook.repo() {
         Repo::Meta { .. } | Repo::Builtin { .. } => false,
@@ -124,6 +125,7 @@ pub async fn run_fast_path(
     result
 }
 
+/// Runs per-file checks concurrently and merges their results in input order.
 pub(crate) async fn run_concurrent_file_checks<'a, I, F, Fut>(
     filenames: I,
     concurrency: usize,
