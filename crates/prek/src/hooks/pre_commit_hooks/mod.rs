@@ -13,6 +13,7 @@ use super::HookFuture;
 pub(crate) mod check_added_large_files;
 pub(crate) mod check_case_conflict;
 pub(crate) mod check_executables_have_shebangs;
+pub(crate) mod check_illegal_windows_names;
 pub(crate) mod check_json;
 pub(crate) mod check_merge_conflict;
 pub(crate) mod check_shebang_scripts_are_executable;
@@ -101,6 +102,7 @@ pub(crate) enum PreCommitHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckIllegalWindowsNames,
     CheckShebangScriptsAreExecutable,
     CheckVcsPermalinks,
     FileContentsSorter,
@@ -141,6 +143,9 @@ impl PreCommitHooks {
             Self::CheckCaseConflict => Box::pin(check_case_conflict::run(hook, filenames)),
             Self::CheckExecutablesHaveShebangs => {
                 Box::pin(check_executables_have_shebangs::run(hook, filenames))
+            }
+            Self::CheckIllegalWindowsNames => {
+                Box::pin(check_illegal_windows_names::run(hook, filenames))
             }
             Self::CheckShebangScriptsAreExecutable => {
                 Box::pin(check_shebang_scripts_are_executable::run(hook, filenames))
