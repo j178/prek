@@ -206,18 +206,41 @@ fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
     context.init_project();
 
     context.write_pre_commit_config("repos: []");
+    context
+        .work_dir()
+        .child("concurrent_hook.py")
+        .write_str(indoc! {r#"
+            from pathlib import Path
+            import time
 
-    let config = indoc! {r#"
+            project = Path.cwd().name
+            workspace = Path.cwd().parent
+            ready = workspace / f"{project}.ready"
+            peer = workspace / f"{'b' if project == 'a' else 'a'}.ready"
+
+            ready.touch()
+            deadline = time.monotonic() + 5
+            while not peer.exists():
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"timed out waiting for {peer.name}")
+                time.sleep(0.01)
+
+            # Make b finish first so output order cannot follow completion order.
+            if project == "a":
+                time.sleep(0.5)
+        "#})?;
+
+    let config = indoc! {r"
     repos:
       - repo: local
         hooks:
-        - id: slow-hook
-          name: Slow Hook
+        - id: concurrent-hook
+          name: Concurrent Hook
           language: system
-          entry: python3 -c "from pathlib import Path; import time; name = Path.cwd().name; log = Path('..') / 'events.log'; log.open('a').write('start ' + name + '\n'); time.sleep(0.5); log.open('a').write('end ' + name + '\n')"
+          entry: python3 ../concurrent_hook.py
           always_run: true
           pass_filenames: false
-    "#};
+    "};
 
     for project in ["a", "b"] {
         let project_dir = context.work_dir().child(project);
@@ -237,23 +260,12 @@ fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     ✓ a
-      Slow Hook..............................................................Passed
+      Concurrent Hook........................................................Passed
     ✓ b
-      Slow Hook..............................................................Passed
+      Concurrent Hook........................................................Passed
 
     ----- stderr -----
     "#);
-
-    let events = context.read("events.log");
-    let start_a = events.find("start a").expect("a should start");
-    let end_a = events.find("end a").expect("a should end");
-    let start_b = events.find("start b").expect("b should start");
-    let end_b = events.find("end b").expect("b should end");
-
-    assert!(start_a < end_a);
-    assert!(start_b < end_b);
-    assert!(start_a < end_b);
-    assert!(start_b < end_a);
 
     Ok(())
 }
