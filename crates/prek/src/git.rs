@@ -435,7 +435,7 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
 }
 
 #[instrument(level = "trace")]
-pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
+pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd()?
         .arg("diff")
         .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])

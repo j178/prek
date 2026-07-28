@@ -9,6 +9,7 @@ use memchr::memmem;
 use regex::bytes::{Match, Regex};
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
@@ -82,10 +83,8 @@ fn is_probable_commit_hash(reference: &[u8]) -> bool {
     (4..=64).contains(&reference.len()) && reference.iter().all(u8::is_ascii_hexdigit)
 }
 
-pub(crate) async fn check_vcs_permalinks(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+/// Runs the `check-vcs-permalinks` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let matcher = Arc::new(GithubNonPermalinkMatcher::new(
         args.additional_github_domains,
@@ -104,11 +103,13 @@ async fn check_file(
     file_base: &Path,
     filename: &Path,
     matcher: &Arc<GithubNonPermalinkMatcher>,
-) -> Result<(i32, Vec<u8>)> {
+) -> Result<HookOutput> {
     let path = file_base.join(filename);
     let filename = filename.to_path_buf();
     let matcher = Arc::clone(matcher);
-    tokio::task::spawn_blocking(move || check_file_sync(&path, &filename, &matcher)).await?
+    let (exit_status, output) =
+        tokio::task::spawn_blocking(move || check_file_sync(&path, &filename, &matcher)).await??;
+    Ok(HookOutput::unchanged(exit_status, output))
 }
 
 fn check_file_sync(
@@ -244,11 +245,11 @@ mod tests {
 
         let matcher = Arc::new(matcher(&["github.example.com"]));
         let relative = PathBuf::from("links.md");
-        let (code, output) = check_file(dir.path(), &relative, &matcher).await?;
+        let result = check_file(dir.path(), &relative, &matcher).await?;
 
-        assert_eq!(code, 1);
+        assert_eq!(result.exit_status, 1);
         assert_eq!(
-            String::from_utf8(output)?,
+            String::from_utf8(result.output)?,
             "Non-permanent github link detected: links.md:1:https://github.example.com/owner/repo/blob/main/file.py#L10\nNon-permanent github link detected: links.md:1:https://github.com/owner/repo/blob/master/src/lib.rs#L5\n",
         );
 

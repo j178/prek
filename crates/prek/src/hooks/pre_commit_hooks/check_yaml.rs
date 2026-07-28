@@ -5,6 +5,7 @@ use clap::Parser;
 use serde::de::IgnoredAny;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
@@ -24,7 +25,8 @@ pub(crate) struct Args {
     // r#unsafe: bool,
 }
 
-pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+/// Runs the `check-yaml` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     run_concurrent_file_checks(
@@ -45,10 +47,10 @@ async fn check_file(
     file_base: &Path,
     filename: &Path,
     allow_multi_docs: bool,
-) -> Result<(i32, Vec<u8>)> {
+) -> Result<HookOutput> {
     let content = fs_err::tokio::read(file_base.join(filename)).await?;
     if content.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let options = serde_saphyr::options! {
@@ -65,17 +67,17 @@ async fn check_file(
             serde_saphyr::from_slice_multiple_with_options::<IgnoredAny>(&content, options)
         {
             let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
-            return Ok((1, error_message.into_bytes()));
+            return Ok(HookOutput::unchanged(1, error_message.into_bytes()));
         }
-        Ok((0, Vec::new()))
+        Ok(HookOutput::unchanged(0, Vec::new()))
     } else {
         match serde_saphyr::from_slice_with_options::<IgnoredAny>(&content, options) {
-            Ok(_) => Ok((0, Vec::new())),
+            Ok(_) => Ok(HookOutput::unchanged(0, Vec::new())),
             Err(e) => {
                 let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
                 let error_message =
                     format!("{}: Failed to yaml decode ({err})\n", filename.display());
-                Ok((1, error_message.into_bytes()))
+                Ok(HookOutput::unchanged(1, error_message.into_bytes()))
             }
         }
     }
@@ -105,9 +107,9 @@ mod tests {
 key2: value2
 ";
         let file_path = create_test_file(&dir, "valid.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -118,9 +120,9 @@ key2: value2
 key2: value2: another_value
 ";
         let file_path = create_test_file(&dir, "invalid.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
         Ok(())
     }
 
@@ -131,9 +133,9 @@ key2: value2: another_value
 key1: value2
 ";
         let file_path = create_test_file(&dir, "duplicate.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
         Ok(())
     }
 
@@ -142,9 +144,9 @@ key1: value2
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -159,13 +161,13 @@ key2: value2
 ";
         let file_path = create_test_file(&dir, "multi.yaml", content).await?;
 
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
 
-        let (code, output) = check_file(Path::new(""), &file_path, true).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path, true).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -187,9 +189,9 @@ response:
       BKa2qJVpyDuvhldbu0LOFtnicypnC0z2yV8AAAD//wMALvIkjL4DAAA=
 ";
         let file_path = create_test_file(&dir, "binary.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -206,9 +208,14 @@ response:
         }
 
         let file_path = create_test_file(&dir, "many-aliases.yaml", content.as_bytes()).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
-        assert_eq!(code, 0, "{}", String::from_utf8_lossy(&output));
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(
+            result.exit_status,
+            0,
+            "{}",
+            String::from_utf8_lossy(&result.output)
+        );
+        assert!(result.output.is_empty());
         Ok(())
     }
 }

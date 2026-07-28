@@ -2,6 +2,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 
 pub(super) const ILLEGAL_WINDOWS_PATTERN: &str = r"(?i)((^|/)(CON|PRN|AUX|NUL|COM[\d\x{00B9}\x{00B2}\x{00B3}]|LPT[\d\x{00B9}\x{00B2}\x{00B3}])(\.|/|$)|[<>:\x22\\|?*\x00-\x1F]|/[^/]*[\.\s]/|[^/]*[\.\s]$)";
 
@@ -12,12 +13,12 @@ pub(super) const ILLEGAL_WINDOWS_PATTERN: &str = r"(?i)((^|/)(CON|PRN|AUX|NUL|CO
 // `fail` language in Rust, so there is no dedicated fast-path implementation to
 // add here. This module only exists to provide the builtin-hook equivalent:
 // reuse the same regex for matching, then emit a simple fail-style message.
-pub(crate) fn check_illegal_windows_names(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
+pub(crate) fn check_illegal_windows_names(_hook: &Hook, filenames: &[&Path]) -> HookOutput {
     if filenames.is_empty() {
-        return (0, Vec::new());
+        return HookOutput::unchanged(0, Vec::new());
     }
 
-    (1, illegal_windows_names_output(filenames))
+    HookOutput::unchanged(1, illegal_windows_names_output(filenames))
 }
 
 fn illegal_windows_names_output(filenames: &[&Path]) -> Vec<u8> {

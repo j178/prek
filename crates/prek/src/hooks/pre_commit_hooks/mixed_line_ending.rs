@@ -6,6 +6,7 @@ use clap::{Parser, ValueEnum};
 use memchr::memchr2;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -61,7 +62,8 @@ impl LineEndingCounts {
     }
 }
 
-pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+/// Runs the `mixed-line-ending` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
     run_file_checks(
@@ -74,13 +76,13 @@ pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Resul
 }
 
 // Process a single file for mixed line endings
-async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     let contents = fs_err::tokio::read(&file_path).await?;
 
     // Skip empty files or binary files
     if contents.is_empty() || contents.find_byte(0).is_some() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let counts = count_line_endings(&contents);
@@ -89,22 +91,26 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Resul
     match fix_mode {
         FixMode::No => {
             if has_mixed_endings {
-                Ok((
+                Ok(HookOutput::unchanged(
                     1,
                     format!("{}: mixed line endings\n", filename.display()).into_bytes(),
                 ))
             } else {
-                Ok((0, Vec::new()))
+                Ok(HookOutput::unchanged(0, Vec::new()))
             }
         }
         FixMode::Auto => {
             if !has_mixed_endings {
-                return Ok((0, Vec::new()));
+                return Ok(HookOutput::unchanged(0, Vec::new()));
             }
 
             let target_ending = find_most_common_ending(&counts);
             apply_line_ending(&file_path, &contents, target_ending).await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            Ok(HookOutput::known(
+                1,
+                format!("Fixing {}\n", filename.display()).into_bytes(),
+                true,
+            ))
         }
         _ => {
             let target_ending = match fix_mode {
@@ -117,9 +123,13 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Resul
 
             if needs_fixing {
                 apply_line_ending(&file_path, &contents, target_ending).await?;
-                Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+                Ok(HookOutput::known(
+                    1,
+                    format!("Fixing {}\n", filename.display()).into_bytes(),
+                    true,
+                ))
             } else {
-                Ok((0, Vec::new()))
+                Ok(HookOutput::unchanged(0, Vec::new()))
             }
         }
     }
@@ -212,9 +222,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\r\nline3\r\n"; // 1 LF, 2 CRLF
         let file_path = create_test_file(&dir, "mixed_crlf.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
-        assert_eq!(code, 1);
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\r\nline2\r\nline3\r\n");
 
@@ -226,9 +236,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\nline3\r\n"; // 2 LF, 1 CRLF
         let file_path = create_test_file(&dir, "mixed_lf.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
-        assert_eq!(code, 1);
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\nline2\nline3\n");
 
@@ -240,9 +250,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\r\n"; // 1 LF, 1 CRLF
         let file_path = create_test_file(&dir, "mixed_tie.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
-        assert_eq!(code, 1);
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\nline2\n");
 
@@ -254,9 +264,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\r\n";
         let file_path = create_test_file(&dir, "mixed_no.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::No).await?;
-        assert_eq!(code, 1);
-        assert!(output.as_bytes().contains_str("mixed line endings"));
+        let result = fix_file(Path::new(""), &file_path, FixMode::No).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(result.output.as_bytes().contains_str("mixed line endings"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content); // File should not be changed
 
@@ -268,9 +278,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"some content";
         let file_path = create_test_file(&dir, "no_endings.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         Ok(())
     }
@@ -283,17 +293,17 @@ mod tests {
         let file_path = create_test_file(&dir, "all_mixed.txt", content).await?;
 
         // Test auto fix (should prefer LF as it's a 3-way tie)
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
-        assert_eq!(code, 1);
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\nline2\nline3\n");
 
         // Restore content and test fix to CRLF
         fs_err::tokio::write(&file_path, content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path, FixMode::CRLF).await?;
-        assert_eq!(code, 1);
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path, FixMode::CRLF).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\r\nline2\r\nline3\r\n");
 

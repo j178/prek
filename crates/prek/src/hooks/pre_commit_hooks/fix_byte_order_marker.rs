@@ -4,16 +4,15 @@ use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const BUFFER_SIZE: usize = 8192; // 8KB buffer for streaming
 
-pub(crate) async fn fix_byte_order_marker(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+/// Runs the `fix-byte-order-marker` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_file_checks(
         &args.filenames,
@@ -24,7 +23,7 @@ pub(crate) async fn fix_byte_order_marker(
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
 
     let mut file = fs_err::tokio::OpenOptions::new()
@@ -36,11 +35,13 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let mut bom_buffer = [0u8; 3];
     match file.read_exact(&mut bom_buffer).await {
         Ok(_) => {}
-        Err(err) if err.kind() == ErrorKind::UnexpectedEof => return Ok((0, Vec::new())),
+        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+            return Ok(HookOutput::unchanged(0, Vec::new()));
+        }
         Err(err) => return Err(err.into()),
     }
     if bom_buffer != UTF8_BOM {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let file_len = file.seek(SeekFrom::End(0)).await?;
@@ -51,9 +52,10 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         shift_file_left(&mut file, file_len, UTF8_BOM.len() as u64).await?;
     }
 
-    Ok((
+    Ok(HookOutput::known(
         1,
         format!("{}: removed byte-order marker\n", filename.display()).into_bytes(),
+        true,
     ))
 }
 
@@ -100,10 +102,10 @@ mod tests {
         let content = b"\xef\xbb\xbfHello, World!";
         let file_path = create_test_file(&dir, "with_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("removed byte-order marker"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -118,10 +120,10 @@ mod tests {
         let content = b"Hello, World!";
         let file_path = create_test_file(&dir, "without_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -135,10 +137,10 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -152,10 +154,10 @@ mod tests {
         let content = b"Hi";
         let file_path = create_test_file(&dir, "short.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -169,10 +171,10 @@ mod tests {
         let content = b"\xef\xbbHello"; // Only first 2 bytes of BOM
         let file_path = create_test_file(&dir, "partial_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -186,10 +188,10 @@ mod tests {
         let content = b"\xef\xbb\xbf";
         let file_path = create_test_file(&dir, "bom_only.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("removed byte-order marker"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -204,10 +206,10 @@ mod tests {
         let content = b"\xef\xbb\xbf\xe4\xb8\xad\xe6\x96\x87"; // BOM + Chinese characters "中文"
         let file_path = create_test_file(&dir, "utf8_with_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("removed byte-order marker"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -231,10 +233,10 @@ mod tests {
 
         let file_path = create_test_file(&dir, "large_with_bom.txt", &content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("removed byte-order marker"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;

@@ -3,6 +3,7 @@ use fancy_regex::Regex;
 
 use crate::git::git_cmd;
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use anyhow::{Context, Result};
 
 #[derive(Parser)]
@@ -40,7 +41,8 @@ impl Args {
     }
 }
 
-pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
+/// Runs the `no-commit-to-branch` hook.
+pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
 
     let output = git_cmd()?
@@ -51,7 +53,7 @@ pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
         .await?;
 
     if !output.status.success() {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let ref_name = String::from_utf8_lossy(&output.stdout);
@@ -60,8 +62,8 @@ pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
 
     if args.check_protected(branch)? {
         let err_msg = format!("You are not allowed to commit to branch '{branch}'\n");
-        Ok((1, err_msg.into_bytes()))
+        Ok(HookOutput::unchanged(1, err_msg.into_bytes()))
     } else {
-        Ok((0, Vec::new()))
+        Ok(HookOutput::unchanged(0, Vec::new()))
     }
 }

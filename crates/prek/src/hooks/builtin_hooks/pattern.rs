@@ -8,6 +8,7 @@ use memchr::memchr_iter;
 use regex_automata::{MatchKind, meta::Regex, util::syntax};
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -79,15 +80,15 @@ impl Matcher {
     }
 }
 
-pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     run(hook, filenames, MatchPolicy::Deny).await
 }
 
-pub(crate) async fn require_pattern(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn require_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     run(hook, filenames, MatchPolicy::Require).await
 }
 
-async fn run(hook: &Hook, filenames: &[&Path], policy: MatchPolicy) -> Result<(i32, Vec<u8>)> {
+async fn run(hook: &Hook, filenames: &[&Path], policy: MatchPolicy) -> Result<HookOutput> {
     let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
     let matcher = Matcher::new(&args)?;
     let file_base = hook.project().relative_path();
@@ -105,11 +106,12 @@ async fn check_file(
     filename: &Path,
     matcher: &Matcher,
     policy: MatchPolicy,
-) -> Result<(i32, Vec<u8>)> {
-    match matcher.scan_mode {
+) -> Result<HookOutput> {
+    let (exit_status, output) = match matcher.scan_mode {
         ScanMode::Lines => check_lines(file_base, filename, &matcher.regex, policy).await,
         ScanMode::Multiline => check_multiline(file_base, filename, &matcher.regex, policy).await,
-    }
+    }?;
+    Ok(HookOutput::unchanged(exit_status, output))
 }
 
 async fn check_lines(

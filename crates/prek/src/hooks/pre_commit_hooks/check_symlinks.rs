@@ -3,11 +3,13 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
-pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+/// Runs the `check-symlinks` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_concurrent_file_checks(
         hook_filenames(&args.filenames, filenames),
@@ -17,20 +19,20 @@ pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(
     .await
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let path = file_base.join(filename);
 
     // Check if it's a symlink and if it's broken
     let Ok(metadata) = fs_err::tokio::symlink_metadata(&path).await else {
-        return Ok((0, Vec::new()));
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     };
 
     if metadata.file_type().is_symlink() && fs_err::tokio::metadata(&path).await.is_err() {
         let error_message = format!("{}: Broken symlink\n", filename.display());
-        return Ok((1, error_message.into_bytes()));
+        return Ok(HookOutput::unchanged(1, error_message.into_bytes()));
     }
 
-    Ok((0, Vec::new()))
+    Ok(HookOutput::unchanged(0, Vec::new()))
 }
 
 #[cfg(test)]
@@ -54,9 +56,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"regular file content";
         let file_path = create_test_file(&dir, "regular.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -68,9 +70,9 @@ mod tests {
         let link_path = dir.path().join("link.txt");
         fs_err::tokio::symlink(&target, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &link_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -82,10 +84,10 @@ mod tests {
         let nonexistent = dir.path().join("nonexistent.txt");
         fs_err::tokio::symlink(&nonexistent, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &link_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Broken symlink"));
         Ok(())
     }
@@ -106,9 +108,9 @@ mod tests {
             return Ok(());
         }
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &link_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -129,10 +131,10 @@ mod tests {
             return Ok(());
         }
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &link_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Broken symlink"));
         Ok(())
     }
@@ -145,9 +147,9 @@ mod tests {
         let link_path = dir.path().join("link.txt");
         fs_err::tokio::symlink(&target, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &link_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -159,10 +161,10 @@ mod tests {
         let nonexistent = dir.path().join("nonexistent.txt");
         fs_err::tokio::symlink(&nonexistent, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &link_path).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Broken symlink"));
         Ok(())
     }

@@ -6,6 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -181,10 +182,8 @@ impl<'a> ParsedRequirements<'a> {
     }
 }
 
-pub(crate) async fn requirements_txt_fixer(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+/// Runs the `requirements-txt-fixer` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let file_base = hook.project().relative_path();
 
@@ -197,21 +196,25 @@ pub(crate) async fn requirements_txt_fixer(
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     let before = fs_err::tokio::read(&file_path).await?;
 
     let after = match fixed_contents(before) {
         Ok(Some(after)) => after,
-        Ok(None) => return Ok((0, Vec::new())),
+        Ok(None) => return Ok(HookOutput::unchanged(0, Vec::new())),
         Err(error) => {
             let output = format!("{}:{}: {error}\n", filename.display(), error.line_number());
-            return Ok((1, output.into_bytes()));
+            return Ok(HookOutput::unchanged(1, output.into_bytes()));
         }
     };
 
     fs_err::tokio::write(file_path, after).await?;
-    Ok((1, format!("Sorting {}\n", filename.display()).into_bytes()))
+    Ok(HookOutput::known(
+        1,
+        format!("Sorting {}\n", filename.display()).into_bytes(),
+        true,
+    ))
 }
 
 fn fixed_contents(mut before: Vec<u8>) -> FixResult<Option<Vec<u8>>> {

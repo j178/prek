@@ -10,6 +10,7 @@ use serde_json::ser::{Formatter, PrettyFormatter};
 use similar::TextDiff;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -75,7 +76,8 @@ impl From<&Args> for PreparedArgs {
     }
 }
 
-pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+/// Runs the `pretty-format-json` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let prepared = PreparedArgs::from(&args);
 
@@ -88,11 +90,7 @@ pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Resu
     .await
 }
 
-async fn check_file(
-    file_base: &Path,
-    filename: &Path,
-    args: &PreparedArgs,
-) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Path, filename: &Path, args: &PreparedArgs) -> Result<HookOutput> {
     let original_content = fs_err::tokio::read_to_string(file_base.join(filename)).await?;
 
     match prettify_json(&original_content, args) {
@@ -101,19 +99,19 @@ async fn check_file(
             // to LF before comparison. Match that behavior without allocating in
             // the common no-change path.
             if matches_pretty_format(&original_content, &prettified_json) {
-                Ok((0, Vec::new()))
+                Ok(HookOutput::unchanged(0, Vec::new()))
             } else if args.auto_fix {
                 // Rust writes bytes exactly as provided. Preserve the file's
                 // existing newline style instead of forcing serde_json's LF.
                 let output = with_original_line_ending(&prettified_json, &original_content);
                 fs_err::tokio::write(file_base.join(filename), output.as_bytes()).await?;
                 let message = format!("Fixing file {}\n", filename.display());
-                Ok((1, message.into_bytes()))
+                Ok(HookOutput::known(1, message.into_bytes(), true))
             } else {
                 let normalized_content = normalize_newlines(&original_content);
                 let diff = generate_diff(normalized_content.as_ref(), &prettified_json, filename);
                 let message = format!("{}: not pretty-formatted.\n{diff}", filename.display());
-                Ok((1, message.into_bytes()))
+                Ok(HookOutput::unchanged(1, message.into_bytes()))
             }
         }
         Err(err) => {
@@ -121,7 +119,7 @@ async fn check_file(
                 "{}: invalid JSON ({err}). Consider using the `check-json` hook.\n",
                 filename.display(),
             );
-            Ok((1, error_message.into_bytes()))
+            Ok(HookOutput::unchanged(1, error_message.into_bytes()))
         }
     }
 }
@@ -523,10 +521,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(dir.path(), Path::new("empty.json"), &args).await?;
+        let result = check_file(dir.path(), Path::new("empty.json"), &args).await?;
 
-        assert_eq!(code, 1);
-        let output = String::from_utf8(output)?;
+        assert_eq!(result.exit_status, 1);
+        let output = String::from_utf8(result.output)?;
         assert_eq!(
             output,
             "empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.\n",
@@ -547,10 +545,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(dir.path(), Path::new("invalid.json"), &args).await?;
+        let result = check_file(dir.path(), Path::new("invalid.json"), &args).await?;
 
-        assert_eq!(code, 1);
-        let output = String::from_utf8(output)?;
+        assert_eq!(result.exit_status, 1);
+        let output = String::from_utf8(result.output)?;
         assert_eq!(
             output,
             "invalid.json: invalid JSON (expected value at line 1 column 9). Consider using the `check-json` hook.\n",
@@ -571,10 +569,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         Ok(())
     }
@@ -592,10 +590,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         Ok(())
     }
@@ -613,10 +611,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         Ok(())
     }
@@ -632,10 +630,10 @@ mod tests {
             ordered_top_keys: vec![],
             sort_keys: true,
         };
-        let (code, output) = check_file(dir.path(), Path::new("non_pretty.json"), &args).await?;
+        let result = check_file(dir.path(), Path::new("non_pretty.json"), &args).await?;
 
-        assert_eq!(code, 1);
-        let output = String::from_utf8(output)?;
+        assert_eq!(result.exit_status, 1);
+        let output = String::from_utf8(result.output)?;
         let expected = indoc::indoc! {r#"
         non_pretty.json: not pretty-formatted.
         --- non_pretty.json
@@ -674,11 +672,11 @@ mod tests {
             sort_keys: false,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
         // With sorting disabled, no changes needed
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
 
         Ok(())
     }
@@ -695,10 +693,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("not pretty-formatted."));
 
         Ok(())
@@ -735,10 +733,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         // Verify the file was actually fixed
         let result = fs_err::tokio::read_to_string(&file_path).await?;
@@ -760,10 +758,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         assert_eq!(result, PRETTY_JSON.replace('\n', "\r\n"));
@@ -783,10 +781,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = "{\n\t\"alist\": [\n\t\t2,\n\t\t34,\n\t\t234\n\t],\n\t\"blah\": null,\n\t\"foo\": \"bar\"\n}\n";
@@ -807,10 +805,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = indoc::indoc! {r#"
@@ -852,10 +850,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         assert_eq!(result, PRETTY_JSON);
@@ -875,10 +873,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = indoc::indoc! {r#"
@@ -911,9 +909,9 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, _output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 0);
+        assert_eq!(result.exit_status, 0);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = indoc::indoc! {r#"
         {
@@ -944,10 +942,10 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = indoc::indoc! {r#"
@@ -1002,9 +1000,9 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, _output) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
+        assert_eq!(result.exit_status, 1);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = indoc::indoc! {r#"
         {
@@ -1033,9 +1031,9 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, _) = check_file(Path::new(""), &file_path, &args).await?;
+        let result = check_file(Path::new(""), &file_path, &args).await?;
 
-        assert_eq!(code, 1);
+        assert_eq!(result.exit_status, 1);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = indoc::indoc! {r#"
         {

@@ -6,6 +6,7 @@ use aho_corasick::AhoCorasick;
 use anyhow::Result;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
@@ -42,7 +43,8 @@ static PRIVATE_KEY_MATCHER: LazyLock<AhoCorasick> = LazyLock::new(|| {
     AhoCorasick::new(BLACKLIST).expect("private key blacklist patterns should be valid")
 });
 
-pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+/// Runs the `detect-private-key` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_concurrent_file_checks(
         hook_filenames(&args.filenames, filenames),
@@ -57,15 +59,15 @@ pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Resu
 /// For example, if one read ends with `BEGIN RSA PRIV` and the next read starts
 /// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
 /// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     // Keep a file's blocking I/O in one task instead of re-entering the blocking pool per read.
     let found = tokio::task::spawn_blocking(move || check_file_sync(&file_path)).await??;
     if found {
         let error_message = format!("Private key found: {}\n", filename.display());
-        Ok((1, error_message.into_bytes()))
+        Ok(HookOutput::unchanged(1, error_message.into_bytes()))
     } else {
-        Ok((0, Vec::new()))
+        Ok(HookOutput::unchanged(0, Vec::new()))
     }
 }
 
@@ -119,9 +121,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This is just a regular file\nwith some content\n";
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -130,9 +132,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n";
         let file_path = create_test_file(&dir, "id_rsa", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
+        let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Private key found"));
         assert!(output_str.contains("id_rsa"));
         Ok(())
@@ -144,8 +146,8 @@ mod tests {
         let content =
             b"Some documentation\n\nHere is a key:\n-----BEGIN RSA PRIVATE KEY-----\ndata\n";
         let file_path = create_test_file(&dir, "doc.txt", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
         Ok(())
     }
 
@@ -154,9 +156,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This file talks about BEGIN_RSA_PRIVATE_KEY but doesn't contain one\n";
         let file_path = create_test_file(&dir, "false_positive.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -165,9 +167,9 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
         Ok(())
     }
 
@@ -177,8 +179,8 @@ mod tests {
         let mut content = vec![0xFF, 0xFE, 0x00];
         content.extend_from_slice(b"BEGIN RSA PRIVATE KEY");
         let file_path = create_test_file(&dir, "binary.dat", &content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
+        let result = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1);
         Ok(())
     }
 }

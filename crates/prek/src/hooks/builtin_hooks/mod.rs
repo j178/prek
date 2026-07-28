@@ -8,10 +8,17 @@ use prek_identify::tags;
 use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks;
+use crate::hooks::pre_commit_hooks::{
+    check_added_large_files, check_case_conflict, check_executables_have_shebangs, check_json,
+    check_merge_conflict, check_shebang_scripts_are_executable, check_symlinks, check_toml,
+    check_vcs_permalinks, check_xml, check_yaml, destroyed_symlinks, detect_private_key,
+    file_contents_sorter, fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace,
+    forbid_new_submodules, mixed_line_ending, no_commit_to_branch, pretty_format_json,
+    requirements_txt_fixer,
+};
 use crate::store::Store;
 
-use super::HookFuture;
+use super::{HookFuture, HookOutput};
 
 mod check_illegal_windows_names;
 mod check_json5;
@@ -63,18 +70,16 @@ pub(crate) enum BuiltinHooks {
 impl BuiltinHooks {
     fn flags_command(self) -> Option<Command> {
         Some(match self {
-            Self::CheckAddedLargeFiles => {
-                pre_commit_hooks::check_added_large_files::Args::command()
-            }
-            Self::CheckMergeConflict => pre_commit_hooks::check_merge_conflict::Args::command(),
-            Self::CheckVcsPermalinks => pre_commit_hooks::check_vcs_permalinks::Args::command(),
-            Self::CheckYaml => pre_commit_hooks::check_yaml::Args::command(),
+            Self::CheckAddedLargeFiles => check_added_large_files::Args::command(),
+            Self::CheckMergeConflict => check_merge_conflict::Args::command(),
+            Self::CheckVcsPermalinks => check_vcs_permalinks::Args::command(),
+            Self::CheckYaml => check_yaml::Args::command(),
             Self::DenyPattern | Self::RequirePattern => pattern::Args::command(),
-            Self::FileContentsSorter => pre_commit_hooks::file_contents_sorter::Args::command(),
-            Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending::Args::command(),
-            Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch::Args::command(),
-            Self::PrettyFormatJson => pre_commit_hooks::pretty_format_json::Args::command(),
-            Self::TrailingWhitespace => pre_commit_hooks::fix_trailing_whitespace::Args::command(),
+            Self::FileContentsSorter => file_contents_sorter::Args::command(),
+            Self::MixedLineEnding => mixed_line_ending::Args::command(),
+            Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
+            Self::PrettyFormatJson => pretty_format_json::Args::command(),
+            Self::TrailingWhitespace => fix_trailing_whitespace::Args::command(),
             _ => return None,
         })
     }
@@ -85,103 +90,47 @@ impl BuiltinHooks {
         if help.is_empty() { None } else { Some(help) }
     }
 
-    pub(crate) fn may_modify_files(self) -> bool {
-        match self {
-            Self::EndOfFileFixer
-            | Self::FileContentsSorter
-            | Self::FixByteOrderMarker
-            | Self::MixedLineEnding
-            | Self::PrettyFormatJson
-            | Self::RequirementsTxtFixer
-            | Self::TrailingWhitespace => true,
-
-            Self::CheckAddedLargeFiles
-            | Self::CheckCaseConflict
-            | Self::CheckExecutablesHaveShebangs
-            | Self::CheckIllegalWindowsNames
-            | Self::CheckJson
-            | Self::CheckJson5
-            | Self::CheckMergeConflict
-            | Self::CheckShebangScriptsAreExecutable
-            | Self::CheckSymlinks
-            | Self::CheckToml
-            | Self::CheckVcsPermalinks
-            | Self::CheckXml
-            | Self::CheckYaml
-            | Self::DenyPattern
-            | Self::DestroyedSymlinks
-            | Self::DetectPrivateKey
-            | Self::ForbidNewSubmodules
-            | Self::NoCommitToBranch
-            | Self::RequirePattern => false,
-        }
-    }
-
     pub(crate) async fn run(
         self,
         _store: &Store,
         hook: &Hook,
         filenames: &[&Path],
         reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<HookOutput> {
         let progress = reporter.on_run_start(hook, filenames.len());
         let future: HookFuture<'_> = match self {
-            Self::CheckAddedLargeFiles => {
-                Box::pin(pre_commit_hooks::check_added_large_files(hook, filenames))
+            Self::CheckAddedLargeFiles => Box::pin(check_added_large_files::run(hook, filenames)),
+            Self::CheckCaseConflict => Box::pin(check_case_conflict::run(hook, filenames)),
+            Self::CheckExecutablesHaveShebangs => {
+                Box::pin(check_executables_have_shebangs::run(hook, filenames))
             }
-            Self::CheckCaseConflict => {
-                Box::pin(pre_commit_hooks::check_case_conflict(hook, filenames))
-            }
-            Self::CheckExecutablesHaveShebangs => Box::pin(
-                pre_commit_hooks::check_executables_have_shebangs(hook, filenames),
-            ),
             Self::CheckIllegalWindowsNames => Box::pin(std::future::ready(Ok(
                 check_illegal_windows_names::check_illegal_windows_names(hook, filenames),
             ))),
-            Self::CheckJson => Box::pin(pre_commit_hooks::check_json(hook, filenames)),
+            Self::CheckJson => Box::pin(check_json::run(hook, filenames)),
             Self::CheckJson5 => Box::pin(check_json5::check_json5(hook, filenames)),
-            Self::CheckMergeConflict => {
-                Box::pin(pre_commit_hooks::check_merge_conflict(hook, filenames))
+            Self::CheckMergeConflict => Box::pin(check_merge_conflict::run(hook, filenames)),
+            Self::CheckShebangScriptsAreExecutable => {
+                Box::pin(check_shebang_scripts_are_executable::run(hook, filenames))
             }
-            Self::CheckShebangScriptsAreExecutable => Box::pin(
-                pre_commit_hooks::check_shebang_scripts_are_executable(hook, filenames),
-            ),
-            Self::CheckSymlinks => Box::pin(pre_commit_hooks::check_symlinks(hook, filenames)),
-            Self::CheckToml => Box::pin(pre_commit_hooks::check_toml(hook, filenames)),
-            Self::CheckVcsPermalinks => {
-                Box::pin(pre_commit_hooks::check_vcs_permalinks(hook, filenames))
-            }
-            Self::CheckXml => Box::pin(pre_commit_hooks::check_xml(hook, filenames)),
-            Self::CheckYaml => Box::pin(pre_commit_hooks::check_yaml(hook, filenames)),
+            Self::CheckSymlinks => Box::pin(check_symlinks::run(hook, filenames)),
+            Self::CheckToml => Box::pin(check_toml::run(hook, filenames)),
+            Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks::run(hook, filenames)),
+            Self::CheckXml => Box::pin(check_xml::run(hook, filenames)),
+            Self::CheckYaml => Box::pin(check_yaml::run(hook, filenames)),
             Self::DenyPattern => Box::pin(pattern::deny_pattern(hook, filenames)),
-            Self::DestroyedSymlinks => {
-                Box::pin(pre_commit_hooks::destroyed_symlinks(hook, filenames))
-            }
-            Self::DetectPrivateKey => {
-                Box::pin(pre_commit_hooks::detect_private_key(hook, filenames))
-            }
-            Self::EndOfFileFixer => Box::pin(pre_commit_hooks::fix_end_of_file(hook, filenames)),
-            Self::FileContentsSorter => {
-                Box::pin(pre_commit_hooks::file_contents_sorter(hook, filenames))
-            }
-            Self::FixByteOrderMarker => {
-                Box::pin(pre_commit_hooks::fix_byte_order_marker(hook, filenames))
-            }
-            Self::ForbidNewSubmodules => {
-                Box::pin(pre_commit_hooks::forbid_new_submodules(hook, filenames))
-            }
-            Self::MixedLineEnding => Box::pin(pre_commit_hooks::mixed_line_ending(hook, filenames)),
-            Self::NoCommitToBranch => Box::pin(pre_commit_hooks::no_commit_to_branch(hook)),
-            Self::PrettyFormatJson => {
-                Box::pin(pre_commit_hooks::pretty_format_json(hook, filenames))
-            }
+            Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
+            Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
+            Self::EndOfFileFixer => Box::pin(fix_end_of_file::run(hook, filenames)),
+            Self::FileContentsSorter => Box::pin(file_contents_sorter::run(hook, filenames)),
+            Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker::run(hook, filenames)),
+            Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules::run(hook, filenames)),
+            Self::MixedLineEnding => Box::pin(mixed_line_ending::run(hook, filenames)),
+            Self::NoCommitToBranch => Box::pin(no_commit_to_branch::run(hook)),
+            Self::PrettyFormatJson => Box::pin(pretty_format_json::run(hook, filenames)),
             Self::RequirePattern => Box::pin(pattern::require_pattern(hook, filenames)),
-            Self::RequirementsTxtFixer => {
-                Box::pin(pre_commit_hooks::requirements_txt_fixer(hook, filenames))
-            }
-            Self::TrailingWhitespace => {
-                Box::pin(pre_commit_hooks::fix_trailing_whitespace(hook, filenames))
-            }
+            Self::RequirementsTxtFixer => Box::pin(requirements_txt_fixer::run(hook, filenames)),
+            Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace::run(hook, filenames)),
         };
         let result = future.await;
         reporter.on_run_complete(progress);

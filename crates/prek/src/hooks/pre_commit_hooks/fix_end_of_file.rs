@@ -4,10 +4,12 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
-pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+/// Runs the `end-of-file-fixer` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     run_file_checks(
         &args.filenames,
@@ -18,14 +20,18 @@ pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     // Keep a file's blocking I/O in one task instead of re-entering the blocking pool per operation.
     let modified = tokio::task::spawn_blocking(move || fix_file_sync(&file_path)).await??;
     if modified {
-        Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+        Ok(HookOutput::known(
+            1,
+            format!("Fixing {}\n", filename.display()).into_bytes(),
+            true,
+        ))
     } else {
-        Ok((0, Vec::new()))
+        Ok(HookOutput::unchanged(0, Vec::new()))
     }
 }
 
@@ -155,25 +161,25 @@ mod tests {
 
         let content = b"line1\nline2\nline3";
         let file_path = create_test_file(&dir, "unix_no_eof.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1, "Should fix the file");
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1, "Should fix the file");
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\nline2\nline3\n");
 
         let content = b"line1\r\nline2\nline3\r\nline4";
         let file_path = create_test_file(&dir, "mixed.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1, "Should fix the file");
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1, "Should fix the file");
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\r\nline2\nline3\r\nline4\n");
 
         let content = b"line1\r\nline2\r\nline3";
         let file_path = create_test_file(&dir, "windows_no_eof.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1, "Should fix the file");
-        assert!(output.as_bytes().contains_str("Fixing"));
+        let result = fix_file(Path::new(""), &file_path).await?;
+        assert_eq!(result.exit_status, 1, "Should fix the file");
+        assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\r\nline2\r\nline3\n");
 
@@ -187,10 +193,10 @@ mod tests {
         let content = b"line1\r\nline2\r\nline3\r\n";
         let file_path = create_test_file(&dir, "windows_with_eof.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0, "Should not change the file");
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0, "Should not change the file");
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -205,10 +211,10 @@ mod tests {
         let content = b"line1\nline2\nline3\n";
         let file_path = create_test_file(&dir, "unix_with_eof.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0, "Should not change the file");
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0, "Should not change the file");
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -223,10 +229,10 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 0, "Should not change empty file");
-        assert!(output.is_empty());
+        assert_eq!(result.exit_status, 0, "Should not change empty file");
+        assert!(result.output.is_empty());
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"");
@@ -241,10 +247,10 @@ mod tests {
         let content = b"line1\nline2\n\n\n\n";
         let file_path = create_test_file(&dir, "excess_newlines.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1, "Should fix the file");
-        assert!(output.as_bytes().contains_str("Fixing"));
+        assert_eq!(result.exit_status, 1, "Should fix the file");
+        assert!(result.output.as_bytes().contains_str("Fixing"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\nline2\n");
@@ -259,10 +265,10 @@ mod tests {
         let content = b"line1\r\nline2\r\n\r\n\r\n";
         let file_path = create_test_file(&dir, "excess_crlf.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1, "Should fix the file");
-        assert!(output.as_bytes().contains_str("Fixing"));
+        assert_eq!(result.exit_status, 1, "Should fix the file");
+        assert!(result.output.as_bytes().contains_str("Fixing"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"line1\r\nline2\r\n");
@@ -277,10 +283,10 @@ mod tests {
         let content = b"\n\n\n\n";
         let file_path = create_test_file(&dir, "only_newlines.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path).await?;
 
-        assert_eq!(code, 1, "Should fix the file");
-        assert!(output.as_bytes().contains_str("Fixing"));
+        assert_eq!(result.exit_status, 1, "Should fix the file");
+        assert!(result.output.as_bytes().contains_str("Fixing"));
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, b"");

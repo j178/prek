@@ -6,12 +6,11 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::git;
 use crate::hook::Hook;
+use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
 
-pub(crate) async fn forbid_new_submodules(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>), anyhow::Error> {
+/// Runs the `forbid-new-submodules` hook.
+pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let diff_arg = if let (Ok(from_ref), Ok(to_ref)) = (
         EnvVars.var("PRE_COMMIT_FROM_REF"),
@@ -40,10 +39,10 @@ pub(crate) async fn forbid_new_submodules(
 
     let new_submodules = collect_new_submodules(&stdout);
     if new_submodules.is_empty() {
-        Ok((0, Vec::new()))
+        Ok(HookOutput::unchanged(0, Vec::new()))
     } else {
         let message = render_message(&new_submodules);
-        Ok((1, message.into_bytes()))
+        Ok(HookOutput::unchanged(1, message.into_bytes()))
     }
 }
 

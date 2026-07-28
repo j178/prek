@@ -703,10 +703,12 @@ impl<'a> HookRunSession<'a> {
         let mut stop_after_level = false;
 
         for group_hooks in project_run.groups {
-            let group_may_modify_files =
-                !self.dry_run && group_hooks.iter().any(|hook| hooks::may_modify_files(hook));
+            let group_requires_diff_tracking = !self.dry_run
+                && group_hooks
+                    .iter()
+                    .any(|hook| hooks::requires_diff_tracking(hook));
             diff_tracker
-                .prepare_for_group(group_may_modify_files)
+                .prepare_for_group(group_requires_diff_tracking)
                 .await?;
 
             let group_results = self
@@ -717,12 +719,21 @@ impl<'a> HookRunSession<'a> {
                     Rc::clone(&semaphore),
                 )
                 .await?;
-            let all_skipped = group_results
+
+            let needs_diff = group_results
                 .iter()
-                .all(|result| result.status.is_skipped());
-            let group_modified_files = diff_tracker
-                .changed_after_group(group_may_modify_files, all_skipped)
-                .await?;
+                .any(|result| result.file_changes == hooks::FileChanges::Unknown);
+            let known_modified_files = group_results
+                .iter()
+                .any(|result| result.file_changes == hooks::FileChanges::Modified);
+            let diff_detected_modifications = diff_tracker.changed_after_group(needs_diff).await?;
+            if known_modified_files && !needs_diff {
+                // Native hooks report modifications directly, so no Git snapshot
+                // was taken. Force one before a later external hook needs a
+                // before/after comparison.
+                diff_tracker.invalidate();
+            }
+            let group_modified_files = known_modified_files || diff_detected_modifications;
 
             let group = ProjectGroupRunResult {
                 results: group_results,
@@ -1286,6 +1297,7 @@ struct RunResult {
     duration: std::time::Duration,
     exit_status: i32,
     output: Vec<u8>,
+    file_changes: hooks::FileChanges,
 }
 
 impl RunResult {
@@ -1296,6 +1308,7 @@ impl RunResult {
             duration: std::time::Duration::ZERO,
             exit_status: 0,
             output: Vec::new(),
+            file_changes: hooks::FileChanges::Unchanged,
         }
     }
 }
@@ -1331,8 +1344,8 @@ async fn run_hook(
     let start = std::time::Instant::now();
     input.shuffle();
 
-    let (exit_status, hook_output) = if dry_run {
-        (0, dry_run_hook(&hook, &input)?)
+    let hook_output = if dry_run {
+        hooks::HookOutput::unchanged(0, dry_run_hook(&hook, &input)?)
     } else {
         match &input {
             HookRunInput::Filenames(filenames) => {
@@ -1348,6 +1361,11 @@ async fn run_hook(
         }
         .with_context(|| format!("Failed to run hook `{hook}`"))?
     };
+    let hooks::HookOutput {
+        exit_status,
+        output,
+        file_changes,
+    } = hook_output;
 
     let duration = start.elapsed();
 
@@ -1364,7 +1382,8 @@ async fn run_hook(
         status: run_status,
         duration,
         exit_status,
-        output: hook_output,
+        output,
+        file_changes,
     })
 }
 
