@@ -3502,6 +3502,44 @@ fn dry_run() {
     ");
 }
 
+/// The file list printed with `--dry-run --verbose` is sorted.
+#[test]
+fn dry_run_sorted() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    let cwd = context.work_dir();
+    cwd.child("zebra.txt").write_str("z").unwrap();
+    cwd.child("apple.txt").write_str("a").unwrap();
+    cwd.child("mango.txt").write_str("m").unwrap();
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--dry-run").arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fail....................................................................Dry Run
+    - hook id: fail
+    - duration: [TIME]
+
+      `fail` would be run on 4 files:
+      - .pre-commit-config.yaml
+      - apple.txt
+      - mango.txt
+      - zebra.txt
+
+    ----- stderr -----
+    ");
+}
+
 /// Supports reading `pre-commit-config.yml` as well.
 #[test]
 fn alternate_config_file() -> Result<()> {

@@ -1389,7 +1389,9 @@ fn dry_run_hook(hook: &InstalledHook, input: &HookRunInput<'_>) -> Result<Vec<u8
 
     match input {
         HookRunInput::Filenames(filenames) => {
-            for filename in filenames {
+            let mut filenames = filenames.clone();
+            filenames.sort();
+            for filename in &filenames {
                 writeln!(output, "- {}", filename.display())?;
             }
         }
