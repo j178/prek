@@ -64,6 +64,7 @@ owo-colors = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }
 reqwest = { workspace = true }
+rayon = { workspace = true }
 aws-lc-rs = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }

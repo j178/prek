@@ -1,4 +1,3 @@
-use std::cell::OnceCell;
 use std::ffi::OsStr;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -8,6 +7,7 @@ use anyhow::{Context, Result};
 use globset::Glob;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags_from_path};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
@@ -108,10 +108,10 @@ impl<'a> HookFileFilter<'a> {
     }
 
     /// Return whether a project-owned file passes this hook's file and tag filters.
-    pub(crate) fn matches_project_file<'p>(
+    pub(crate) fn matches_project_file(
         &self,
-        file: &ProjectFile<'p>,
-        tag_cache: &FileTagCache<'p>,
+        file: &ProjectFile<'_>,
+        tag_cache: &FileTagCache,
     ) -> bool {
         self.matches_filename(file.hook_path) && self.matches_tags(file.tags(tag_cache))
     }
@@ -137,42 +137,33 @@ impl<'a> ProjectFile<'a> {
     }
 
     /// Return cached tags for the workspace-relative path.
-    pub(crate) fn tags<'cache>(
-        &self,
-        tag_cache: &'cache FileTagCache<'a>,
-    ) -> Option<&'cache TagSet> {
+    pub(crate) fn tags<'cache>(&self, tag_cache: &'cache FileTagCache) -> Option<&'cache TagSet> {
         tag_cache.tags(self.file_idx)
     }
 }
 
 #[derive(Default)]
-pub(crate) struct FileTagCache<'a> {
-    paths: &'a [PathBuf],
-    tags_by_file: Vec<OnceCell<Option<TagSet>>>,
+pub(crate) struct FileTagCache {
+    tags_by_file: Vec<Option<TagSet>>,
 }
 
-impl<'a> FileTagCache<'a> {
-    pub(crate) fn from_paths(paths: &'a [PathBuf]) -> Self {
-        let tags_by_file = (0..paths.len()).map(|_| OnceCell::new()).collect();
-        Self {
-            paths,
-            tags_by_file,
-        }
+impl FileTagCache {
+    pub(crate) fn from_paths(paths: &[PathBuf]) -> Self {
+        let tags_by_file = paths
+            .par_iter()
+            .map(|path| match tags_from_path(path) {
+                Ok(tags) => Some(tags),
+                Err(err) => {
+                    error!(filename = ?path.display(), error = %err, "Failed to get tags");
+                    None
+                }
+            })
+            .collect();
+        Self { tags_by_file }
     }
 
     pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
-        self.tags_by_file[file_idx]
-            .get_or_init(|| {
-                let path = &self.paths[file_idx];
-                match tags_from_path(path) {
-                    Ok(tags) => Some(tags),
-                    Err(err) => {
-                        error!(filename = ?path.display(), error = %err, "Failed to get tags");
-                        None
-                    }
-                }
-            })
-            .as_ref()
+        self.tags_by_file[file_idx].as_ref()
     }
 }
 
@@ -275,7 +266,7 @@ impl<'a> ProjectFiles<'a> {
     pub(crate) fn matching_filenames(
         &self,
         hook: &Hook,
-        tag_cache: &FileTagCache<'a>,
+        tag_cache: &FileTagCache,
     ) -> Vec<&'a Path> {
         let hook_filter = HookFileFilter::new(hook);
         let mut filenames = Vec::new();
@@ -288,7 +279,7 @@ impl<'a> ProjectFiles<'a> {
     }
 
     /// Return whether at least one file matches a hook without collecting every filename.
-    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &FileTagCache<'a>) -> bool {
+    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &FileTagCache) -> bool {
         let hook_filter = HookFileFilter::new(hook);
         for file in &self.files {
             if hook_filter.matches_project_file(file, tag_cache) {
@@ -343,7 +334,7 @@ impl<'a> ProjectPathNode<'a> {
 /// Project-relative views of the run input, built once and shared by hook setup and execution.
 pub(crate) struct RunFileIndex<'a> {
     projects: Vec<ProjectFiles<'a>>,
-    tag_cache: FileTagCache<'a>,
+    tag_cache: FileTagCache,
 }
 
 impl<'a> RunFileIndex<'a> {
@@ -415,7 +406,7 @@ impl<'a> RunFileIndex<'a> {
         &self.projects[project.idx()]
     }
 
-    pub(crate) fn tag_cache(&self) -> &FileTagCache<'a> {
+    pub(crate) fn tag_cache(&self) -> &FileTagCache {
         &self.tag_cache
     }
 }

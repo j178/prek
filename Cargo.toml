@@ -75,6 +75,7 @@ aws-lc-rs = { version = "1.17.0", default-features = false, features = [
 ] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
+rayon = { version = "1.11.0" }
 same-file = { version = "1.0.6" }
 seahash = { version = "4.1.0" }
 semver = { version = "1.0.24", features = ["serde"] }
