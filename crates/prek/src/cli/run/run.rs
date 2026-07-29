@@ -1335,11 +1335,11 @@ async fn run_hook(
         return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
     let start = std::time::Instant::now();
-    input.shuffle();
 
     let hook_output = if dry_run {
         hooks::HookOutput::unchanged(0, dry_run_hook(&hook, &input)?)
     } else {
+        input.shuffle();
         match &input {
             HookRunInput::Filenames(filenames) => {
                 hook.language.run(store, &hook, filenames, reporter).await
