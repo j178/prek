@@ -72,6 +72,8 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-install--config"><a href="#prek-install--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-install--force"><a href="#prek-install--force"><code>--force</code></a>, <code>--overwrite</code>, <code>-f</code></dt><dd><p>Force installation and overwrite existing Git shims.</p>
+<p>If <code>core.hooksPath</code> is configured outside this repository, install the shims into this repository's default hooks directory.</p>
 </dd><dt id="prek-install--git-dir"><a href="#prek-install--git-dir"><code>--git-dir</code></a> <i>git-dir</i></dt><dd><p>Install Git shims into the <code>hooks</code> subdirectory of the given git directory (<code>&lt;GIT_DIR&gt;/hooks/</code>).</p>
 <p>When this flag is used, <code>prek install</code> bypasses the safety check that normally refuses to install shims while <code>core.hooksPath</code> is configured outside the repo. It only writes shims to <code>&lt;GIT_DIR&gt;/hooks</code>; Git will keep using <code>core.hooksPath</code> until that config changes.</p>
 </dd><dt id="prek-install--help"><a href="#prek-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -94,7 +96,6 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-install--log-file"><a href="#prek-install--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-install--no-progress"><a href="#prek-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-install--overwrite"><a href="#prek-install--overwrite"><code>--overwrite</code></a>, <code>-f</code></dt><dd><p>Overwrite existing Git shims</p>
 </dd><dt id="prek-install--prepare-hooks"><a href="#prek-install--prepare-hooks"><code>--prepare-hooks</code></a>, <code>--install-hooks</code></dt><dd><p>Also prepare environments for all hooks used in the config file</p>
 </dd><dt id="prek-install--quiet"><a href="#prek-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>

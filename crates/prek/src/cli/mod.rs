@@ -329,9 +329,12 @@ pub(crate) struct InstallArgs {
     #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
     pub(crate) skips: Vec<String>,
 
-    /// Overwrite existing Git shims.
-    #[arg(short = 'f', long)]
-    pub(crate) overwrite: bool,
+    /// Force installation and overwrite existing Git shims.
+    ///
+    /// If `core.hooksPath` is configured outside this repository, install the
+    /// shims into this repository's default hooks directory.
+    #[arg(short = 'f', long, alias = "overwrite")]
+    pub(crate) force: bool,
 
     /// Also prepare environments for all hooks used in the config file.
     #[arg(long, alias = "install-hooks")]

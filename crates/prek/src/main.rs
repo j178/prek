@@ -241,7 +241,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.skips,
                 args.hook_types,
                 args.prepare_hooks,
-                args.overwrite,
+                args.force,
                 args.allow_missing_config,
                 cli.globals.refresh,
                 printer,
