@@ -756,7 +756,7 @@ impl<'a> HookRunSession<'a> {
         &self,
         group_hooks: Vec<InstalledHook>,
         project_input: &ProjectHookInput<'_, '_>,
-        tag_cache: &FileTagCache<'_>,
+        tag_cache: &FileTagCache,
         semaphore: Rc<Semaphore>,
     ) -> Result<Vec<RunResult>> {
         debug!(
@@ -1093,11 +1093,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
         }
     }
 
-    fn run_input_for_hook(
-        &self,
-        hook: &Hook,
-        tag_cache: &FileTagCache<'paths>,
-    ) -> HookRunInput<'paths> {
+    fn run_input_for_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> HookRunInput<'paths> {
         match self {
             Self::Files(project_files) => match hook.pass_filenames {
                 // Always-run hooks without filename arguments run regardless of file matches.
@@ -1124,7 +1120,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
         }
     }
 
-    fn matches_hook(&self, hook: &Hook, tag_cache: &FileTagCache<'paths>) -> bool {
+    fn matches_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> bool {
         match self {
             Self::Files(project_files) => project_files.has_matching_file(hook, tag_cache),
             Self::MessageFile { hook_arg, tags } => {
@@ -1309,7 +1305,7 @@ impl RunResult {
 async fn run_hook(
     hook: InstalledHook,
     project_input: &ProjectHookInput<'_, '_>,
-    tag_cache: &FileTagCache<'_>,
+    tag_cache: &FileTagCache,
     store: &Store,
     dry_run: bool,
     reporter: &HookRunReporter,
