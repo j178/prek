@@ -22,8 +22,26 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
 async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
-    // Keep a file's blocking I/O in one task instead of re-entering the blocking pool per operation.
-    let modified = tokio::task::spawn_blocking(move || fix_file_sync(&file_path)).await??;
+    let modified = tokio::task::spawn_blocking(move || -> Result<bool> {
+        let mut file = fs_err::File::open(&file_path)?;
+        let Some(fix) = find_fix(&mut file)? else {
+            return Ok(false);
+        };
+        drop(file);
+
+        let mut file = fs_err::OpenOptions::new().write(true).open(&file_path)?;
+        match fix {
+            FileFix::Truncate(size) => file.set_len(size)?,
+            FileFix::AppendNewline(pos) => {
+                file.seek(SeekFrom::Start(pos))?;
+                file.write_all(b"\n")?;
+            }
+        }
+        file.flush()?;
+        Ok(true)
+    })
+    .await??;
+
     if modified {
         Ok(HookOutput::known(
             1,
@@ -35,43 +53,31 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     }
 }
 
-fn fix_file_sync(file_path: &Path) -> Result<bool> {
-    // If the file is empty, do nothing and avoid opening a write handle.
-    let file_size = fs_err::metadata(file_path)?.len();
+enum FileFix {
+    Truncate(u64),
+    AppendNewline(u64),
+}
+
+fn find_fix(file: &mut fs_err::File) -> Result<Option<FileFix>> {
+    let file_size = file.metadata()?.len();
     if file_size == 0 {
-        return Ok(false);
+        return Ok(None);
     }
 
-    let mut file = fs_err::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(file_path)?;
-
-    match find_last_non_ending(&mut file)? {
-        (None, _) => {
-            // File contains only line endings, so we can just set it to empty.
-            file.set_len(0)?;
-            file.flush()?;
-            Ok(true)
-        }
-        (Some(pos), None) => {
-            // File has some content, but no line ending at the end.
-            file.seek(SeekFrom::Start(pos + 1))?;
-            file.write_all(b"\n")?;
-            file.flush()?;
-            Ok(true)
-        }
+    Ok(match find_last_non_ending(file)? {
+        // A file containing only line endings should be empty.
+        (None, _) => Some(FileFix::Truncate(0)),
+        // A file with no ending needs one LF appended.
+        (Some(pos), None) => Some(FileFix::AppendNewline(pos + 1)),
         (Some(pos), Some(line_ending)) => {
-            // File has some content and at least one line ending.
             let new_size = pos + 1 + line_ending.len() as u64;
             if file_size == new_size {
-                // File already has the correct line ending.
-                return Ok(false);
+                None
+            } else {
+                Some(FileFix::Truncate(new_size))
             }
-            file.set_len(new_size)?;
-            Ok(true)
         }
-    }
+    })
 }
 
 fn determine_line_ending(first: u8, second: u8) -> Option<&'static str> {
@@ -138,6 +144,7 @@ mod tests {
 
     use anyhow::Ok;
     use bstr::ByteSlice;
+    use std::fs::Permissions;
     use std::path::{Path, PathBuf};
     use tempfile::tempdir;
 
@@ -149,6 +156,47 @@ mod tests {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
         Ok(file_path)
+    }
+
+    async fn make_read_only(file_path: &Path) -> Result<Permissions> {
+        let original = fs_err::tokio::metadata(file_path).await?.permissions();
+        let mut read_only = original.clone();
+        read_only.set_readonly(true);
+        fs_err::tokio::set_permissions(file_path, read_only).await?;
+        Ok(original)
+    }
+
+    #[tokio::test]
+    async fn test_read_only_file_with_correct_ending() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = create_test_file(&dir, "correct.txt", b"already correct\n").await?;
+        let permissions = make_read_only(&file_path).await?;
+
+        let result = fix_file(Path::new(""), &file_path).await;
+        fs_err::tokio::set_permissions(&file_path, permissions).await?;
+
+        assert_eq!(result?.exit_status, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_read_only_file_needing_fix_fails() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = create_test_file(&dir, "incorrect.txt", b"missing newline").await?;
+        let permissions = make_read_only(&file_path).await?;
+
+        let write_is_denied = fs_err::tokio::OpenOptions::new()
+            .write(true)
+            .open(&file_path)
+            .await
+            .is_err();
+        let result = fix_file(Path::new(""), &file_path).await;
+        fs_err::tokio::set_permissions(&file_path, permissions).await?;
+
+        if write_is_denied {
+            assert!(result.is_err());
+        }
+        Ok(())
     }
 
     #[tokio::test]

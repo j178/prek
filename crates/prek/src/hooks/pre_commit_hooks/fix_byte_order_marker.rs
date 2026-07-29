@@ -1,7 +1,7 @@
-use std::{io::ErrorKind, path::Path};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::path::Path;
 
 use anyhow::Result;
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
@@ -26,40 +26,52 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
 
-    let mut file = fs_err::tokio::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&file_path)
-        .await?;
+    let modified = tokio::task::spawn_blocking(move || -> Result<bool> {
+        let mut file = fs_err::File::open(&file_path)?;
+        if !has_utf8_bom(&mut file)? {
+            return Ok(false);
+        }
+        drop(file);
 
+        let mut file = fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&file_path)?;
+        let file_len = file.seek(SeekFrom::End(0))?;
+        if file_len == UTF8_BOM.len() as u64 {
+            file.set_len(0)?;
+        } else {
+            // Shift the payload in place so large files do not need a full second buffer.
+            shift_file_left(&mut file, file_len, UTF8_BOM.len() as u64)?;
+        }
+        Ok(true)
+    })
+    .await??;
+
+    if modified {
+        Ok(HookOutput::known(
+            1,
+            format!("{}: removed byte-order marker\n", filename.display()).into_bytes(),
+            true,
+        ))
+    } else {
+        Ok(HookOutput::unchanged(0, Vec::new()))
+    }
+}
+
+fn has_utf8_bom(file: &mut fs_err::File) -> Result<bool> {
     let mut bom_buffer = [0u8; 3];
-    match file.read_exact(&mut bom_buffer).await {
-        Ok(_) => {}
+    match file.read_exact(&mut bom_buffer) {
+        Ok(()) => {}
         Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-            return Ok(HookOutput::unchanged(0, Vec::new()));
+            return Ok(false);
         }
         Err(err) => return Err(err.into()),
     }
-    if bom_buffer != UTF8_BOM {
-        return Ok(HookOutput::unchanged(0, Vec::new()));
-    }
-
-    let file_len = file.seek(SeekFrom::End(0)).await?;
-    if file_len == UTF8_BOM.len() as u64 {
-        file.set_len(0).await?;
-    } else {
-        // Shift the payload in place so large files do not need a full second buffer.
-        shift_file_left(&mut file, file_len, UTF8_BOM.len() as u64).await?;
-    }
-
-    Ok(HookOutput::known(
-        1,
-        format!("{}: removed byte-order marker\n", filename.display()).into_bytes(),
-        true,
-    ))
+    Ok(bom_buffer == UTF8_BOM)
 }
 
-async fn shift_file_left(file: &mut fs_err::tokio::File, file_len: u64, offset: u64) -> Result<()> {
+fn shift_file_left(file: &mut fs_err::File, file_len: u64, offset: u64) -> Result<()> {
     let mut buf = vec![0u8; BUFFER_SIZE];
     let mut read_pos = offset;
     let mut write_pos = 0;
@@ -68,15 +80,15 @@ async fn shift_file_left(file: &mut fs_err::tokio::File, file_len: u64, offset: 
         // Read after the BOM and rewrite earlier in the same file.
         let remaining = usize::try_from(file_len - read_pos)?;
         let chunk_len = BUFFER_SIZE.min(remaining);
-        file.seek(SeekFrom::Start(read_pos)).await?;
-        file.read_exact(&mut buf[..chunk_len]).await?;
-        file.seek(SeekFrom::Start(write_pos)).await?;
-        file.write_all(&buf[..chunk_len]).await?;
+        file.seek(SeekFrom::Start(read_pos))?;
+        file.read_exact(&mut buf[..chunk_len])?;
+        file.seek(SeekFrom::Start(write_pos))?;
+        file.write_all(&buf[..chunk_len])?;
         read_pos += chunk_len as u64;
         write_pos += chunk_len as u64;
     }
 
-    file.set_len(file_len - offset).await?;
+    file.set_len(file_len - offset)?;
     Ok(())
 }
 
