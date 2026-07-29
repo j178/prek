@@ -83,17 +83,17 @@ pub(crate) async fn install(
             );
         }
 
-        let hooks_path = git::get_git_common_dir().await?.join("hooks");
+        let hooks_path = git::common_dir().await?.join("hooks");
         warn_user!(
             "`core.hooksPath` is configured outside this repository. Installing Git shims to `{}` because `--force` was used.",
             hooks_path.user_display().cyan()
         );
         hooks_path
     } else {
-        git::get_git_hooks_dir().await?
+        git::hooks_dir().await?
     };
 
-    let hook_mode = git::get_shared_repository_file_mode(0o755)
+    let hook_mode = git::shared_repository_file_mode(0o755)
         .await
         .unwrap_or(0o755);
 
@@ -427,7 +427,7 @@ pub(crate) async fn uninstall(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_hooks_dir().await?
+        git::hooks_dir().await?
     };
 
     let types: Vec<HookType> = if all {

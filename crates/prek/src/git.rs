@@ -62,7 +62,7 @@ fn git_work_tree() -> Option<&'static Path> {
 }
 
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
-    get_root()
+    root()
         .map(|root| dunce::canonicalize(&root).unwrap_or(root))
         .inspect(|root| {
             debug!("Git root: {}", root.display());
@@ -172,7 +172,7 @@ pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Err
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn staged_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd()?
         .current_dir(root)
         .arg("diff")
@@ -190,7 +190,7 @@ pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> 
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn get_changed_files(
+pub(crate) async fn changed_files(
     old: &str,
     new: &str,
     root: &Path,
@@ -248,7 +248,7 @@ where
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn get_git_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn git_dir() -> Result<PathBuf, Error> {
     let output = git_cmd()?
         .arg("rev-parse")
         .arg("--git-dir")
@@ -260,7 +260,7 @@ pub(crate) async fn get_git_dir() -> Result<PathBuf, Error> {
     ))
 }
 
-pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn common_dir() -> Result<PathBuf, Error> {
     let output = git_cmd()?
         .arg("rev-parse")
         .arg("--git-common-dir")
@@ -268,7 +268,7 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
         .output()
         .await?;
     if output.stdout.trim_ascii().is_empty() {
-        Ok(get_git_dir().await?)
+        Ok(git_dir().await?)
     } else {
         Ok(PathBuf::from(
             String::from_utf8_lossy(&output.stdout).trim_ascii(),
@@ -276,7 +276,7 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn hooks_dir() -> Result<PathBuf, Error> {
     // Ask Git for the effective hooks directory instead of reconstructing it
     // ourselves. That lets Git apply the full precedence chain for
     // `core.hooksPath`, including local/worktree config, linked worktrees, bare
@@ -290,7 +290,7 @@ pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
         .output()
         .await?;
     let hooks_dir = if output.stdout.trim_ascii().is_empty() {
-        get_git_common_dir().await?.join("hooks")
+        common_dir().await?.join("hooks")
     } else {
         PathBuf::from(String::from_utf8_lossy(&output.stdout).trim_ascii())
     };
@@ -308,7 +308,7 @@ pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd()?
         .current_dir(root)
         .arg("diff")
@@ -365,11 +365,11 @@ pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
 }
 
 pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
-    let git_dir = get_git_dir().await?;
+    let git_dir = git_dir().await?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let tree = git_cmd()?.arg("write-tree").check(true).output().await?;
 
     let output = git_cmd()?
@@ -396,7 +396,7 @@ pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Er
 }
 
 async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
-    let git_dir = get_git_dir().await?;
+    let git_dir = git_dir().await?;
     let merge_msg = git_dir.join("MERGE_MSG");
     let content = fs_err::tokio::read_to_string(&merge_msg).await?;
     let conflicts = content
@@ -471,9 +471,9 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
         .to_string())
 }
 
-/// Get the path of the top-level directory of the working tree.
+/// Return the path of the top-level directory of the working tree.
 #[instrument(level = "trace")]
-pub(crate) fn get_root() -> Result<PathBuf, Error> {
+pub(crate) fn root() -> Result<PathBuf, Error> {
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
     let mut cmd = Command::new(git);
     let output = apply_git_work_tree(&mut cmd)
@@ -709,7 +709,7 @@ pub(crate) async fn clone_repo(
     clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
-async fn get_config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {
+async fn config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {
     let mut cmd = git_cmd()?;
     cmd.arg("config").arg("--includes");
     if let Some(scope) = scope {
@@ -729,11 +729,11 @@ async fn has_config_value(scope: Option<&str>, key: &str) -> Result<bool, Error>
     // An empty config value still counts as configured and can affect Git's
     // path resolution, e.g. `core.hooksPath=` makes `--git-path hooks`
     // resolve to the current directory.
-    Ok(get_config_value(scope, key).await?.is_some())
+    Ok(config_value(scope, key).await?.is_some())
 }
 
 async fn config_value_is_empty(scope: Option<&str>, key: &str) -> Result<bool, Error> {
-    Ok(get_config_value(scope, key)
+    Ok(config_value(scope, key)
         .await?
         .as_deref()
         .is_some_and(|value| value.strip_suffix(b"\0").unwrap_or(value).is_empty()))
@@ -752,7 +752,7 @@ pub(crate) async fn has_repo_hooks_path_set() -> Result<bool, Error> {
 ///
 /// This mirrors the relevant parts of Git's `git_config_perm` in `setup.c`
 /// and `calc_shared_perm` in `path.c`.
-fn shared_repository_file_mode(value: &str, mode: u32) -> Option<u32> {
+fn apply_shared_repository_file_mode(value: &str, mode: u32) -> Option<u32> {
     const PERM_GROUP: u32 = 0o660;
     const PERM_EVERYBODY: u32 = 0o664;
 
@@ -797,7 +797,7 @@ fn shared_repository_file_mode(value: &str, mode: u32) -> Option<u32> {
 }
 
 /// Resolve the file mode implied by `core.sharedRepository` for a newly created file.
-pub(crate) async fn get_shared_repository_file_mode(mode: u32) -> Result<u32> {
+pub(crate) async fn shared_repository_file_mode(mode: u32) -> Result<u32> {
     let output = git_cmd()?
         .arg("config")
         .arg("--get")
@@ -807,13 +807,13 @@ pub(crate) async fn get_shared_repository_file_mode(mode: u32) -> Result<u32> {
         .await?;
     if output.status.success() {
         let value = str::from_utf8(&output.stdout)?;
-        Ok(shared_repository_file_mode(value, mode).unwrap_or(mode))
+        Ok(apply_shared_repository_file_mode(value, mode).unwrap_or(mode))
     } else {
         Ok(mode)
     }
 }
 
-pub(crate) async fn get_lfs_files(
+pub(crate) async fn lfs_files(
     current_dir: &Path,
     paths: &[&Path],
 ) -> Result<FxHashSet<PathBuf>, Error> {
@@ -911,8 +911,8 @@ pub(crate) async fn is_ancestor(ancestor: &str, commit: &str) -> Result<bool, Er
     Ok(false)
 }
 
-/// Get commits that are ancestors of the given commit but not in the specified remote
-pub(crate) async fn get_ancestors_not_in_remote(
+/// Return commits that are ancestors of the given commit but not in the specified remote.
+pub(crate) async fn ancestors_not_in_remote(
     local_sha: &str,
     remote_name: &str,
 ) -> Result<Vec<String>, Error> {
@@ -933,8 +933,8 @@ pub(crate) async fn get_ancestors_not_in_remote(
         .collect())
 }
 
-/// Get root commits (commits with no parents) for the given commit
-pub(crate) async fn get_root_commits(local_sha: &str) -> Result<FxHashSet<String>, Error> {
+/// Return root commits (commits with no parents) for the given commit.
+pub(crate) async fn root_commits(local_sha: &str) -> Result<FxHashSet<String>, Error> {
     let output = git_cmd()?
         .arg("rev-list")
         .arg("--max-parents=0")
@@ -949,8 +949,8 @@ pub(crate) async fn get_root_commits(local_sha: &str) -> Result<FxHashSet<String
         .collect())
 }
 
-/// Get the parent commit of the given commit
-pub(crate) async fn get_parent_commit(commit: &str) -> Result<Option<String>, Error> {
+/// Return the parent commit of the given commit.
+pub(crate) async fn parent_commit(commit: &str) -> Result<Option<String>, Error> {
     let output = git_cmd()?
         .arg("rev-parse")
         .arg(format!("{commit}^"))
@@ -997,7 +997,7 @@ mod tests {
     #[cfg(unix)]
     use super::zsplit;
     use super::{
-        Error, GIT, TerminalPrompt, full_clone, init_repo, shared_repository_file_mode,
+        Error, GIT, TerminalPrompt, apply_shared_repository_file_mode, full_clone, init_repo,
         should_update_submodules, update_submodules,
     };
     use assert_cmd::assert::OutputAssertExt;
@@ -1107,27 +1107,33 @@ mod tests {
     #[test]
     fn shared_repository_group_mode_matches_git_behavior() {
         for value in ["group", "true", "yes", "on", "1"] {
-            assert_eq!(shared_repository_file_mode(value, 0o755), Some(0o775));
+            assert_eq!(apply_shared_repository_file_mode(value, 0o755), Some(0o775));
         }
     }
 
     #[test]
     fn shared_repository_everybody_mode_matches_git_behavior() {
         for value in ["all", "world", "everybody", "2"] {
-            assert_eq!(shared_repository_file_mode(value, 0o755), Some(0o775));
+            assert_eq!(apply_shared_repository_file_mode(value, 0o755), Some(0o775));
         }
     }
 
     #[test]
     fn shared_repository_octal_mode_matches_git_behavior() {
-        assert_eq!(shared_repository_file_mode("0640", 0o644), Some(0o640));
-        assert_eq!(shared_repository_file_mode("0640", 0o755), Some(0o750));
+        assert_eq!(
+            apply_shared_repository_file_mode("0640", 0o644),
+            Some(0o640)
+        );
+        assert_eq!(
+            apply_shared_repository_file_mode("0640", 0o755),
+            Some(0o750)
+        );
     }
 
     #[test]
     fn shared_repository_umask_or_invalid_values_do_not_override_mode() {
         for value in ["", "umask", "false", "no", "off", "0", "invalid", "0400"] {
-            assert_eq!(shared_repository_file_mode(value, 0o755), None);
+            assert_eq!(apply_shared_repository_file_mode(value, 0o755), None);
         }
     }
 }

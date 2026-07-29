@@ -51,7 +51,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
     let index_path = shadow.join(".git/index");
     let objects_path = shadow.join(".git/objects");
 
-    let staged_files = git::get_staged_files(repo_path).await?;
+    let staged_files = git::staged_files(repo_path).await?;
     if !staged_files.is_empty() {
         git::git_cmd()?
             .arg("add")

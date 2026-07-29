@@ -3367,9 +3367,9 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
     app.child("FOO.txt").write_str("conflicting case")?;
     context.git_add("app/FOO.txt");
 
-    // Regression: in workspace mode, `get_added_files()` must return paths relative to the
-    // nested project root so added files still participate in conflict detection even when
-    // `--files` only names some other file in that project.
+    // Regression: in workspace mode, staged additions must be reported relative to the nested
+    // project root so they still participate in conflict detection even when `--files` only
+    // names some other file in that project.
     cmd_snapshot!(
         context.filters(),
         context
