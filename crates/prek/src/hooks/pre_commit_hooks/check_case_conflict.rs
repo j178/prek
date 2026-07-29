@@ -25,7 +25,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     }
 
     // Get relevant files (filenames + added files) and include their parent directories.
-    let added = git::get_added_files(work_dir).await?;
+    let added = git::staged_added_files(work_dir).await?;
     let mut relevant_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for filename in &filenames {
         insert_path_and_parents(&mut relevant_files_with_dirs, filename);

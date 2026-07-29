@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use rustc_hash::FxHashSet;
 
-use crate::git::{get_added_files, get_lfs_files};
+use crate::git::{lfs_files, staged_added_files};
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
@@ -35,7 +35,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<Hook
     let filenames = if args.enforce_all {
         filenames
     } else {
-        let added_files = get_added_files(hook.work_dir())
+        let added_files = staged_added_files(hook.work_dir())
             .await?
             .into_iter()
             .collect::<FxHashSet<_>>();
@@ -53,7 +53,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<Hook
 
     // Builtin hooks receive project-relative filenames, so git attribute lookups need to run
     // from the project root for nested `.gitattributes` files to apply.
-    let lfs_files = get_lfs_files(hook.work_dir(), filenames).await?;
+    let lfs_files = lfs_files(hook.work_dir(), filenames).await?;
 
     let filenames = filenames
         .iter()

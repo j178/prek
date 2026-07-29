@@ -344,7 +344,7 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
 
         // New remote ref, missing old remote object, or rebased force-push: find the
         // commits reachable from the local tip that this remote cannot already reach.
-        let ancestors = git::get_ancestors_not_in_remote(local_sha, remote_name).await?;
+        let ancestors = git::ancestors_not_in_remote(local_sha, remote_name).await?;
         if ancestors.is_empty() {
             // The local tip is already reachable from the remote, so this line does
             // not introduce files that need pre-push checks.
@@ -352,7 +352,7 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
         }
 
         let first_ancestor = &ancestors[0];
-        let roots = git::get_root_commits(local_sha).await?;
+        let roots = git::root_commits(local_sha).await?;
 
         if roots.contains(first_ancestor) {
             // The first commit being pushed is a root commit. There is no parent to
@@ -369,7 +369,7 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
         // Use the parent of the first remote-unknown commit as the diff base. For
         // rebased force-pushes, this usually resolves to the updated default branch
         // base, matching the files a pull request would show.
-        if let Some(source) = git::get_parent_commit(first_ancestor).await? {
+        if let Some(source) = git::parent_commit(first_ancestor).await? {
             return Ok(Some(PushInfo {
                 from_ref: Some(source),
                 to_ref: Some(local_sha.to_string()),

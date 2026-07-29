@@ -667,7 +667,7 @@ async fn collect_files_for_selection(
 ) -> Result<Vec<PathBuf>> {
     match selection {
         FileSelection::Diff { from_ref, to_ref } => {
-            let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
+            let files = git::changed_files(&from_ref, &to_ref, workspace_root).await?;
             debug!(
                 "Files changed between {} and {}: {}",
                 from_ref,
@@ -688,12 +688,12 @@ async fn collect_files_for_selection(
         }
         FileSelection::Default => {
             if git::is_in_merge_conflict().await? {
-                let files = git::get_conflicted_files(workspace_root).await?;
+                let files = git::conflicted_files(workspace_root).await?;
                 debug!("Conflicted files: {}", files.len());
                 return Ok(files);
             }
 
-            let files = git::get_staged_files(workspace_root).await?;
+            let files = git::staged_files(workspace_root).await?;
             debug!("Staged files: {}", files.len());
             Ok(files)
         }

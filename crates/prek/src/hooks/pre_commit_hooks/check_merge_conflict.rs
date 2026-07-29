@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Parser;
 use tokio::io::AsyncBufReadExt;
 
-use crate::git::get_git_dir;
+use crate::git::git_dir;
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
@@ -48,7 +48,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
 async fn is_in_merge() -> Result<bool> {
     // Change directory temporarily or ensure we're in the right directory
-    let git_dir = get_git_dir().await?;
+    let git_dir = git_dir().await?;
 
     // Check if MERGE_MSG exists
     let merge_msg_exists = git_dir.join("MERGE_MSG").exists();
