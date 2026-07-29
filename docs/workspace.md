@@ -19,13 +19,13 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 2. **Discover all projects**: From the workspace root, `prek` recursively searches all subdirectories for additional `.pre-commit-config.yaml` files. Each one becomes a separate project.
 
-3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
+3. **Repository boundary**: The search stops at the repository root (`.git` or `.jj` directory) to avoid including unrelated projects.
 
 !!! note
 
     **Workspace root**
 
-    - The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+    - The workspace root is not necessarily the same as the repository root; a workspace can exist within a subdirectory of a Git or Jujutsu repository.
     - The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
 
     **Discovery exclusions**

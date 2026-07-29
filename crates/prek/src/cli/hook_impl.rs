@@ -14,10 +14,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::cli::{self, ExitStatus, RunOptions, flag};
 use crate::config::HookType;
 use crate::fs::CWD;
-use crate::git::GIT_ROOT;
 use crate::languages::resolve_command;
 use crate::printer::Printer;
 use crate::process::Cmd;
+use crate::repo;
 use crate::store::Store;
 use crate::workspace;
 use crate::workspace::Project;
@@ -92,7 +92,7 @@ pub(crate) async fn hook_impl(
                 };
             }
             Ok(project) => {
-                if project.path() != GIT_ROOT.as_ref()? {
+                if project.path() != repo::root()? {
                     writeln!(
                         printer.stdout(),
                         "Running in workspace: `{}`",
