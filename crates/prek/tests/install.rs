@@ -56,7 +56,7 @@ fn install() -> anyhow::Result<()> {
     exit_code: 0
     ----- stdout -----
     Hook already exists at `.git/hooks/pre-commit`, moved it to `.git/hooks/pre-commit.legacy`
-    Migration mode: prek will also run legacy hook `.git/hooks/pre-commit.legacy`. Use `--overwrite` to remove legacy hooks.
+    Migration mode: prek will also run legacy hook `.git/hooks/pre-commit.legacy`. Use `--force` to remove legacy hooks.
     prek installed at `.git/hooks/pre-commit`
     prek installed at `.git/hooks/post-commit`
 
@@ -285,7 +285,10 @@ fn install_with_git_dir_allows_external_hooks_path_set() {
 
     note: Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.
 
-    hint: Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.
+    hint: To install into this repository's default hooks directory anyway, rerun with:
+      prek install --force
+
+    Otherwise, remove the global/system setting or move `core.hooksPath` into repo scope:
       git config --unset-all --global core.hooksPath
       git config --unset-all --system core.hooksPath
       git config --local core.hooksPath <path>
@@ -304,6 +307,50 @@ fn install_with_git_dir_allows_external_hooks_path_set() {
 
     ----- stderr -----
     "#);
+}
+
+#[test]
+fn install_force_uses_repository_hooks_with_external_hooks_path_set() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.work_dir().child("custom-hooks").create_dir_all()?;
+    context
+        .work_dir()
+        .child("custom-hooks/pre-commit")
+        .write_str("#!/bin/sh\necho global hook\n")?;
+
+    let global_gitconfig = context.work_dir().join("global.gitconfig");
+    git_cmd(context.work_dir())
+        .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
+        .args(["config", "--global", "core.hooksPath", "custom-hooks"])
+        .assert()
+        .success();
+
+    let mut install = context.install();
+    install
+        .arg("-f")
+        .env("GIT_CONFIG_GLOBAL", &global_gitconfig);
+    cmd_snapshot!(context.filters(), install, @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    warning: `core.hooksPath` is configured outside this repository. Installing Git shims to `.git/hooks` because `--force` was used.
+    "#);
+
+    context
+        .work_dir()
+        .child(".git/hooks/pre-commit")
+        .assert(predicates::path::exists());
+    assert_eq!(
+        context.read("custom-hooks/pre-commit"),
+        "#!/bin/sh\necho global hook\n"
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -330,7 +377,10 @@ fn install_refuses_empty_external_hooks_path_set() {
 
     note: Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.
 
-    hint: Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.
+    hint: To install into this repository's default hooks directory anyway, rerun with:
+      prek install --force
+
+    Otherwise, remove the global/system setting or move `core.hooksPath` into repo scope:
       git config --unset-all --global core.hooksPath
       git config --unset-all --system core.hooksPath
       git config --local core.hooksPath <path>
@@ -646,12 +696,12 @@ fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
         .child(".git/hooks/pre-commit.legacy")
         .write_str("#!/bin/sh\necho 'legacy'\n")?;
 
-    // Without --overwrite, we should stay in migration mode.
+    // Without --force, we should stay in migration mode.
     cmd_snapshot!(context.filters(), context.install(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Migration mode: prek will also run legacy hook `.git/hooks/pre-commit.legacy`. Use `--overwrite` to remove legacy hooks.
+    Migration mode: prek will also run legacy hook `.git/hooks/pre-commit.legacy`. Use `--force` to remove legacy hooks.
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
@@ -661,7 +711,7 @@ fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
         .child(".git/hooks/pre-commit.legacy")
         .assert(predicates::path::exists());
 
-    // With --overwrite, the legacy script should be removed.
+    // The previous --overwrite spelling remains a compatibility alias for --force.
     cmd_snapshot!(context.filters(), context.install().arg("--overwrite"), @r#"
     success: true
     exit_code: 0

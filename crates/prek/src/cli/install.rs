@@ -31,7 +31,7 @@ pub(crate) async fn install(
     skips: Vec<String>,
     hook_types: Vec<HookType>,
     prepare_hooks: bool,
-    overwrite: bool,
+    force: bool,
     allow_missing_config: bool,
     refresh: bool,
     printer: Printer,
@@ -51,29 +51,47 @@ pub(crate) async fn install(
     // actual unsafe case. Repo-owned `core.hooksPath` values are safe to honor
     // implicitly when they come from local/worktree scope, including repo
     // config reached through `include.path` / `includeIf`, because those values
-    // are part of the repository's own Git setup. Only hooksPath values that
-    // resolve entirely from external config still require the explicit
-    // `--git-dir` escape hatch.
-    if git_dir.is_none()
+    // are part of the repository's own Git setup. For an external value,
+    // `--force` deliberately installs into the repository's default hooks
+    // directory without touching the shared configured directory. `--git-dir`
+    // remains the escape hatch for an explicit target.
+    let has_external_hooks_path = git_dir.is_none()
         && git::has_hooks_path_set().await?
-        && !git::has_repo_hooks_path_set().await?
-    {
-        anyhow::bail!(
-            concat!(
-                "Refusing to install hooks because `core.hooksPath` is configured outside this repository.\n",
-                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
-                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
-                "  {}\n",
-                "  {}\n",
-                "  {}\n",
-            ),
-            "note:".yellow().bold(),
-            "hint:".yellow().bold(),
-            "git config --unset-all --global core.hooksPath".cyan(),
-            "git config --unset-all --system core.hooksPath".cyan(),
-            "git config --local core.hooksPath <path>".cyan(),
+        && !git::has_repo_hooks_path_set().await?;
+
+    let hooks_path = if let Some(dir) = git_dir {
+        dir.join("hooks")
+    } else if has_external_hooks_path {
+        if !force {
+            anyhow::bail!(
+                concat!(
+                    "Refusing to install hooks because `core.hooksPath` is configured outside this repository.\n",
+                    "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                    "\n{} To install into this repository's default hooks directory anyway, rerun with:\n",
+                    "  {}\n",
+                    "\nOtherwise, remove the global/system setting or move `core.hooksPath` into repo scope:\n",
+                    "  {}\n",
+                    "  {}\n",
+                    "  {}\n",
+                ),
+                "note:".yellow().bold(),
+                "hint:".yellow().bold(),
+                "prek install --force".cyan(),
+                "git config --unset-all --global core.hooksPath".cyan(),
+                "git config --unset-all --system core.hooksPath".cyan(),
+                "git config --local core.hooksPath <path>".cyan(),
+            );
+        }
+
+        let hooks_path = git::get_git_common_dir().await?.join("hooks");
+        warn_user!(
+            "`core.hooksPath` is configured outside this repository. Installing Git shims to `{}` because `--force` was used.",
+            hooks_path.user_display().cyan()
         );
-    }
+        hooks_path
+    } else {
+        git::get_git_hooks_dir().await?
+    };
 
     let hook_mode = git::get_shared_repository_file_mode(0o755)
         .await
@@ -90,11 +108,6 @@ pub(crate) async fn install(
     };
     let hook_types = get_hook_types(hook_types, project.as_ref(), config.as_deref());
 
-    let hooks_path = if let Some(dir) = git_dir {
-        dir.join("hooks")
-    } else {
-        git::get_git_hooks_dir().await?
-    };
     fs_err::create_dir_all(&hooks_path)?;
 
     let selectors = if let Some(project) = &project {
@@ -112,7 +125,7 @@ pub(crate) async fn install(
             selectors.as_ref(),
             hook_type,
             &hooks_path,
-            overwrite,
+            force,
             allow_missing_config,
             hook_mode,
             printer,
@@ -244,7 +257,7 @@ fn install_hook_script(
         } else {
             writeln!(
                 printer.stdout(),
-                "Migration mode: prek will also run legacy hook `{}`. Use `--overwrite` to remove legacy hooks.",
+                "Migration mode: prek will also run legacy hook `{}`. Use `--force` to remove legacy hooks.",
                 legacy_path.user_display().yellow()
             )?;
         }
