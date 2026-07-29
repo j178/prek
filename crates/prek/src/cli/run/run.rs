@@ -1335,11 +1335,11 @@ async fn run_hook(
         return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
     let start = std::time::Instant::now();
-    input.shuffle();
 
     let hook_output = if dry_run {
         hooks::HookOutput::unchanged(0, dry_run_hook(&hook, &input)?)
     } else {
+        input.shuffle();
         match &input {
             HookRunInput::Filenames(filenames) => {
                 hook.language.run(store, &hook, filenames, reporter).await
@@ -1389,9 +1389,7 @@ fn dry_run_hook(hook: &InstalledHook, input: &HookRunInput<'_>) -> Result<Vec<u8
 
     match input {
         HookRunInput::Filenames(filenames) => {
-            let mut filenames = filenames.clone();
-            filenames.sort();
-            for filename in &filenames {
+            for filename in filenames {
                 writeln!(output, "- {}", filename.display())?;
             }
         }
