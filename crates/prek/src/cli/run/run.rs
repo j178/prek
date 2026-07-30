@@ -2,6 +2,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::slice;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
@@ -1093,7 +1094,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
         }
     }
 
-    fn run_input_for_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> HookRunInput<'paths> {
+    fn run_input_for_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> HookRunInput<'_> {
         match self {
             Self::Files(project_files) => match hook.pass_filenames {
                 // Always-run hooks without filename arguments run regardless of file matches.
@@ -1110,7 +1111,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
                     match hook.pass_filenames {
                         PassFilenames::None => HookRunInput::without_filenames(true),
                         PassFilenames::All | PassFilenames::Limited(_) => {
-                            HookRunInput::with_filename(hook_arg.clone())
+                            HookRunInput::with_filename(hook_arg)
                         }
                     }
                 } else {
@@ -1136,7 +1137,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
 
 enum HookRunInput<'a> {
     Filenames(Vec<&'a Path>),
-    Filename(PathBuf),
+    Filename(&'a Path),
     WithoutFilenames { matched: bool },
 }
 
@@ -1148,7 +1149,7 @@ impl<'a> HookRunInput<'a> {
         Self::Filenames(filenames.into_iter().collect())
     }
 
-    fn with_filename(filename: PathBuf) -> Self {
+    fn with_filename(filename: &'a Path) -> Self {
         Self::Filename(filename)
     }
 
@@ -1341,8 +1342,9 @@ async fn run_hook(
                 hook.language.run(store, &hook, filenames, reporter).await
             }
             HookRunInput::Filename(filename) => {
-                let filenames = [filename.as_path()];
-                hook.language.run(store, &hook, &filenames, reporter).await
+                hook.language
+                    .run(store, &hook, slice::from_ref(filename), reporter)
+                    .await
             }
             HookRunInput::WithoutFilenames { .. } => {
                 hook.language.run(store, &hook, &[], reporter).await
