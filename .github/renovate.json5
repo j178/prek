@@ -27,6 +27,13 @@
     rangeStrategy: "update-lockfile",
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
+  // Pin GitHub Actions references in documentation to immutable SHAs.
+  'github-actions': {
+    managerFilePatterns: [
+      '/README\\.md$/',
+      '/^docs/.*\\.md$/',
+    ],
+  },
   enabledManagers: [
     'github-actions',
     'pre-commit',
@@ -49,19 +56,6 @@
         'const\\s+CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
         'UV_VERSION:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
       ]
-    },
-    // Update major GitHub actions references in documentation.
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/README\\.md$/',
-        '/^docs/.*\\.md$/'
-      ],
-      matchStrings: [
-        '\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s',
-      ],
-      datasourceTemplate: 'github-tags',
-      versioningTemplate: 'regex:^v(?<major>\\d+)$',
     },
     // Minimum supported Rust toolchain version
     {
@@ -106,14 +100,6 @@
       groupName: 'pre-commit',
       matchManagers: ['pre-commit'],
       matchFileNames: ['.pre-commit-config.yaml']
-    },
-    // Annotate GitHub Actions SHAs with a SemVer version.
-    {
-      extends: [
-        'helpers:pinGitHubActionDigests'
-      ],
-      extractVersion: '^(?<version>v?\\d+\\.\\d+\\.\\d+)$',
-      versioning: 'regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$'
     },
     // Disable updates for GitHub runners: we'd only pin them to a specific version
     // if there was a deliberate reason to do so
