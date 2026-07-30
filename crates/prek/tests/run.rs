@@ -2032,6 +2032,69 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     Ok(())
 }
 
+/// A hook that re-stages what it rewrote must not cost the user their unstaged work.
+///
+/// Auto-fixing hooks commonly run a formatter and then `git add` the result, so the
+/// commit completes in one step instead of aborting for a manual re-stage. That moves
+/// the index while the keeper is active. If the stash restore then conflicts, rolling
+/// back with a bare `git checkout -- <root>` restores from the *hook's* index rather
+/// than the pre-hook state, so the saved patch gets applied on top of the hook's
+/// content — and the unstaged changes are silently lost.
+///
+/// Regression test for the rollback baseline: the working tree must come back exactly
+/// as the user left it, and `git status` must still report the file as dirty.
+#[test]
+fn restaging_hook_does_not_discard_unstaged_changes() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: rewrite-and-restage
+                name: rewrite-and-restage
+                language: system
+                entry: bash -c 'printf "NORMALISED\nbody\nstaged edit\n" > doc.md && git add -- doc.md'
+                files: ^doc\.md$
+                pass_filenames: false
+   "#});
+
+    let cwd = context.work_dir();
+    cwd.child("doc.md").write_str("ORIGINAL\nbody\n")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Stage an edit, then leave a further unstaged edit on the same file.
+    cwd.child("doc.md")
+        .write_str("ORIGINAL\nbody\nstaged edit\n")?;
+    context.git_add("doc.md");
+    cwd.child("doc.md")
+        .write_str("ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n")?;
+
+    let _ = context.run().assert();
+
+    // The unstaged edit must survive the conflicted restore untouched.
+    assert_eq!(
+        context.read("doc.md"),
+        "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n"
+    );
+
+    // ...and it must still be unstaged, not silently absorbed into the index.
+    let output = git_cmd(cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--")
+        .arg("doc.md")
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8(output.stdout)?.contains("doc.md"),
+        "doc.md should still have unstaged changes"
+    );
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {

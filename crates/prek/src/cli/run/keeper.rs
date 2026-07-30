@@ -16,6 +16,15 @@ use crate::store::Store;
 struct IntentToAddRestorer(Vec<PathBuf>);
 struct UnstagedChangesRestorer {
     root: PathBuf,
+    /// Tree object written from the index BEFORE any hook ran.
+    ///
+    /// The rollback path must reset to this snapshot rather than to the live index:
+    /// hooks routinely mutate the index (any auto-fixer that re-stages what it
+    /// rewrote, e.g. a `prettier --write` + `git add` wrapper), so by the time we
+    /// roll back, `git checkout -- <root>` would restore the hook's own content as
+    /// the baseline and then apply a patch computed against the ORIGINAL content on
+    /// top of it — silently losing or duplicating unstaged work.
+    tree: String,
     patch: Option<PathBuf>,
 }
 
@@ -95,7 +104,7 @@ impl UnstagedChangesRestorer {
             .arg("--binary")
             .arg("--exit-code")
             .hidden_args(["--ignore-submodules", "--no-color", "--no-ext-diff"])
-            .arg(tree)
+            .arg(&tree)
             .arg("--")
             .arg(root)
             .check(false)
@@ -107,6 +116,7 @@ impl UnstagedChangesRestorer {
             // No non-staged changes
             Ok(Self {
                 root: root.to_path_buf(),
+                tree,
                 patch: None,
             })
         } else if output.status.code() == Some(1) {
@@ -115,6 +125,7 @@ impl UnstagedChangesRestorer {
                 // probably git auto crlf behavior quirks
                 Ok(Self {
                     root: root.to_path_buf(),
+                    tree,
                     patch: None,
                 })
             } else {
@@ -140,12 +151,14 @@ impl UnstagedChangesRestorer {
                 );
                 fs_err::write(&patch_path, output.stdout)?;
 
-                // Clean the working tree
+                // Clean the working tree. The index was just used to write `tree`,
+                // so index and tree are identical here — no tree-ish needed.
                 debug!("Cleaning working tree");
-                Self::checkout_working_tree(root)?;
+                Self::checkout_working_tree(root, None)?;
 
                 Ok(Self {
                     root: root.to_path_buf(),
+                    tree,
                     patch: Some(patch_path),
                 })
             }
@@ -154,12 +167,23 @@ impl UnstagedChangesRestorer {
         }
     }
 
-    fn checkout_working_tree(root: &Path) -> Result<()> {
+    /// Reset the working tree under `root`.
+    ///
+    /// With `tree: None`, `git checkout -- <root>` restores from the CURRENT index.
+    /// With `tree: Some(t)`, `git checkout <t> -- <root>` restores both the index
+    /// entries and the working-tree files for paths under `root` to that tree —
+    /// which is what the rollback path needs, because a hook may have mutated the
+    /// index in between (see the `tree` field docs).
+    fn checkout_working_tree(root: &Path, tree: Option<&str>) -> Result<()> {
         let mut cmd = Command::new(GIT.as_ref()?);
-        let output = git::apply_git_work_tree(&mut cmd)
+        let cmd = git::apply_git_work_tree(&mut cmd)
             .arg("-c")
             .arg("submodule.recurse=0")
-            .arg("checkout")
+            .arg("checkout");
+        if let Some(tree) = tree {
+            cmd.arg(tree);
+        }
+        let output = cmd
             .arg("--")
             .arg(root)
             // prevent recursive post-checkout hooks
@@ -202,7 +226,10 @@ impl UnstagedChangesRestorer {
             );
 
             // Discard any changes made by hooks, and try applying the patch again.
-            Self::checkout_working_tree(&self.root)?;
+            // Reset to the PRE-HOOK tree, not the live index: a hook that re-staged
+            // what it rewrote has already moved the index, and restoring from it
+            // would make the hook's content the baseline the patch applies onto.
+            Self::checkout_working_tree(&self.root, Some(&self.tree))?;
             Self::git_apply(patch)?;
         }
 
