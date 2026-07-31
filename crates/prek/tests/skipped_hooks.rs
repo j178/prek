@@ -622,6 +622,63 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
 }
 
 #[test]
+fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    let status = git_cmd(cwd)
+        .args(["init", "--object-format=sha1"])
+        .status()?;
+    assert!(
+        status.success(),
+        "initializing SHA-1 repository should succeed"
+    );
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: write-first
+                name: write-first
+                language: system
+                entry: python3 -c "from pathlib import Path; Path('binary.dat').write_bytes(b'variant-20663\n')"
+                pass_filenames: false
+                priority: 0
+              - id: write-second
+                name: write-second
+                language: system
+                entry: python3 -c "from pathlib import Path; Path('binary.dat').write_bytes(b'variant-30375\n')"
+                pass_filenames: false
+                priority: 1
+    "#});
+
+    // The two replacement blobs have distinct SHA-1s whose first seven
+    // hexadecimal digits are both `4b8e34c`.
+    cwd.child(".gitattributes")
+        .write_str("binary.dat -diff\n")?;
+    cwd.child("binary.dat").write_str("original\n")?;
+    context.git_add(".");
+
+    let status = git_cmd(cwd).args(["config", "core.abbrev", "7"]).status()?;
+    assert!(status.success(), "setting core.abbrev should succeed");
+
+    let output = context.run().output()?;
+    assert!(
+        !output.status.success(),
+        "both hooks should modify the file"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout.matches("files were modified by this hook").count(),
+        2,
+        "both binary rewrites should produce distinct snapshots.\n\
+         stdout:\n{stdout}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
