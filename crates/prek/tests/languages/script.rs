@@ -17,7 +17,7 @@ mod unix {
         context.init_project();
         context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/script-hooks
+          - repo: https://github.com/prek-ci/script-hooks
             rev: v1.0.0
             hooks:
               - id: echo-env
