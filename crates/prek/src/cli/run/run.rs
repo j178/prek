@@ -718,17 +718,18 @@ impl<'a> HookRunSession<'a> {
                 )
                 .await?;
 
-            let needs_diff = group_results
-                .iter()
-                .any(|result| result.file_changes == hooks::FileChanges::Unknown);
             let known_modified_files = group_results
                 .iter()
                 .any(|result| result.file_changes == hooks::FileChanges::Modified);
+            let needs_diff = !known_modified_files
+                && group_results
+                    .iter()
+                    .any(|result| result.file_changes == hooks::FileChanges::Unknown);
             let diff_detected_modifications = diff_tracker.changed_after_group(needs_diff).await?;
-            if known_modified_files && !needs_diff {
-                // Native hooks report modifications directly, so no Git snapshot
-                // was taken. Force one before a later external hook needs a
-                // before/after comparison.
+            if known_modified_files {
+                // The group is already known to have modified files, so a Git
+                // comparison cannot change its result. A later external hook
+                // will capture the current worktree before it runs.
                 diff_tracker.invalidate();
             }
             let group_modified_files = known_modified_files || diff_detected_modifications;
