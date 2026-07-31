@@ -123,6 +123,69 @@ fn skipped_installable_hook_does_not_install_env() -> Result<()> {
     Ok(())
 }
 
+/// Installed environments are not health-checked when their hook has no matching files.
+#[test]
+#[cfg(unix)]
+fn skipped_installed_hook_does_not_check_environment_health() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: python-check
+                name: python-check
+                language: python
+                entry: python -c "pass"
+                files: \.py$
+    "#});
+    cwd.child("check.py").write_str("pass\n")?;
+    context.git_add(".");
+    assert!(context.run().output()?.status.success());
+
+    let hooks_dir = context.home_dir().child("hooks");
+    let hook_env = hooks_dir
+        .read_dir()?
+        .next()
+        .expect("Python hook environment should exist")?
+        .path();
+    let python = hook_env.join("bin/python");
+    fs_err::remove_file(&python)?;
+    fs_err::write(
+        &python,
+        "#!/bin/sh\n: > \"${PREK_HEALTH_PROBE:?}\"\nexit 86\n",
+    )?;
+    let mut permissions = fs_err::metadata(&python)?.permissions();
+    permissions.set_mode(0o755);
+    fs_err::set_permissions(&python, permissions)?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: python-check
+                name: python-check
+                language: python
+                entry: python -c "pass"
+                files: \.rs$
+    "#});
+    context.git_add(".pre-commit-config.yaml");
+
+    let health_probe = cwd.child("health-check-ran");
+    let output = context
+        .run()
+        .env("PREK_HEALTH_PROBE", health_probe.path())
+        .output()?;
+    assert!(output.status.success());
+    health_probe.assert(predicates::path::missing());
+
+    Ok(())
+}
+
 /// Installable hooks excluded by group selection should not create environments.
 #[test]
 fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
@@ -239,6 +302,43 @@ fn dry_run_skips_all_hooks() -> Result<()> {
     "#);
 
     assert_eq!(context.read("file.txt"), "content");
+
+    Ok(())
+}
+
+#[test]
+fn planned_hook_input_keeps_matches_after_first_match() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: selective
+                name: selective
+                language: system
+                entry: echo
+                files: ^matched-.*\.txt$
+    "});
+    cwd.child("aaa.txt").write_str("ignored\n")?;
+    cwd.child("matched-a.txt").write_str("first\n")?;
+    cwd.child("matched-m.log").write_str("ignored\n")?;
+    cwd.child("matched-z.txt").write_str("last\n")?;
+    context.git_add(".");
+
+    let output = context
+        .run()
+        .args(["--all-files", "--dry-run", "--verbose"])
+        .output()?;
+
+    assert!(output.status.success(), "dry run should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("- matched-a.txt"));
+    assert!(stdout.contains("- matched-z.txt"));
+    assert!(!stdout.contains("- aaa.txt"));
+    assert!(!stdout.contains("- matched-m.log"));
 
     Ok(())
 }
@@ -464,6 +564,92 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
     assert_eq!(
         diff_worktree_calls, 0,
         "Expected no diff_worktree calls when all hooks skip, found {diff_worktree_calls}.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn skipped_external_hook_does_not_snapshot_dirty_worktree() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: python-only
+                name: python-only
+                language: system
+                entry: python3 -c "pass"
+                files: \.py$
+    "#});
+    cwd.child("data.json").write_str("{}\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+    cwd.child("data.json").write_str("{\"dirty\": true}\n")?;
+
+    let output = context
+        .run()
+        .arg("--all-files")
+        .env("RUST_LOG", "prek::git=trace")
+        .output()?;
+
+    assert!(output.status.success(), "skipped hook should succeed");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("diff_worktree").count(),
+        0,
+        "A skipped external hook should not prepare a diff snapshot.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn always_run_external_hook_still_tracks_dirty_worktree() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: always-run
+                name: always-run
+                language: system
+                entry: python3 -c "pass"
+                files: \.py$
+                always_run: true
+                pass_filenames: false
+    "#});
+    cwd.child("data.json").write_str("{}\n")?;
+    context.git_add(".");
+    context.git_commit("init");
+    cwd.child("data.json").write_str("{\"dirty\": true}\n")?;
+
+    let output = context
+        .run()
+        .arg("--all-files")
+        .env("RUST_LOG", "prek::git=trace")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "always_run hook should run and pass"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("always-run") && stdout.contains("Passed"));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("diff_worktree").count(),
+        2,
+        "The always_run external hook should compare the dirty worktree before and after.\n\
          Trace output:\n{stderr}"
     );
 

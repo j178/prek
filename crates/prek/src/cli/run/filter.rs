@@ -263,14 +263,15 @@ impl<'a> ProjectFiles<'a> {
 
     /// Filter filenames by file patterns and tags for a specific hook.
     #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
-    pub(crate) fn matching_filenames(
+    pub(crate) fn matching_filenames_from(
         &self,
+        start: usize,
         hook: &Hook,
         tag_cache: &FileTagCache,
     ) -> Vec<&'a Path> {
         let hook_filter = HookFileFilter::new(hook);
         let mut filenames = Vec::new();
-        for file in &self.files {
+        for file in &self.files[start..] {
             if hook_filter.matches_project_file(file, tag_cache) {
                 filenames.push(file.hook_path);
             }
@@ -278,15 +279,16 @@ impl<'a> ProjectFiles<'a> {
         filenames
     }
 
-    /// Return whether at least one file matches a hook without collecting every filename.
-    pub(crate) fn has_matching_file(&self, hook: &Hook, tag_cache: &FileTagCache) -> bool {
+    /// Return the first file that matches a hook without collecting every filename.
+    pub(crate) fn first_matching_file_index(
+        &self,
+        hook: &Hook,
+        tag_cache: &FileTagCache,
+    ) -> Option<usize> {
         let hook_filter = HookFileFilter::new(hook);
-        for file in &self.files {
-            if hook_filter.matches_project_file(file, tag_cache) {
-                return true;
-            }
-        }
-        false
+        self.files
+            .iter()
+            .position(|file| hook_filter.matches_project_file(file, tag_cache))
     }
 }
 

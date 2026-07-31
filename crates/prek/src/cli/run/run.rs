@@ -1,5 +1,6 @@
 use std::fmt::Write as _;
 use std::io::Write as _;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::slice;
@@ -199,21 +200,13 @@ pub(crate) async fn run(
     })?;
 
     let file_index = RunFileIndex::new(&input, workspace.all_projects());
-    let installed_hooks = ensure_hooks_installed(
-        store,
-        printer,
-        &workspace,
-        &input,
-        &file_index,
-        &filtered_hooks,
-    )
-    .await?;
+    let hook_runs = plan_hook_runs(&workspace, &input, &file_index, &filtered_hooks)?;
+    let hook_runs = ensure_hooks_installed(store, printer, hook_runs).await?;
 
     run_hooks(
         &workspace,
-        &input,
         &file_index,
-        &installed_hooks,
+        &hook_runs,
         store,
         show_diff_on_failure,
         fail_fast,
@@ -306,29 +299,67 @@ fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArg
     }
 }
 
-/// Ensure installable hooks have environments and return the form expected by the runner.
-///
-/// Hooks that do not need an environment are returned as-is. Hooks that need an
-/// environment first try the install cache; only cache misses are filtered
-/// against the run input before installation.
-async fn ensure_hooks_installed<'paths>(
-    store: &Store,
-    printer: Printer,
+fn plan_hook_runs<'paths>(
     workspace: &Workspace,
     input: &'paths RunInput,
     file_index: &RunFileIndex<'paths>,
     hooks: &[Arc<Hook>],
-) -> Result<Vec<InstalledHook>> {
-    let env_hooks = hooks
+) -> Result<Vec<PlannedHookRun>> {
+    let mut project_to_hooks: FxHashMap<usize, Vec<Arc<Hook>>> =
+        FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
+    for hook in hooks {
+        project_to_hooks
+            .entry(hook.project().idx())
+            .or_default()
+            .push(hook.clone());
+    }
+
+    let mut hook_runs = Vec::with_capacity(hooks.len());
+    for project in workspace.all_projects() {
+        let Some(project_hooks) = project_to_hooks.remove(&project.idx()) else {
+            continue;
+        };
+        let project_input = ProjectHookInput::new(input, project, file_index)?;
+        trace!(
+            "Files for project `{}` after filtered: {}",
+            project,
+            project_input.len()
+        );
+
+        for hook in project_hooks {
+            let input = project_input.plan_for_hook(&hook, file_index.tag_cache());
+            trace!(
+                will_run = input.will_run(&hook),
+                "Planned hook `{}`", hook.id,
+            );
+            hook_runs.push(PlannedHookRun { hook, input });
+        }
+    }
+    debug_assert!(project_to_hooks.is_empty());
+
+    Ok(hook_runs)
+}
+
+/// Resolve environments only for hooks that will actually run.
+async fn ensure_hooks_installed(
+    store: &Store,
+    printer: Printer,
+    hook_runs: Vec<PlannedHookRun>,
+) -> Result<Vec<InstalledHookRun>> {
+    let env_hooks = hook_runs
         .iter()
-        .filter(|hook| hook.needs_install_env())
-        .cloned()
+        .filter(|hook_run| hook_run.input.will_run(&hook_run.hook))
+        .filter(|hook_run| hook_run.hook.needs_install_env())
+        .map(|hook_run| hook_run.hook.clone())
         .collect::<Vec<_>>();
 
     if env_hooks.is_empty() {
-        return Ok(hooks
-            .iter()
-            .map(|hook| InstalledHook::NoNeedInstall(hook.clone()))
+        return Ok(hook_runs
+            .into_iter()
+            .map(|hook_run| InstalledHookRun {
+                hook: InstalledHook::NoNeedInstall(hook_run.hook),
+                input: hook_run.input,
+            })
             .collect());
     }
 
@@ -337,8 +368,7 @@ async fn ensure_hooks_installed<'paths>(
     let mut installed_by_hook = FxHashMap::default();
     let mut missing_env_hooks = Vec::new();
 
-    // Resolve the cache before file filtering so already-installed hooks keep their exact
-    // environment, while missing hooks still avoid install when they would not run.
+    // Keep the exact cached environment when one already satisfies the planned hook run.
     for hook in env_hooks {
         if let Some(installed_hook) = install_cache.installed_hook(store, hook.clone()).await {
             installed_by_hook.insert(hook_key(&hook), installed_hook);
@@ -347,12 +377,10 @@ async fn ensure_hooks_installed<'paths>(
         }
     }
 
-    let hooks_to_install =
-        select_hooks_to_install(workspace, input, file_index, &missing_env_hooks)?;
-    if !hooks_to_install.is_empty() {
+    if !missing_env_hooks.is_empty() {
         let reporter = HookInstallReporter::new(printer);
         let installed_hooks =
-            install_hooks(hooks_to_install, store, &reporter, &mut install_cache).await?;
+            install_hooks(missing_env_hooks, store, &reporter, &mut install_cache).await?;
         reporter.on_complete();
 
         for installed_hook in installed_hooks {
@@ -360,69 +388,15 @@ async fn ensure_hooks_installed<'paths>(
         }
     }
 
-    Ok(hooks
-        .iter()
-        .map(|hook| {
-            installed_by_hook
-                .remove(&hook_key(hook))
-                .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook.clone()))
+    Ok(hook_runs
+        .into_iter()
+        .map(|hook_run| InstalledHookRun {
+            hook: installed_by_hook
+                .remove(&hook_key(&hook_run.hook))
+                .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook_run.hook)),
+            input: hook_run.input,
         })
         .collect())
-}
-
-/// Return the missing environment hooks that should actually be installed.
-///
-/// The input hooks are already known to need an environment and be missing from
-/// the install cache. This applies language support and run-input filtering so
-/// hooks that would not run do not get installed.
-fn select_hooks_to_install<'paths>(
-    workspace: &Workspace,
-    input: &'paths RunInput,
-    file_index: &RunFileIndex<'paths>,
-    hooks: &[Arc<Hook>],
-) -> Result<Vec<Arc<Hook>>> {
-    #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
-        FxHashMap::with_capacity_and_hasher(workspace.all_projects().len(), FxBuildHasher);
-    for hook in hooks {
-        project_to_hooks
-            .entry(hook.project())
-            .or_default()
-            .push(hook.clone());
-    }
-
-    let mut hooks_to_install = Vec::with_capacity(hooks.len());
-    let tag_cache = file_index.tag_cache();
-
-    for project in workspace.all_projects() {
-        match input {
-            RunInput::Files(_) => {
-                let Some(mut hooks) = project_to_hooks.remove(project.as_ref()) else {
-                    continue;
-                };
-
-                let project_files = file_index.project_files(project);
-                hooks.retain(|hook| {
-                    hook.always_run || project_files.has_matching_file(hook, tag_cache)
-                });
-                hooks_to_install.extend(hooks);
-            }
-            RunInput::MessageFile(_) => {
-                let Some(hooks) = project_to_hooks.remove(project.as_ref()) else {
-                    continue;
-                };
-
-                let project_input = ProjectHookInput::new(input, project, file_index)?;
-                for hook in hooks {
-                    if hook.always_run || project_input.matches_hook(&hook, tag_cache) {
-                        hooks_to_install.push(hook);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(hooks_to_install)
 }
 
 fn hook_key(hook: &Hook) -> (usize, usize) {
@@ -431,11 +405,10 @@ fn hook_key(hook: &Hook) -> (usize, usize) {
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
-async fn run_hooks<'paths>(
+async fn run_hooks(
     workspace: &Workspace,
-    input: &'paths RunInput,
-    file_index: &RunFileIndex<'paths>,
-    hooks: &[InstalledHook],
+    file_index: &RunFileIndex<'_>,
+    hooks: &[InstalledHookRun],
     store: &Store,
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
@@ -448,7 +421,7 @@ async fn run_hooks<'paths>(
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> =
+    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHookRun>> =
         FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
     for hook in hooks {
         project_to_hooks
@@ -495,7 +468,7 @@ async fn run_hooks<'paths>(
         }
 
         let project_results = session
-            .run_project_level(project_runs, input, file_index, clean_baseline)
+            .run_project_level(project_runs, file_index, clean_baseline)
             .await?;
         let mut stop_after_level = false;
 
@@ -545,7 +518,7 @@ impl<'a> Iterator for ProjectDepthGroups<'a> {
 struct ProjectRun<'project> {
     project: &'project Project,
     project_fail_fast: bool,
-    groups: Vec<Vec<InstalledHook>>,
+    groups: Vec<Vec<InstalledHookRun>>,
 }
 
 struct ProjectRunResult<'project> {
@@ -600,7 +573,7 @@ struct HookRunSession<'a> {
 
 impl<'a> HookRunSession<'a> {
     fn new(
-        hooks: &[InstalledHook],
+        hooks: &[InstalledHookRun],
         store: &'a Store,
         dry_run: bool,
         verbose: bool,
@@ -645,11 +618,10 @@ impl<'a> HookRunSession<'a> {
         Ok(())
     }
 
-    async fn run_project_level<'project, 'paths>(
+    async fn run_project_level<'project>(
         &self,
         project_runs: Vec<ProjectRun<'project>>,
-        input: &'paths RunInput,
-        file_index: &RunFileIndex<'paths>,
+        file_index: &RunFileIndex<'_>,
         clean_baseline: bool,
     ) -> Result<Vec<ProjectRunResult<'project>>> {
         let semaphore = Rc::new(Semaphore::new(*HOOK_CONCURRENCY));
@@ -659,7 +631,7 @@ impl<'a> HookRunSession<'a> {
             runs.push(async move {
                 let project = project_run.project;
                 let result = self
-                    .run_project(project_run, input, file_index, clean_baseline, semaphore)
+                    .run_project(project_run, file_index, clean_baseline, semaphore)
                     .await;
                 if let Ok(result) = &result {
                     self.reporter.on_project_complete(project, result.failed());
@@ -673,21 +645,13 @@ impl<'a> HookRunSession<'a> {
         Ok(results.into_iter().map(|(_, result)| result).collect())
     }
 
-    async fn run_project<'project, 'paths>(
+    async fn run_project<'project>(
         &self,
         project_run: ProjectRun<'project>,
-        input: &'paths RunInput,
-        file_index: &RunFileIndex<'paths>,
+        file_index: &RunFileIndex<'_>,
         clean_baseline: bool,
         semaphore: Rc<Semaphore>,
     ) -> Result<ProjectRunResult<'project>> {
-        let project_input = ProjectHookInput::new(input, project_run.project, file_index)?;
-        trace!(
-            "Files for project `{}` after filtered: {}",
-            project_run.project,
-            project_input.len()
-        );
-
         // The worktree is only known clean at the start of a depth level. Once
         // an earlier level leaves a diff behind, later projects need a fresh
         // per-project snapshot to avoid attributing that diff to their hooks.
@@ -702,20 +666,16 @@ impl<'a> HookRunSession<'a> {
 
         for group_hooks in project_run.groups {
             let group_requires_diff_tracking = !self.dry_run
-                && group_hooks
-                    .iter()
-                    .any(|hook| hooks::requires_diff_tracking(hook));
+                && group_hooks.iter().any(|hook_run| {
+                    hook_run.input.will_run(&hook_run.hook)
+                        && hooks::requires_diff_tracking(hook_run)
+                });
             diff_tracker
                 .prepare_for_group(group_requires_diff_tracking)
                 .await?;
 
             let group_results = self
-                .run_priority_group(
-                    group_hooks,
-                    &project_input,
-                    file_index.tag_cache(),
-                    Rc::clone(&semaphore),
-                )
+                .run_priority_group(group_hooks, file_index, Rc::clone(&semaphore))
                 .await?;
 
             let known_modified_files = group_results
@@ -756,9 +716,8 @@ impl<'a> HookRunSession<'a> {
 
     async fn run_priority_group(
         &self,
-        group_hooks: Vec<InstalledHook>,
-        project_input: &ProjectHookInput<'_, '_>,
-        tag_cache: &FileTagCache,
+        group_hooks: Vec<InstalledHookRun>,
+        file_index: &RunFileIndex<'_>,
         semaphore: Rc<Semaphore>,
     ) -> Result<Vec<RunResult>> {
         debug!(
@@ -768,11 +727,10 @@ impl<'a> HookRunSession<'a> {
         );
 
         let runs = FuturesUnordered::new();
-        for hook in group_hooks {
+        for hook_run in group_hooks {
             runs.push(run_hook(
-                hook,
-                project_input,
-                tag_cache,
+                hook_run,
+                file_index,
                 self.store,
                 self.dry_run,
                 &self.reporter,
@@ -1031,17 +989,17 @@ impl<'a> HookRunSession<'a> {
 }
 
 struct PriorityGroups {
-    hooks: Vec<InstalledHook>,
+    hooks: Vec<InstalledHookRun>,
 }
 
 impl PriorityGroups {
-    fn new(hooks: Vec<InstalledHook>) -> Self {
+    fn new(hooks: Vec<InstalledHookRun>) -> Self {
         Self { hooks }
     }
 }
 
 impl Iterator for PriorityGroups {
-    type Item = Vec<InstalledHook>;
+    type Item = Vec<InstalledHookRun>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let first = self.hooks.first()?;
@@ -1059,7 +1017,7 @@ impl Iterator for PriorityGroups {
 enum ProjectHookInput<'index, 'paths> {
     Files(&'index ProjectFiles<'paths>),
     MessageFile {
-        hook_arg: PathBuf,
+        hook_arg: Arc<Path>,
         tags: Option<TagSet>,
     },
 }
@@ -1081,7 +1039,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
                     }
                 };
                 Ok(Self::MessageFile {
-                    hook_arg: fs::normalize_path(fs::relative_to(path, project.path())?),
+                    hook_arg: fs::normalize_path(fs::relative_to(path, project.path())?).into(),
                     tags,
                 })
             }
@@ -1095,42 +1053,26 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
         }
     }
 
-    fn run_input_for_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> HookRunInput<'_> {
+    fn plan_for_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> HookInputPlan {
         match self {
-            Self::Files(project_files) => match hook.pass_filenames {
-                // Always-run hooks without filename arguments run regardless of file matches.
-                PassFilenames::None if hook.always_run => HookRunInput::without_filenames(true),
-                PassFilenames::None => HookRunInput::without_filenames(
-                    project_files.has_matching_file(hook, tag_cache),
-                ),
-                PassFilenames::All | PassFilenames::Limited(_) => {
-                    HookRunInput::with_filenames(project_files.matching_filenames(hook, tag_cache))
-                }
-            },
-            Self::MessageFile { hook_arg, .. } => {
-                if self.matches_hook(hook, tag_cache) {
-                    match hook.pass_filenames {
-                        PassFilenames::None => HookRunInput::without_filenames(true),
-                        PassFilenames::All | PassFilenames::Limited(_) => {
-                            HookRunInput::with_filename(hook_arg)
-                        }
-                    }
+            Self::Files(project_files) => {
+                let first_match = if hook.always_run {
+                    None
                 } else {
-                    HookRunInput::without_filenames(false)
-                }
+                    project_files.first_matching_file_index(hook, tag_cache)
+                };
+                HookInputPlan::Files { first_match }
             }
-        }
-    }
-
-    fn matches_hook(&self, hook: &Hook, tag_cache: &FileTagCache) -> bool {
-        match self {
-            Self::Files(project_files) => project_files.has_matching_file(hook, tag_cache),
             Self::MessageFile { hook_arg, tags } => {
                 // `commit-msg` and `prepare-commit-msg` receive Git's special message file,
                 // which can live outside a project root, so it bypasses project ownership
                 // filtering. Hook-level `files`/`exclude`/`types` filters still apply.
                 let hook_filter = HookFileFilter::new(hook);
-                hook_filter.matches_filename(hook_arg) && hook_filter.matches_tags(tags.as_ref())
+                HookInputPlan::MessageFile {
+                    hook_arg: hook_arg.clone(),
+                    matched: hook_filter.matches_filename(hook_arg)
+                        && hook_filter.matches_tags(tags.as_ref()),
+                }
             }
         }
     }
@@ -1138,7 +1080,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
 
 enum HookRunInput<'a> {
     Filenames(Vec<&'a Path>),
-    Filename(&'a Path),
+    Filename(Arc<Path>),
     WithoutFilenames { matched: bool },
 }
 
@@ -1150,7 +1092,7 @@ impl<'a> HookRunInput<'a> {
         Self::Filenames(filenames.into_iter().collect())
     }
 
-    fn with_filename(filename: &'a Path) -> Self {
+    fn with_filename(filename: Arc<Path>) -> Self {
         Self::Filename(filename)
     }
 
@@ -1182,6 +1124,76 @@ impl<'a> HookRunInput<'a> {
             let mut rng = fastrand::Rng::with_seed(SEED);
             rng.shuffle(filenames);
         }
+    }
+}
+
+#[derive(Clone)]
+enum HookInputPlan {
+    Files { first_match: Option<usize> },
+    MessageFile { hook_arg: Arc<Path>, matched: bool },
+}
+
+impl HookInputPlan {
+    fn will_run(&self, hook: &Hook) -> bool {
+        hook.always_run
+            || match self {
+                Self::Files { first_match } => first_match.is_some(),
+                Self::MessageFile { matched, .. } => *matched,
+            }
+    }
+
+    fn into_run_input<'paths>(
+        self,
+        hook: &Hook,
+        file_index: &RunFileIndex<'paths>,
+    ) -> HookRunInput<'paths> {
+        match self {
+            Self::Files { first_match } => match hook.pass_filenames {
+                PassFilenames::None => {
+                    HookRunInput::without_filenames(hook.always_run || first_match.is_some())
+                }
+                PassFilenames::All | PassFilenames::Limited(_) => HookRunInput::with_filenames(
+                    file_index
+                        .project_files(hook.project())
+                        .matching_filenames_from(
+                            first_match.unwrap_or(0),
+                            hook,
+                            file_index.tag_cache(),
+                        ),
+                ),
+            },
+            Self::MessageFile { hook_arg, matched } => {
+                if matched {
+                    match hook.pass_filenames {
+                        PassFilenames::None => HookRunInput::without_filenames(true),
+                        PassFilenames::All | PassFilenames::Limited(_) => {
+                            HookRunInput::with_filename(hook_arg)
+                        }
+                    }
+                } else {
+                    HookRunInput::without_filenames(false)
+                }
+            }
+        }
+    }
+}
+
+struct PlannedHookRun {
+    hook: Arc<Hook>,
+    input: HookInputPlan,
+}
+
+#[derive(Clone)]
+struct InstalledHookRun {
+    hook: InstalledHook,
+    input: HookInputPlan,
+}
+
+impl Deref for InstalledHookRun {
+    type Target = Hook;
+
+    fn deref(&self) -> &Self::Target {
+        &self.hook
     }
 }
 
@@ -1217,7 +1229,7 @@ impl StatusPrinter {
 
     fn for_hooks<T>(hooks: &[T], printer: Printer) -> Self
     where
-        T: std::ops::Deref<Target = Hook>,
+        T: Deref<Target = Hook>,
     {
         let name_len = hooks
             .iter()
@@ -1305,33 +1317,31 @@ impl RunResult {
 }
 
 async fn run_hook(
-    hook: InstalledHook,
-    project_input: &ProjectHookInput<'_, '_>,
-    tag_cache: &FileTagCache,
+    hook_run: InstalledHookRun,
+    file_index: &RunFileIndex<'_>,
     store: &Store,
     dry_run: bool,
     reporter: &HookRunReporter,
     semaphore: Rc<Semaphore>,
 ) -> Result<RunResult> {
+    let InstalledHookRun { hook, input } = hook_run;
+    if !input.will_run(&hook) {
+        return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
+    }
+
     let _permit = if dry_run {
         None
     } else {
         Some(semaphore.acquire(1).await)
     };
 
-    let mut input = project_input.run_input_for_hook(&hook, tag_cache);
-    let matched = input.matched();
-    let filename_count = input.filename_count();
+    let mut input = input.into_run_input(&hook, file_index);
     trace!(
-        matched,
-        filenames = filename_count,
+        matched = input.matched(),
+        filenames = input.filename_count(),
         "Files for hook `{}` after filtering",
         hook.id,
     );
-
-    if !matched && !hook.always_run {
-        return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
-    }
     let start = std::time::Instant::now();
 
     let hook_output = if dry_run {
@@ -1343,8 +1353,9 @@ async fn run_hook(
                 hook.language.run(store, &hook, filenames, reporter).await
             }
             HookRunInput::Filename(filename) => {
+                let filename = filename.as_ref();
                 hook.language
-                    .run(store, &hook, slice::from_ref(filename), reporter)
+                    .run(store, &hook, slice::from_ref(&filename), reporter)
                     .await
             }
             HookRunInput::WithoutFilenames { .. } => {
