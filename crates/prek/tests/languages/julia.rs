@@ -180,7 +180,7 @@ fn remote_hook() {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/julia-hooks
+          - repo: https://github.com/prek-ci/julia-hooks
             rev: v1.0.0
             hooks:
               - id: hello

@@ -135,7 +135,7 @@ fn remote_hook() {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/deno-hooks
+          - repo: https://github.com/prek-ci/deno-hooks
             rev: v3.1.0
             hooks:
               - id: deno-eval
@@ -167,7 +167,7 @@ fn remote_hook_with_additional_dependencies() {
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
-          - repo: https://github.com/prek-test-repos/deno-hooks
+          - repo: https://github.com/prek-ci/deno-hooks
             rev: v3.1.0
             hooks:
               - id: deno-semver
@@ -200,7 +200,7 @@ fn remote_hook_with_local_file_additional_dependency() {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/deno-hooks
+          - repo: https://github.com/prek-ci/deno-hooks
             rev: v3.1.0
             hooks:
               - id: deno-local-dep

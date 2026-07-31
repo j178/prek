@@ -150,7 +150,7 @@ fn remote_hook() {
     // Run hooks with system found go.
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/golang-hooks
+          - repo: https://github.com/prek-ci/golang-hooks
             rev: v1.0
             hooks:
               - id: echo
@@ -214,7 +214,7 @@ fn remote_hook() {
     // Run hooks with newly downloaded go.
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/golang-hooks
+          - repo: https://github.com/prek-ci/golang-hooks
             rev: v1.0
             hooks:
               - id: echo

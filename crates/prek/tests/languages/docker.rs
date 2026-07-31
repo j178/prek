@@ -10,7 +10,7 @@ fn docker() {
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
-          - repo: https://github.com/prek-test-repos/docker-hooks
+          - repo: https://github.com/prek-ci/docker-hooks
             rev: v1.0
             hooks:
               - id: hello-world
@@ -45,7 +45,7 @@ fn workspace_docker() -> anyhow::Result<()> {
 
     let config = indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/docker-hooks
+          - repo: https://github.com/prek-ci/docker-hooks
             rev: v1.0
             hooks:
               - id: hello-world

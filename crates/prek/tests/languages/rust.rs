@@ -182,7 +182,7 @@ fn remote_hooks() {
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
-          - repo: https://github.com/prek-test-repos/rust-hooks
+          - repo: https://github.com/prek-ci/rust-hooks
             rev: v1.0.0
             hooks:
               - id: hello-world
@@ -215,7 +215,7 @@ fn remote_hook_non_workspace() {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/rust-hooks-non-workspace
+          - repo: https://github.com/prek-ci/rust-hooks-non-workspace
             rev: v1.0.0
             hooks:
               - id: hello-world
@@ -248,7 +248,7 @@ fn remote_hooks_with_lib_deps() {
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
-          - repo: https://github.com/prek-test-repos/rust-hooks
+          - repo: https://github.com/prek-ci/rust-hooks
             rev: v1.0.0
             hooks:
               - id: hello-world-lib-deps
