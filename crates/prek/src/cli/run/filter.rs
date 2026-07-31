@@ -431,6 +431,10 @@ pub(crate) enum FileSelection {
 }
 
 impl FileSelection {
+    pub(crate) const fn uses_staged_files(&self) -> bool {
+        matches!(self, Self::Default)
+    }
+
     pub(crate) const fn requires_clean_worktree(&self) -> bool {
         matches!(self, Self::Default | Self::Diff { .. })
     }
@@ -449,6 +453,7 @@ pub(crate) struct CollectOptions {
     pub(crate) input_mode: RunInputMode,
     pub(crate) selection: FileSelection,
     pub(crate) commit_msg_filename: Option<String>,
+    pub(crate) known_staged_files: Option<Vec<PathBuf>>,
 }
 
 impl CollectOptions {
@@ -513,6 +518,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         input_mode,
         selection,
         commit_msg_filename,
+        known_staged_files,
     } = opts;
 
     let git_root = GIT_ROOT.as_ref()?;
@@ -535,7 +541,8 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         )
     })?;
 
-    let filenames = collect_files_for_selection(git_root, root, selection).await?;
+    let filenames =
+        collect_files_for_selection(git_root, root, selection, known_staged_files).await?;
 
     // Convert filenames to be relative to the workspace root.
     let mut filenames = filenames
@@ -655,6 +662,7 @@ async fn collect_files_for_selection(
     git_root: &Path,
     workspace_root: &Path,
     selection: FileSelection,
+    known_staged_files: Option<Vec<PathBuf>>,
 ) -> Result<Vec<PathBuf>> {
     match selection {
         FileSelection::Diff { from_ref, to_ref } => {
@@ -684,7 +692,11 @@ async fn collect_files_for_selection(
                 return Ok(files);
             }
 
-            let files = git::staged_files(workspace_root).await?;
+            let files = if let Some(files) = known_staged_files {
+                files
+            } else {
+                git::staged_files(workspace_root).await?
+            };
             debug!("Staged files: {}", files.len());
             Ok(files)
         }

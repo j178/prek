@@ -1967,6 +1967,111 @@ fn staged_files_only() -> Result<()> {
 }
 
 #[test]
+fn clean_default_run_skips_redundant_git_queries() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: noop
+                language: system
+                entry: "true"
+    "#});
+    context.git_add(PRE_COMMIT_CONFIG_YAML);
+    context.git_commit("initial commit");
+
+    let output = context
+        .run()
+        .env("RUST_LOG", "prek::process=trace")
+        .output()?;
+
+    assert!(output.status.success(), "clean default run should succeed");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("(no files to check)"));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--no-optional-locks status --porcelain=v1"),
+        "expected the combined Git status query:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("--diff-filter=A")
+            && !stderr.contains("diff-index")
+            && !stderr.contains("write-tree")
+            && !stderr.contains("--cached"),
+        "clean state should skip keeper and staged-file queries:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn nested_workspace_ignores_dirty_files_outside_workspace() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    let cwd = context.work_dir();
+    let workspace = cwd.child("workspace");
+    workspace.create_dir_all()?;
+    workspace
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo
+                name: echo
+                language: system
+                entry: echo
+                verbose: true
+    "})?;
+    workspace.child("inside.txt").write_str("base\n")?;
+    cwd.child("outside.txt").write_str("base\n")?;
+    context.git_add(".");
+    context.git_commit("initial commit");
+
+    workspace.child("inside.txt").write_str("staged\n")?;
+    context.git_add("workspace/inside.txt");
+    cwd.child("outside.txt").write_str("staged\n")?;
+    context.git_add("outside.txt");
+    cwd.child("outside.txt").write_str("unstaged\n")?;
+
+    let output = context
+        .run()
+        .current_dir(&workspace)
+        .env("RUST_LOG", "prek::process=trace")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "nested workspace run should succeed"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("inside.txt"),
+        "workspace file should run:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("outside.txt"),
+        "outside staged file must not become workspace input:\n{stdout}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--no-optional-locks status --porcelain=v1"),
+        "expected the workspace status query:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("diff-index")
+            && !stderr.contains("write-tree")
+            && !stderr.contains("--cached"),
+        "outside dirt should not force the workspace onto the fallback path:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

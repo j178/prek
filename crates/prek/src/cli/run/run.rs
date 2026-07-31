@@ -166,9 +166,22 @@ pub(crate) async fn run(
         filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
 
+    // This query is worthwhile only when its staged paths replace a later Git query. Capture it
+    // after hook initialization so the evidence used to skip worktree cleanup stays fresh.
+    let initial_git_state = if input_mode == RunInputMode::Files && selection.uses_staged_files() {
+        git::initial_git_state(workspace.root()).await?
+    } else {
+        git::InitialGitState::Unknown
+    };
+    if initial_git_state.has_unmerged_paths() {
+        anyhow::bail!(
+            "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
+        );
+    }
+
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
-    if should_stash {
+    if should_stash && !initial_git_state.is_worktree_known_clean() {
         _guard = Some(
             WorkTreeKeeper::clean(store, workspace.root())
                 .await
@@ -185,6 +198,7 @@ pub(crate) async fn run(
             input_mode,
             selection,
             commit_msg_filename: extra_args.commit_msg_filename,
+            known_staged_files: initial_git_state.into_staged_files(),
         },
     )
     .await

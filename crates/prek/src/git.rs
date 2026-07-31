@@ -136,6 +136,120 @@ pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     Ok(cmd)
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum InitialGitState {
+    Known {
+        staged_files: Vec<PathBuf>,
+        worktree_clean: bool,
+    },
+    Unmerged,
+    Unknown,
+}
+
+impl InitialGitState {
+    pub(crate) const fn has_unmerged_paths(&self) -> bool {
+        matches!(self, Self::Unmerged)
+    }
+
+    pub(crate) const fn is_worktree_known_clean(&self) -> bool {
+        matches!(
+            self,
+            Self::Known {
+                worktree_clean: true,
+                ..
+            }
+        )
+    }
+
+    pub(crate) fn into_staged_files(self) -> Option<Vec<PathBuf>> {
+        match self {
+            Self::Known { staged_files, .. } => Some(staged_files),
+            Self::Unmerged | Self::Unknown => None,
+        }
+    }
+}
+
+fn parse_initial_git_state(output: &[u8]) -> InitialGitState {
+    try_parse_initial_git_state(output).unwrap_or(InitialGitState::Unknown)
+}
+
+fn try_parse_initial_git_state(output: &[u8]) -> Option<InitialGitState> {
+    let mut staged_files = Vec::new();
+    let mut worktree_clean = true;
+
+    for record in output.split(|&byte| byte == b'\0') {
+        if record.is_empty() {
+            continue;
+        }
+
+        let &[index_status, worktree_status, b' '] = record.get(..3)? else {
+            return None;
+        };
+        let unmerged = index_status == b'U'
+            || worktree_status == b'U'
+            || (index_status == worktree_status && matches!(index_status, b'A' | b'D'));
+        if unmerged {
+            return Some(InitialGitState::Unmerged);
+        }
+        if (index_status == b' ' && worktree_status == b' ')
+            || !matches!(index_status, b' ' | b'A' | b'M' | b'T' | b'D')
+            || !matches!(worktree_status, b' ' | b'A' | b'M' | b'T' | b'D')
+        {
+            return None;
+        }
+
+        let path = &record[3..];
+        if path.is_empty() {
+            return None;
+        }
+
+        worktree_clean &= worktree_status == b' ';
+        if matches!(index_status, b'A' | b'M' | b'T') {
+            staged_files.push(path_from_git_bytes(path).ok()?);
+        }
+    }
+
+    Some(InitialGitState::Known {
+        staged_files,
+        worktree_clean,
+    })
+}
+
+/// Capture the index and worktree facts needed by the run hot path in one Git query.
+///
+/// A non-zero status or an unfamiliar porcelain record is deliberately treated as unknown so
+/// callers can fall back to the existing, narrower Git queries.
+#[instrument(level = "trace")]
+pub(crate) async fn initial_git_state(root: &Path) -> Result<InitialGitState, Error> {
+    let mut cmd = git_cmd()?;
+    let output = cmd
+        .arg("--no-optional-locks")
+        .arg("status")
+        .arg("--porcelain=v1")
+        .arg("-z")
+        .arg("--untracked-files=no")
+        // Preserve staged gitlink changes while ignoring dirt inside submodules.
+        .arg("--ignore-submodules=dirty")
+        // Reporting a rename as an add plus a delete makes every record self-contained.
+        .arg("--no-renames")
+        .arg("--")
+        .arg(root)
+        .check(false)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        debug!(
+            status = %output.status,
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "Falling back after initial Git status failed"
+        );
+        return Ok(InitialGitState::Unknown);
+    }
+
+    Ok(parse_initial_git_state(&output.stdout))
+}
+
 fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
@@ -997,11 +1111,11 @@ mod tests {
     #[cfg(unix)]
     use super::zsplit;
     use super::{
-        Error, GIT, TerminalPrompt, apply_shared_repository_file_mode, full_clone, init_repo,
-        should_update_submodules, update_submodules,
+        Error, GIT, InitialGitState, TerminalPrompt, apply_shared_repository_file_mode, full_clone,
+        init_repo, parse_initial_git_state, should_update_submodules, update_submodules,
     };
     use assert_cmd::assert::OutputAssertExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
 
     fn run_git(path: &Path, args: &[&str]) {
@@ -1102,6 +1216,91 @@ mod tests {
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0].as_os_str().as_bytes(), b"normal.py");
         assert_eq!(paths[1].as_os_str().as_bytes(), b"bad-\xff.py");
+    }
+
+    #[test]
+    fn initial_git_state_recognizes_clean_repository() {
+        assert_eq!(
+            parse_initial_git_state(b""),
+            InitialGitState::Known {
+                staged_files: vec![],
+                worktree_clean: true,
+            }
+        );
+    }
+
+    #[test]
+    fn initial_git_state_collects_staged_files_with_spaces() {
+        let state = parse_initial_git_state(
+            b"A  path with spaces.txt\0M  modified.txt\0T  type-changed.txt\0D  deleted.txt\0",
+        );
+
+        assert_eq!(
+            state,
+            InitialGitState::Known {
+                staged_files: vec![
+                    PathBuf::from("path with spaces.txt"),
+                    PathBuf::from("modified.txt"),
+                    PathBuf::from("type-changed.txt"),
+                ],
+                worktree_clean: true,
+            }
+        );
+    }
+
+    #[test]
+    fn initial_git_state_detects_unstaged_changes() {
+        let state = parse_initial_git_state(b" M file.txt\0");
+
+        assert_eq!(
+            state,
+            InitialGitState::Known {
+                staged_files: vec![],
+                worktree_clean: false,
+            }
+        );
+    }
+
+    #[test]
+    fn initial_git_state_keeps_intent_to_add_on_the_fallback_path() {
+        let state = parse_initial_git_state(b" A intent.txt\0");
+
+        assert_eq!(
+            state,
+            InitialGitState::Known {
+                staged_files: vec![],
+                worktree_clean: false,
+            }
+        );
+    }
+
+    #[test]
+    fn initial_git_state_detects_unmerged_record() {
+        for status in [b"DD", b"AU", b"UD", b"UA", b"DU", b"AA", b"UU"] {
+            let mut record = status.to_vec();
+            record.extend_from_slice(b" file.txt\0");
+            assert_eq!(parse_initial_git_state(&record), InitialGitState::Unmerged);
+        }
+    }
+
+    #[test]
+    fn initial_git_state_falls_back_for_unexpected_record() {
+        let state = parse_initial_git_state(b"R  new.txt\0old.txt\0");
+
+        assert_eq!(state, InitialGitState::Unknown);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn initial_git_state_preserves_non_utf8_paths() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let state = parse_initial_git_state(b"A  bad-\xff.py\0");
+        let InitialGitState::Known { staged_files, .. } = state else {
+            panic!("expected known Git state");
+        };
+
+        assert_eq!(staged_files[0].as_os_str().as_bytes(), b"bad-\xff.py");
     }
 
     #[test]
