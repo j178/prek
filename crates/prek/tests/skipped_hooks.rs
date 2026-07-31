@@ -894,6 +894,126 @@ fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
 }
 
 #[test]
+fn same_group_known_modification_skips_diff_detection() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                priority: 0
+          - repo: local
+            hooks:
+              - id: noop
+                name: noop
+                language: system
+                entry: python3 -c "pass"
+                pass_filenames: false
+                priority: 0
+    "#});
+
+    cwd.child("file.txt").write_str("missing newline")?;
+    context.git_add(".");
+
+    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+
+    assert!(
+        !output.status.success(),
+        "the builtin should report its modification"
+    );
+    assert_eq!(context.read("file.txt"), "missing newline\n");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.contains("noop") && line.contains("Passed"))
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("has_worktree_diff").count(),
+        0,
+        "A known modification should make the same-group quiet diff unnecessary.\n\
+         Trace output:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("diff_worktree").count(),
+        0,
+        "A known modification should make the same-group full diff unnecessary.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                priority: 0
+          - repo: local
+            hooks:
+              - id: same-group-noop
+                name: same-group-noop
+                language: system
+                entry: python3 -c "pass"
+                pass_filenames: false
+                priority: 0
+              - id: later-noop
+                name: later-noop
+                language: system
+                entry: python3 -c "pass"
+                pass_filenames: false
+                priority: 1
+    "#});
+
+    cwd.child("file.txt").write_str("missing newline")?;
+    context.git_add(".");
+
+    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+
+    assert!(
+        !output.status.success(),
+        "the builtin should report its modification"
+    );
+    assert_eq!(context.read("file.txt"), "missing newline\n");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.contains("later-noop") && line.contains("Passed"))
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("has_worktree_diff").count(),
+        0,
+        "The known modification should invalidate the clean baseline.\n\
+         Trace output:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("diff_worktree").count(),
+        2,
+        "The later external hook should capture and compare the modified worktree.\n\
+         Trace output:\n{stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
