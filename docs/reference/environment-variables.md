@@ -56,6 +56,7 @@ See [Built-in Fast Hooks](../builtin.md) for details.
 Control how uv (Python package installer) is installed.
 Options:
 
+- `astral` (download from Astral's CDN, the default source)
 - `github` (download from GitHub releases)
 - `pypi` (install from PyPI)
 - `tuna` (use Tsinghua University mirror)
