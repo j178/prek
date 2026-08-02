@@ -99,7 +99,7 @@ impl LanguageBackend for Pygrep {
         let progress = reporter.on_install_start(&hook);
 
         let uv_dir = store.tools_path(ToolBucket::Uv);
-        let uv = Uv::install(store, &uv_dir).await?;
+        let uv = Uv::find_or_install(store, &uv_dir).await?;
         let python_dir = store.tools_path(ToolBucket::Python);
 
         // Find or download a Python interpreter.

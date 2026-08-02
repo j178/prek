@@ -2,13 +2,11 @@ use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use http::header::ACCEPT;
 use semver::{Version, VersionReq};
 use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem};
-use tokio::task::JoinSet;
 use tracing::{debug, trace, warn};
 
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
@@ -18,7 +16,6 @@ use crate::fs::LockedFile;
 use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
-use crate::version;
 use crate::warn_user;
 
 // The version range of `uv` we will install. Should update periodically.
@@ -178,10 +175,6 @@ impl PyPiMirror {
             Self::Custom(url) => url,
         }
     }
-
-    fn iter() -> impl Iterator<Item = Self> {
-        vec![Self::Pypi, Self::Tuna, Self::Aliyun, Self::Tencent].into_iter()
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -197,19 +190,34 @@ enum InstallSource {
 }
 
 impl InstallSource {
-    async fn install(&self, store: &Store, target: &Path) -> Result<()> {
+    async fn install(&self, store: &Store, target: &Path) -> Result<Uv> {
         match self {
             Self::Astral => {
                 self.install_from_release_archive(store, target, ASTRAL_UV_RELEASE_BASE)
-                    .await
+                    .await?;
             }
             Self::GitHub => {
                 self.install_from_release_archive(store, target, GITHUB_UV_RELEASE_BASE)
-                    .await
+                    .await?;
             }
-            Self::PyPi(source) => self.install_from_pypi(store, target, source).await,
-            Self::Pip => self.install_from_pip(target).await,
+            Self::PyPi(source) => self.install_from_pypi(store, target, source).await?,
+            Self::Pip => self.install_from_pip(target).await?,
         }
+
+        let uv_path = target.join("uv").with_extension(EXE_EXTENSION);
+        match validate_uv_binary(&uv_path) {
+            Ok(version) => trace!(version = %version, "Successfully installed uv"),
+            Err(err) => bail!(
+                "Installed uv at `{}` failed validation: {err}. \
+                This usually means the downloaded uv binary is incompatible with the \
+                current runtime environment, for example due to a libc mismatch or a \
+                missing dynamic loader path. If this keeps happening, please report it \
+                with details about your environment and the full error output.",
+                uv_path.display()
+            ),
+        }
+
+        Ok(Uv::new(uv_path))
     }
 
     async fn install_from_release_archive(
@@ -419,11 +427,9 @@ impl InstallSource {
         let bin_dir = uv_src.join(if cfg!(windows) { "Scripts" } else { "bin" });
         let lib_dir = uv_src.join(if cfg!(windows) { "Lib" } else { "lib" });
 
-        let uv = uv_src
-            .join(&bin_dir)
-            .join("uv")
-            .with_extension(EXE_EXTENSION);
-        fs_err::tokio::rename(&uv, target.join("uv").with_extension(EXE_EXTENSION)).await?;
+        let uv = bin_dir.join("uv").with_extension(EXE_EXTENSION);
+        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+        replace_uv_binary(&uv, &target_path).await?;
         fs_err::tokio::remove_dir_all(bin_dir).await?;
         fs_err::tokio::remove_dir_all(lib_dir).await?;
 
@@ -446,17 +452,23 @@ impl Uv {
         cmd
     }
 
-    /// Install managed uv, trying the default source first and falling back on failure.
+    /// Install managed uv, trying each default source in order until one succeeds.
     ///
-    /// The order is Astral CDN, then `PyPI` (probing mirrors), then `pip` as a last resort.
-    async fn install_auto(store: &Store, uv_dir: &Path) -> Result<()> {
-        if try_install(&InstallSource::Astral, store, uv_dir).await {
-            return Ok(());
-        }
-
-        let mirror = select_best_pypi().await;
-        if try_install(&InstallSource::PyPi(mirror), store, uv_dir).await {
-            return Ok(());
+    /// The order is Astral CDN, `PyPI` and its mirrors, then `pip` as a last resort.
+    async fn install_with_fallbacks(store: &Store, uv_dir: &Path) -> Result<Self> {
+        for source in [
+            InstallSource::Astral,
+            InstallSource::PyPi(PyPiMirror::Pypi),
+            InstallSource::PyPi(PyPiMirror::Tuna),
+            InstallSource::PyPi(PyPiMirror::Aliyun),
+            InstallSource::PyPi(PyPiMirror::Tencent),
+        ] {
+            match source.install(store, uv_dir).await {
+                Ok(uv) => return Ok(uv),
+                Err(err) => {
+                    warn!(?source, %err, "Failed to install uv, trying next source");
+                }
+            }
         }
 
         InstallSource::Pip
@@ -465,7 +477,7 @@ impl Uv {
             .context("Failed to install uv from every source")
     }
 
-    pub(crate) async fn install(store: &Store, uv_dir: &Path) -> Result<Self> {
+    pub(crate) async fn find_or_install(store: &Store, uv_dir: &Path) -> Result<Self> {
         // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
         let prek_exe = std::env::current_exe()?.canonicalize()?;
         if let Some(prek_dir) = prek_exe.parent() {
@@ -524,74 +536,12 @@ impl Uv {
             }
         }
 
-        if let Some(uv_source) = uv_source_from_env(&EnvVars) {
-            uv_source.install(store, uv_dir).await?;
+        if let Some(source) = uv_source_from_env(&EnvVars) {
+            source.install(store, uv_dir).await
         } else {
-            Self::install_auto(store, uv_dir).await?;
-        }
-
-        // Downloaded `uv` binaries can be present on disk but still fail to execute in the
-        // current runtime environment, such as when the libc variant or dynamic loader path
-        // does not match the host. Validate immediately so we can surface a clear error here.
-        match validate_uv_binary(&uv_path) {
-            Ok(version) => trace!(version = %version, "Successfully installed uv"),
-            Err(err) => bail!(
-                "Installed uv at `{}` failed validation: {err}. \
-                This usually means the downloaded uv binary is incompatible with the \
-                current runtime environment, for example due to a libc mismatch or a \
-                missing dynamic loader path. If this keeps happening, please report it \
-                with details about your environment and the full error output.",
-                uv_path.display()
-            ),
-        }
-
-        Ok(Self::new(uv_path))
-    }
-}
-
-/// Install uv from `source`, returning `true` on success. A failure is logged and reported as
-/// `false` so the caller can fall back to the next source.
-async fn try_install(source: &InstallSource, store: &Store, uv_dir: &Path) -> bool {
-    match source.install(store, uv_dir).await {
-        Ok(()) => true,
-        Err(err) => {
-            warn!(?source, %err, "Failed to install uv, trying next source");
-            false
+            Self::install_with_fallbacks(store, uv_dir).await
         }
     }
-}
-
-/// Pick the first responsive `PyPI` mirror, defaulting to `pypi.org`.
-async fn select_best_pypi() -> PyPiMirror {
-    let mut best = PyPiMirror::Pypi;
-    let mut tasks = PyPiMirror::iter()
-        .map(|source| {
-            let client = REQWEST_CLIENT.clone();
-            async move {
-                let url = format!("{}uv/", source.url());
-                let response = client
-                    .head(&url)
-                    .header("User-Agent", format!("prek/{}", version::version().version))
-                    .header("Accept", "*/*")
-                    .timeout(Duration::from_secs(2))
-                    .send()
-                    .await;
-                (source, response)
-            }
-        })
-        .collect::<JoinSet<_>>();
-
-    while let Some(result) = tasks.join_next().await {
-        if let Ok((source, response)) = result
-            && let Ok(resp) = response
-            && resp.status().is_success()
-        {
-            best = source;
-            break;
-        }
-    }
-
-    best
 }
 
 fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> Option<InstallSource> {
