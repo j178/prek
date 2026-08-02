@@ -2,13 +2,11 @@ use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use http::header::ACCEPT;
 use semver::{Version, VersionReq};
 use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem};
-use tokio::task::JoinSet;
 use tracing::{debug, trace, warn};
 
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
@@ -18,13 +16,24 @@ use crate::fs::LockedFile;
 use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
-use crate::version;
 use crate::warn_user;
 
 // The version range of `uv` we will install. Should update periodically.
 const CUR_UV_VERSION: &str = "0.11.29";
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
     LazyLock::new(|| VersionReq::parse(">=0.7.0").unwrap());
+
+// Base URLs for the uv release archive. Astral's CDN mirrors GitHub release assets under
+// `/github/<repo>/releases/download/...` and is the default; GitHub stays reachable via
+// `PREK_UV_SOURCE=github`.
+// TODO: verify the archive against the SHA256 published in Astral's versions manifest
+// (`https://releases.astral.sh/github/versions/main/v1/uv.ndjson`).
+const ASTRAL_UV_RELEASE_BASE: &str = "https://releases.astral.sh/github/uv/releases/download";
+const GITHUB_UV_RELEASE_BASE: &str = "https://github.com/astral-sh/uv/releases/download";
+
+fn release_archive_url(base: &str, version: &str, archive_name: &str) -> String {
+    format!("{base}/{version}/{archive_name}")
+}
 
 fn wheel_platform_tag_for_host(
     operating_system: OperatingSystem,
@@ -166,14 +175,12 @@ impl PyPiMirror {
             Self::Custom(url) => url,
         }
     }
-
-    fn iter() -> impl Iterator<Item = Self> {
-        vec![Self::Pypi, Self::Tuna, Self::Aliyun, Self::Tencent].into_iter()
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum InstallSource {
+    /// Download uv from Astral's CDN (the default).
+    Astral,
     /// Download uv from GitHub releases.
     GitHub,
     /// Download uv from `PyPi`.
@@ -183,20 +190,45 @@ enum InstallSource {
 }
 
 impl InstallSource {
-    async fn install(&self, store: &Store, target: &Path) -> Result<()> {
+    async fn install(&self, store: &Store, target: &Path) -> Result<Uv> {
         match self {
-            Self::GitHub => self.install_from_github(store, target).await,
-            Self::PyPi(source) => self.install_from_pypi(store, target, source).await,
-            Self::Pip => self.install_from_pip(target).await,
+            Self::Astral => {
+                self.install_from_release_archive(store, target, ASTRAL_UV_RELEASE_BASE)
+                    .await?;
+            }
+            Self::GitHub => {
+                self.install_from_release_archive(store, target, GITHUB_UV_RELEASE_BASE)
+                    .await?;
+            }
+            Self::PyPi(source) => self.install_from_pypi(store, target, source).await?,
+            Self::Pip => self.install_from_pip(target).await?,
         }
+
+        let uv_path = target.join("uv").with_extension(EXE_EXTENSION);
+        match validate_uv_binary(&uv_path) {
+            Ok(version) => trace!(version = %version, "Successfully installed uv"),
+            Err(err) => bail!(
+                "Installed uv at `{}` failed validation: {err}. \
+                This usually means the downloaded uv binary is incompatible with the \
+                current runtime environment, for example due to a libc mismatch or a \
+                missing dynamic loader path. If this keeps happening, please report it \
+                with details about your environment and the full error output.",
+                uv_path.display()
+            ),
+        }
+
+        Ok(Uv::new(uv_path))
     }
 
-    async fn install_from_github(&self, store: &Store, target: &Path) -> Result<()> {
+    async fn install_from_release_archive(
+        &self,
+        store: &Store,
+        target: &Path,
+        base_url: &str,
+    ) -> Result<()> {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let archive_name = format!("uv-{HOST}.{ext}");
-        let download_url = format!(
-            "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/{archive_name}"
-        );
+        let download_url = release_archive_url(base_url, CUR_UV_VERSION, &archive_name);
 
         let download = download_artifact_with(
             &download_url,
@@ -395,11 +427,9 @@ impl InstallSource {
         let bin_dir = uv_src.join(if cfg!(windows) { "Scripts" } else { "bin" });
         let lib_dir = uv_src.join(if cfg!(windows) { "Lib" } else { "lib" });
 
-        let uv = uv_src
-            .join(&bin_dir)
-            .join("uv")
-            .with_extension(EXE_EXTENSION);
-        fs_err::tokio::rename(&uv, target.join("uv").with_extension(EXE_EXTENSION)).await?;
+        let uv = bin_dir.join("uv").with_extension(EXE_EXTENSION);
+        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+        replace_uv_binary(&uv, &target_path).await?;
         fs_err::tokio::remove_dir_all(bin_dir).await?;
         fs_err::tokio::remove_dir_all(lib_dir).await?;
 
@@ -422,68 +452,32 @@ impl Uv {
         cmd
     }
 
-    async fn select_source() -> Result<InstallSource> {
-        async fn check_github() -> Result<bool> {
-            let url = format!(
-                "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
-            );
-            let response = REQWEST_CLIENT
-                .head(url)
-                .timeout(Duration::from_secs(3))
-                .send()
-                .await?;
-            trace!(?response, "Checked GitHub");
-            Ok(response.status().is_success())
-        }
-
-        async fn select_best_pypi() -> Result<PyPiMirror> {
-            let mut best = PyPiMirror::Pypi;
-            let mut tasks = PyPiMirror::iter()
-                .map(|source| {
-                    let client = REQWEST_CLIENT.clone();
-                    async move {
-                        let url = format!("{}uv/", source.url());
-                        let response = client
-                            .head(&url)
-                            .header("User-Agent", format!("prek/{}", version::version().version))
-                            .header("Accept", "*/*")
-                            .timeout(Duration::from_secs(2))
-                            .send()
-                            .await;
-                        (source, response)
-                    }
-                })
-                .collect::<JoinSet<_>>();
-
-            while let Some(result) = tasks.join_next().await {
-                if let Ok((source, response)) = result {
-                    if let Ok(resp) = response
-                        && resp.status().is_success()
-                    {
-                        best = source;
-                        break;
-                    }
+    /// Install managed uv, trying each default source in order until one succeeds.
+    ///
+    /// The order is Astral CDN, `PyPI` and its mirrors, then `pip` as a last resort.
+    async fn install_with_fallbacks(store: &Store, uv_dir: &Path) -> Result<Self> {
+        for source in [
+            InstallSource::Astral,
+            InstallSource::PyPi(PyPiMirror::Pypi),
+            InstallSource::PyPi(PyPiMirror::Tuna),
+            InstallSource::PyPi(PyPiMirror::Aliyun),
+            InstallSource::PyPi(PyPiMirror::Tencent),
+        ] {
+            match source.install(store, uv_dir).await {
+                Ok(uv) => return Ok(uv),
+                Err(err) => {
+                    warn!(?source, %err, "Failed to install uv, trying next source");
                 }
             }
-
-            Ok(best)
         }
 
-        let source = tokio::select! {
-                Ok(true) = check_github() => InstallSource::GitHub,
-                Ok(source) = select_best_pypi() => InstallSource::PyPi(source),
-                else => {
-                    warn!("Failed to check uv source availability, falling back to pip install");
-                    InstallSource::Pip
-                }
-
-        };
-
-        trace!(?source, "Selected uv source");
-        Ok(source)
+        InstallSource::Pip
+            .install(store, uv_dir)
+            .await
+            .context("Failed to install uv from every source")
     }
 
-    pub(crate) async fn install(store: &Store, uv_dir: &Path) -> Result<Self> {
+    pub(crate) async fn find_or_install(store: &Store, uv_dir: &Path) -> Result<Self> {
         // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
         let prek_exe = std::env::current_exe()?.canonicalize()?;
         if let Some(prek_dir) = prek_exe.parent() {
@@ -542,35 +536,18 @@ impl Uv {
             }
         }
 
-        let source = if let Some(uv_source) = uv_source_from_env(&EnvVars) {
-            uv_source
+        if let Some(source) = uv_source_from_env(&EnvVars) {
+            source.install(store, uv_dir).await
         } else {
-            Self::select_source().await?
-        };
-        source.install(store, uv_dir).await?;
-
-        // Downloaded `uv` binaries can be present on disk but still fail to execute in the
-        // current runtime environment, such as when the libc variant or dynamic loader path
-        // does not match the host. Validate immediately so we can surface a clear error here.
-        match validate_uv_binary(&uv_path) {
-            Ok(version) => trace!(version = %version, "Successfully installed uv"),
-            Err(err) => bail!(
-                "Installed uv at `{}` failed validation: {err}. \
-                This usually means the downloaded uv binary is incompatible with the \
-                current runtime environment, for example due to a libc mismatch or a \
-                missing dynamic loader path. If this keeps happening, please report it \
-                with details about your environment and the full error output.",
-                uv_path.display()
-            ),
+            Self::install_with_fallbacks(store, uv_dir).await
         }
-
-        Ok(Self::new(uv_path))
     }
 }
 
 fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> Option<InstallSource> {
     let var = env_vars.var(EnvVars::PREK_UV_SOURCE).ok()?;
     match var.as_str() {
+        "astral" => Some(InstallSource::Astral),
         "github" => Some(InstallSource::GitHub),
         "pypi" => Some(InstallSource::PyPi(PyPiMirror::Pypi)),
         "tuna" => Some(InstallSource::PyPi(PyPiMirror::Tuna)),
@@ -580,7 +557,7 @@ fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> Option<InstallSource> {
         custom if custom.starts_with("http") => Some(InstallSource::PyPi(PyPiMirror::Custom(var))),
         _ => {
             warn_user!(
-                "Invalid value for {}: {:?}. Expected github, pypi, tuna, aliyun, tencent, pip, or an http(s) URL; using default ({:?})",
+                "Invalid value for {}: {:?}. Expected astral, github, pypi, tuna, aliyun, tencent, pip, or an http(s) URL; using default ({:?})",
                 EnvVars::PREK_UV_SOURCE,
                 var,
                 "auto",
@@ -605,8 +582,32 @@ mod tests {
     }
 
     #[test]
+    fn release_archive_url_joins_base_version_and_name() {
+        assert_eq!(
+            release_archive_url(
+                ASTRAL_UV_RELEASE_BASE,
+                "0.11.29",
+                "uv-x86_64-unknown-linux-gnu.tar.gz",
+            ),
+            "https://releases.astral.sh/github/uv/releases/download/0.11.29/uv-x86_64-unknown-linux-gnu.tar.gz"
+        );
+        assert_eq!(
+            release_archive_url(
+                GITHUB_UV_RELEASE_BASE,
+                "0.11.29",
+                "uv-x86_64-pc-windows-msvc.zip"
+            ),
+            "https://github.com/astral-sh/uv/releases/download/0.11.29/uv-x86_64-pc-windows-msvc.zip"
+        );
+    }
+
+    #[test]
     fn uv_source_from_env_reads_source_override() {
         assert_eq!(uv_source_from_env(&EnvVars::from_map(&[])), None);
+        assert_eq!(
+            uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "astral")])),
+            Some(InstallSource::Astral)
+        );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "github")])),
             Some(InstallSource::GitHub)

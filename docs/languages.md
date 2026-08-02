@@ -415,7 +415,7 @@ For remote hook repositories, `language_version` may be inferred from
 prek uses `uv` for creating virtual environments and installing dependencies:
 
 - First tries to find `uv` in the system PATH
-- If not found, automatically installs `uv` from the best available source (GitHub releases, PyPI, or mirrors)
+- If not found, automatically installs `uv` from Astral's CDN, falling back to PyPI (and mirrors) then `pip`
 - Automatically installs the required Python version if it's not already available
 
 !!! warning "Environment variables"

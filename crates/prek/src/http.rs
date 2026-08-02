@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use futures_util::TryStreamExt;
@@ -239,9 +240,17 @@ fn load_certs_from_paths(file: Option<&Path>, dirs: &[impl AsRef<Path>]) -> Vec<
     certs
 }
 
+// Bound the connect phase, and fail a download that stalls (no bytes received for this long)
+// rather than blocking forever. This is an inactivity timeout, so it doesn't penalize slow but
+// progressing downloads, and it lets callers fall back to another source.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
+
 fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> reqwest::Client {
-    let builder =
-        reqwest::ClientBuilder::new().user_agent(format!("prek/{}", crate::version::version()));
+    let builder = reqwest::ClientBuilder::new()
+        .user_agent(format!("prek/{}", crate::version::version()))
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT);
 
     let builder = if native_tls {
         debug!("Using native TLS for reqwest client");
