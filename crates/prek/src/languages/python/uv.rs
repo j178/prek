@@ -12,8 +12,11 @@ use tracing::{debug, trace, warn};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::archive;
+use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
+use crate::http::{
+    DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact, download_artifact_with,
+};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::warn_user;
@@ -26,8 +29,6 @@ static UV_VERSION_RANGE: LazyLock<VersionReq> =
 // Base URLs for the uv release archive. Astral's CDN mirrors GitHub release assets under
 // `/github/<repo>/releases/download/...` and is the default; GitHub stays reachable via
 // `PREK_UV_SOURCE=github`.
-// TODO: verify the archive against the SHA256 published in Astral's versions manifest
-// (`https://releases.astral.sh/github/versions/main/v1/uv.ndjson`).
 const ASTRAL_UV_RELEASE_BASE: &str = "https://releases.astral.sh/github/uv/releases/download";
 const GITHUB_UV_RELEASE_BASE: &str = "https://github.com/astral-sh/uv/releases/download";
 
@@ -220,6 +221,28 @@ impl InstallSource {
         Ok(Uv::new(uv_path))
     }
 
+    async fn fetch_release_archive_checksum(
+        checksum_url: &str,
+        archive_name: &str,
+    ) -> Result<Option<Sha256Digest>> {
+        let response = REQWEST_CLIENT
+            .get(checksum_url)
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch uv checksum from {checksum_url}"))?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let checksum = response
+            .error_for_status()
+            .with_context(|| format!("Failed to fetch uv checksum from {checksum_url}"))?
+            .text()
+            .await
+            .with_context(|| format!("Failed to read uv checksum from {checksum_url}"))?;
+        digest_from_sha256sums(&checksum, archive_name)
+    }
+
     async fn install_from_release_archive(
         &self,
         store: &Store,
@@ -229,15 +252,11 @@ impl InstallSource {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let archive_name = format!("uv-{HOST}.{ext}");
         let download_url = release_archive_url(base_url, CUR_UV_VERSION, &archive_name);
+        let checksum_url = format!("{download_url}.sha256");
 
-        let download = download_artifact_with(
-            &download_url,
-            &archive_name,
-            store,
-            DownloadChecksumPolicy::Disabled,
-            async || Ok(None),
-            |req| req,
-        )
+        let download = download_artifact(&download_url, &archive_name, store, async || {
+            Self::fetch_release_archive_checksum(&checksum_url, &archive_name).await
+        })
         .await
         .context("Failed to download uv")?;
         let extracted = archive::extract_archive(download.path())
