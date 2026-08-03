@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use futures_util::TryStreamExt;
-use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use reqwest::Certificate;
 use tokio::io::AsyncWriteExt;
@@ -13,7 +12,6 @@ use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use crate::checksum::{HashReader, Sha256Digest};
-use crate::fs::Simplified;
 use crate::store::Store;
 use crate::warn_user;
 
@@ -161,83 +159,16 @@ fn reqwest_client_from_env(env_vars: &impl EnvVarsRead) -> reqwest::Client {
         })
         .unwrap_or(false);
 
-    let cert_file = env_vars.var_os(EnvVars::SSL_CERT_FILE).map(PathBuf::from);
-    let cert_dirs: Vec<_> = if let Some(cert_dirs) = env_vars.var_os(EnvVars::SSL_CERT_DIR) {
-        std::env::split_paths(&cert_dirs).collect()
-    } else {
-        vec![]
-    };
-
-    let certs = load_certs_from_paths(cert_file.as_deref(), &cert_dirs);
+    let certs = ssl_certs::load_certs_from_env();
+    for error in certs.errors {
+        warn_user!("Failed to load certificates: {error}");
+    }
+    let certs = certs
+        .certs
+        .iter()
+        .filter_map(|cert| Certificate::from_der(cert).ok())
+        .collect();
     create_reqwest_client(native_tls, certs)
-}
-
-fn load_pem_certs_from_file(path: &Path) -> Result<Vec<Certificate>> {
-    let cert_data = fs_err::read(path)?;
-    let certs = Certificate::from_pem_bundle(&cert_data)
-        .or_else(|_| Certificate::from_pem(&cert_data).map(|cert| vec![cert]))?;
-    Ok(certs)
-}
-
-/// Load certificate from certificate directory.
-fn load_pem_certs_from_dir(dir: &Path) -> Result<Vec<Certificate>> {
-    let mut certs = Vec::new();
-
-    for entry in fs_err::read_dir(dir)?.flatten() {
-        let path = entry.path();
-
-        // `openssl rehash` used to create this directory uses symlinks. So,
-        // make sure we resolve them.
-        let metadata = match fs_err::metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Dangling symlink
-                continue;
-            }
-            Err(_) => {
-                continue;
-            }
-        };
-
-        if metadata.is_file() {
-            if let Ok(mut loaded) = load_pem_certs_from_file(&path) {
-                certs.append(&mut loaded);
-            }
-        }
-    }
-
-    Ok(certs)
-}
-
-fn load_certs_from_paths(file: Option<&Path>, dirs: &[impl AsRef<Path>]) -> Vec<Certificate> {
-    let mut certs = Vec::new();
-
-    if let Some(file) = file {
-        match load_pem_certs_from_file(file) {
-            Ok(mut loaded) => certs.append(&mut loaded),
-            Err(e) => {
-                warn_user!(
-                    "Failed to load certificates from {}: {e}",
-                    file.simplified_display().cyan(),
-                );
-            }
-        }
-    }
-
-    for dir in dirs {
-        match load_pem_certs_from_dir(dir.as_ref()) {
-            Ok(mut loaded) => certs.append(&mut loaded),
-            Err(e) => {
-                warn_user!(
-                    "Failed to load certificates from {}: {}",
-                    dir.as_ref().simplified_display().cyan(),
-                    e
-                );
-            }
-        }
-    }
-
-    certs
 }
 
 // Bound the connect phase, and fail a download that stalls (no bytes received for this long)
@@ -273,7 +204,6 @@ fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> re
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
     use std::str::FromStr;
 
     use anyhow::Result;
@@ -289,23 +219,6 @@ mod tests {
 
     const DATA_SHA256: &str = "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7";
     const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
-    const TEST_CERT_PEM: &str = "-----BEGIN CERTIFICATE-----
-MIIBtjCCAVugAwIBAgITBmyf1XSXNmY/Owua2eiedgPySjAKBggqhkjOPQQDAjA5
-MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6b24g
-Um9vdCBDQSAzMB4XDTE1MDUyNjAwMDAwMFoXDTQwMDUyNjAwMDAwMFowOTELMAkG
-A1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJvb3Qg
-Q0EgMzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCmXp8ZBf8ANm+gBG1bG8lKl
-ui2yEujSLtf6ycXYqm0fc4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt6j
-QjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBSr
-ttvXBp43rDCGB5Fwx5zEGbF4wDAKBggqhkjOPQQDAgNJADBGAiEA4IWSoxe3jfkr
-BqWTrBqYaGFy+uGh0PsceGCmQ5nFuMQCIQCcAu/xlJyzlvnrxir4tiz+OpAUFteM
-YyRIHN8wfdVoOw==
------END CERTIFICATE-----\n";
-
-    fn write_cert(path: &Path) {
-        fs_err::write(path, TEST_CERT_PEM).expect("failed to write test certificate");
-    }
 
     async fn serve_once(body: &'static [u8]) -> Result<(String, JoinHandle<Result<()>>)> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
@@ -387,50 +300,6 @@ YyRIHN8wfdVoOw==
             )])),
             DownloadChecksumPolicy::WarnMissing
         );
-    }
-
-    #[test]
-    fn test_load_pem_certs_from_file() -> Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let cert_path = temp_dir.path().join("cert.pem");
-        write_cert(&cert_path);
-
-        let certs = super::load_pem_certs_from_file(&cert_path)?;
-        assert_eq!(certs.len(), 1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_load_pem_certs_from_dir_skips_invalid_files() -> Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let cert_dir = temp_dir.path().join("certs");
-        fs_err::create_dir(&cert_dir)?;
-
-        write_cert(&cert_dir.join("valid.pem"));
-        fs_err::write(cert_dir.join("invalid.pem"), "not a certificate")?;
-
-        let certs = super::load_pem_certs_from_dir(&cert_dir)?;
-        assert_eq!(certs.len(), 1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_load_certs_from_paths_combines_sources() -> Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let cert_file = temp_dir.path().join("cert-file.pem");
-        write_cert(&cert_file);
-
-        let cert_dir = temp_dir.path().join("cert-dir");
-        fs_err::create_dir(&cert_dir)?;
-        write_cert(&cert_dir.join("cert-in-dir.pem"));
-        fs_err::write(cert_dir.join("garbage.txt"), "invalid")?;
-
-        let certs = super::load_certs_from_paths(Some(&cert_file), &[&cert_dir]);
-        assert_eq!(certs.len(), 2);
-
-        Ok(())
     }
 
     #[tokio::test]
