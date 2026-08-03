@@ -127,6 +127,7 @@ pub(crate) async fn hook_impl(
         skips,
         vec![],
         vec![],
+        vec![],
         Some(hook_type.into()),
         file_selection,
         false,

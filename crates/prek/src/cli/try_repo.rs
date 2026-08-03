@@ -281,6 +281,7 @@ pub(crate) async fn try_repo(
         vec![],
         vec![],
         vec![],
+        vec![],
         stage,
         file_selection,
         run_args.show_diff_on_failure,

@@ -758,7 +758,7 @@ fn run_group_without_stage_selects_hooks_across_stages() {
 }
 
 #[test]
-fn run_group_without_stage_warns_when_only_message_file_hooks_match() {
+fn run_required_group_without_stage_warns_when_only_message_file_hooks_match() {
     let context = TestContext::new();
     context.init_project();
 
@@ -784,7 +784,7 @@ fn run_group_without_stage_warns_when_only_message_file_hooks_match() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--require-group").arg("ci"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -864,7 +864,97 @@ fn run_group_exclusion_wins_over_inclusion() {
 }
 
 #[test]
-fn run_unknown_group_warns_and_empty_selection_fails() {
+fn run_required_groups_intersect_and_compose_with_other_group_filters() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: ty
+                name: Ty
+                language: system
+                entry: python3 -c "print('ty')"
+                always_run: true
+                groups: [lint, fast, local]
+              - id: ruff-format
+                name: Ruff Format
+                language: system
+                entry: python3 -c "print('ruff-format')"
+                always_run: true
+                groups: [format, fast, local]
+              - id: mypy
+                name: Mypy
+                language: system
+                entry: python3 -c "print('mypy')"
+                always_run: true
+                groups: [lint, slow, ci]
+              - id: black
+                name: Black
+                language: system
+                entry: python3 -c "print('black')"
+                always_run: true
+                groups: [format, slow, ci]
+              - id: black-fast
+                name: Black Fast
+                language: system
+                entry: python3 -c "print('black-fast')"
+                always_run: true
+                groups: [format, slow, ci, fast]
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--all-files")
+            .arg("--no-group")
+            .arg("fast")
+            .arg("--require-group")
+            .arg("format")
+            .arg("--group")
+            .arg("lint")
+            .arg("--no-group")
+            .arg("local")
+            .arg("--require-group")
+            .arg("slow")
+            .arg("--group")
+            .arg("ci"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Black....................................................................Passed
+
+    ----- stderr -----
+    "
+    );
+
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--all-files")
+            .arg("--require-group")
+            .arg("lint")
+            .arg("--require-group")
+            .arg("format"),
+        @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No hooks found after filtering with the given selectors
+    "
+    );
+}
+
+#[test]
+fn run_unknown_group_selectors_warn_and_empty_selection_fails() {
     let context = TestContext::new();
     context.init_project();
 
@@ -889,6 +979,16 @@ fn run_unknown_group_warns_and_empty_selection_fails() {
 
     ----- stderr -----
     warning: group selector `--group=missing` did not match any hooks
+    error: No hooks found after filtering with the given selectors
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--require-group").arg("missing"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: group selector `--require-group=missing` did not match any hooks
     error: No hooks found after filtering with the given selectors
     "#);
 }
@@ -934,7 +1034,7 @@ fn run_group_selectors_reject_whitespace() {
 }
 
 #[test]
-fn run_group_and_stage_filters_intersect() {
+fn run_required_group_and_stage_filters_intersect() {
     let context = TestContext::new();
     context.init_project();
 
@@ -967,7 +1067,7 @@ fn run_group_and_stage_filters_intersect() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci").arg("--stage").arg("pre-push"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--require-group").arg("ci").arg("--stage").arg("pre-push"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1836,6 +1936,7 @@ fn global_path_options_expand_tilde() -> Result<()> {
         },
         stage: None,
         groups: [],
+        required_groups: [],
         no_groups: [],
     }
 
@@ -2366,7 +2467,7 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
 }
 
 #[test]
-fn group_excluded_remote_repo_is_not_cloned() {
+fn required_group_excluded_remote_repo_is_not_cloned() {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -2374,19 +2475,25 @@ fn group_excluded_remote_repo_is_not_cloned() {
           - repo: builtin
             hooks:
               - id: end-of-file-fixer
-                groups: [ci]
+                groups: [ci, fast]
 
           - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
             rev: v1.0.0
             hooks:
               - id: ruff-check
-                groups: [local]
+                groups: [ci]
         "});
     context.git_add(".");
 
     cmd_snapshot!(
         context.filters(),
-        context.run().arg("--all-files").arg("--group").arg("ci"),
+        context
+            .run()
+            .arg("--all-files")
+            .arg("--require-group")
+            .arg("ci")
+            .arg("--require-group")
+            .arg("fast"),
         @r"
     success: true
     exit_code: 0
@@ -3278,6 +3385,7 @@ fn selectors_completion() -> Result<()> {
     --dry-run	Do not run the hooks, but print the hooks that would have been run
     --stage	The stage during which the hook is fired
     --group	Run hooks belonging to the specified group
+    --require-group	Run hooks belonging to every specified group
     --no-group	Do not run hooks belonging to the specified group
     --config	Path to alternate config file
     --cd	Change to directory before running
