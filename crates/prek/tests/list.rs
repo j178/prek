@@ -340,6 +340,15 @@ fn list_with_group_filter() {
     warning: group selector `--group=missing` did not match any hooks
     ");
 
+    cmd_snapshot!(context.filters(), context.list().arg("--require-group").arg("ci").arg("--require-group").arg("slow"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:slow-lint
+
+    ----- stderr -----
+    ");
+
     cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci slow"), @r"
     success: false
     exit_code: 2

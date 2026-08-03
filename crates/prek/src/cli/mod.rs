@@ -646,9 +646,10 @@ pub(crate) struct RunArgs {
     /// When not specified and no group filter is active, this command starts with
     /// hooks eligible for `pre-commit`. If no hook is selected and the command
     /// named hook IDs, those same IDs are matched again against hooks configured
-    /// for `manual`. With `--group` or `--no-group`, omitting the stage lets
-    /// hooks from any configured stage match, using the default file input mode;
-    /// hooks that only run at `commit-msg` or `prepare-commit-msg` are ignored.
+    /// for `manual`. With `--group`, `--require-group`, or `--no-group`, omitting
+    /// the stage lets hooks from any configured stage match, using the default file
+    /// input mode; hooks that only run at `commit-msg` or `prepare-commit-msg` are
+    /// ignored.
     #[arg(long, value_enum, alias = "hook-stage")]
     pub(crate) stage: Option<Stage>,
 
@@ -657,6 +658,12 @@ pub(crate) struct RunArgs {
     /// Can be specified multiple times.
     #[arg(long = "group", value_name = "GROUP")]
     pub(crate) groups: Vec<String>,
+
+    /// Run hooks belonging to every specified group.
+    ///
+    /// Can be specified multiple times. Composes with `--group` and `--no-group`.
+    #[arg(long = "require-group", value_name = "GROUP")]
+    pub(crate) required_groups: Vec<String>,
 
     /// Do not run hooks belonging to the specified group.
     ///
@@ -750,6 +757,12 @@ pub(crate) struct ListArgs {
     /// Can be specified multiple times.
     #[arg(long = "group", value_name = "GROUP")]
     pub(crate) groups: Vec<String>,
+
+    /// Show hooks belonging to every specified group.
+    ///
+    /// Can be specified multiple times. Composes with `--group` and `--no-group`.
+    #[arg(long = "require-group", value_name = "GROUP")]
+    pub(crate) required_groups: Vec<String>,
 
     /// Do not show hooks belonging to the specified group.
     ///

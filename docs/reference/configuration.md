@@ -1143,7 +1143,9 @@ Tag a hook with user-defined run groups.
 - Type: list of strings
 - Default: `[]`
 
-Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run--group) and [`prek run --no-group <group>`](cli.md#prek-run--no-group).
+Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run--group),
+[`prek run --require-group <group>`](cli.md#prek-run--require-group), and
+[`prek run --no-group <group>`](cli.md#prek-run--no-group).
 Group names cannot be empty or contain whitespace.
 
 `groups` is a project configuration field. If it appears in a remote
@@ -1199,6 +1201,12 @@ Run only the `ci` group:
 prek run --all-files --group ci
 ```
 
+Run only hooks belonging to both `lint` and `ci`:
+
+```bash
+prek run --all-files --require-group lint --require-group ci
+```
+
 Run everything except formatters:
 
 ```bash
@@ -1207,13 +1215,16 @@ prek run --all-files --no-group format
 
 If a hook matches both `--group` and `--no-group`, `--no-group` wins.
 
-When `--group` or `--no-group` is used without `--stage`, group filtering is
-not constrained by hook stage. `prek run` collects normal file input for the
-manual command and runs every matching hook that can use that input. Hooks
-configured only for `commit-msg` and/or `prepare-commit-msg` require Git's
-message file argument, so they are ignored unless run in the corresponding
-hook stage. If every matching hook is ignored this way, `prek run` warns and
-fails.
+Repeated `--group` values use union semantics, while repeated
+`--require-group` values use intersection semantics. When combined, a hook must
+match at least one `--group`, every `--require-group`, and no `--no-group`.
+
+When any group selector is used without `--stage`, group filtering is not
+constrained by hook stage. `prek run` collects normal file input for the manual
+command and runs every matching hook that can use that input. Hooks configured
+only for `commit-msg` and/or `prepare-commit-msg` require Git's message file
+argument, so they are ignored unless run in the corresponding hook stage. If
+every matching hook is ignored this way, `prek run` warns and fails.
 
 ### `require_serial`
 

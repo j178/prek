@@ -44,6 +44,7 @@ pub(crate) async fn run(
     includes: Vec<String>,
     skips: Vec<String>,
     groups: Vec<String>,
+    required_groups: Vec<String>,
     no_groups: Vec<String>,
     hook_stage: Option<Stage>,
     selection: FileSelection,
@@ -76,7 +77,7 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let group_filters = GroupFilters::parse(&groups, &no_groups)?;
+    let group_filters = GroupFilters::parse(&groups, &required_groups, &no_groups)?;
     let has_group_filters = group_filters.has_filters();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 

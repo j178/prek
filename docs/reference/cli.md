@@ -243,6 +243,8 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-run--require-group"><a href="#prek-run--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to every specified group.</p>
+<p>Can be specified multiple times. Composes with <code>--group</code> and <code>--no-group</code>.</p>
 </dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
@@ -259,7 +261,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
 </dd><dt id="prek-run--stage"><a href="#prek-run--stage"><code>--stage</code></a>, <code>--hook-stage</code> <i>stage</i></dt><dd><p>The stage during which the hook is fired.</p>
-<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-push</code>) will run. When not specified and no group filter is active, this command starts with hooks eligible for <code>pre-commit</code>. If no hook is selected and the command named hook IDs, those same IDs are matched again against hooks configured for <code>manual</code>. With <code>--group</code> or <code>--no-group</code>, omitting the stage lets hooks from any configured stage match, using the default file input mode; hooks that only run at <code>commit-msg</code> or <code>prepare-commit-msg</code> are ignored.</p>
+<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-push</code>) will run. When not specified and no group filter is active, this command starts with hooks eligible for <code>pre-commit</code>. If no hook is selected and the command named hook IDs, those same IDs are matched again against hooks configured for <code>manual</code>. With <code>--group</code>, <code>--require-group</code>, or <code>--no-group</code>, omitting the stage lets hooks from any configured stage match, using the default file input mode; hooks that only run at <code>commit-msg</code> or <code>prepare-commit-msg</code> are ignored.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>manual</code></li>
@@ -373,6 +375,8 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-list--quiet"><a href="#prek-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-list--refresh"><a href="#prek-list--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-list--require-group"><a href="#prek-list--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Show hooks belonging to every specified group.</p>
+<p>Can be specified multiple times. Composes with <code>--group</code> and <code>--no-group</code>.</p>
 </dd><dt id="prek-list--skip"><a href="#prek-list--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
