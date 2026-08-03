@@ -21,6 +21,11 @@ filter = "test(dotnet::)"
 threads-required = "num-test-threads"
 
 [[profile.ci-language.overrides]]
+# Conda package operations can share user-level cache and lock state.
+filter = "test(conda::)"
+threads-required = "num-test-threads"
+
+[[profile.ci-language.overrides]]
 # Julia package operations share user-level depot and registry state.
 filter = "test(julia::)"
 threads-required = "num-test-threads"
