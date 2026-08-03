@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.12
+
+Released on 2026-08-03.
+
+### Enhancements
+
+- Add `--require-group` for hook group intersections ([#2472](https://github.com/j178/prek/pull/2472))
+- Align fast-path and builtin pre-commit hooks ([#2433](https://github.com/j178/prek/pull/2433))
+- Do not shuffle file list for verbose output ([#2431](https://github.com/j178/prek/pull/2431))
+- Improve top-level command descriptions ([#2429](https://github.com/j178/prek/pull/2429))
+- Install `uv` from Astral CDN and drop source racing ([#2455](https://github.com/j178/prek/pull/2455))
+- Make `prek install --force` bypass external hooks paths ([#2437](https://github.com/j178/prek/pull/2437))
+- Show builtin hook flags in verbose list output ([#2427](https://github.com/j178/prek/pull/2427))
+- Verify uv release archive checksums ([#2456](https://github.com/j178/prek/pull/2456))
+
+### Performance
+
+- Precompute file tags in parallel ([#2440](https://github.com/j178/prek/pull/2440))
+- Skip diffs after known hook modifications ([#2447](https://github.com/j178/prek/pull/2447))
+- Skip worktree diffs for read-only languages ([#2432](https://github.com/j178/prek/pull/2432))
+- Track builtin hook file changes directly ([#2404](https://github.com/j178/prek/pull/2404))
+
+### Bug fixes
+
+- Use full object IDs in diff snapshots ([#2448](https://github.com/j178/prek/pull/2448))
+
+### Documentation
+
+- Add a multi-repository configuration example ([#2434](https://github.com/j178/prek/pull/2434))
+- Rewrite benchmark documentation ([#2469](https://github.com/j178/prek/pull/2469))
+
+### Contributors
+
+- @j178
+- @BitWeaverDev
+- @allanlewis
+
 ## 0.4.11
 
 Released on 2026-07-25.
