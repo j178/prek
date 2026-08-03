@@ -8,9 +8,15 @@ use env_vars::{EnvVars, EnvVarsRead};
 pub const PRE_COMMIT_CONFIG_YAML: &str = ".pre-commit-config.yaml";
 pub const PRE_COMMIT_CONFIG_YML: &str = ".pre-commit-config.yml";
 pub const PREK_TOML: &str = "prek.toml";
+pub const PREK_DOT_TOML: &str = ".prek.toml";
 pub const PRE_COMMIT_HOOKS_YAML: &str = ".pre-commit-hooks.yaml";
 
-pub const CONFIG_FILENAMES: &[&str] = &[PREK_TOML, PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML];
+pub const CONFIG_FILENAMES: &[&str] = &[
+    PREK_TOML,
+    PREK_DOT_TOML,
+    PRE_COMMIT_CONFIG_YAML,
+    PRE_COMMIT_CONFIG_YML,
+];
 
 /// Prepend paths to the current $PATH, returning the joined result.
 ///

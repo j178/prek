@@ -8,7 +8,7 @@ use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{
-    PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
+    PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_DOT_TOML, PREK_TOML,
 };
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
@@ -3703,6 +3703,38 @@ fn alternate_config_file() -> Result<()> {
     warning: Multiple configuration files found (`prek.toml`, `.pre-commit-config.yaml`, `.pre-commit-config.yml`); using `[TEMP_DIR]/prek.toml`
     ");
 
+    context
+        .work_dir()
+        .child(PREK_DOT_TOML)
+        .write_str(indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "local-python-hook",
+            name = "local-python-hook",
+            language = "python",
+            entry = "python3 -c 'import sys; print(\"Hello, world!\")'"
+          }
+        ]
+    "#})?;
+    context.git_add(".");
+
+    // `prek.toml` still takes precedence over `.prek.toml`.
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-python-hook........................................................Passed
+    - hook id: local-python-hook
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
+    warning: Multiple configuration files found (`prek.toml`, `.prek.toml`, `.pre-commit-config.yaml`, `.pre-commit-config.yml`); using `[TEMP_DIR]/prek.toml`
+    ");
+
     Ok(())
 }
 
@@ -3715,6 +3747,45 @@ fn prek_toml() -> Result<()> {
     context
         .work_dir()
         .child(PREK_TOML)
+        .write_str(indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "local-python-hook",
+            name = "local-python-hook",
+            language = "python",
+            entry = "python3 -c 'import sys; print(\"Hello, world!\")'"
+          }
+        ]
+    "#})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-python-hook........................................................Passed
+    - hook id: local-python-hook
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Supports `.prek.toml` as configuration file.
+#[test]
+fn prek_dot_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child(PREK_DOT_TOML)
         .write_str(indoc::indoc! {r#"
         [[repos]]
         repo = "local"

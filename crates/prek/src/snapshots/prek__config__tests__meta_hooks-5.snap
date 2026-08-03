@@ -22,6 +22,7 @@ Config {
                                     GlobPatterns {
                                         patterns: [
                                             "prek.toml",
+                                            ".prek.toml",
                                             ".pre-commit-config.yaml",
                                             ".pre-commit-config.yml",
                                         ],
@@ -62,6 +63,7 @@ Config {
                                     GlobPatterns {
                                         patterns: [
                                             "prek.toml",
+                                            ".prek.toml",
                                             ".pre-commit-config.yaml",
                                             ".pre-commit-config.yml",
                                         ],

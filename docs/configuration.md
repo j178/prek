@@ -117,6 +117,7 @@ If you pass `--config` / `-c`, workspace discovery is disabled and only that sin
 `prek` recognizes the following configuration filenames:
 
 - `prek.toml` (TOML)
+- `.prek.toml` (TOML, dotfile alternate)
 - `.pre-commit-config.yaml` (YAML, preferred for pre-commit compatibility)
 - `.pre-commit-config.yml` (YAML, alternate)
 
@@ -130,8 +131,9 @@ In workspace mode, each project uses one of these filenames in its own directory
     The precedence order is:
 
     1. `prek.toml`
-    2. `.pre-commit-config.yaml`
-    3. `.pre-commit-config.yml`
+    2. `.prek.toml`
+    3. `.pre-commit-config.yaml`
+    4. `.pre-commit-config.yml`
 
 ### File format
 

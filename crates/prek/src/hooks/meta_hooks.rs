@@ -368,7 +368,7 @@ pub fn identity(_hook: &Hook, filenames: &[&Path]) -> HookOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
+    use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_DOT_TOML, PREK_TOML};
 
     fn regex_pattern(pattern: &str) -> FilePattern {
         FilePattern::regex(pattern).unwrap()
@@ -402,12 +402,14 @@ mod tests {
         assert!(apply_files.is_match(Path::new(PRE_COMMIT_CONFIG_YAML)));
         assert!(apply_files.is_match(Path::new(PRE_COMMIT_CONFIG_YML)));
         assert!(apply_files.is_match(Path::new(PREK_TOML)));
+        assert!(apply_files.is_match(Path::new(PREK_DOT_TOML)));
 
         let useless = MetaHook::from_id("check-useless-excludes").expect("known meta hook");
         let useless_files = useless.options.files.as_ref().expect("files should be set");
         assert!(useless_files.is_match(Path::new(PRE_COMMIT_CONFIG_YAML)));
         assert!(useless_files.is_match(Path::new(PRE_COMMIT_CONFIG_YML)));
         assert!(useless_files.is_match(Path::new(PREK_TOML)));
+        assert!(useless_files.is_match(Path::new(PREK_DOT_TOML)));
 
         let identity = MetaHook::from_id("identity").expect("known meta hook");
         assert!(identity.options.files.is_none());
