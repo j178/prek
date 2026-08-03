@@ -2047,6 +2047,7 @@ dependencies = [
  "serde_stacker",
  "shlex",
  "similar 3.1.1",
+ "ssl-certs",
  "strum",
  "target-lexicon",
  "tempfile",
@@ -2790,6 +2791,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "ssl-certs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bec6ae64c07c77e2f158e26315a42be873612fa4a0b94104ffaf5a165df4a40"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]
