@@ -438,7 +438,12 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
 pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd()?
         .arg("diff")
-        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
+        .hidden_args([
+            "--full-index",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--ignore-submodules",
+        ])
         .arg("--")
         .arg(path)
         // This diff is only used as a best-effort before/after snapshot of
