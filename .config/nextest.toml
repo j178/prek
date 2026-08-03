@@ -15,6 +15,12 @@ filter = "test(lua::)"
 threads-required = "num-test-threads"
 
 [[profile.ci-language.overrides]]
+# .NET named mutexes share /tmp/.dotnet/shm state between test processes on Unix.
+platform = "cfg(unix)"
+filter = "test(dotnet::)"
+threads-required = "num-test-threads"
+
+[[profile.ci-language.overrides]]
 # Julia package operations share user-level depot and registry state.
 filter = "test(julia::)"
 threads-required = "num-test-threads"
