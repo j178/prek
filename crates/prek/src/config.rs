@@ -1501,6 +1501,10 @@ where
     I: Iterator<Item = &'a str>,
 {
     for key in keys {
+        // Silently ignore extension keys starting with 'x-' (used for YAML anchors and custom metadata).
+        if key.starts_with("x-") {
+            continue;
+        }
         let path = if prefix.is_empty() {
             key.to_string()
         } else {

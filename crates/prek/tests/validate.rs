@@ -300,14 +300,18 @@ fn unexpected_keys_warning() {
     let context = TestContext::new();
 
     context.write_pre_commit_config(indoc::indoc! {r"
+        x-anchor: &anchor
+          language: system
         repos:
           - repo: local
             unexpected_repo_key: some_value
+            x-repo-key: some_value
             hooks:
               - id: test-hook
                 name: Test Hook
                 entry: echo test
-                language: system
+                <<: *anchor
+                x-hook-key: some_value
         unexpected_top_level_key: some_value
         another_unknown: test
         minimum_pre_commit_version: 1.0.0
@@ -355,6 +359,29 @@ fn unexpected_keys_warning() {
       - `repos[0].hooks[0].unexpected_hook_key_2`
       - `repos[0].hooks[0].unexpected_hook_key_3`
       - `repos[0].hooks[0].unexpected_hook_key_4`
+    success: All configs are valid
+    ");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        x-anchor: &anchor
+          language: system
+        repos:
+          - repo: local
+            x-repo-key: test
+            hooks:
+              - id: test-hook
+                name: Test Hook
+                entry: echo test
+                <<: *anchor
+                x-hook-key: test
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
     success: All configs are valid
     ");
 }
