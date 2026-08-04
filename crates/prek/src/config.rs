@@ -1501,6 +1501,9 @@ where
     I: Iterator<Item = &'a str>,
 {
     for key in keys {
+        if key.starts_with("x-") {
+            continue;
+        }
         let path = if prefix.is_empty() {
             key.to_string()
         } else {

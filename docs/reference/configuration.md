@@ -47,6 +47,10 @@ The cooldown age is computed from the tag creation timestamp for annotated tags,
 
     The legacy `auto_update` key is still accepted as an alias for `update`.
 
+## Extension keys (`x-`)
+
+Any key starting with `x-` (a lowercase `x` followed by a hyphen) is silently ignored by `prek` at any level of the configuration (top-level, repository entries, and hook entries). This supports custom metadata and YAML anchors without triggering unexpected key warnings.
+
 ## Top-level keys
 
 ### `repos` (required)
