@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -8,11 +7,9 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageBackend;
+use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
-use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
@@ -87,45 +84,21 @@ impl LanguageBackend for Conda {
         Ok(())
     }
 
-    async fn run(
+    fn execution_environment(
         &self,
-        store: &Store,
+        _store: &Store,
         hook: &InstalledHook,
-        filenames: &[&Path],
-        reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
-        let progress = reporter.on_run_start(hook, filenames.len());
-
+    ) -> Result<ExecutionEnvironment> {
         let env_dir = hook.env_path().expect("Conda must have env path");
         let new_path = conda_path(env_dir).context("Failed to join PATH")?;
-        let entry = hook.entry.resolve(Some(&new_path), store)?;
 
-        let run = async |batch: &[&Path]| {
-            let output = Cmd::new(&entry[0])
-                .current_dir(hook.work_dir())
-                .args(&entry[1..])
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::CONDA_PREFIX, env_dir)
-                .env_remove(EnvVars::PYTHONHOME)
-                .env_remove(EnvVars::VIRTUAL_ENV)
-                .envs(&hook.env)
-                .args(&hook.args)
-                .file_args(batch)
-                .check(false)
-                .stdin(Stdio::null())
-                .pty_output_with_sink(reporter.output_sink(progress))
-                .await?;
-
-            reporter.on_run_progress(progress, batch.len() as u64);
-
-            anyhow::Ok(output)
-        };
-
-        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
-
-        reporter.on_run_complete(progress);
-
-        Ok(output)
+        let mut environment = ExecutionEnvironment::new();
+        environment
+            .set_path(&new_path)
+            .env(EnvVars::CONDA_PREFIX, env_dir)
+            .env_remove(EnvVars::PYTHONHOME)
+            .env_remove(EnvVars::VIRTUAL_ENV);
+        Ok(environment)
     }
 }
 

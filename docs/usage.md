@@ -138,6 +138,34 @@ Inspect what would run without executing hooks or changing files:
 prek run --dry-run
 ```
 
+## Run a command in a hook environment
+
+Use `prek exec` to run an explicit command with the toolchain, installed
+dependencies, and environment variables prepared for one configured hook. The
+hook environment is prepared first if necessary:
+
+```bash
+prek exec prettier -- prettier --stdin-filepath src/app.js < src/app.js
+```
+
+The hook selector must resolve to exactly one hook. In a workspace, use a
+project-qualified selector when needed, for example:
+
+```bash
+prek exec frontend:prettier -- prettier --version
+```
+
+Everything after `--` is the command to execute. It replaces the hook's
+configured `entry` and `args`; `prek exec` does not select files, schedule other
+hooks, or stash changes. The child process keeps the current working directory
+after applying `--cd`, inherits the terminal's standard input, output, and error
+streams, and its exit status becomes the exit status of `prek exec`.
+
+Backends whose hook entry defines a special execution mechanism, including
+`docker`, `docker_image`, `fail`, `julia`, and `pygrep`, are not supported.
+Builtin and meta hooks are also unsupported; `prek exec` reports an error for
+these cases.
+
 ## Skip hooks for one commit
 
 When the repository's policy permits it, Git can bypass the `pre-commit` and

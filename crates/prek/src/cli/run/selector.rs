@@ -193,6 +193,23 @@ pub(crate) struct Selectors {
 }
 
 impl Selectors {
+    /// Create selectors for one explicit include without applying skip environment variables.
+    pub(crate) fn from_include(include: &str, workspace_root: &Path) -> Result<Self, Error> {
+        let include = parse_single_selector(
+            include,
+            workspace_root,
+            SelectorSource::CliArg,
+            RealFileSystem,
+        )?;
+        trace!("Include selector: `{include}`");
+
+        Ok(Self {
+            includes: vec![include],
+            skips: Vec::new(),
+            usage: Arc::default(),
+        })
+    }
+
     /// Load include and skip selectors from CLI args and environment variables.
     pub(crate) fn load(
         includes: &[String],

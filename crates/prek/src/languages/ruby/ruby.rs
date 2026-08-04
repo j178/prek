@@ -1,6 +1,5 @@
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -9,14 +8,11 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageBackend;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
 use crate::languages::ruby::installer::{RubyInstaller, query_ruby_version};
-use crate::process::Cmd;
-use crate::run::run_by_batch;
+use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
@@ -121,57 +117,27 @@ impl LanguageBackend for Ruby {
         Ok(())
     }
 
-    async fn run(
+    fn execution_environment(
         &self,
-        store: &Store,
+        _store: &Store,
         hook: &InstalledHook,
-        filenames: &[&Path],
-        reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
-        let progress = reporter.on_run_start(hook, filenames.len());
-
+    ) -> Result<ExecutionEnvironment> {
         let env_dir = hook.env_path().expect("Ruby hook must have env path");
-
-        // Prepare PATH
         let gem_home = gem_home(env_dir);
         let gem_bin = gem_bin(env_dir);
         let ruby_bin = hook
             .toolchain_dir()
             .expect("Ruby toolchain should have parent");
-
         let new_path = prepend_paths(&[&gem_bin, ruby_bin]).context("Failed to join PATH")?;
 
-        // Resolve entry point
-        let entry = hook.entry.resolve(Some(&new_path), store)?;
-
-        // Execute in batches
-        let run = async |batch: &[&Path]| {
-            let output = Cmd::new(&entry[0])
-                .current_dir(hook.work_dir())
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::GEM_HOME, &gem_home)
-                .env(EnvVars::BUNDLE_IGNORE_CONFIG, "1")
-                .env_remove(EnvVars::GEM_PATH)
-                .env_remove(EnvVars::BUNDLE_GEMFILE)
-                .envs(&hook.env)
-                .args(&entry[1..])
-                .args(&hook.args)
-                .file_args(batch)
-                .check(false)
-                .stdin(Stdio::null())
-                .pty_output_with_sink(reporter.output_sink(progress))
-                .await?;
-
-            reporter.on_run_progress(progress, batch.len() as u64);
-
-            anyhow::Ok(output)
-        };
-
-        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
-
-        reporter.on_run_complete(progress);
-
-        Ok(output)
+        let mut environment = ExecutionEnvironment::new();
+        environment
+            .set_path(&new_path)
+            .env(EnvVars::GEM_HOME, &gem_home)
+            .env(EnvVars::BUNDLE_IGNORE_CONFIG, "1")
+            .env_remove(EnvVars::GEM_PATH)
+            .env_remove(EnvVars::BUNDLE_GEMFILE);
+        Ok(environment)
     }
 }
 

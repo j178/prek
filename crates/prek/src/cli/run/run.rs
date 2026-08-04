@@ -88,12 +88,7 @@ pub(crate) async fn run(
     let reporter = HookInitReporter::new(printer);
     let hooks = {
         let _lock = store.lock_async().await?;
-        store.track_configs(
-            workspace
-                .projects()
-                .iter()
-                .map(|project| project.config_file()),
-        )?;
+        store.track_configs(workspace.config_files())?;
 
         workspace
             .init_hooks(

@@ -17,6 +17,7 @@ mod cache_clean;
 mod cache_gc;
 mod cache_size;
 mod completion;
+mod exec;
 mod hook_impl;
 mod identify;
 mod install;
@@ -36,6 +37,7 @@ pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
+pub(crate) use exec::exec;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
 pub(crate) use install::{init_template_dir, install, prepare_hooks, uninstall};
@@ -259,6 +261,8 @@ pub(crate) enum Command {
     PrepareHooks(PrepareHooksArgs),
     /// Run configured hooks.
     Run(Box<RunArgs>),
+    /// Run a command in the environment prepared for a configured hook.
+    Exec(ExecArgs),
     /// List configured hooks.
     List(ListArgs),
     /// Uninstall prek Git hook shims.
@@ -293,6 +297,30 @@ pub(crate) enum Command {
     /// Manage the prek installation.
     #[command(name = "self")]
     Self_(SelfNamespace),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ExecArgs {
+    /// Hook whose execution environment should be used.
+    ///
+    /// Supports `hook-id` and `project-path:hook-id` selectors and must resolve
+    /// to exactly one configured hook.
+    #[arg(
+        value_name = "HOOK",
+        value_hint = ValueHint::Other,
+        add = ArgValueCompleter::new(selector_completer)
+    )]
+    pub(crate) selector: String,
+
+    /// Command and arguments to execute.
+    #[arg(
+        value_name = "COMMAND",
+        required = true,
+        num_args = 1..,
+        last = true,
+        value_hint = ValueHint::CommandWithArguments
+    )]
+    pub(crate) command: Vec<OsString>,
 }
 
 #[derive(Debug, Args)]

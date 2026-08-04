@@ -1,6 +1,5 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -8,14 +7,11 @@ use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::cli::run::HookRunReporter;
 use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageBackend;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
-use crate::process::Cmd;
-use crate::run::run_by_batch;
+use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
@@ -115,59 +111,31 @@ impl LanguageBackend for Golang {
         Ok(())
     }
 
-    async fn run(
+    fn execution_environment(
         &self,
         store: &Store,
         hook: &InstalledHook,
-        filenames: &[&Path],
-        reporter: &HookRunReporter,
-    ) -> anyhow::Result<(i32, Vec<u8>)> {
-        let progress = reporter.on_run_start(hook, filenames.len());
-
-        let env_dir = hook.env_path().expect("Node hook must have env path");
-
+    ) -> anyhow::Result<ExecutionEnvironment> {
+        let env_dir = hook.env_path().expect("Go hook must have env path");
         let go_bin = bin_dir(env_dir);
         let go_tools = store.tools_path(ToolBucket::Go);
         let go_root_bin = hook.toolchain_dir().expect("Go root should exist");
         let go_root = go_root_bin.parent().expect("Go root should exist");
         let go_cache = store.cache_path(CacheBucket::Go);
-
-        // Only set GOROOT and GOPATH if using the Go installed by prek
-        let go_envs = if go_root_bin.starts_with(go_tools) {
-            vec![(EnvVars::GOROOT, go_root), (EnvVars::GOPATH, &go_cache)]
-        } else {
-            vec![]
-        };
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
-        let entry = hook.entry.resolve(Some(&new_path), store)?;
-        let run = async |batch: &[&Path]| {
-            let output = Cmd::new(&entry[0])
-                .current_dir(hook.work_dir())
-                .args(&entry[1..])
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::GOTOOLCHAIN, "local")
-                .env(EnvVars::GOBIN, &go_bin)
-                .env(EnvVars::GOFLAGS, "-modcacherw")
-                .envs(go_envs.iter().copied())
-                .envs(&hook.env)
-                .args(&hook.args)
-                .file_args(batch)
-                .check(false)
-                .stdin(Stdio::null())
-                .pty_output_with_sink(reporter.output_sink(progress))
-                .await?;
-
-            reporter.on_run_progress(progress, batch.len() as u64);
-
-            anyhow::Ok(output)
-        };
-
-        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
-
-        reporter.on_run_complete(progress);
-
-        Ok(output)
+        let mut environment = ExecutionEnvironment::new();
+        environment
+            .set_path(&new_path)
+            .env(EnvVars::GOTOOLCHAIN, "local")
+            .env(EnvVars::GOBIN, &go_bin)
+            .env(EnvVars::GOFLAGS, "-modcacherw");
+        if go_root_bin.starts_with(go_tools) {
+            environment
+                .env(EnvVars::GOROOT, go_root)
+                .env(EnvVars::GOPATH, &go_cache);
+        }
+        Ok(environment)
     }
 }
 

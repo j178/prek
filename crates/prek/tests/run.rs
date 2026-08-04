@@ -3356,6 +3356,7 @@ fn selectors_completion() -> Result<()> {
     install	Install prek Git hook shims
     prepare-hooks	Prepare environments for configured hooks
     run	Run configured hooks
+    exec	Run a command in the environment prepared for a configured hook
     list	List configured hooks
     uninstall	Uninstall prek Git hook shims
     validate-config	Validate prek configuration files
