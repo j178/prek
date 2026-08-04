@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Stdio;
 use std::str;
 use std::sync::Arc;
 
@@ -11,15 +10,13 @@ use tracing::debug;
 use url::Url;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::cli::run::HookRunReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::LanguageBackend;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir, query_node_version};
 use crate::languages::node::version::EXTRA_KEY_LTS;
+use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
-use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
@@ -213,49 +210,28 @@ impl LanguageBackend for Node {
         Ok(())
     }
 
-    async fn run(
+    fn execution_environment(
         &self,
         store: &Store,
         hook: &InstalledHook,
-        filenames: &[&Path],
-        reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
-        let progress = reporter.on_run_start(hook, filenames.len());
-
+    ) -> Result<ExecutionEnvironment> {
         let env_dir = hook.env_path().expect("Node must have env path");
         let node_bin = hook.toolchain_dir().expect("Node binary must have parent");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), node_bin]).context("Failed to join PATH")?;
-
-        let entry = hook.entry.resolve(Some(&new_path), store)?;
         let npm_cache = store.cache_path(CacheBucket::Npm);
 
-        let run = async |batch: &[&Path]| {
-            let mut cmd = Cmd::new(&entry[0]);
-            cmd.current_dir(hook.work_dir())
-                .args(&entry[1..])
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::NODE_PATH, lib_dir(env_dir))
-                .envs(&hook.env);
-            apply_npm_config_env(&mut cmd, env_dir, &npm_cache);
-            let output = cmd
-                .args(&hook.args)
-                .file_args(batch)
-                .check(false)
-                .stdin(Stdio::null())
-                .pty_output_with_sink(reporter.output_sink(progress))
-                .await?;
-
-            reporter.on_run_progress(progress, batch.len() as u64);
-
-            anyhow::Ok(output)
-        };
-
-        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
-
-        reporter.on_run_complete(progress);
-
-        Ok(output)
+        let mut environment = ExecutionEnvironment::new();
+        environment
+            .set_path(&new_path)
+            .env(EnvVars::NODE_PATH, lib_dir(env_dir));
+        for key in NPM_CONFIG_ENVS_TO_REMOVE {
+            environment.env_remove(key);
+        }
+        environment
+            .env(NPM_CONFIG_PREFIX_ENV, env_dir)
+            .env(NPM_CONFIG_CACHE_ENV, &npm_cache);
+        Ok(environment)
     }
 }
 

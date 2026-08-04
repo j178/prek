@@ -15,6 +15,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git hook shims</p></dd>
 <dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for configured hooks</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run configured hooks</p></dd>
+<dt><a href="#prek-exec"><code>prek exec</code></a></dt><dd><p>Run a command in the environment prepared for a configured hook</p></dd>
 <dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List configured hooks</p></dd>
 <dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek Git hook shims</p></dd>
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate prek configuration files</p></dd>
@@ -278,6 +279,44 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-run--to-ref"><a href="#prek-run--to-ref"><code>--to-ref</code></a>, <code>--origin</code>, <code>-o</code> <i>to-ref</i></dt><dd><p>The destination ref in a <code>from_ref...to_ref</code> diff expression. Defaults to <code>HEAD</code> if <code>from_ref</code> is specified</p>
 </dd><dt id="prek-run--verbose"><a href="#prek-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-run--version"><a href="#prek-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd></dl>
+
+## prek exec
+
+Run a command in the environment prepared for a configured hook
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek exec [OPTIONS] <HOOK> -- <COMMAND>...
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="prek-exec--selector"><a href="#prek-exec--selector"><code>HOOK</code></a></dt><dd><p>Hook whose execution environment should be used.</p>
+<p>Supports <code>hook-id</code> and <code>project-path:hook-id</code> selectors and must resolve to exactly one configured hook.</p>
+</dd><dt id="prek-exec--command"><a href="#prek-exec--command"><code>COMMAND</code></a></dt><dd><p>Command and arguments to execute</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="prek-exec--cd"><a href="#prek-exec--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-exec--color"><a href="#prek-exec--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="prek-exec--config"><a href="#prek-exec--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-exec--help"><a href="#prek-exec--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-exec--log-file"><a href="#prek-exec--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-exec--no-progress"><a href="#prek-exec--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+</dd><dt id="prek-exec--quiet"><a href="#prek-exec--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-exec--refresh"><a href="#prek-exec--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-exec--verbose"><a href="#prek-exec--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-exec--version"><a href="#prek-exec--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek list

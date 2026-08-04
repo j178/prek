@@ -298,6 +298,19 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Exec(args) => {
+            show_settings!(args);
+
+            cli::exec(
+                &store,
+                cli.globals.config,
+                args.selector,
+                args.command,
+                cli.globals.refresh,
+                printer,
+            )
+            .await
+        }
         Command::List(args) => {
             show_settings!(args);
 

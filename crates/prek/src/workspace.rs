@@ -970,6 +970,11 @@ impl Workspace {
         &self.projects
     }
 
+    /// Iterate over configuration files for the selected projects.
+    pub(crate) fn config_files(&self) -> impl Iterator<Item = &Path> {
+        self.projects.iter().map(|project| project.config_file())
+    }
+
     pub(crate) fn all_projects(&self) -> &[Arc<Project>] {
         &self.all_projects
     }
@@ -1030,11 +1035,7 @@ impl Workspace {
 
     /// Check if all configuration files are staged in git.
     pub(crate) async fn check_configs_staged(&self) -> Result<()> {
-        let config_files = self
-            .projects
-            .iter()
-            .map(|project| project.config_file())
-            .collect::<Vec<_>>();
+        let config_files = self.config_files().collect::<Vec<_>>();
         let non_staged = git::files_not_staged(&config_files).await?;
 
         let git_root = GIT_ROOT.as_ref()?;

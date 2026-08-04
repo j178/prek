@@ -230,6 +230,12 @@ impl TestContext {
         command
     }
 
+    pub fn exec(&self) -> Command {
+        let mut command = self.command();
+        command.arg("exec");
+        command
+    }
+
     pub fn validate_config(&self) -> Command {
         let mut command = self.command();
         command.arg("validate-config");

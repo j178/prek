@@ -5,6 +5,56 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestContext, cmd_snapshot, make_executable, remove_bin_from_path};
 
+#[test]
+fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let package = context.work_dir().child("node-env-tool");
+    package.create_dir_all()?;
+    package.child("package.json").write_str(indoc::indoc! {r#"
+        {
+          "name": "node-env-tool",
+          "version": "1.0.0",
+          "bin": {
+            "node-env-tool": "cli.js"
+          }
+        }
+    "#})?;
+    let cli = package.child("cli.js");
+    cli.write_str(indoc::indoc! {r#"
+        #!/usr/bin/env node
+        console.log("exec node env ok");
+    "#})?;
+    make_executable(cli.path())?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: command-that-must-not-run
+                additional_dependencies: ["./node-env-tool"]
+    "#});
+
+    cmd_snapshot!(context.filters(), context.exec().args([
+        "node",
+        "--",
+        "node-env-tool",
+    ]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    exec node env ok
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Test `language_version` parsing and auto downloading works correctly.
 /// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
 #[test]

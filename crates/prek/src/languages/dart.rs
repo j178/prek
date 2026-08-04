@@ -14,7 +14,6 @@ use std::collections::BTreeMap;
 use std::env::consts::EXE_EXTENSION;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -24,11 +23,10 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageBackend;
+use crate::hook_entry::PreparedHookEntry;
+use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
-use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
@@ -151,21 +149,32 @@ impl LanguageBackend for Dart {
         Ok(())
     }
 
-    async fn run(
+    fn execution_environment(
+        &self,
+        _store: &Store,
+        hook: &InstalledHook,
+    ) -> Result<ExecutionEnvironment> {
+        let env_dir = hook.env_path().expect("Dart must have env path");
+        let new_path = prepend_paths(&[&bin_path(env_dir)]).context("Failed to join PATH")?;
+
+        let mut environment = ExecutionEnvironment::new();
+        environment
+            .set_path(&new_path)
+            .env(EnvVars::PUB_CACHE, env_dir);
+        Ok(environment)
+    }
+
+    fn prepare_hook_entry(
         &self,
         store: &Store,
         hook: &InstalledHook,
-        filenames: &[&Path],
-        reporter: &HookRunReporter,
-    ) -> Result<(i32, Vec<u8>)> {
-        let progress = reporter.on_run_start(hook, filenames.len());
-
+        environment: &ExecutionEnvironment,
+    ) -> Result<PreparedHookEntry> {
         let env_dir = hook.env_path().expect("Dart must have env path");
-        let bin_path = bin_path(env_dir);
-        let new_path = prepend_paths(&[&bin_path]).context("Failed to join PATH")?;
         let packages_path = package_config_path(env_dir);
-
-        let mut entry = hook.entry.resolve(Some(&new_path), store)?;
+        let mut entry = hook
+            .entry
+            .resolve(environment.path(hook), hook.work_dir(), store)?;
         // `dart pub get` writes the hook env's dependency graph here. Dart's
         // VM-level `--packages` flag makes `Platform.packageConfig` and package
         // imports resolve against this env instead of the hook work dir.
@@ -177,31 +186,7 @@ impl LanguageBackend for Dart {
                 format!("--packages={}", packages_path.display()).into(),
             );
         }
-
-        let run = async |batch: &[&Path]| {
-            let output = Cmd::new(&entry[0])
-                .current_dir(hook.work_dir())
-                .args(&entry[1..])
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::PUB_CACHE, env_dir)
-                .envs(&hook.env)
-                .args(&hook.args)
-                .file_args(batch)
-                .check(false)
-                .stdin(Stdio::null())
-                .pty_output_with_sink(reporter.output_sink(progress))
-                .await?;
-
-            reporter.on_run_progress(progress, batch.len() as u64);
-
-            anyhow::Ok(output)
-        };
-
-        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
-
-        reporter.on_run_complete(progress);
-
-        Ok(output)
+        Ok(entry)
     }
 }
 
