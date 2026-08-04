@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.13
+
+Released on 2026-08-04.
+
+### Enhancements
+
+- Silently ignore `x-` extension keys in configuration files ([#2482](https://github.com/j178/prek/pull/2482))
+- Add `prek exec` for running commands in a hook environment ([#2478](https://github.com/j178/prek/pull/2478))
+
+### Documentation
+
+- Refresh "Why prek" highlights ([#2474](https://github.com/j178/prek/pull/2474))
+
+### Contributors
+
+- @j178
+- @udaya2899
+
 ## 0.4.12
 
 Released on 2026-08-03.
