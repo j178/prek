@@ -26,7 +26,6 @@ pub(crate) struct LanguageRequest {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum VersionRequest {
-    Any,
     Bun(BunRequest),
     Dotnet(DotnetRequest),
     Deno(DenoRequest),
@@ -48,7 +47,6 @@ macro_rules! impl_language_version_request {
         impl LanguageVersionRequest for $request {
             fn from_version_request(request: &VersionRequest) -> &Self {
                 match request {
-                    VersionRequest::Any => &Self::Any,
                     VersionRequest::$variant(request) => request,
                     _ => unreachable!("language-specific version request mismatch"),
                 }
@@ -65,15 +63,6 @@ impl_language_version_request!(RubyRequest, Ruby);
 impl_language_version_request!(NodeRequest, Node);
 impl_language_version_request!(PythonRequest, Python);
 impl_language_version_request!(RustRequest, Rust);
-
-impl Default for LanguageRequest {
-    fn default() -> Self {
-        Self {
-            version: VersionRequest::Any,
-            allows_download: true,
-        }
-    }
-}
 
 impl LanguageRequest {
     pub(crate) fn is_any(&self) -> bool {
@@ -122,9 +111,10 @@ impl LanguageRequest {
 
 impl VersionRequest {
     pub(crate) fn parse(lang: Language, request: &str) -> Result<Self, Error> {
-        if request == "default" || request == "system" || request.is_empty() {
-            return Ok(Self::Any);
-        }
+        let request = match request {
+            "default" | "system" => "",
+            request => request,
+        };
 
         Ok(match lang {
             Language::Bun => Self::Bun(request.parse()?),
@@ -156,7 +146,6 @@ impl VersionRequest {
 
     fn is_any(&self) -> bool {
         match self {
-            Self::Any => true,
             Self::Bun(req) => req.is_any(),
             Self::Dotnet(req) => req.is_any(),
             Self::Deno(req) => req.is_any(),
@@ -165,13 +154,12 @@ impl VersionRequest {
             Self::Python(req) => req.is_any(),
             Self::Ruby(req) => req.is_any(),
             Self::Rust(req) => req.is_any(),
-            Self::Semver(_) => false,
+            Self::Semver(req) => req.is_any(),
         }
     }
 
     fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
-            Self::Any => true,
             Self::Bun(req) => req.satisfied_by(install_info),
             Self::Dotnet(req) => req.satisfied_by(install_info),
             Self::Deno(req) => req.satisfied_by(install_info),
@@ -186,21 +174,35 @@ impl VersionRequest {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct SemverRequest(semver::VersionReq);
+pub(crate) enum SemverRequest {
+    Any,
+    Range(semver::VersionReq),
+}
 
 impl FromStr for SemverRequest {
     type Err = Error;
 
     fn from_str(request: &str) -> Result<Self, Self::Err> {
+        if request.is_empty() {
+            return Ok(Self::Any);
+        }
+
         semver::VersionReq::parse(request)
-            .map(SemverRequest)
+            .map(Self::Range)
             .map_err(|_| Error::InvalidVersion(request.to_string()))
     }
 }
 
 impl SemverRequest {
+    fn is_any(&self) -> bool {
+        matches!(self, Self::Any)
+    }
+
     fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        self.0.matches(&install_info.language_version)
+        match self {
+            Self::Any => true,
+            Self::Range(request) => request.matches(&install_info.language_version),
+        }
     }
 }
 
@@ -209,4 +211,31 @@ pub(crate) fn try_into_u64_slice(version: &str) -> Result<Vec<u64>, std::num::Pa
         .split('.')
         .map(str::parse::<u64>)
         .collect::<Result<Vec<_>, _>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LanguageRequest, SemverRequest, VersionRequest};
+    use crate::config::Language;
+    use crate::languages::python::PythonRequest;
+
+    #[test]
+    fn default_request_preserves_language() {
+        let request = LanguageRequest::parse(Language::Python, "default").unwrap();
+
+        assert_eq!(
+            request.version_request(),
+            &VersionRequest::Python(PythonRequest::Any)
+        );
+    }
+
+    #[test]
+    fn fallback_default_uses_semver_any() {
+        let request = LanguageRequest::parse(Language::Conda, "default").unwrap();
+
+        assert_eq!(
+            request.version_request(),
+            &VersionRequest::Semver(SemverRequest::Any)
+        );
+    }
 }
