@@ -430,7 +430,7 @@ mod tests {
         uses_prek_managed_store: bool,
     ) {
         let (_temp, uv, store, info) = setup_test_install();
-        let request = LanguageRequest::default();
+        let request = LanguageRequest::parse(Language::Python, "").unwrap();
         let cmd = Python::create_venv_command(&uv, &store, &info, &request, attempt);
         let args = cmd
             .get_args()
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn create_venv_command_removes_uv_system_python_override() {
         let (_temp, uv, store, info) = setup_test_install();
-        let request = LanguageRequest::default();
+        let request = LanguageRequest::parse(Language::Python, "").unwrap();
         let cmd = Python::create_venv_command(&uv, &store, &info, &request, VenvAttempt::External);
         let envs = env_map(&cmd);
 
