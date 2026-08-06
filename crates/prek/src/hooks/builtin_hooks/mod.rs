@@ -51,6 +51,7 @@ pub(crate) enum BuiltinHooks {
     CheckVcsPermalinks,
     CheckXml,
     CheckYaml,
+    DenyFilenamePattern,
     DenyPattern,
     DestroyedSymlinks,
     DetectPrivateKey,
@@ -61,6 +62,7 @@ pub(crate) enum BuiltinHooks {
     MixedLineEnding,
     NoCommitToBranch,
     PrettyFormatJson,
+    RequireFilenamePattern,
     RequirePattern,
     RequirementsTxtFixer,
     TrailingWhitespace,
@@ -73,6 +75,9 @@ impl BuiltinHooks {
             Self::CheckMergeConflict => check_merge_conflict::Args::command(),
             Self::CheckVcsPermalinks => check_vcs_permalinks::Args::command(),
             Self::CheckYaml => check_yaml::Args::command(),
+            Self::DenyFilenamePattern | Self::RequireFilenamePattern => {
+                pattern::FilenameArgs::command()
+            }
             Self::DenyPattern | Self::RequirePattern => pattern::Args::command(),
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
@@ -117,6 +122,9 @@ impl BuiltinHooks {
             Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks::run(hook, filenames)),
             Self::CheckXml => Box::pin(check_xml::run(hook, filenames)),
             Self::CheckYaml => Box::pin(check_yaml::run(hook, filenames)),
+            Self::DenyFilenamePattern => Box::pin(std::future::ready(
+                pattern::deny_filename_pattern(hook, filenames),
+            )),
             Self::DenyPattern => Box::pin(pattern::deny_pattern(hook, filenames)),
             Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
             Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
@@ -127,6 +135,9 @@ impl BuiltinHooks {
             Self::MixedLineEnding => Box::pin(mixed_line_ending::run(hook, filenames)),
             Self::NoCommitToBranch => Box::pin(no_commit_to_branch::run(hook)),
             Self::PrettyFormatJson => Box::pin(pretty_format_json::run(hook, filenames)),
+            Self::RequireFilenamePattern => Box::pin(std::future::ready(
+                pattern::require_filename_pattern(hook, filenames),
+            )),
             Self::RequirePattern => Box::pin(pattern::require_pattern(hook, filenames)),
             Self::RequirementsTxtFixer => Box::pin(requirements_txt_fixer::run(hook, filenames)),
             Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace::run(hook, filenames)),
@@ -319,6 +330,20 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
+            BuiltinHooks::DenyFilenamePattern => BuiltinHook {
+                id: "deny-filename-pattern".to_string(),
+                name: "deny filename patterns".to_string(),
+                entry: "deny-filename-pattern".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Fails if any selected filename matches a regular expression."
+                            .to_string(),
+                    ),
+                    ..Default::default()
+                },
+            },
             BuiltinHooks::DenyPattern => BuiltinHook {
                 id: "deny-pattern".to_string(),
                 name: "deny patterns".to_string(),
@@ -452,6 +477,20 @@ impl BuiltinHook {
                     description: Some("Checks that JSON files are pretty-formatted.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::RequireFilenamePattern => BuiltinHook {
+                id: "require-filename-pattern".to_string(),
+                name: "require filename patterns".to_string(),
+                entry: "require-filename-pattern".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Fails if any selected filename does not match a regular expression."
+                            .to_string(),
+                    ),
                     ..Default::default()
                 },
             },

@@ -23,6 +23,7 @@ fn list_builtins_basic() {
     check-vcs-permalinks
     check-xml
     check-yaml
+    deny-filename-pattern
     deny-pattern
     destroyed-symlinks
     detect-private-key
@@ -33,6 +34,7 @@ fn list_builtins_basic() {
     mixed-line-ending
     no-commit-to-branch
     pretty-format-json
+    require-filename-pattern
     require-pattern
     requirements-txt-fixer
     trailing-whitespace
@@ -97,6 +99,11 @@ fn list_builtins_verbose() {
       flags:
         -m, --allow-multiple-documents  Allow multiple YAML documents [alias: --multi]
 
+    deny-filename-pattern
+      Fails if any selected filename matches a regular expression.
+      flags:
+        -i, --ignore-case  Match patterns case-insensitively
+
     deny-pattern
       Fails if any file contains a matching regular expression.
       flags:
@@ -144,6 +151,11 @@ fn list_builtins_verbose() {
             --no-ensure-ascii  Keep non-ASCII characters as UTF-8
             --no-sort-keys     Preserve object key order
             --top-keys <KEYS>  Object keys to move to the front, comma-separated
+
+    require-filename-pattern
+      Fails if any selected filename does not match a regular expression.
+      flags:
+        -i, --ignore-case  Match patterns case-insensitively
 
     require-pattern
       Fails if any file does not contain a matching regular expression.
@@ -240,6 +252,11 @@ fn list_builtins_json() {
         "description": "Checks YAML files for parseable syntax."
       },
       {
+        "id": "deny-filename-pattern",
+        "name": "deny filename patterns",
+        "description": "Fails if any selected filename matches a regular expression."
+      },
+      {
         "id": "deny-pattern",
         "name": "deny patterns",
         "description": "Fails if any file contains a matching regular expression."
@@ -288,6 +305,11 @@ fn list_builtins_json() {
         "id": "pretty-format-json",
         "name": "pretty format json",
         "description": "Checks that JSON files are pretty-formatted."
+      },
+      {
+        "id": "require-filename-pattern",
+        "name": "require filename patterns",
+        "description": "Fails if any selected filename does not match a regular expression."
       },
       {
         "id": "require-pattern",

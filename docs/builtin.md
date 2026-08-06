@@ -113,7 +113,9 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-vcs-permalinks`](#check-vcs-permalinks) (Ensures that links to VCS websites are permalinks.)
 - [`check-yaml`](#check-yaml) (Checks YAML files for parseable syntax.)
 - [`check-xml`](#check-xml) (Checks XML files for parseable syntax.)
+- [`deny-filename-pattern`](#deny-filename-pattern) (Fails if any selected filename matches a regular expression.)
 - [`deny-pattern`](#deny-pattern) (Fails if any file contains a matching regular expression.)
+- [`require-filename-pattern`](#require-filename-pattern) (Fails if any selected filename does not match a regular expression.)
 - [`require-pattern`](#require-pattern) (Fails if any file does not contain a matching regular expression.)
 - [`mixed-line-ending`](#mixed-line-ending) (Replaces or checks mixed line endings.)
 - [`check-symlinks`](#check-symlinks) (Checks for symlinks which do not point to anything.)
@@ -427,6 +429,33 @@ Attempts to load all XML files to verify syntax.
 
 ---
 
+#### `deny-filename-pattern`
+
+Fails when the final path component (the basename) of any selected file matches a configured regular expression. Patterns use the [Rust `regex` syntax](https://docs.rs/regex/latest/regex/#syntax). When multiple patterns are provided, the hook fails when a basename matches any one of them.
+
+The standard `files`, `exclude`, and type filters select which project-relative paths are checked. The patterns passed to this hook are then matched only against each selected basename.
+
+**Supported arguments**
+
+- `PATTERN...` (required)
+    - Positional regular expressions to deny.
+    - Use `--` before a pattern that begins with `-`.
+- `-i`, `--ignore-case`
+    - Match all patterns case-insensitively.
+
+Each matching file is reported once as `path: filename matches a denied pattern`.
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: deny-filename-pattern
+        name: disallow spaces in filenames
+        args: ['\s']
+```
+
+---
+
 #### `deny-pattern`
 
 Fails when any selected text file matches a configured regular expression.
@@ -454,6 +483,27 @@ repos:
         name: disallow wildcard imports
         args: ['^\s*#import\s+.+:\s*\*']
         files: \.typ$
+```
+
+---
+
+#### `require-filename-pattern`
+
+Fails when the final path component (the basename) of any selected file does not match at least one configured regular expression. This is a per-file requirement: every selected basename must match, while different basenames may match different patterns.
+
+`require-filename-pattern` supports the same positional `PATTERN...` and `-i` / `--ignore-case` arguments as [`deny-filename-pattern`](#deny-filename-pattern). Matching uses search semantics; use `^` and `$` when the pattern must match the entire basename. Files without a match are reported as `path: filename does not match any required pattern`.
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: require-filename-pattern
+        name: python tests naming
+        args:
+          - '^test_.*\.py$'
+          - '^__init__\.py$'
+          - '^conftest\.py$'
+        files: '(^|/)tests/.+\.py$'
 ```
 
 ---
