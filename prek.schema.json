@@ -1045,6 +1045,7 @@
         "check-vcs-permalinks",
         "check-xml",
         "check-yaml",
+        "deny-filename-pattern",
         "deny-pattern",
         "destroyed-symlinks",
         "detect-private-key",
@@ -1055,6 +1056,7 @@
         "mixed-line-ending",
         "no-commit-to-branch",
         "pretty-format-json",
+        "require-filename-pattern",
         "require-pattern",
         "requirements-txt-fixer",
         "trailing-whitespace"

@@ -27,6 +27,18 @@ pub(crate) struct Args {
     patterns: Vec<String>,
 }
 
+#[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+pub(crate) struct FilenameArgs {
+    /// Match patterns case-insensitively.
+    #[arg(short = 'i', long)]
+    ignore_case: bool,
+    #[arg(required = true, value_name = "PATTERN")]
+    patterns: Vec<String>,
+}
+
 #[derive(Clone, Copy)]
 enum MatchPolicy {
     Deny,
@@ -46,27 +58,6 @@ struct Matcher {
 
 impl Matcher {
     fn new(args: &Args) -> Result<Self> {
-        let syntax = syntax::Config::new()
-            // Enable case-insensitive matching for `-i` / `--ignore-case`.
-            .case_insensitive(args.ignore_case)
-            // Let `^` and `$` match line boundaries for `-m` / `--multiline`.
-            .multi_line(args.multiline)
-            // Let `.` match newlines for `-m` / `--multiline`.
-            .dot_matches_new_line(args.multiline)
-            // Compile byte-oriented patterns so arbitrary file bytes can match.
-            .utf8(false);
-        let regex = Regex::builder()
-            .configure(
-                Regex::config()
-                    // Return the earliest match, using pattern order to break ties.
-                    .match_kind(MatchKind::LeftmostFirst)
-                    // Allow empty matches at any byte offset, as byte regexes do.
-                    .utf8_empty(false),
-            )
-            .syntax(syntax)
-            .build_many(&args.patterns)
-            .context("Failed to compile regex patterns")?;
-
         let scan_mode = if args.multiline {
             ScanMode::Multiline
         } else {
@@ -74,10 +65,37 @@ impl Matcher {
         };
 
         Ok(Self {
-            regex: Arc::new(regex),
+            regex: Arc::new(build_regex(
+                &args.patterns,
+                args.ignore_case,
+                args.multiline,
+            )?),
             scan_mode,
         })
     }
+}
+
+fn build_regex(patterns: &[String], ignore_case: bool, multiline: bool) -> Result<Regex> {
+    let syntax = syntax::Config::new()
+        // Enable case-insensitive matching for `-i` / `--ignore-case`.
+        .case_insensitive(ignore_case)
+        // Let `^` and `$` match line boundaries for `-m` / `--multiline`.
+        .multi_line(multiline)
+        // Let `.` match newlines for `-m` / `--multiline`.
+        .dot_matches_new_line(multiline)
+        // Compile byte-oriented patterns so arbitrary file bytes can match.
+        .utf8(false);
+    Regex::builder()
+        .configure(
+            Regex::config()
+                // Return the earliest match, using pattern order to break ties.
+                .match_kind(MatchKind::LeftmostFirst)
+                // Allow empty matches at any byte offset, as byte regexes do.
+                .utf8_empty(false),
+        )
+        .syntax(syntax)
+        .build_many(patterns)
+        .context("Failed to compile regex patterns")
 }
 
 pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
@@ -86,6 +104,42 @@ pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<Hoo
 
 pub(crate) async fn require_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     run(hook, filenames, MatchPolicy::Require).await
+}
+
+pub(crate) fn deny_filename_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+    run_filename_pattern(hook, filenames, MatchPolicy::Deny)
+}
+
+pub(crate) fn require_filename_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+    run_filename_pattern(hook, filenames, MatchPolicy::Require)
+}
+
+fn run_filename_pattern(
+    hook: &Hook,
+    filenames: &[&Path],
+    policy: MatchPolicy,
+) -> Result<HookOutput> {
+    let args =
+        FilenameArgs::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let regex = build_regex(&args.patterns, args.ignore_case, false)?;
+    let mut failed = false;
+    let mut output = Vec::new();
+
+    for filename in filenames {
+        let matched = filename
+            .file_name()
+            .is_some_and(|basename| regex.is_match(basename.as_encoded_bytes()));
+        let message = match policy {
+            MatchPolicy::Deny if matched => "filename matches a denied pattern",
+            MatchPolicy::Require if !matched => "filename does not match any required pattern",
+            MatchPolicy::Deny | MatchPolicy::Require => continue,
+        };
+
+        failed = true;
+        writeln!(output, "{}: {message}", filename.display())?;
+    }
+
+    Ok(HookOutput::unchanged(i32::from(failed), output))
 }
 
 async fn run(hook: &Hook, filenames: &[&Path], policy: MatchPolicy) -> Result<HookOutput> {

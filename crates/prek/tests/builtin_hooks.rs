@@ -78,6 +78,44 @@ fn builtin_hooks_unknown_hook() {
 }
 
 #[test]
+fn deny_filename_pattern_hook_matches_only_basename() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-filename-pattern
+                args: [--ignore-case, 'readme']
+                files: '\.md$'
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("docs").create_dir_all()?;
+    cwd.child("README").create_dir_all()?;
+    cwd.child("docs/README.md").touch()?;
+    cwd.child("README/guide.md").touch()?;
+    cwd.child("docs/guide.md").touch()?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny filename patterns...................................................Failed
+    - hook id: deny-filename-pattern
+    - exit code: 1
+
+      docs/README.md: filename matches a denied pattern
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -198,6 +236,50 @@ fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
       block.txt:2:BEGIN
       middle
       END
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn require_filename_pattern_hook_accepts_any_pattern_for_basename() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: require-filename-pattern
+                args:
+                  - '^test_.*\.py$'
+                  - '^__init__\.py$'
+                  - '^conftest\.py$'
+                files: '(^|/)tests/.+\.py$'
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("tests/unit").create_dir_all()?;
+    cwd.child("tests/test_unit").create_dir_all()?;
+    cwd.child("tests/unit/test_parser.py").touch()?;
+    cwd.child("tests/unit/parser_test.py").touch()?;
+    cwd.child("tests/unit/__init__.py").touch()?;
+    cwd.child("tests/unit/conftest.py").touch()?;
+    cwd.child("tests/test_unit/parser.py").touch()?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    require filename patterns................................................Failed
+    - hook id: require-filename-pattern
+    - exit code: 1
+
+      tests/test_unit/parser.py: filename does not match any required pattern
+      tests/unit/parser_test.py: filename does not match any required pattern
 
     ----- stderr -----
     ");
