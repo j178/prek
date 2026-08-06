@@ -199,6 +199,7 @@ fn remote_hooks() {
     ----- stdout -----
     Hello World..............................................................Passed
     - hook id: hello-world
+    - description: echoes its arguments
     - duration: [TIME]
 
       Hello World
@@ -231,6 +232,7 @@ fn remote_hook_non_workspace() {
     ----- stdout -----
     hello-world..............................................................Passed
     - hook id: hello-world
+    - description: A simple hello world hook
     - duration: [TIME]
 
       Hello, Prek!
@@ -265,6 +267,7 @@ fn remote_hooks_with_lib_deps() {
     ----- stdout -----
     Hello World Lib Deps.....................................................Passed
     - hook id: hello-world-lib-deps
+    - description: requires a library dependency to be added
     - duration: [TIME]
 
       42

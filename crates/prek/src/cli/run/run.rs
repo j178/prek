@@ -913,6 +913,16 @@ impl<'a> HookRunSession<'a> {
                     "{detail_prefix}{}",
                     format!("- hook id: {}", result.hook.id).dimmed()
                 )?;
+                if let Some(description) = result.hook.description.as_deref()
+                    && let Some(description) = description.trim().lines().next()
+                {
+                    let description = description.trim_end().trim_end_matches('.');
+                    writeln!(
+                        stdout,
+                        "{detail_prefix}{}",
+                        format!("- description: {description}").dimmed()
+                    )?;
+                }
                 if self.verbose || result.hook.verbose {
                     writeln!(
                         stdout,

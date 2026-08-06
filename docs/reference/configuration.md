@@ -1379,7 +1379,8 @@ Write hook output to a file when the hook fails (and also when `verbose: true`).
 
 ### `description`
 
-Free-form description shown in listings / metadata.
+Free-form description shown in listings / metadata. Its first line is also included in failure and
+verbose run details.
 
 - Type: string
 
