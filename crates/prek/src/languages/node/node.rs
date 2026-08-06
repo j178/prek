@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::str;
 use std::sync::Arc;
 
@@ -80,108 +81,24 @@ impl LanguageBackend for Node {
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
         // 3. Install dependencies
-        let (deps, includes_git_hook_repo) = node_install_dependencies(&hook)?;
-        if deps.is_empty() {
+        let hook_repo = node_hook_repo_spec(&hook)?;
+        if hook_repo.is_none() && hook.additional_dependencies.is_empty() {
             debug!("No dependencies to install");
         } else {
-            // Why remote hook repositories are installed as `git+file://` rather than as folders
-            // ------------------------------------------------------------------------------------
-            //
-            // npm delegates package acquisition to `pacote`. The type of the package spec selects
-            // a fetcher, and folder and Git specs have importantly different preparation semantics:
-            //
-            // * `<folder>` (including `<folder>` with `--install-links`) selects `DirFetcher`.
-            //   `DirFetcher` runs the source package's `prepare` script and then packs the directory.
-            //   It does *not* first run a nested install in that source directory. Although Arborist
-            //   has resolved the package's dependency tree, those dependencies have not yet been
-            //   reified into `<folder>/node_modules` when `DirFetcher` needs to prepare and pack it.
-            //   Consequently, a conventional source package such as
-            //
-            //       devDependencies: { "typescript": "..." }
-            //       scripts:         { "prepare": "tsc" }
-            //
-            //   fails with `tsc: not found`. `--install-links` only changes whether directory
-            //   content is packed instead of linked; it does not add the missing install-before-
-            //   prepare step.
-            //
-            // * `git+file://<repo>` selects `GitFetcher`. It clones the already-pinned local
-            //   checkout into npm's temporary cache. In npm 12, when the package needs
-            //   preparation, `GitFetcher` runs a nested, non-global install roughly equivalent to:
-            //
-            //       npm install --force --include=dev --include=peer --include=optional \
-            //         --global=false
-            //
-            //   The nested install makes build-time dependencies available and runs the root
-            //   package's `prepare`; `DirFetcher` then packs that prepared temporary clone, and
-            //   the outer global install installs the packed result into the hook environment.
-            //   This is npm's documented behavior for Git dependencies and matches what package
-            //   authors expect when publishing source that must be compiled before use.
-            //
-            // Besides fixing lifecycle ordering, the temporary Git clone keeps `node_modules` and
-            // generated build output out of prek's shared repository cache. The extra local clone
-            // and pack are deliberate costs in exchange for correct, isolated package preparation.
-            //
-            // npm 12 defaults `allow-git` to `none`, so prek must explicitly opt this top-level
-            // Git package into fetching. `root` is intentionally narrower than `all`: it permits
-            // Git dependencies introduced by this npm command's project root, while transitive
-            // Git dependencies remain blocked. Because all specs below share one npm command, a
-            // Git URL explicitly supplied through `additional_dependencies` is also a root
-            // dependency and is therefore allowed. We intentionally do not enable `allow-remote`,
-            // `allow-scripts`, or unrestricted `allow-git=all`; npm's other safety defaults remain
-            // in effect.
-            //
-            // npm < 12 does not need the allow flag and older GitFetcher implementations also
-            // lack the explicit `--global=false` on their nested install. That means a build
-            // which requires devDependencies during `prepare` is only fixed by this path on npm
-            // 12 or newer; it already failed with prek's previous folder installation on older
-            // npm.
-            //
-            // In particular, do not pass `--allow-git=root` to npm 11.9 through 11.12. Those
-            // releases have an npm bug, not a different definition of a root dependency. The
-            // first manifest fetch used to discover an unnamed CLI Git spec correctly receives
-            // `_isRoot=true`, and Arborist creates an edge from the project root. A later
-            // manifest fetch and the reify/extract path, however, fail to forward that context
-            // to pacote. Pacote defaults a missing `_isRoot` to false and consequently rejects
-            // the same root dependency as "non-root" with EALLOWGIT. npm 11 defaults
-            // `allow-git` to `all`, which masks the bug unless `root` is explicitly requested.
-            // The bug was fixed upstream and backported in npm 11.13:
-            //
-            // - https://github.com/npm/cli/issues/9189
-            // - https://github.com/npm/cli/pull/9206
-            //
-            // Since npm 11 already defaults to allowing Git, prek omits the flag for all npm 11
-            // versions to remain compatible with the affected releases. npm 12 both contains the
-            // fix and defaults `allow-git` to `none`, so that is where prek starts passing
-            // `--allow-git=root`. Querying npm itself instead of inferring from the Node version
-            // also covers custom and independently upgraded npm installations correctly.
-            //
-            // Relevant npm implementation:
-            // - pacote/lib/dir.js (`DirFetcher`)
-            // - pacote/lib/git.js (`GitFetcher`, especially `#prepareDir`)
-            // - @npmcli/arborist/lib/arborist/build-ideal-tree.js (`allow-git` root checks)
-
             // `npm` is a script that uses `/usr/bin/env node`, so we need to add the
             // node toolchain directory to PATH so that `npm` can find `node`.
             let node_bin = node.node().parent().expect("Node binary must have parent");
             let new_path = prepend_paths(&[&bin_dir, node_bin]).context("Failed to join PATH")?;
             let npm_cache = store.cache_path(CacheBucket::Npm);
-
-            let mut cmd = Cmd::new(node.npm());
-            cmd.arg("install");
-            if includes_git_hook_repo && query_npm_version(node.npm(), &new_path).await?.major >= 12
-            {
-                cmd.arg("--allow-git=root");
+            Npm {
+                executable: node.npm(),
+                path: &new_path,
+                node_path: &lib_dir,
+                prefix: &info.env_path,
+                cache: &npm_cache,
             }
-            cmd.arg("-g")
-                .arg("--no-progress")
-                .arg("--no-save")
-                .arg("--no-fund")
-                .arg("--no-audit")
-                .args(&deps)
-                .env(EnvVars::PATH, new_path)
-                .env(EnvVars::NODE_PATH, &lib_dir);
-            apply_npm_config_env(&mut cmd, &info.env_path, &npm_cache);
-            cmd.check(true).output().await?;
+            .install_dependencies(hook_repo.as_deref(), &hook.additional_dependencies)
+            .await?;
         }
 
         info.persist_env_path();
@@ -235,39 +152,200 @@ impl LanguageBackend for Node {
     }
 }
 
-fn node_install_dependencies(hook: &Hook) -> Result<(Vec<String>, bool)> {
-    let mut deps = Vec::with_capacity(hook.additional_dependencies.len() + 1);
-    let mut includes_git_hook_repo = false;
-
-    if let Some(repo_path) = hook.repo_path() {
-        let file_url = Url::from_file_path(repo_path).map_err(|()| {
-            anyhow!(
-                "Failed to convert Node hook repository path to a file URL: {}",
-                repo_path.display()
-            )
-        })?;
-        deps.push(format!("git+{file_url}"));
-        includes_git_hook_repo = true;
-    }
-
-    deps.extend(hook.additional_dependencies.iter().cloned());
-    Ok((deps, includes_git_hook_repo))
+fn node_hook_repo_spec(hook: &Hook) -> Result<Option<String>> {
+    hook.repo_path()
+        .map(|repo_path| {
+            let file_url = Url::from_file_path(repo_path).map_err(|()| {
+                anyhow!(
+                    "Failed to convert Node hook repository path to a file URL: {}",
+                    repo_path.display()
+                )
+            })?;
+            Ok(format!("git+{file_url}"))
+        })
+        .transpose()
 }
 
-async fn query_npm_version(npm: &Path, path: &std::ffi::OsStr) -> Result<Version> {
-    let output = Cmd::new(npm)
-        .arg("--version")
-        .env(EnvVars::PATH, path)
-        .check(true)
-        .output()
-        .await?;
-    Version::parse(str::from_utf8(&output.stdout)?.trim()).context("Failed to parse npm version")
+struct PackedNodeHook {
+    _temp_dir: tempfile::TempDir,
+    archive: PathBuf,
 }
 
-fn apply_npm_config_env(cmd: &mut Cmd, prefix: &Path, cache: &Path) {
-    for key in NPM_CONFIG_ENVS_TO_REMOVE {
-        cmd.env_remove(key);
+enum HookInstall<'a> {
+    None,
+    Git(&'a str),
+    Tarball(PackedNodeHook),
+}
+
+struct Npm<'a> {
+    executable: &'a Path,
+    path: &'a OsStr,
+    node_path: &'a Path,
+    prefix: &'a Path,
+    cache: &'a Path,
+}
+
+impl Npm<'_> {
+    // Why remote hooks use `git+file://` and two installation paths
+    // ----------------------------------------------------------------
+    //
+    // npm delegates package acquisition to `pacote`. The package spec selects a fetcher, and
+    // folder and Git specs have importantly different preparation semantics:
+    //
+    // * `<folder>` (including `<folder>` with `--install-links`) selects `DirFetcher`.
+    //   `DirFetcher` runs the source package's `prepare` script and then packs the directory.
+    //   It does *not* first run a nested install in that source directory. Although Arborist has
+    //   resolved the package's dependency tree, those dependencies have not yet been reified into
+    //   `<folder>/node_modules` when `DirFetcher` needs to prepare and pack it. Consequently, a
+    //   conventional source package such as
+    //
+    //       devDependencies: { "typescript": "..." }
+    //       scripts:         { "prepare": "tsc" }
+    //
+    //   fails with `tsc: not found`. `--install-links` only changes whether directory content is
+    //   packed instead of linked; it does not add the missing install-before-prepare step.
+    //
+    // * `git+file://<repo>` selects `GitFetcher`. It clones the already-pinned local checkout into
+    //   npm's temporary cache. When the package needs preparation, `GitFetcher` runs a nested,
+    //   non-global install roughly equivalent to:
+    //
+    //       npm install --force --include=dev --include=peer --include=optional \
+    //         --global=false
+    //
+    //   The nested install makes build-time dependencies available and runs the root package's
+    //   `prepare`; `DirFetcher` then packs that prepared temporary clone.
+    //
+    //   On npm < 12, prek invokes this path with `npm pack`, then installs the resulting tarball
+    //   globally. npm 11's global Git reifier can otherwise remove the package root while its
+    //   child dependencies are still being extracted, causing ENOENT failures. Separating Git
+    //   preparation from the global install avoids that race.
+    //
+    //   npm 12 keeps the direct global Git install. Its reifier does not have the npm 11 race,
+    //   while `npm pack` loses the root classification on a follow-up Git manifest fetch and
+    //   rejects it under `allow-git=root`. Keeping the direct path avoids broadening that setting
+    //   to `allow-git=all`.
+    //
+    // Besides fixing lifecycle ordering, the temporary Git clone keeps `node_modules` and
+    // generated build output out of prek's shared repository cache. The extra local clone and
+    // pack are deliberate costs in exchange for correct, isolated package preparation.
+    //
+    // npm 12 defaults `allow-git` to `none`, so prek must explicitly opt the hook repo into
+    // fetching. `root` is intentionally narrower than `all`: it permits the hook and Git URLs
+    // explicitly supplied through `additional_dependencies`, while transitive Git dependencies
+    // remain blocked. We intentionally do not enable `allow-remote`, `allow-scripts`, or
+    // unrestricted `allow-git=all`; npm's other safety defaults remain in effect.
+    //
+    // In particular, do not pass `--allow-git=root` to npm 11.9 through 11.12. Those releases
+    // have an npm bug, not a different definition of a root dependency. The first manifest fetch
+    // used to discover an unnamed CLI Git spec correctly receives `_isRoot=true`, and Arborist
+    // creates an edge from the project root. A later manifest fetch and the reify/extract path,
+    // however, fail to forward that context to pacote. Pacote defaults a missing `_isRoot` to
+    // false and consequently rejects the same root dependency as "non-root" with EALLOWGIT. npm
+    // 11 defaults `allow-git` to `all`, which masks the bug unless `root` is explicitly requested.
+    // The bug was fixed upstream and backported in npm 11.13:
+    //
+    // - https://github.com/npm/cli/issues/9189
+    // - https://github.com/npm/cli/pull/9206
+    //
+    // Since npm 11 already defaults to allowing Git, prek omits the flag for all npm 11 versions
+    // to remain compatible with the affected releases. npm 12 both contains the fix and defaults
+    // `allow-git` to `none`, so that is where prek starts passing `--allow-git=root`. Querying npm
+    // itself instead of inferring from the Node version also covers custom and independently
+    // upgraded npm installations correctly.
+    //
+    // Relevant npm implementation:
+    // - pacote/lib/dir.js (`DirFetcher`)
+    // - pacote/lib/git.js (`GitFetcher`, especially `#prepareDir`)
+    // - @npmcli/arborist/lib/arborist/build-ideal-tree.js (`allow-git` root checks)
+    async fn install_dependencies(
+        &self,
+        hook_repo: Option<&str>,
+        additional_dependencies: &[String],
+    ) -> Result<()> {
+        let hook_install = match hook_repo {
+            Some(hook_repo) if self.version().await?.major >= 12 => HookInstall::Git(hook_repo),
+            Some(hook_repo) => HookInstall::Tarball(self.pack_hook(hook_repo).await?),
+            None => HookInstall::None,
+        };
+
+        let mut cmd = self.command();
+        cmd.arg("install")
+            .arg("-g")
+            .arg("--no-progress")
+            .arg("--no-save")
+            .arg("--no-fund")
+            .arg("--no-audit");
+        match &hook_install {
+            HookInstall::None => {}
+            HookInstall::Git(hook_repo) => {
+                cmd.arg("--allow-git=root").arg(hook_repo);
+            }
+            HookInstall::Tarball(packed_hook) => {
+                cmd.arg(&packed_hook.archive);
+            }
+        }
+        cmd.args(additional_dependencies);
+        cmd.check(true).output().await?;
+        Ok(())
     }
-    cmd.env(NPM_CONFIG_PREFIX_ENV, prefix);
-    cmd.env(NPM_CONFIG_CACHE_ENV, cache);
+
+    async fn pack_hook(&self, hook_repo: &str) -> Result<PackedNodeHook> {
+        let temp_dir = tempfile::tempdir().context("Failed to create npm pack directory")?;
+
+        let mut cmd = self.command();
+        cmd.arg("pack")
+            .arg("--global=false")
+            .arg("--pack-destination")
+            .arg(temp_dir.path())
+            .arg(hook_repo);
+        cmd.check(true)
+            .output()
+            .await
+            .context("Failed to pack Node hook repository")?;
+
+        let archives = fs_err::read_dir(temp_dir.path())
+            .context("Failed to read npm pack directory")?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<std::io::Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|path| path.extension().is_some_and(|extension| extension == "tgz"))
+            .collect::<Vec<_>>();
+        let archive = match archives.as_slice() {
+            [archive] => archive.clone(),
+            _ => {
+                return Err(anyhow!(
+                    "npm pack produced {} package archives; expected exactly one",
+                    archives.len()
+                ));
+            }
+        };
+
+        Ok(PackedNodeHook {
+            _temp_dir: temp_dir,
+            archive,
+        })
+    }
+
+    async fn version(&self) -> Result<Version> {
+        let output = Cmd::new(self.executable)
+            .arg("--version")
+            .env(EnvVars::PATH, self.path)
+            .check(true)
+            .output()
+            .await?;
+        Version::parse(str::from_utf8(&output.stdout)?.trim())
+            .context("Failed to parse npm version")
+    }
+
+    fn command(&self) -> Cmd {
+        let mut cmd = Cmd::new(self.executable);
+        cmd.env(EnvVars::PATH, self.path)
+            .env(EnvVars::NODE_PATH, self.node_path);
+        for key in NPM_CONFIG_ENVS_TO_REMOVE {
+            cmd.env_remove(key);
+        }
+        cmd.env(NPM_CONFIG_PREFIX_ENV, self.prefix);
+        cmd.env(NPM_CONFIG_CACHE_ENV, self.cache);
+        cmd
+    }
 }

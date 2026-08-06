@@ -247,7 +247,8 @@ fn additional_dependencies() {
     ");
 }
 
-/// Test that remote Node packages are installed through npm's Git package path.
+/// Test that remote Node packages with runtime dependencies are prepared through npm's Git
+/// package path before installation.
 ///
 /// This runs on every supported npm version. In particular, npm 11.9 through
 /// 11.12 must not receive `--allow-git=root` because npm's missing `_isRoot`
@@ -278,12 +279,17 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
           "version": "1.0.0",
           "bin": {
             "remote-node-hook": "cli.js"
+          },
+          "dependencies": {
+            "is-number": "7.0.0"
           }
         }
     "#})?;
     let cli = hook_repo.work_dir().child("cli.js");
     cli.write_str(indoc::indoc! {r#"
         #!/usr/bin/env node
+        const isNumber = require("is-number");
+        if (!isNumber(42)) process.exit(1);
         console.log("remote hook ok");
     "#})?;
     make_executable(cli.path())?;
@@ -329,17 +335,6 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
 /// its development dependencies.
 #[test]
 fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
-    let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
-    let Ok(output) = std::process::Command::new(npm).arg("--version").output() else {
-        return Ok(());
-    };
-    let version = semver::Version::parse(String::from_utf8_lossy(&output.stdout).trim())?;
-    if version.major < 12 {
-        // npm 12 added the non-global nested install that makes this GitFetcher
-        // lifecycle ordering work when the outer installation is global.
-        return Ok(());
-    }
-
     let hook_repo = TestContext::new();
     hook_repo.init_project();
 
