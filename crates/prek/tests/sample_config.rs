@@ -13,6 +13,7 @@ fn sample_config() -> anyhow::Result<()> {
     exit_code: 0
     ----- stdout -----
     # See https://prek.j178.dev for more information.
+    # yaml-language-server: $schema=https://www.schemastore.org/prek.json
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
@@ -36,6 +37,7 @@ fn sample_config() -> anyhow::Result<()> {
 
     insta::assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
     # See https://prek.j178.dev for more information.
+    # yaml-language-server: $schema=https://www.schemastore.org/prek.json
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
@@ -57,6 +59,7 @@ fn sample_config() -> anyhow::Result<()> {
 
     insta::assert_snapshot!(context.read("sample.yaml"), @"
     # See https://prek.j178.dev for more information.
+    # yaml-language-server: $schema=https://www.schemastore.org/prek.json
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
@@ -80,6 +83,7 @@ fn sample_config() -> anyhow::Result<()> {
     "#);
     insta::assert_snapshot!(context.read("child/sample.yaml"), @"
     # See https://prek.j178.dev for more information.
+    # yaml-language-server: $schema=https://www.schemastore.org/prek.json
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
@@ -149,6 +153,7 @@ fn sample_config_format() {
     exit_code: 0
     ----- stdout -----
     # See https://prek.j178.dev for more information.
+    # yaml-language-server: $schema=https://www.schemastore.org/prek.json
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
@@ -190,6 +195,7 @@ fn respect_format() {
 
     insta::assert_snapshot!(context.read("prek.toml"), @"
     # See https://prek.j178.dev for more information.
+    # yaml-language-server: $schema=https://www.schemastore.org/prek.json
     repos:
       - repo: https://github.com/pre-commit/pre-commit-hooks
         rev: v6.0.0
