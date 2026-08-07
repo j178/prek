@@ -376,6 +376,7 @@ impl Language {
             Self::Coursier => &[CacheBucket::Coursier],
             Self::Deno => &[CacheBucket::Deno],
             Self::Golang => &[CacheBucket::Go],
+            Self::Julia => &[CacheBucket::Julia],
             Self::Node => &[CacheBucket::Npm],
             Self::Python | Self::Pygrep => &[CacheBucket::Uv, CacheBucket::Python],
             Self::Rust => &[CacheBucket::Cargo],
@@ -387,7 +388,6 @@ impl Language {
             | Self::Dotnet
             | Self::Fail
             | Self::Haskell
-            | Self::Julia
             | Self::Lua
             | Self::Perl
             | Self::Php
