@@ -664,6 +664,52 @@ fn multiple_hook_ids() {
 }
 
 #[test]
+fn run_displays_aliases_for_repeated_hook_ids() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: repeated
+                alias: repeated-format
+                name: Repeated hook
+                language: system
+                entry: git diff --quiet
+                always_run: true
+                pass_filenames: false
+                verbose: true
+              - id: repeated
+                alias: repeated-lint
+                name: Repeated hook
+                language: system
+                entry: git diff --quiet
+                always_run: true
+                pass_filenames: false
+                verbose: true
+    "});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("repeated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Repeated hook............................................................Passed
+    - hook id: repeated
+    - hook alias: repeated-format
+    - duration: [TIME]
+    Repeated hook............................................................Passed
+    - hook id: repeated
+    - hook alias: repeated-lint
+    - duration: [TIME]
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn priorities_respected() {
     let context = TestContext::new();
     context.init_project();

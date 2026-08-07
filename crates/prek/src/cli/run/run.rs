@@ -913,6 +913,13 @@ impl<'a> HookRunSession<'a> {
                     "{detail_prefix}{}",
                     format!("- hook id: {}", result.hook.id).dimmed()
                 )?;
+                if !result.hook.alias.is_empty() && result.hook.alias != result.hook.id {
+                    writeln!(
+                        stdout,
+                        "{detail_prefix}{}",
+                        format!("- hook alias: {}", result.hook.alias).dimmed()
+                    )?;
+                }
                 if let Some(description) = result.hook.description.as_deref()
                     && let Some(description) = description.trim().lines().next()
                 {
