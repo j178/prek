@@ -233,7 +233,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--glob"><a href="#prek-run--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
 <p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-run--group"><a href="#prek-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to the specified group.</p>
-<p>Can be specified multiple times.</p>
+<p>Can be specified multiple times; a hook may match any specified group. When combined with <code>--require-group</code>, both filters must match.</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-run--last-commit"><a href="#prek-run--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
 </dd><dt id="prek-run--log-file"><a href="#prek-run--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
@@ -245,7 +245,8 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-run--require-group"><a href="#prek-run--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to every specified group.</p>
-<p>Can be specified multiple times. Composes with <code>--group</code> and <code>--no-group</code>.</p>
+<p>Can be specified multiple times; a hook must match every specified group. When combined with <code>--group</code>, it must also match at least one <code>--group</code>. <code>--no-group</code> excludes matching hooks regardless of argument order.</p>
+<p>For example, <code>--require-group fast --group format --group lint-only</code> selects hooks in <code>fast</code> and either <code>format</code> or <code>lint-only</code>.</p>
 </dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>

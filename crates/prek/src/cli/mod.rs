@@ -683,13 +683,19 @@ pub(crate) struct RunArgs {
 
     /// Run hooks belonging to the specified group.
     ///
-    /// Can be specified multiple times.
+    /// Can be specified multiple times; a hook may match any specified group.
+    /// When combined with `--require-group`, both filters must match.
     #[arg(long = "group", value_name = "GROUP")]
     pub(crate) groups: Vec<String>,
 
     /// Run hooks belonging to every specified group.
     ///
-    /// Can be specified multiple times. Composes with `--group` and `--no-group`.
+    /// Can be specified multiple times; a hook must match every specified group.
+    /// When combined with `--group`, it must also match at least one `--group`.
+    /// `--no-group` excludes matching hooks regardless of argument order.
+    ///
+    /// For example, `--require-group fast --group format --group lint-only`
+    /// selects hooks in `fast` and either `format` or `lint-only`.
     #[arg(long = "require-group", value_name = "GROUP")]
     pub(crate) required_groups: Vec<String>,
 
