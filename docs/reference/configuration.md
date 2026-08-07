@@ -1223,6 +1223,22 @@ Repeated `--group` values use union semantics, while repeated
 `--require-group` values use intersection semantics. When combined, a hook must
 match at least one `--group`, every `--require-group`, and no `--no-group`.
 
+For example, consider these hook groups:
+
+| Hook | Groups |
+| -- | -- |
+| `ty` | `lint-only`, `fast`, `local` |
+| `ruff-format` | `format`, `fast`, `local` |
+| `mypy` | `lint-only`, `slow`, `ci` |
+| `black` | `format`, `slow`, `ci` |
+
+```bash
+prek run --all-files --require-group fast --group format --group lint-only
+```
+
+This represents `fast AND (format OR lint-only)`, so it selects exactly `ty`
+and `ruff-format`. Reordering the options does not change the selection.
+
 When any group selector is used without `--stage`, group filtering is not
 constrained by hook stage. `prek run` collects normal file input for the manual
 command and runs every matching hook that can use that input. Hooks configured

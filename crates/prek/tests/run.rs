@@ -991,6 +991,33 @@ fn run_required_groups_intersect_and_compose_with_other_group_filters() {
         context
             .run()
             .arg("--all-files")
+            .arg("--group")
+            .arg("ci")
+            .arg("--require-group")
+            .arg("slow")
+            .arg("--no-group")
+            .arg("local")
+            .arg("--group")
+            .arg("lint")
+            .arg("--require-group")
+            .arg("format")
+            .arg("--no-group")
+            .arg("fast"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Black....................................................................Passed
+
+    ----- stderr -----
+    "
+    );
+
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--all-files")
             .arg("--require-group")
             .arg("lint")
             .arg("--require-group")
