@@ -6,9 +6,10 @@ use anyhow::{Context, Result};
 use mea::once::OnceMap;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
+use regex::Regex;
 use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::git::GitCommandExt;
@@ -116,32 +117,7 @@ impl LanguageBackend for Python {
             .context("Failed to create Python virtual environment")?;
 
         // Install dependencies
-        let mut pip_install = Self::pip_install_command(&uv, store, &info.env_path);
-
-        if let Some(repo_path) = hook.repo_path() {
-            trace!(
-                "Installing dependencies from repo path: {}",
-                repo_path.display()
-            );
-            pip_install
-                .arg("--directory")
-                .arg(repo_path)
-                .arg(".")
-                .args(&hook.additional_dependencies)
-                .output()
-                .await?;
-        } else if !hook.additional_dependencies.is_empty() {
-            trace!(
-                "Installing additional dependencies: {:?}",
-                hook.additional_dependencies
-            );
-            pip_install
-                .args(&hook.additional_dependencies)
-                .output()
-                .await?;
-        } else {
-            debug!("No dependencies to install");
-        }
+        Self::install_dependencies(&uv, store, &info, &hook, &hook.language_request).await?;
 
         let python = python_exec(&info.env_path);
         let python_info = query_python_info(&python)
@@ -208,6 +184,76 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     }
 }
 
+/// The highest `requires-python` lower bound in a uv resolution failure, patch included so the
+/// compatibility check against the hook's original request stays sound (e.g. against `<3.11.2`).
+fn infer_python_request(stderr: &[u8]) -> Option<semver::Version> {
+    static PYTHON_BOUND: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"Python\s*>=?\s*(\d+\.\d+(?:\.\d+)?)").unwrap());
+
+    let stderr = String::from_utf8_lossy(stderr);
+    let (major, minor, patch) = PYTHON_BOUND
+        .captures_iter(&stderr)
+        .filter_map(|caps| Some(version_sort_key(caps.get(1)?.as_str())))
+        .max()?;
+
+    Some(semver::Version::new(major, minor, patch))
+}
+
+/// Whether the hook's original request permits the `version` uv wants to upgrade to. The default
+/// and metadata-derived ranges (e.g. pyproject `requires-python`) permit compatible upgrades; an
+/// explicit pin or bound that excludes `version` does not, so its error surfaces instead.
+fn request_permits(original: &LanguageRequest, version: &semver::Version) -> bool {
+    match original {
+        LanguageRequest::Any { .. } => true,
+        LanguageRequest::Python(request) => request.permits(version),
+        // Non-Python requests never reach the Python retry path.
+        _ => false,
+    }
+}
+
+/// The venv request for a retry: `>=bound`, plus any upper bound or pin the original request
+/// still imposes (e.g. `>=3.8, <3.12` caps a retry to `>=3.11.2, <3.12`, not an open `>=3.11.2`
+/// that could let uv pick a 3.12+ interpreter the hook explicitly excluded).
+fn retry_request_for(original: &LanguageRequest, bound: &semver::Version) -> LanguageRequest {
+    let mut comparators = vec![format!(">={bound}")];
+    match original {
+        // `request_permits` only accepts an exact-pin original when `bound` already equals it.
+        LanguageRequest::Python(PythonRequest::MajorMinorPatch(..)) => {
+            comparators = vec![format!("={bound}")];
+        }
+        LanguageRequest::Python(PythonRequest::Major(major)) => {
+            comparators.push(format!("<{}.0.0", major + 1));
+        }
+        LanguageRequest::Python(PythonRequest::MajorMinor(major, minor)) => {
+            comparators.push(format!("<{major}.{}.0", minor + 1));
+        }
+        LanguageRequest::Python(PythonRequest::Range(version_req, _)) => {
+            comparators.extend(
+                version_req
+                    .comparators
+                    .iter()
+                    .filter(|c| matches!(c.op, semver::Op::Less | semver::Op::LessEq))
+                    .map(ToString::to_string),
+            );
+        }
+        _ => {}
+    }
+    let raw = comparators.join(", ");
+    let version_req =
+        semver::VersionReq::parse(&raw).expect("comparators built from a Version are valid");
+    LanguageRequest::Python(PythonRequest::Range(version_req, raw))
+}
+
+/// Sort key for a `major.minor[.patch]` version string; unparsable parts sort as 0.
+fn version_sort_key(version: &str) -> (u64, u64, u64) {
+    let mut parts = version.split('.').map(|p| p.parse::<u64>().unwrap_or(0));
+    (
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+    )
+}
+
 #[derive(Debug, Clone, Copy)]
 enum VenvAttempt {
     PrekManaged,
@@ -235,6 +281,71 @@ impl Python {
             .isolate_from_git_env()
             .check(true);
         cmd
+    }
+
+    /// Install the hook's dependencies, retrying once with the Python version inferred from
+    /// `uv`'s resolution error (a dependency's `requires-python`). On no inferable or permitted
+    /// version, the original error is surfaced.
+    async fn install_dependencies(
+        uv: &Uv,
+        store: &Store,
+        info: &InstallInfo,
+        hook: &Hook,
+        python_request: &LanguageRequest,
+    ) -> Result<()> {
+        if hook.repo_path().is_none() && hook.additional_dependencies.is_empty() {
+            debug!("No dependencies to install");
+            return Ok(());
+        }
+
+        let build = || {
+            let mut cmd = Self::pip_install_command(uv, store, &info.env_path);
+            if let Some(repo_path) = hook.repo_path() {
+                cmd.arg("--directory").arg(repo_path).arg(".");
+            }
+            cmd.args(&hook.additional_dependencies);
+            cmd
+        };
+
+        // Capture the failure instead of bailing, so we can inspect and maybe retry.
+        let mut cmd = build();
+        let output = cmd.check(false).output().await?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        // Retry only when downloading is allowed and the hook's original request still permits
+        // the inferred interpreter, so a pin or bound the user (or pyproject metadata) set is
+        // never overridden; otherwise surface the original resolution error.
+        let retry_bound = infer_python_request(&output.stderr)
+            .filter(|_| python_request.allows_download())
+            .filter(|bound| request_permits(python_request, bound));
+
+        let Some(bound) = retry_bound else {
+            // `output.status.success()` is already known false here, so this always errors.
+            return cmd.check_output(output).map(|_| ()).map_err(Into::into);
+        };
+        let retry_request = retry_request_for(python_request, &bound);
+
+        // Preserve the original resolution error if the venv recreate fails.
+        let original_error = String::from_utf8_lossy(&output.stderr).into_owned();
+        debug!("uv pip install failed to resolve; retrying with the inferred Python version");
+        // Recreate the venv from scratch so the retry deterministically uses the new interpreter.
+        if info.env_path.exists() {
+            fs_err::tokio::remove_dir_all(&info.env_path)
+                .await
+                .context("Failed to remove venv before retry")?;
+        }
+        Self::create_venv(uv, store, info, &retry_request)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to recreate the venv with the inferred Python version.\n\
+                     Original dependency resolution error:\n{original_error}"
+                )
+            })?;
+        build().check(true).output().await?;
+        Ok(())
     }
 
     async fn create_venv(
@@ -512,5 +623,85 @@ mod tests {
 
         assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
         assert_eq!(envs.get(EnvVars::UV_PYTHON), Some(&None));
+    }
+
+    #[test]
+    fn infer_python_request_picks_highest_bound() {
+        use super::infer_python_request;
+
+        // No Python bound in the error -> nothing to refine.
+        assert!(infer_python_request(b"error: something unrelated failed").is_none());
+
+        // A single bound.
+        let bound = infer_python_request(b"Because foo requires Python >=3.10, ...").unwrap();
+        assert_eq!(bound, semver::Version::new(3, 10, 0));
+
+        // Multiple bounds -> the highest wins (and beats lexical: 3.9 < 3.10), keeping the patch.
+        let bound =
+            infer_python_request(b"requires Python >=3.9 and bar requires Python>=3.11.2 so ...")
+                .unwrap();
+        assert_eq!(bound, semver::Version::new(3, 11, 2));
+    }
+
+    #[test]
+    fn request_permits_honors_original_bounds() {
+        use super::request_permits;
+        use crate::languages::python::PythonRequest;
+
+        let bound = semver::Version::new(3, 11, 2);
+
+        // The default and metadata-derived ranges permit a compatible upgrade.
+        assert!(request_permits(
+            &LanguageRequest::Any { system_only: false },
+            &bound
+        ));
+        let derived = LanguageRequest::Python(">=3.8".parse::<PythonRequest>().unwrap());
+        assert!(request_permits(&derived, &bound));
+
+        // A pin, or a cap the bound violates, does not (the patch matters: `<3.11.2` excludes it).
+        let pinned = LanguageRequest::Python(PythonRequest::MajorMinor(3, 9));
+        assert!(!request_permits(&pinned, &bound));
+        let capped = LanguageRequest::Python(">=3.8, <3.11.2".parse::<PythonRequest>().unwrap());
+        assert!(!request_permits(&capped, &bound));
+    }
+
+    #[test]
+    fn retry_request_preserves_the_patch_bound() {
+        use super::{retry_request_for, to_uv_python_request};
+
+        // A patch-bearing bound must survive into the venv request; a `major.minor` pin would
+        // let external discovery settle for an older, non-conforming patch (e.g. an installed
+        // 3.12.0 when the dependency actually requires >=3.12.5).
+        let any = LanguageRequest::Any { system_only: false };
+        let request = retry_request_for(&any, &semver::Version::new(3, 12, 5));
+        assert_eq!(to_uv_python_request(&request).as_deref(), Some(">=3.12.5"));
+    }
+
+    #[test]
+    fn retry_request_preserves_the_original_upper_bound() {
+        use super::retry_request_for;
+        use crate::languages::python::PythonRequest;
+
+        let bound = semver::Version::new(3, 11, 2);
+
+        // An explicit upper-bounded range keeps its cap, so uv can't pick a 3.12+ interpreter
+        // the hook excluded.
+        let capped = LanguageRequest::Python(">=3.8, <3.12".parse::<PythonRequest>().unwrap());
+        let request = retry_request_for(&capped, &bound);
+        let LanguageRequest::Python(PythonRequest::Range(req, _)) = &request else {
+            panic!("expected a Range request");
+        };
+        assert!(req.matches(&semver::Version::new(3, 11, 5)));
+        assert!(!req.matches(&semver::Version::new(3, 12, 0)));
+        assert!(!req.matches(&semver::Version::new(3, 11, 1)));
+
+        // A `major.minor` pin caps the retry to that minor line.
+        let pinned = LanguageRequest::Python(PythonRequest::MajorMinor(3, 11));
+        let request = retry_request_for(&pinned, &bound);
+        let LanguageRequest::Python(PythonRequest::Range(req, _)) = &request else {
+            panic!("expected a Range request");
+        };
+        assert!(req.matches(&semver::Version::new(3, 11, 9)));
+        assert!(!req.matches(&semver::Version::new(3, 12, 0)));
     }
 }
