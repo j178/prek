@@ -3,11 +3,13 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::string::ToString;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use mea::once::OnceMap;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use rustc_hash::FxBuildHasher;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
@@ -24,7 +26,7 @@ use crate::store::Store;
 pub(crate) struct NodeResult {
     node: PathBuf,
     npm: PathBuf,
-    version: NodeVersion,
+    version: Arc<NodeVersion>,
 }
 
 impl Display for NodeResult {
@@ -49,11 +51,15 @@ impl NodeResult {
         let npm = bin_dir(dir)
             .join("npm")
             .with_extension(if cfg!(windows) { "cmd" } else { "" });
-        Self { node, npm, version }
+        Self {
+            node,
+            npm,
+            version: Arc::new(version),
+        }
     }
 
     pub(crate) async fn from_executables(node: PathBuf, npm: PathBuf) -> Result<Self> {
-        let version = query_node_version(&node).await?;
+        let version = query_node_version_cached(&node).await?;
         Ok(Self { node, npm, version })
     }
 
@@ -70,7 +76,11 @@ impl NodeResult {
     }
 }
 
-pub(crate) async fn query_node_version(node: &Path) -> Result<NodeVersion> {
+// Canonical paths let hook environments backed by the same Node executable share one query.
+static NODE_VERSION_CACHE: LazyLock<OnceMap<PathBuf, Arc<NodeVersion>, FxBuildHasher>> =
+    LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+
+async fn query_node_version(node: &Path) -> Result<NodeVersion> {
     // https://nodejs.org/api/process.html#processrelease
     let output = Cmd::new(node)
         .arg("-p")
@@ -80,6 +90,15 @@ pub(crate) async fn query_node_version(node: &Path) -> Result<NodeVersion> {
         .await?;
     let output_str = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&output_str).context("Failed to parse node version")
+}
+
+pub(crate) async fn query_node_version_cached(node: &Path) -> Result<Arc<NodeVersion>> {
+    let node = fs_err::canonicalize(node).unwrap_or_else(|_| node.to_path_buf());
+    NODE_VERSION_CACHE
+        .try_compute(node.clone(), async move || {
+            query_node_version(&node).await.map(Arc::new)
+        })
+        .await
 }
 
 pub(crate) struct NodeInstaller {

@@ -14,7 +14,9 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::node::NodeRequest;
-use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir, query_node_version};
+use crate::languages::node::installer::{
+    NodeInstaller, bin_dir, lib_dir, query_node_version_cached,
+};
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
@@ -112,7 +114,7 @@ impl LanguageBackend for Node {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let version = query_node_version(&info.toolchain)
+        let version = query_node_version_cached(&info.toolchain)
             .await
             .context("Failed to query node version")?;
 

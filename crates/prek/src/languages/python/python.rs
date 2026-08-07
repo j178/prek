@@ -30,16 +30,15 @@ pub(crate) struct PythonInfo {
     pub(crate) python_exec: PathBuf,
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum PythonInfoError {
     #[error("Failed to parse Python info JSON: {0}")]
     Parse(String),
     #[error("Failed to query Python info: {0}")]
     Query(String),
-    #[error("{0}")]
-    Message(String),
 }
 
+// Canonical paths let virtual environments backed by the same interpreter share one query.
 static PYTHON_INFO_CACHE: LazyLock<OnceMap<PathBuf, Arc<PythonInfo>, FxBuildHasher>> =
     LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 

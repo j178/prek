@@ -1,0 +1,78 @@
+# Configuration file for `prek`, a git hook framework written in Rust.
+# See https://prek.j178.dev for more information.
+#:schema https://www.schemastore.org/prek.json
+#:tombi toml-version = "v1.1.0"
+
+fail_fast = true
+default_install_hook_types = ["pre-push"]
+exclude = { glob = "**/snapshots/**" }
+
+[update]
+cooldown_days = 7
+freeze = true
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace", exclude = { glob = "CHANGELOG.md" } },
+  { id = "mixed-line-ending" },
+  { id = "check-yaml" },
+  { id = "check-toml" },
+  { id = "end-of-file-fixer" }
+]
+
+[[repos]]
+repo = "https://github.com/crate-ci/typos"
+rev = "bee27e3a4fd1ea2111cf90ab89cd076c870fce14"  # frozen: v1.48.0
+hooks = [{ id = "typos" }]
+
+[[repos]]
+repo = "https://github.com/executablebooks/mdformat"
+rev = "82912cdaea4fb830f751504486a7879c70526547"  # frozen: 1.0.0
+hooks = [
+  {
+    id = "mdformat",
+    language = "python",
+    args = ["--number", "--compact-tables", "--align-semantic-breaks-in-lists"],
+    additional_dependencies = [
+      "mdformat-frontmatter==2.1.2",
+      "mdformat-mkdocs==5.2.1",
+      "mdformat-simple-breaks==0.1.0"
+    ]
+  }
+]
+
+[[repos]]
+repo = "https://github.com/python-jsonschema/check-jsonschema"
+rev = "6b63472e72e1a91ed8a2f6d483790dfb644fa1d3"  # frozen: 0.37.4
+hooks = [
+  { id = "check-metaschema", files = { glob = "prek.schema.json" } },
+  { id = "check-github-workflows" },
+  { id = "check-renovate", additional_dependencies = ["json5"] }
+]
+
+[[repos]]
+repo = "https://github.com/tombi-toml/tombi-pre-commit"
+rev = "5421ca8ca3d6a659b6c097512b486395676a6af1"  # frozen: v1.2.4
+hooks = [{ id = "tombi-format", args = ["--offline"], files = '\.toml$' }]
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "cargo-fmt",
+    name = "cargo fmt",
+    entry = "cargo fmt --",
+    language = "system",
+    types = ["rust"],
+    pass_filenames = false
+  },
+  {
+    id = "cargo-clippy",
+    name = "cargo clippy",
+    language = "system",
+    types = ["rust"],
+    pass_filenames = false,
+    entry = "cargo clippy --all-targets --all-features -- -D warnings"
+  }
+]

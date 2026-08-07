@@ -111,6 +111,16 @@ The three options compose independently of argument order, and exclusion wins:
 2. Keep only hooks matching every `--require-group` value, if any were provided.
 3. Remove hooks matching `--no-group`, if any `--no-group` values were provided.
 
+Equivalently, a hook must satisfy:
+
+```text
+(any --group value matches, if specified)
+AND
+(every --require-group value matches)
+AND
+(no --no-group value matches)
+```
+
 Examples:
 
 ```bash
@@ -121,6 +131,22 @@ prek run --all-files --no-group format
 prek run --all-files --group ci --require-group lint --no-group slow
 prek run --all-files --group ci --stage pre-push
 ```
+
+For example, consider these hook groups:
+
+| Hook | Groups |
+| -- | -- |
+| `ty` | `lint-only`, `fast`, `local` |
+| `ruff-format` | `format`, `fast`, `local` |
+| `mypy` | `lint-only`, `slow`, `ci` |
+| `black` | `format`, `slow`, `ci` |
+
+```bash
+prek run --all-files --require-group fast --group format --group lint-only
+```
+
+This represents `fast AND (format OR lint-only)`, so it selects exactly `ty`
+and `ruff-format`. Reordering the options does not change the selection.
 
 ## Selection Model
 

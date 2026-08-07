@@ -170,6 +170,24 @@ fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     str::from_utf8(bytes).map(PathBuf::from)
 }
 
+#[cfg(unix)]
+#[expect(clippy::unnecessary_wraps)]
+fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
+    use std::os::unix::ffi::OsStrExt as _;
+
+    Ok(path.as_os_str().as_bytes())
+}
+
+#[cfg(not(unix))]
+fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
+    path.to_str().map(str::as_bytes).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Path is not valid UTF-8: `{}`", path.display()),
+        )
+    })
+}
+
 pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd()?
         .arg("diff")
@@ -268,9 +286,7 @@ pub(crate) async fn git_dir() -> Result<PathBuf, Error> {
         .check(true)
         .output()
         .await?;
-    Ok(PathBuf::from(
-        String::from_utf8_lossy(&output.stdout).trim_ascii(),
-    ))
+    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
 }
 
 pub(crate) async fn common_dir() -> Result<PathBuf, Error> {
@@ -280,13 +296,7 @@ pub(crate) async fn common_dir() -> Result<PathBuf, Error> {
         .check(true)
         .output()
         .await?;
-    if output.stdout.trim_ascii().is_empty() {
-        Ok(git_dir().await?)
-    } else {
-        Ok(PathBuf::from(
-            String::from_utf8_lossy(&output.stdout).trim_ascii(),
-        ))
-    }
+    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
 }
 
 pub(crate) async fn hooks_dir() -> Result<PathBuf, Error> {
@@ -302,10 +312,11 @@ pub(crate) async fn hooks_dir() -> Result<PathBuf, Error> {
         .check(true)
         .output()
         .await?;
-    let hooks_dir = if output.stdout.trim_ascii().is_empty() {
+    let stdout = output.stdout.trim_ascii();
+    let hooks_dir = if stdout.is_empty() {
         common_dir().await?.join("hooks")
     } else {
-        PathBuf::from(String::from_utf8_lossy(&output.stdout).trim_ascii())
+        path_from_git_bytes(stdout)?
     };
 
     let cleaned = hooks_dir.clean();
@@ -484,9 +495,7 @@ pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
 /// The index must be in a fully merged state.
 pub(crate) async fn write_tree() -> Result<String, Error> {
     let output = git_cmd()?.arg("write-tree").check(true).output().await?;
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .trim_ascii()
-        .to_string())
+    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_string())
 }
 
 /// Return the path of the top-level directory of the working tree.
@@ -856,7 +865,7 @@ pub(crate) async fn lfs_files(
 
     let writer = async move {
         for path in paths {
-            stdin.write_all(path.to_string_lossy().as_bytes()).await?;
+            stdin.write_all(path_to_git_bytes(path)?).await?;
             stdin.write_all(b"\0").await?;
         }
         stdin.shutdown().await?;
@@ -882,11 +891,10 @@ pub(crate) async fn lfs_files(
     }
 
     let mut lfs_files = FxHashSet::default();
-    let read_result = String::from_utf8_lossy(&read_result);
-    let mut it = read_result.split_terminator('\0');
+    let mut it = read_result.split(|&byte| byte == b'\0');
     while let (Some(file), Some(_attr), Some(value)) = (it.next(), it.next(), it.next()) {
-        if value == "lfs" {
-            lfs_files.insert(PathBuf::from(file));
+        if value == b"lfs" {
+            lfs_files.insert(path_from_git_bytes(file)?);
         }
     }
 
@@ -996,30 +1004,39 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = apply_git_work_tree(&mut cmd)
         .current_dir(git_root)
         .arg("config")
+        .arg("--null")
         .arg("--file")
         .arg(".gitmodules")
         .arg("--get-regexp")
         .arg(r"^submodule\..*\.path$")
         .output()?;
 
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .trim_ascii()
-        .lines()
-        .filter_map(|line| line.split_whitespace().nth(1))
-        .map(|submodule| git_root.join(submodule))
-        .collect())
+    let mut submodules = Vec::new();
+    // With `--null`, Git separates each key from its value with `\n` and records with NUL.
+    for entry in output.stdout.split(|&byte| byte == b'\0') {
+        let Some(separator) = entry.iter().position(|&byte| byte == b'\n') else {
+            continue;
+        };
+        let path = &entry[separator + 1..];
+        if path.is_empty() {
+            continue;
+        }
+        submodules.push(git_root.join(path_from_git_bytes(path)?));
+    }
+    Ok(submodules)
 }
 
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
+    use super::lfs_files;
     use super::zsplit;
     use super::{
         Error, GIT, TerminalPrompt, apply_shared_repository_file_mode, full_clone, init_repo,
-        should_update_submodules, update_submodules,
+        list_submodules, should_update_submodules, update_submodules,
     };
     use assert_cmd::assert::OutputAssertExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
 
     fn run_git(path: &Path, args: &[&str]) {
@@ -1120,6 +1137,73 @@ mod tests {
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0].as_os_str().as_bytes(), b"normal.py");
         assert_eq!(paths[1].as_os_str().as_bytes(), b"bad-\xff.py");
+    }
+
+    #[test]
+    fn zsplit_preserves_leading_and_trailing_spaces() {
+        let paths = zsplit(b" leading.py\0trailing.py \0").unwrap();
+
+        assert_eq!(
+            paths,
+            vec![PathBuf::from(" leading.py"), PathBuf::from("trailing.py ")]
+        );
+    }
+
+    #[test]
+    fn list_submodules_preserves_spaces_in_paths() {
+        let tmp = tempfile::tempdir().unwrap();
+        run_git(tmp.path(), &["init"]);
+        fs_err::write(
+            tmp.path().join(".gitmodules"),
+            "[submodule \"space\"]\n\tpath = modules/with space\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            list_submodules(tmp.path()).unwrap(),
+            vec![tmp.path().join("modules/with space")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_submodules_preserves_non_utf8_paths() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let tmp = tempfile::tempdir().unwrap();
+        run_git(tmp.path(), &["init"]);
+        fs_err::write(
+            tmp.path().join(".gitmodules"),
+            b"[submodule \"raw\"]\n\tpath = modules/bad-\xff\n",
+        )
+        .unwrap();
+
+        let submodules = list_submodules(tmp.path()).unwrap();
+
+        assert_eq!(
+            submodules[0]
+                .strip_prefix(tmp.path())
+                .unwrap()
+                .as_os_str()
+                .as_bytes(),
+            b"modules/bad-\xff"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn lfs_files_preserves_non_utf8_paths() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let tmp = tempfile::tempdir().unwrap();
+        run_git(tmp.path(), &["init"]);
+        fs_err::write(tmp.path().join(".gitattributes"), "* filter=lfs\n").unwrap();
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.bin"));
+
+        let files = lfs_files(tmp.path(), &[path]).await.unwrap();
+
+        assert!(files.contains(path));
     }
 
     #[test]
