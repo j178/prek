@@ -1,3 +1,4 @@
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
@@ -583,4 +584,75 @@ fn npm_version() {
 
     ----- stderr -----
     ");
+}
+
+/// npm installs node hook repos through a `git+file://` URL, which makes npm
+/// spawn git against prek's cache clone. Those git commands must not honor the
+/// `GIT_INDEX_FILE`/`GIT_DIR` that `git commit` exports to hook processes
+/// (absolute paths when committing from a linked worktree), or npm's clone
+/// checkout replaces the user's index with the hook repo's tree.
+#[test]
+fn leaked_git_index_file_is_not_written_by_node_install() -> anyhow::Result<()> {
+    let hook_repo = TestContext::new();
+    hook_repo.init_project();
+
+    hook_repo
+        .work_dir()
+        .child("package.json")
+        .write_str(indoc::indoc! {r#"
+        {
+          "name": "sentinel-node-tool",
+          "version": "1.0.0",
+          "bin": {
+            "sentinel-node-tool": "cli.js"
+          }
+        }
+    "#})?;
+    let cli = hook_repo.work_dir().child("cli.js");
+    cli.write_str(indoc::indoc! {r#"
+        #!/usr/bin/env node
+        console.log("sentinel node ok");
+    "#})?;
+    make_executable(cli.path())?;
+    hook_repo
+        .work_dir()
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r"
+        - id: sentinel-node
+          name: sentinel-node
+          entry: sentinel-node-tool
+          language: node
+          always_run: true
+          pass_filenames: false
+    "})?;
+
+    hook_repo.git_add(".");
+    hook_repo.git_commit("Add sentinel Node hook");
+    hook_repo.git_tag("v1.0.0");
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {repo}
+            rev: v1.0.0
+            hooks:
+              - id: sentinel-node
+    ", repo = hook_repo.work_dir().display()});
+    context.git_add(".");
+
+    let staged_before = context.staged_files();
+
+    let git_dir = context.work_dir().child(".git");
+    context
+        .run()
+        .arg("--all-files")
+        .env(EnvVars::GIT_DIR, git_dir.path())
+        .env(EnvVars::GIT_INDEX_FILE, git_dir.child("index").path())
+        .assert()
+        .success();
+
+    assert_eq!(context.staged_files(), staged_before);
+
+    Ok(())
 }

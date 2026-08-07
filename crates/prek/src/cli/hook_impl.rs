@@ -217,6 +217,8 @@ async fn run_legacy(
 
     let entry = resolve_command(vec![legacy_hook.into_os_string()], None, &CWD);
     let mut cmd = Cmd::new(&entry[0]);
+    // The legacy hook is a user hook and must observe git's hook environment.
+    cmd.inherit_git_repo_env();
     cmd.check(false).args(&entry[1..]).args(args);
     cmd.env(EnvVars::PREK_RUNNING_LEGACY, "1");
 

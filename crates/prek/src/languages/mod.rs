@@ -189,6 +189,8 @@ impl ExecutionEnvironment {
         let command = resolve_command(command.to_vec(), self.path(hook), cwd);
         let (program, args) = command.split_first().context("Command cannot be empty")?;
         let mut cmd = Cmd::new(program);
+        // Hooks must observe the `GIT_INDEX_FILE`/`GIT_DIR` that git exports to hooks.
+        cmd.inherit_git_repo_env();
         cmd.current_dir(cwd).args(args).check(false);
         self.patch.apply(&mut cmd);
         cmd.envs(&hook.env);
