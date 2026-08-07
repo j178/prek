@@ -69,14 +69,12 @@ pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| 
         })
 });
 
-/// Inherited `GIT_*` environment variables to remove for commands that are
-/// detached from the current repository (e.g. commands that target cache
-/// repositories).
+/// Inherited `GIT_*` environment variables to remove for commands detached
+/// from the current repository (e.g. commands that target cache repositories).
 ///
-/// Note that `git_cmd()` re-injects the repository-location variables scrubbed
-/// by `Cmd::new`: for some commands, like `git commit -a` or `git commit -p`,
-/// git creates a temporary index and sets `GIT_INDEX_FILE` to point to it, and
-/// prek's own `git write-tree` must observe it.
+/// `git_cmd()` re-injects the repository-location variables scrubbed by
+/// `Cmd::new`: `git commit -a`/`-p` set `GIT_INDEX_FILE` to a temporary index,
+/// and prek's own `git write-tree` must observe it.
 /// <https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202>
 static GIT_ENVS_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
@@ -123,8 +121,7 @@ impl GitCommandExt for Cmd {
             self.env_remove(EnvVars::GIT_WORK_TREE);
         }
         // `git_cmd()` re-injects the inherited repository-location variables;
-        // remove them explicitly rather than relying on them being covered by
-        // the `GIT_ENVS_TO_REMOVE` prefix scan.
+        // remove them explicitly rather than relying on the prefix scan below.
         for key in EnvVars::GIT_REPO_LOCATION_VARS {
             self.env_remove(key);
         }
@@ -137,9 +134,6 @@ impl GitCommandExt for Cmd {
 
 pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?);
-    // prek's own git commands target the user's repository, e.g. `git
-    // write-tree` must see the `GIT_INDEX_FILE` exported by `git commit`.
-    // Commands that target cache repositories chain `isolate_from_git_env()`.
     cmd.inherit_git_repo_env();
     cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"]);
     if let Some(work_tree) = git_work_tree() {

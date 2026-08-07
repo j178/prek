@@ -116,7 +116,6 @@ impl LanguageBackend for Julia {
 
         let run = async |batch: &[&Path]| {
             let output = Cmd::new("julia")
-                // Hooks must observe the `GIT_INDEX_FILE`/`GIT_DIR` that git exports to hooks.
                 .inherit_git_repo_env()
                 .current_dir(hook.work_dir())
                 .arg("--startup-file=no")
