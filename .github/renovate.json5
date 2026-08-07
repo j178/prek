@@ -18,10 +18,6 @@
     'internal'
   ],
   semanticCommits: 'disabled',
-  // pre-commit is currently in beta testing, must opt in
-  'pre-commit': {
-    enabled: true
-  },
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
@@ -36,7 +32,6 @@
   },
   enabledManagers: [
     'github-actions',
-    'pre-commit',
     'cargo',
     'custom.regex',
     'dockerfile',
@@ -96,11 +91,6 @@
       matchDepNames: ['rui314/setup-mold'],
       overrideDatasource: 'github-tags',
     },
-    {
-      groupName: 'pre-commit',
-      matchManagers: ['pre-commit'],
-      matchFileNames: ['.pre-commit-config.yaml']
-    },
     // Disable updates for GitHub runners: we'd only pin them to a specific version
     // if there was a deliberate reason to do so
     {
@@ -120,7 +110,7 @@
       commitMessageTopic: "Rust",
     },
     {
-      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'pep621', 'custom.regex', 'dockerfile' ],
+      matchManagers: [ 'cargo', 'github-actions', 'pep621', 'custom.regex', 'dockerfile' ],
       minimumReleaseAge: '7 days'
     },
     {
