@@ -305,8 +305,8 @@ fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArg
 /// Ensure installable hooks have environments and return the form expected by the runner.
 ///
 /// Hooks that do not need an environment are returned as-is. Hooks that need an
-/// environment first try the install cache; only cache misses are filtered
-/// against the run input before installation.
+/// environment but would not run for this input are also returned without resolving
+/// an environment; `run_hook` will report them as skipped before trying to execute them.
 async fn ensure_hooks_installed<'paths>(
     store: &Store,
     printer: Printer,
@@ -315,13 +315,9 @@ async fn ensure_hooks_installed<'paths>(
     file_index: &RunFileIndex<'paths>,
     hooks: &[Arc<Hook>],
 ) -> Result<Vec<InstalledHook>> {
-    let env_hooks = hooks
-        .iter()
-        .filter(|hook| hook.needs_install_env())
-        .cloned()
-        .collect::<Vec<_>>();
+    let runnable_env_hooks = select_runnable_env_hooks(workspace, input, file_index, hooks)?;
 
-    if env_hooks.is_empty() {
+    if runnable_env_hooks.is_empty() {
         return Ok(hooks
             .iter()
             .map(|hook| InstalledHook::NoNeedInstall(hook.clone()))
@@ -333,9 +329,7 @@ async fn ensure_hooks_installed<'paths>(
     let mut installed_by_hook = FxHashMap::default();
     let mut missing_env_hooks = Vec::new();
 
-    // Resolve the cache before file filtering so already-installed hooks keep their exact
-    // environment, while missing hooks still avoid install when they would not run.
-    for hook in env_hooks {
+    for hook in runnable_env_hooks {
         if let Some(installed_hook) = install_cache.installed_hook(store, hook.clone()).await {
             installed_by_hook.insert(hook_key(&hook), installed_hook);
         } else {
@@ -343,12 +337,10 @@ async fn ensure_hooks_installed<'paths>(
         }
     }
 
-    let hooks_to_install =
-        select_hooks_to_install(workspace, input, file_index, &missing_env_hooks)?;
-    if !hooks_to_install.is_empty() {
+    if !missing_env_hooks.is_empty() {
         let reporter = HookInstallReporter::new(printer);
         let installed_hooks =
-            install_hooks(hooks_to_install, store, &reporter, &mut install_cache).await?;
+            install_hooks(missing_env_hooks, store, &reporter, &mut install_cache).await?;
         reporter.on_complete();
 
         for installed_hook in installed_hooks {
@@ -366,12 +358,11 @@ async fn ensure_hooks_installed<'paths>(
         .collect())
 }
 
-/// Return the missing environment hooks that should actually be installed.
+/// Return installable hooks that should run for this input.
 ///
-/// The input hooks are already known to need an environment and be missing from
-/// the install cache. This applies language support and run-input filtering so
-/// hooks that would not run do not get installed.
-fn select_hooks_to_install<'paths>(
+/// Filtering happens before consulting the install cache so skipped hooks do not
+/// scan or health-check environments that they cannot use in this run.
+fn select_runnable_env_hooks<'paths>(
     workspace: &Workspace,
     input: &'paths RunInput,
     file_index: &RunFileIndex<'paths>,
@@ -380,14 +371,14 @@ fn select_hooks_to_install<'paths>(
     #[allow(clippy::mutable_key_type)]
     let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
         FxHashMap::with_capacity_and_hasher(workspace.all_projects().len(), FxBuildHasher);
-    for hook in hooks {
+    for hook in hooks.iter().filter(|hook| hook.needs_install_env()) {
         project_to_hooks
             .entry(hook.project())
             .or_default()
             .push(hook.clone());
     }
 
-    let mut hooks_to_install = Vec::with_capacity(hooks.len());
+    let mut runnable_env_hooks = Vec::with_capacity(hooks.len());
     let tag_cache = file_index.tag_cache();
 
     for project in workspace.all_projects() {
@@ -401,7 +392,7 @@ fn select_hooks_to_install<'paths>(
                 hooks.retain(|hook| {
                     hook.always_run || project_files.has_matching_file(hook, tag_cache)
                 });
-                hooks_to_install.extend(hooks);
+                runnable_env_hooks.extend(hooks);
             }
             RunInput::MessageFile(_) => {
                 let Some(hooks) = project_to_hooks.remove(project.as_ref()) else {
@@ -411,14 +402,14 @@ fn select_hooks_to_install<'paths>(
                 let project_input = ProjectHookInput::new(input, project, file_index)?;
                 for hook in hooks {
                     if hook.always_run || project_input.matches_hook(&hook, tag_cache) {
-                        hooks_to_install.push(hook);
+                        runnable_env_hooks.push(hook);
                     }
                 }
             }
         }
     }
 
-    Ok(hooks_to_install)
+    Ok(runnable_env_hooks)
 }
 
 fn hook_key(hook: &Hook) -> (usize, usize) {
