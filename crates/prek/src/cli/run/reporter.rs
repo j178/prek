@@ -555,9 +555,9 @@ impl HookRunReporter {
         };
 
         let label = if self.show_project_headers {
-            format!("  {}", hook.name)
+            Cow::Owned(format!("  {}", hook.name))
         } else {
-            hook.name.clone()
+            Cow::Borrowed(hook.name.as_str())
         };
         let dots = self.dots.saturating_sub(label.width());
         progress.set_style(
@@ -565,7 +565,7 @@ impl HookRunReporter {
                 .unwrap()
                 .progress_chars(".."),
         );
-        progress.set_message(label);
+        progress.set_message(label.into_owned());
         progress
     }
 
