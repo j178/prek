@@ -1,20 +1,27 @@
 use std::fmt::Write;
 use std::path::Path;
 
+use anstream::stream::IsTerminal;
 use anyhow::Result;
 
-use crate::cli::ExitStatus;
+use crate::cli::{CacheSizeOutputFormat, ExitStatus};
 use crate::printer::Printer;
 use crate::store::Store;
 
 /// Display the total size of the cache.
 pub(crate) fn cache_size(
     store: &Store,
-    human_readable: bool,
+    output_format: CacheSizeOutputFormat,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Walk the entire cache root
     let total_bytes = dir_size_bytes(store.path());
+
+    let human_readable = match output_format {
+        CacheSizeOutputFormat::Auto => std::io::stdout().is_terminal(),
+        CacheSizeOutputFormat::Human => true,
+        CacheSizeOutputFormat::Machine => false,
+    };
+
     if human_readable {
         let (bytes, unit) = human_readable_bytes(total_bytes);
         writeln!(printer.stdout_important(), "{bytes:.1}{unit}")?;

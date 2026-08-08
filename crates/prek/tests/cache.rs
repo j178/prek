@@ -10,6 +10,12 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
+fn cache_size_filters(context: &TestContext) -> Vec<(&str, &str)> {
+    let mut filters = vec![(r"(?m)^\d+\n", "[BYTES]\n")];
+    filters.extend(context.filters());
+    filters
+}
+
 #[test]
 fn cache_dir() {
     let context = TestContext::new();
@@ -202,8 +208,40 @@ fn cache_clean() -> anyhow::Result<()> {
 }
 
 #[test]
-fn cache_size() -> anyhow::Result<()> {
-    let context = TestContext::new().with_filtered_cache_size();
+fn cache_size_output_formats() {
+    let context = TestContext::new();
+
+    cmd_snapshot!(cache_size_filters(&context), context.command().args(["cache", "size", "--no-log-file", "--output-format", "auto"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [BYTES]
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(cache_size_filters(&context), context.command().args(["cache", "size", "--no-log-file", "--output-format", "human"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [SIZE]
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(cache_size_filters(&context), context.command().args(["cache", "size", "--no-log-file", "--output-format", "machine"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [BYTES]
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn cache_size_with_populated_cache() -> anyhow::Result<()> {
+    let context = TestContext::new();
     context.init_project();
 
     let cwd = context.work_dir();
@@ -220,16 +258,16 @@ fn cache_size() -> anyhow::Result<()> {
 
     context.run();
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("size"), @r"
+    cmd_snapshot!(cache_size_filters(&context), context.command().arg("cache").arg("size"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [SIZE]
+    [BYTES]
 
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("size").arg("-H"), @r"
+    cmd_snapshot!(cache_size_filters(&context), context.command().arg("cache").arg("size").arg("-H"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

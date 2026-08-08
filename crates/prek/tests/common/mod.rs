@@ -430,20 +430,6 @@ impl TestContext {
         Ok(())
     }
 
-    /// Add extra filtering for cache size output
-    #[must_use]
-    pub fn with_filtered_cache_size(mut self) -> Self {
-        // Filter raw byte counts (numbers on their own line)
-        self.filters
-            .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
-        // Filter human-readable sizes (e.g., "384.2 KiB")
-        self.filters.push((
-            r"(?m)^\d+(\.\d+)? ([KMGTPE]i)?B\n".to_string(),
-            "[SIZE]\n".to_string(),
-        ));
-        self
-    }
-
     /// Add extra filtering for `cache clean` summary output.
     #[must_use]
     pub fn with_filtered_cache_clean_summary(mut self) -> Self {

@@ -1084,10 +1084,30 @@ pub(crate) enum CacheCommand {
     Size(SizeArgs),
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub(crate) enum CacheSizeOutputFormat {
+    /// Display a human-readable size in terminals and raw bytes otherwise.
+    #[default]
+    Auto,
+    /// Display the cache size in a human-readable format.
+    Human,
+    /// Display the cache size in raw bytes.
+    Machine,
+}
+
 #[derive(Args, Debug)]
 pub struct SizeArgs {
-    /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
-    #[arg(long = "human", short = 'H', alias = "human-readable")]
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = CacheSizeOutputFormat::default())]
+    pub(crate) output_format: CacheSizeOutputFormat,
+
+    /// Display the cache size in human-readable format (e.g., `1.2GiB` instead of raw bytes).
+    #[arg(
+        long = "human",
+        short = 'H',
+        alias = "human-readable",
+        conflicts_with = "output_format"
+    )]
     pub(crate) human: bool,
 }
 
