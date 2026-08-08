@@ -13,7 +13,7 @@ use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunOptions, flag};
 use crate::config::{self, Stage};
 use crate::git;
-use crate::git::GIT_ROOT;
+use crate::git::{GIT_ROOT, GitCommandExt};
 use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
 use crate::store::Store;
@@ -24,6 +24,7 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
         .arg("rev-parse")
         .arg("HEAD")
         .current_dir(repo)
+        .isolate_from_git_env()
         .output()
         .await?
         .stdout;
@@ -37,6 +38,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("clone")
         .arg(repo_path)
         .arg(&shadow)
+        .isolate_from_git_env()
         .output()
         .await?;
     git::git_cmd()?
@@ -45,19 +47,23 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("-b")
         .arg("_prek_tmp")
         .current_dir(&shadow)
+        .isolate_from_git_env()
         .output()
         .await?;
 
     let index_path = shadow.join(".git/index");
     let objects_path = shadow.join(".git/objects");
 
-    let staged_files = git::staged_files(repo_path).await?;
+    let mut cmd = git::git_cmd()?;
+    cmd.isolate_from_git_env();
+    let staged_files = git::staged_files(cmd, repo_path).await?;
     if !staged_files.is_empty() {
         git::git_cmd()?
             .arg("add")
             .arg("--")
             .file_args(&staged_files)
             .current_dir(repo_path)
+            .isolate_from_git_env()
             .env("GIT_INDEX_FILE", &index_path)
             .env("GIT_OBJECT_DIRECTORY", &objects_path)
             .output()
@@ -69,6 +75,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("add")
         .arg("--update") // Update tracked files
         .current_dir(repo_path)
+        .isolate_from_git_env()
         .env("GIT_INDEX_FILE", &index_path)
         .env("GIT_OBJECT_DIRECTORY", &objects_path)
         .output()
@@ -82,6 +89,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("--no-edit")
         .arg("--no-verify")
         .current_dir(&shadow)
+        .isolate_from_git_env()
         .env("GIT_AUTHOR_NAME", "prek test")
         .env("GIT_AUTHOR_EMAIL", "test@example.com")
         .env("GIT_COMMITTER_NAME", "prek test")
@@ -135,6 +143,7 @@ async fn prepare_repo<'a>(
             .arg("--exit-code")
             .arg(runtime_source.as_ref())
             .arg("HEAD")
+            .isolate_from_git_env()
             .output()
             .await?
             .stdout;

@@ -319,8 +319,8 @@ pub(crate) async fn hooks_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub(crate) async fn staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd()?
+pub(crate) async fn staged_files(mut cmd: Cmd, root: &Path) -> Result<Vec<PathBuf>, Error> {
+    let output = cmd
         .current_dir(root)
         .arg("diff")
         .arg("--cached")
@@ -369,6 +369,7 @@ pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
         .arg("--quiet")
         .arg(rev)
         .current_dir(path)
+        .isolate_from_git_env()
         .check(false)
         .status()
         .await?;

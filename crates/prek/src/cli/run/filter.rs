@@ -684,7 +684,7 @@ async fn collect_files_for_selection(
                 return Ok(files);
             }
 
-            let files = git::staged_files(workspace_root).await?;
+            let files = git::staged_files(git::git_cmd()?, workspace_root).await?;
             debug!("Staged files: {}", files.len());
             Ok(files)
         }

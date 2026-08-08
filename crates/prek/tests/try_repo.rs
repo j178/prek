@@ -2,6 +2,7 @@ mod common;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use prek_consts::env_vars::EnvVars;
 use std::path::PathBuf;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
@@ -280,7 +281,7 @@ fn try_repo_specific_rev() -> Result<()> {
 }
 
 #[test]
-fn try_repo_uncommitted_changes() -> Result<()> {
+fn try_repo_uncommitted_changes_ignore_inherited_git_env() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -314,7 +315,11 @@ fn try_repo_uncommitted_changes() -> Result<()> {
         ("'", "\""),
     ]);
 
-    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r#"
+    let git_dir = context.work_dir().child(".git");
+    cmd_snapshot!(filters, context.try_repo()
+        .env(EnvVars::GIT_DIR, git_dir.path())
+        .env("GIT_INDEX_FILE", git_dir.child("index").path())
+        .arg(&repo_path), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -331,6 +336,14 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ----- stderr -----
     warning: Local repository has uncommitted changes. Creating a temporary copy...
     "#);
+
+    git_cmd(context.work_dir())
+        .arg("diff")
+        .arg("--cached")
+        .arg("--name-only")
+        .assert()
+        .success()
+        .stdout("test.txt\n");
 
     Ok(())
 }
