@@ -8,6 +8,7 @@ use semver::Version;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
@@ -113,6 +114,7 @@ impl LanguageBackend for Swift {
                     .arg(repo_path)
                     .arg("--build-path")
                     .arg(&build_path)
+                    .sanitize_git_repo_env()
                     .check(true)
                     .output()
                     .await
@@ -128,6 +130,7 @@ impl LanguageBackend for Swift {
                     .arg("--build-path")
                     .arg(&build_path)
                     .arg("--show-bin-path")
+                    .sanitize_git_repo_env()
                     .check(true)
                     .output()
                     .await

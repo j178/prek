@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::hook_entry::PreparedHookEntry;
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
@@ -351,6 +352,7 @@ async fn install_package_config(
         .env(EnvVars::PUB_CACHE, env_path)
         .arg("pub")
         .arg("get")
+        .sanitize_git_repo_env()
         .check(true)
         .output()
         .await?;

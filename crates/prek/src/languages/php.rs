@@ -11,6 +11,7 @@ use serde_json::{Map, Value, json};
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
@@ -193,6 +194,7 @@ impl LanguageBackend for Php {
                 .arg("--no-progress")
                 .arg("--")
                 .args(dependencies)
+                .sanitize_git_repo_env()
                 .check(true)
                 .output()
                 .await

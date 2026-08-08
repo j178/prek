@@ -272,7 +272,7 @@ async fn install_local_project(
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .check(true)
             .output()
             .await?;
@@ -321,7 +321,7 @@ async fn install_local_project(
         cmd.current_dir(&manifest_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .check(true)
             .output()
             .await?;
@@ -344,7 +344,7 @@ async fn install_local_project(
         cmd.current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .check(true)
             .output()
             .await?;
@@ -377,7 +377,7 @@ async fn install_cli_dependency(
 
     cmd.env(EnvVars::PATH, new_path)
         .env(EnvVars::CARGO_HOME, cargo_home)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .check(true)
         .output()
         .await?;

@@ -11,6 +11,7 @@ use tracing::debug;
 use url::Url;
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::git::GitCommandExt;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::node::NodeRequest;
@@ -341,7 +342,8 @@ impl Npm<'_> {
 
     fn command(&self) -> Cmd {
         let mut cmd = Cmd::new(self.executable);
-        cmd.env(EnvVars::PATH, self.path)
+        cmd.sanitize_git_repo_env()
+            .env(EnvVars::PATH, self.path)
             .env(EnvVars::NODE_PATH, self.node_path);
         for key in NPM_CONFIG_ENVS_TO_REMOVE {
             cmd.env_remove(key);

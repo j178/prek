@@ -28,7 +28,7 @@ pub(super) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Re
         .arg("--filter=blob:none")
         .arg("--tags")
         .current_dir(repo_path)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -44,7 +44,7 @@ pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> R
         .arg(format!("{rev}^{{}}"))
         .check(true)
         .current_dir(repo_path)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .output()
         .await?;
 
@@ -84,7 +84,7 @@ pub(super) async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<
         .env(EnvVars::LC_ALL, "C")
         .check(false)
         .current_dir(repo_path)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .stdout(Stdio::null())
         .output()
         .await?;
@@ -128,7 +128,7 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
         .arg("--exact-match")
         .check(false)
         .current_dir(repo_path)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .output()
         .await?;
     let rev = if output.status.success() {
@@ -140,7 +140,7 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
             .arg("FETCH_HEAD")
             .check(true)
             .current_dir(repo_path)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await?;
         String::from_utf8_lossy(&output.stdout).trim().to_string()
@@ -162,7 +162,7 @@ pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> 
         .arg("refs/tags")
         .check(true)
         .current_dir(repo)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .output()
         .await?;
 
@@ -381,7 +381,7 @@ pub(super) async fn checkout_and_validate_manifest(
             .arg("show")
             .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
             .current_dir(repo_path)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -395,7 +395,7 @@ pub(super) async fn checkout_and_validate_manifest(
         .arg("--")
         .arg(PRE_COMMIT_HOOKS_YAML)
         .current_dir(repo_path)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -445,7 +445,7 @@ mod tests {
             .unwrap()
             .arg("init")
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -454,7 +454,7 @@ mod tests {
             .unwrap()
             .args(["config", "user.email", "test@test.com"])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -463,7 +463,7 @@ mod tests {
             .unwrap()
             .args(["config", "user.name", "Test"])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -479,7 +479,7 @@ mod tests {
                 "initial",
             ])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -488,7 +488,7 @@ mod tests {
             .unwrap()
             .args(["branch", "-M", "trunk"])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -524,7 +524,7 @@ mod tests {
     async fn create_commit(repo: &Path, message: &str) {
         git_cmd(repo)
             .args(["commit", "--allow-empty", "-m", message])
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -543,7 +543,7 @@ mod tests {
             .args(["commit", "--allow-empty", "-m", message])
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -553,7 +553,7 @@ mod tests {
         git_cmd(repo)
             .arg("tag")
             .arg(tag)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -575,7 +575,7 @@ mod tests {
             .arg(tag)
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -613,7 +613,7 @@ mod tests {
             .unwrap()
             .args(["fetch", ".", "HEAD"])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -633,7 +633,7 @@ mod tests {
             .unwrap()
             .args(["fetch", ".", "HEAD"])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
@@ -644,7 +644,7 @@ mod tests {
             .unwrap()
             .args(["rev-parse", "HEAD"])
             .current_dir(repo)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .output()
             .await
             .unwrap()

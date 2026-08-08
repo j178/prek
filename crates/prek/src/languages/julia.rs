@@ -7,6 +7,7 @@ use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::process::Cmd;
@@ -70,6 +71,7 @@ impl LanguageBackend for Julia {
             .arg(julia_code)
             .arg("--")
             .args(&hook.additional_dependencies)
+            .sanitize_git_repo_env()
             .check(true)
             .output()
             .await

@@ -69,38 +69,29 @@ pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| 
         })
 });
 
-/// Remove some `GIT_` environment variables exposed by `git`.
+/// Repository-local environment variables cleared before operating on another repository.
 ///
-/// For some commands, like `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
-/// and set `GIT_INDEX_FILE` to point to it.
-/// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
-/// <https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202>
-static GIT_ENVS_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
-    let keep = &[
-        "GIT_EXEC_PATH",
-        "GIT_SSH",
-        "GIT_SSH_COMMAND",
-        "GIT_SSL_CAINFO",
-        "GIT_SSL_NO_VERIFY",
-        "GIT_CONFIG_COUNT",
-        "GIT_CONFIG_PARAMETERS",
-        "GIT_HTTP_PROXY_AUTHMETHOD",
-        "GIT_ALLOW_PROTOCOL",
-        "GIT_ASKPASS",
-    ];
-
-    std::env::vars()
-        .filter(|(k, _)| {
-            k.starts_with("GIT_")
-                && !k.starts_with("GIT_CONFIG_KEY_")
-                && !k.starts_with("GIT_CONFIG_VALUE_")
-                && !keep.contains(&k.as_str())
-        })
-        .collect()
-});
+/// `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_*`, and `GIT_CONFIG_VALUE_*`
+/// are deliberately excluded so nested Git commands retain caller-supplied command-scoped settings.
+static GIT_REPO_LOCAL_ENVS: &[&str] = &[
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_INTERNAL_SUPER_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+];
 
 pub(crate) trait GitCommandExt {
-    fn isolate_from_git_env(&mut self) -> &mut Self;
+    fn sanitize_git_repo_env(&mut self) -> &mut Self;
 }
 
 pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
@@ -111,15 +102,8 @@ pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
 }
 
 impl GitCommandExt for Cmd {
-    fn isolate_from_git_env(&mut self) -> &mut Self {
-        // `git_cmd()` adds this synthetic value as a command-local env. Commands
-        // that call `isolate_from_git_env()` are intentionally detached from the
-        // current repo, so remove it here; inherited `GIT_WORK_TREE` is handled
-        // by `GIT_ENVS_TO_REMOVE`.
-        if git_work_tree().is_some() {
-            self.env_remove(EnvVars::GIT_WORK_TREE);
-        }
-        for (key, _) in GIT_ENVS_TO_REMOVE.iter() {
+    fn sanitize_git_repo_env(&mut self) -> &mut Self {
+        for key in GIT_REPO_LOCAL_ENVS {
             self.env_remove(key);
         }
         self
@@ -515,7 +499,7 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("init")
         .arg("--template=")
         .arg(path)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .check(true)
         .output()
         .await?;
@@ -526,7 +510,7 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("add")
         .arg("origin")
         .arg(url)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .check(true)
         .output()
         .await?;
@@ -589,7 +573,7 @@ async fn shallow_clone(
         .arg("origin")
         .arg(rev)
         .arg("--depth=1")
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -600,7 +584,7 @@ async fn shallow_clone(
         .current_dir(path)
         .arg("checkout")
         .arg("FETCH_HEAD")
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
@@ -619,7 +603,7 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
         .arg("fetch")
         .arg("origin")
         .arg("--tags")
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -630,7 +614,7 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
@@ -662,7 +646,7 @@ async fn update_submodules(
     if shallow {
         cmd.arg("--depth=1");
     }
-    cmd.isolate_from_git_env()
+    cmd.sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
@@ -682,7 +666,7 @@ async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
         .arg("ls-files")
         .arg("-z")
         .arg("-s")
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .check(true)
         .output()

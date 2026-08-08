@@ -7,6 +7,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::git::GitCommandExt;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::bun::BunRequest;
@@ -83,6 +84,7 @@ impl LanguageBackend for Bun {
                 .args(deps)
                 .env(EnvVars::PATH, new_path)
                 .env(EnvVars::BUN_INSTALL, &info.env_path)
+                .sanitize_git_repo_env()
                 .check(true)
                 .output()
                 .await?;
