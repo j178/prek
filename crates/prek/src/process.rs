@@ -25,17 +25,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 /// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::PipeReader;
 use std::ops::Range;
 use std::path::Path;
 use std::process::Output;
 use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
-use std::sync::LazyLock;
 
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tracing::{enabled, trace};
@@ -173,35 +171,11 @@ impl AsyncPipeReader {
     }
 }
 
-/// The [`EnvVars::GIT_REPO_LOCATION_VARS`] values inherited from the parent
-/// process.
-///
-/// `git commit` exports these to hooks pointing at the user's repository; any
-/// subprocess that runs `git` against another repository (e.g. npm resolving a
-/// git dependency) would write through them into the user's index. [`Cmd::new`]
-/// therefore removes them from every spawned command, mirroring pre-commit's
-/// `no_git_env()`; callers that legitimately operate on the user's repository
-/// opt back in via [`Cmd::inherit_git_repo_env`].
-static INHERITED_GIT_REPO_ENV: LazyLock<Vec<(&'static str, OsString)>> = LazyLock::new(|| {
-    EnvVars::GIT_REPO_LOCATION_VARS
-        .iter()
-        .filter_map(|&key| EnvVars.var_os(key).map(|value| (key, value)))
-        .collect()
-});
-
 /// Constructors
 impl Cmd {
     /// Create a new command.
-    ///
-    /// Inherited git repository-location variables are removed from the child
-    /// environment by default; see [`INHERITED_GIT_REPO_ENV`].
     pub fn new(command: impl AsRef<OsStr>) -> Self {
-        let mut inner = tokio::process::Command::new(command);
-        // Removing only the inherited variables keeps the env map untouched in
-        // the common case, preserving the zero-copy spawn path.
-        for (key, _) in INHERITED_GIT_REPO_ENV.iter() {
-            inner.env_remove(key);
-        }
+        let inner = tokio::process::Command::new(command);
         Self {
             inner,
             hidden_arg_ranges: Vec::new(),
@@ -503,18 +477,6 @@ impl Cmd {
     /// Forwards to [`std::process::Command::env_remove`].
     pub fn env_remove<K: AsRef<OsStr>>(&mut self, key: K) -> &mut Self {
         self.inner.env_remove(key);
-        self
-    }
-
-    /// Re-inject the inherited git repository-location variables removed by
-    /// [`Cmd::new`].
-    ///
-    /// Only for commands that intentionally operate on the user's repository:
-    /// prek's own `git` invocations and hook processes.
-    pub fn inherit_git_repo_env(&mut self) -> &mut Self {
-        for (key, value) in INHERITED_GIT_REPO_ENV.iter() {
-            self.inner.env(key, value);
-        }
         self
     }
 

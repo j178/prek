@@ -77,21 +77,7 @@ impl EnvVars {
     // Git related
     pub const GIT_DIR: &'static str = "GIT_DIR";
     pub const GIT_WORK_TREE: &'static str = "GIT_WORK_TREE";
-    pub const GIT_INDEX_FILE: &'static str = "GIT_INDEX_FILE";
-    pub const GIT_OBJECT_DIRECTORY: &'static str = "GIT_OBJECT_DIRECTORY";
-    pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
-
-    /// Variables through which git resolves repository locations. When set
-    /// (git exports them to hooks during `git commit`), any git subprocess
-    /// honors them regardless of its working directory.
-    pub const GIT_REPO_LOCATION_VARS: &'static [&'static str] = &[
-        Self::GIT_DIR,
-        Self::GIT_WORK_TREE,
-        Self::GIT_INDEX_FILE,
-        Self::GIT_OBJECT_DIRECTORY,
-        Self::GIT_COMMON_DIR,
-    ];
 
     pub const SKIP: &'static str = "SKIP";
 

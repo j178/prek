@@ -69,12 +69,11 @@ pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| 
         })
 });
 
-/// Inherited `GIT_*` environment variables to remove for commands detached
-/// from the current repository (e.g. commands that target cache repositories).
+/// Remove some `GIT_` environment variables exposed by `git`.
 ///
-/// `git_cmd()` re-injects the repository-location variables scrubbed by
-/// `Cmd::new`: `git commit -a`/`-p` set `GIT_INDEX_FILE` to a temporary index,
-/// and prek's own `git write-tree` must observe it.
+/// For some commands, like `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
+/// and set `GIT_INDEX_FILE` to point to it.
+/// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
 /// <https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202>
 static GIT_ENVS_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
@@ -120,11 +119,6 @@ impl GitCommandExt for Cmd {
         if git_work_tree().is_some() {
             self.env_remove(EnvVars::GIT_WORK_TREE);
         }
-        // `git_cmd()` re-injects the inherited repository-location variables;
-        // remove them explicitly rather than relying on the prefix scan below.
-        for key in EnvVars::GIT_REPO_LOCATION_VARS {
-            self.env_remove(key);
-        }
         for (key, _) in GIT_ENVS_TO_REMOVE.iter() {
             self.env_remove(key);
         }
@@ -134,7 +128,6 @@ impl GitCommandExt for Cmd {
 
 pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?);
-    cmd.inherit_git_repo_env();
     cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"]);
     if let Some(work_tree) = git_work_tree() {
         cmd.env(EnvVars::GIT_WORK_TREE, work_tree);

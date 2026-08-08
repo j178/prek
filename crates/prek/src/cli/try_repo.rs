@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
-use prek_consts::env_vars::EnvVars;
 use strum::IntoEnumIterator;
 use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
@@ -14,7 +13,7 @@ use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunOptions, flag};
 use crate::config::{self, Stage};
 use crate::git;
-use crate::git::{GIT_ROOT, GitCommandExt};
+use crate::git::GIT_ROOT;
 use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
 use crate::store::Store;
@@ -38,7 +37,6 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("clone")
         .arg(repo_path)
         .arg(&shadow)
-        .isolate_from_git_env()
         .output()
         .await?;
     git::git_cmd()?
@@ -47,7 +45,6 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("-b")
         .arg("_prek_tmp")
         .current_dir(&shadow)
-        .isolate_from_git_env()
         .output()
         .await?;
 
@@ -61,8 +58,8 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
             .arg("--")
             .file_args(&staged_files)
             .current_dir(repo_path)
-            .env(EnvVars::GIT_INDEX_FILE, &index_path)
-            .env(EnvVars::GIT_OBJECT_DIRECTORY, &objects_path)
+            .env("GIT_INDEX_FILE", &index_path)
+            .env("GIT_OBJECT_DIRECTORY", &objects_path)
             .output()
             .await?;
     }
@@ -72,8 +69,8 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("add")
         .arg("--update") // Update tracked files
         .current_dir(repo_path)
-        .env(EnvVars::GIT_INDEX_FILE, &index_path)
-        .env(EnvVars::GIT_OBJECT_DIRECTORY, &objects_path)
+        .env("GIT_INDEX_FILE", &index_path)
+        .env("GIT_OBJECT_DIRECTORY", &objects_path)
         .output()
         .await?;
 
@@ -85,7 +82,6 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("--no-edit")
         .arg("--no-verify")
         .current_dir(&shadow)
-        .isolate_from_git_env()
         .env("GIT_AUTHOR_NAME", "prek test")
         .env("GIT_AUTHOR_EMAIL", "test@example.com")
         .env("GIT_COMMITTER_NAME", "prek test")

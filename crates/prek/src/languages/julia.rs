@@ -116,7 +116,6 @@ impl LanguageBackend for Julia {
 
         let run = async |batch: &[&Path]| {
             let output = Cmd::new("julia")
-                .inherit_git_repo_env()
                 .current_dir(hook.work_dir())
                 .arg("--startup-file=no")
                 .arg(format!("--project={}", env_dir.display()))

@@ -341,17 +341,6 @@ impl TestContext {
             .success();
     }
 
-    /// Return the output of `git ls-files --stage`.
-    pub fn staged_files(&self) -> String {
-        let output = git_cmd(&self.temp_dir)
-            .arg("ls-files")
-            .arg("--stage")
-            .output()
-            .expect("failed to list staged files");
-        assert!(output.status.success());
-        String::from_utf8_lossy(&output.stdout).into_owned()
-    }
-
     /// Run `git tag`.
     pub fn git_tag(&self, tag: &str) {
         git_cmd(&self.temp_dir)

@@ -189,7 +189,6 @@ impl ExecutionEnvironment {
         let command = resolve_command(command.to_vec(), self.path(hook), cwd);
         let (program, args) = command.split_first().context("Command cannot be empty")?;
         let mut cmd = Cmd::new(program);
-        cmd.inherit_git_repo_env();
         cmd.current_dir(cwd).args(args).check(false);
         self.patch.apply(&mut cmd);
         cmd.envs(&hook.env);

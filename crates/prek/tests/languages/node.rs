@@ -4,7 +4,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot, make_executable, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, make_executable, remove_bin_from_path};
 
 #[test]
 fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
@@ -586,13 +586,8 @@ fn npm_version() {
     ");
 }
 
-/// npm installs node hook repos through a `git+file://` URL, which makes npm
-/// spawn git against prek's cache clone. Those git commands must not honor the
-/// `GIT_INDEX_FILE`/`GIT_DIR` that `git commit` exports to hook processes
-/// (absolute paths when committing from a linked worktree), or npm's clone
-/// checkout replaces the user's index with the hook repo's tree.
 #[test]
-fn leaked_git_index_file_is_not_written_by_node_install() -> anyhow::Result<()> {
+fn node_install_does_not_modify_inherited_git_index() -> anyhow::Result<()> {
     let hook_repo = TestContext::new();
     hook_repo.init_project();
 
@@ -641,18 +636,31 @@ fn leaked_git_index_file_is_not_written_by_node_install() -> anyhow::Result<()> 
     ", repo = hook_repo.work_dir().display()});
     context.git_add(".");
 
-    let staged_before = context.staged_files();
+    let staged_before = git_cmd(context.work_dir())
+        .args(["ls-files", "--stage"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
 
     let git_dir = context.work_dir().child(".git");
     context
         .run()
         .arg("--all-files")
         .env(EnvVars::GIT_DIR, git_dir.path())
-        .env(EnvVars::GIT_INDEX_FILE, git_dir.child("index").path())
+        .env("GIT_INDEX_FILE", git_dir.child("index").path())
         .assert()
         .success();
 
-    assert_eq!(context.staged_files(), staged_before);
+    let staged_after = git_cmd(context.work_dir())
+        .args(["ls-files", "--stage"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_eq!(staged_after, staged_before);
 
     Ok(())
 }
