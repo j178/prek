@@ -7,6 +7,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process::Cmd;
@@ -86,6 +87,7 @@ impl LanguageBackend for Haskell {
             .arg("--installdir")
             .arg(&bin_dir)
             .args(pkgs)
+            .isolate_from_git_env()
             .check(true)
             .output()
             .await
