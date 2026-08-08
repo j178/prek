@@ -352,7 +352,7 @@ async fn install_package_config(
         .env(EnvVars::PUB_CACHE, env_path)
         .arg("pub")
         .arg("get")
-        .isolate_from_git_env()
+        .sanitize_git_repo_env()
         .check(true)
         .output()
         .await?;

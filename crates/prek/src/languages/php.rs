@@ -194,7 +194,7 @@ impl LanguageBackend for Php {
                 .arg("--no-progress")
                 .arg("--")
                 .args(dependencies)
-                .isolate_from_git_env()
+                .sanitize_git_repo_env()
                 .check(true)
                 .output()
                 .await

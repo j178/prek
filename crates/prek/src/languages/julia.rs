@@ -71,7 +71,7 @@ impl LanguageBackend for Julia {
             .arg(julia_code)
             .arg("--")
             .args(&hook.additional_dependencies)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .check(true)
             .output()
             .await

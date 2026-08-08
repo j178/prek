@@ -84,7 +84,7 @@ impl LanguageBackend for Bun {
                 .args(deps)
                 .env(EnvVars::PATH, new_path)
                 .env(EnvVars::BUN_INSTALL, &info.env_path)
-                .isolate_from_git_env()
+                .sanitize_git_repo_env()
                 .check(true)
                 .output()
                 .await?;

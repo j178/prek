@@ -87,7 +87,7 @@ impl LanguageBackend for Haskell {
             .arg("--installdir")
             .arg(&bin_dir)
             .args(pkgs)
-            .isolate_from_git_env()
+            .sanitize_git_repo_env()
             .check(true)
             .output()
             .await

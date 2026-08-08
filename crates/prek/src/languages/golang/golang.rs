@@ -80,7 +80,7 @@ impl LanguageBackend for Golang {
             go_install_cmd()
                 .arg("./...")
                 .current_dir(repo)
-                .isolate_from_git_env()
+                .sanitize_git_repo_env()
                 .check(true)
                 .output()
                 .await?;
@@ -91,7 +91,7 @@ impl LanguageBackend for Golang {
                 cmd.current_dir(repo);
             }
             cmd.arg(dep)
-                .isolate_from_git_env()
+                .sanitize_git_repo_env()
                 .check(true)
                 .output()
                 .await?;

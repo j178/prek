@@ -114,7 +114,7 @@ impl LanguageBackend for Swift {
                     .arg(repo_path)
                     .arg("--build-path")
                     .arg(&build_path)
-                    .isolate_from_git_env()
+                    .sanitize_git_repo_env()
                     .check(true)
                     .output()
                     .await
@@ -130,7 +130,7 @@ impl LanguageBackend for Swift {
                     .arg("--build-path")
                     .arg(&build_path)
                     .arg("--show-bin-path")
-                    .isolate_from_git_env()
+                    .sanitize_git_repo_env()
                     .check(true)
                     .output()
                     .await

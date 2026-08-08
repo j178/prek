@@ -342,7 +342,7 @@ impl Npm<'_> {
 
     fn command(&self) -> Cmd {
         let mut cmd = Cmd::new(self.executable);
-        cmd.isolate_from_git_env()
+        cmd.sanitize_git_repo_env()
             .env(EnvVars::PATH, self.path)
             .env(EnvVars::NODE_PATH, self.node_path);
         for key in NPM_CONFIG_ENVS_TO_REMOVE {

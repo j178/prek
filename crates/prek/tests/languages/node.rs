@@ -3,6 +3,7 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use url::Url;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd, make_executable, remove_bin_from_path};
 
@@ -587,7 +588,22 @@ fn npm_version() {
 }
 
 #[test]
-fn node_install_does_not_modify_inherited_git_index() -> anyhow::Result<()> {
+fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow::Result<()> {
+    // Installing this additional dependency forces npm to invoke Git during environment setup.
+    let dependency_repo = TestContext::new();
+    dependency_repo.init_project();
+    dependency_repo
+        .work_dir()
+        .child("package.json")
+        .write_str(indoc::indoc! {r#"
+        {
+          "name": "sentinel-node-dependency",
+          "version": "1.0.0"
+        }
+    "#})?;
+    dependency_repo.git_add(".");
+    dependency_repo.git_commit("Add sentinel Node dependency");
+
     let hook_repo = TestContext::new();
     hook_repo.init_project();
 
@@ -633,9 +649,12 @@ fn node_install_does_not_modify_inherited_git_index() -> anyhow::Result<()> {
             rev: v1.0.0
             hooks:
               - id: sentinel-node
+                additional_dependencies:
+                  - git+file:///prek-node-git-dependency
     ", repo = hook_repo.work_dir().display()});
     context.git_add(".");
 
+    // The regression corrupts the calling repository's index, so capture it before npm runs.
     let staged_before = git_cmd(context.work_dir())
         .args(["ls-files", "--stage"])
         .assert()
@@ -644,15 +663,31 @@ fn node_install_does_not_modify_inherited_git_index() -> anyhow::Result<()> {
         .stdout
         .clone();
 
+    let dependency_url = Url::from_file_path(dependency_repo.work_dir().path())
+        .map_err(|()| anyhow::anyhow!("Failed to create dependency repository URL"))?;
+    let global_gitconfig = context.work_dir().child("global.gitconfig");
+    // Keep the dependency local while requiring npm's Git subprocess to inherit global config.
+    git_cmd(context.work_dir())
+        .args(["config", "--file"])
+        .arg(global_gitconfig.path())
+        .arg(format!("url.{dependency_url}.insteadOf"))
+        .arg("file:///prek-node-git-dependency")
+        .assert()
+        .success();
+
     let git_dir = context.work_dir().child(".git");
+    // Simulate the repository-local variables Git exports to hooks from a linked worktree.
     context
         .run()
         .arg("--all-files")
         .env(EnvVars::GIT_DIR, git_dir.path())
         .env("GIT_INDEX_FILE", git_dir.child("index").path())
+        .env("GIT_CONFIG_GLOBAL", global_gitconfig.path())
+        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .assert()
         .success();
 
+    // Success proves the URL rewrite survived; an unchanged index proves repository isolation.
     let staged_after = git_cmd(context.work_dir())
         .args(["ls-files", "--stage"])
         .assert()
