@@ -779,11 +779,17 @@ prek cache size [OPTIONS]
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-cache-size--config"><a href="#prek-cache-size--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-cache-size--help"><a href="#prek-cache-size--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-cache-size--human"><a href="#prek-cache-size--human"><code>--human</code></a>, <code>--human-readable</code>, <code>-H</code></dt><dd><p>Display the cache size in human-readable format (e.g., <code>1.2 GiB</code> instead of raw bytes)</p>
+</dd><dt id="prek-cache-size--human"><a href="#prek-cache-size--human"><code>--human</code></a>, <code>--human-readable</code>, <code>-H</code></dt><dd><p>Display the cache size in human-readable format (e.g., <code>1.2GiB</code> instead of raw bytes)</p>
 </dd><dt id="prek-cache-size--log-file"><a href="#prek-cache-size--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-cache-size--no-progress"><a href="#prek-cache-size--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-cache-size--quiet"><a href="#prek-cache-size--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="prek-cache-size--output-format"><a href="#prek-cache-size--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Select the output format</p>
+<p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Display a human-readable size in terminals and raw bytes otherwise</li>
+<li><code>human</code>:  Display the cache size in a human-readable format</li>
+<li><code>machine</code>:  Display the cache size in raw bytes</li>
+</ul></dd><dt id="prek-cache-size--quiet"><a href="#prek-cache-size--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-size--refresh"><a href="#prek-cache-size--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-cache-size--verbose"><a href="#prek-cache-size--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>

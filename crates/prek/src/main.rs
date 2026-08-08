@@ -363,7 +363,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             CacheCommand::GC(args) => {
                 cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
             }
-            CacheCommand::Size(cli::SizeArgs { human }) => cli::cache_size(&store, human, printer),
+            CacheCommand::Size(args) => {
+                let output_format = if args.human {
+                    cli::CacheSizeOutputFormat::Human
+                } else {
+                    args.output_format
+                };
+                cli::cache_size(&store, output_format, printer)
+            }
         },
         Command::Clean => cli::cache_clean(&store, printer),
         Command::GC(args) => {
