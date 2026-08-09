@@ -33,6 +33,7 @@ Languages with managed toolchain downloads in prek today:
 - [Bun](#bun)
 - [Deno](#deno)
 - [Golang](#golang)
+- [mise](#mise)
 - [Rust](#rust)
 - [Ruby](#ruby)
 
@@ -314,6 +315,64 @@ prek installs Lua hooks via LuaRocks and runs the configured entry. If the repos
 Lua does not support `language_version` today. It uses the system `lua` / `luarocks` installation.
 
 The hook entry should point at an executable installed by LuaRocks.
+
+### mise
+
+The `mise` language is prek-only. Each item in `additional_dependencies` is a
+mise tool specification, and `entry` runs with the installed tools available on
+`PATH`. For remote hooks, prek also installs and activates tools declared by the
+repository root's `mise.toml`. `additional_dependencies` take precedence when
+they select the same tool. The hook repository itself is not installed.
+
+Mise hooks do not require a pre-installed mise runtime when toolchain download
+is available. A remote repository's root `mise.toml` is read from its pinned
+checkout, so relative paths resolve from the repository root. A committed root
+`mise.lock` is honored in locked mode, but prek does not create or update it.
+Local hooks are provisioned only from `additional_dependencies`. Provisioning
+uses a prek-owned mise environment rather than the user's mise configuration.
+For remote hooks, the root config is used only as a provisioning manifest; mise
+tasks and configuration hooks are not run.
+
+The managed mise CLI is shared. Tool installs, plugins, cache, and state are
+scoped to a reusable hook environment. Hooks reuse that entire environment when
+their remote repository and revision, mise version, and
+`additional_dependencies` match. Local hooks with the same mise version and
+dependencies also reuse an environment.
+
+Relative `path:` versions in `additional_dependencies` resolve from the remote
+repository root. Local hooks must use an absolute `path:` version because their
+environments can be reused across projects.
+
+On Unix, a working directory containing `:` cannot be represented in mise's
+configuration ceiling. Prek reports an error in that case instead of weakening
+the configuration isolation.
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        language: mise
+        additional_dependencies: ["aqua:golangci/golangci-lint@2"]
+        entry: golangci-lint run --fast-only ./...
+        pass_filenames: false
+```
+
+#### `language_version`
+
+`language_version` selects the mise CLI, not the tools listed in
+`additional_dependencies`. Prek requires mise 2026.5.18 or newer; a system mise
+older than that is rejected. It accepts mise semver constraints:
+
+- `default` or `system`
+- Exact mise releases such as `=2026.7.18`
+- Semver ranges such as `>=2026.7, <2027`
+
+A tool without a version selects `latest`. A fuzzy tool version such as `@2`
+stays fixed while its hook environment exists, but may resolve to a newer 2.x
+release after that environment is rebuilt. Use an exact tool version when clean
+rebuilds must be reproducible.
 
 ### node
 

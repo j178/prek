@@ -76,6 +76,9 @@
         "lua": {
           "type": "string"
         },
+        "mise": {
+          "type": "string"
+        },
         "node": {
           "type": "string"
         },
@@ -420,6 +423,7 @@
         "haskell",
         "julia",
         "lua",
+        "mise",
         "node",
         "perl",
         "php",

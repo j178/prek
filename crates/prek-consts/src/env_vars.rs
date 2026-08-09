@@ -111,6 +111,7 @@ impl EnvVars {
     pub const PREK_INTERNAL__DENO_BINARY_NAME: &'static str = "PREK_INTERNAL__DENO_BINARY_NAME";
     pub const PREK_INTERNAL__DOTNET_BINARY_NAME: &'static str = "PREK_INTERNAL_DOTNET_BINARY_NAME";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
+    pub const PREK_INTERNAL__MISE_BINARY_NAME: &'static str = "PREK_INTERNAL__MISE_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
     pub const PREK_INTERNAL__SKIP_CABAL_UPDATE: &'static str = "PREK_INTERNAL__SKIP_CABAL_UPDATE";
@@ -137,6 +138,30 @@ impl EnvVars {
     // Deno related
     pub const DENO_DIR: &'static str = "DENO_DIR";
     pub const DENO_NO_UPDATE_CHECK: &'static str = "DENO_NO_UPDATE_CHECK";
+
+    // mise related
+    pub const MISE_AUTO_ENV: &'static str = "MISE_AUTO_ENV";
+    pub const MISE_DATA_DIR: &'static str = "MISE_DATA_DIR";
+    pub const MISE_CACHE_DIR: &'static str = "MISE_CACHE_DIR";
+    pub const MISE_CONFIG_DIR: &'static str = "MISE_CONFIG_DIR";
+    pub const MISE_STATE_DIR: &'static str = "MISE_STATE_DIR";
+    pub const MISE_SYSTEM_CONFIG_DIR: &'static str = "MISE_SYSTEM_CONFIG_DIR";
+    pub const MISE_SYSTEM_DATA_DIR: &'static str = "MISE_SYSTEM_DATA_DIR";
+    pub const MISE_TMP_DIR: &'static str = "MISE_TMP_DIR";
+    pub const MISE_SHARED_INSTALL_DIRS: &'static str = "MISE_SHARED_INSTALL_DIRS";
+    pub const MISE_CEILING_PATHS: &'static str = "MISE_CEILING_PATHS";
+    pub const MISE_GLOBAL_CONFIG_FILE: &'static str = "MISE_GLOBAL_CONFIG_FILE";
+    pub const MISE_GLOBAL_CONFIG_ROOT: &'static str = "MISE_GLOBAL_CONFIG_ROOT";
+    pub const MISE_OVERRIDE_CONFIG_FILENAMES: &'static str = "MISE_OVERRIDE_CONFIG_FILENAMES";
+    pub const MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES: &'static str =
+        "MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES";
+    pub const MISE_ENV: &'static str = "MISE_ENV";
+    pub const MISE_LOCKED: &'static str = "MISE_LOCKED";
+    pub const MISE_LOCKFILE: &'static str = "MISE_LOCKFILE";
+    pub const MISE_NO_CONFIG: &'static str = "MISE_NO_CONFIG";
+    pub const MISE_NO_ENV: &'static str = "MISE_NO_ENV";
+    pub const MISE_NO_HOOKS: &'static str = "MISE_NO_HOOKS";
+    pub const MISE_SYSTEM_DEPS: &'static str = "MISE_SYSTEM_DEPS";
 
     // GitHub API authentication (to avoid rate limits)
     pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";

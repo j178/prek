@@ -391,6 +391,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>haskell</code></li>
 <li><code>julia</code></li>
 <li><code>lua</code></li>
+<li><code>mise</code></li>
 <li><code>node</code></li>
 <li><code>perl</code></li>
 <li><code>php</code></li>

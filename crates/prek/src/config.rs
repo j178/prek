@@ -398,6 +398,7 @@ pub enum Language {
     Haskell,
     Julia,
     Lua,
+    Mise,
     Node,
     Perl,
     Php,

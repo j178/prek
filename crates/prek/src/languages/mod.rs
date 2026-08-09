@@ -35,6 +35,7 @@ mod golang;
 mod haskell;
 mod julia;
 mod lua;
+mod mise;
 mod node;
 mod perl;
 mod php;
@@ -80,6 +81,15 @@ trait LanguageBackend: Sync {
             .resolve(environment.path(hook), hook.work_dir(), store)?)
     }
 
+    async fn prepare_execution_environment(
+        &self,
+        _hook: &InstalledHook,
+        _cwd: &Path,
+        _environment: &mut ExecutionEnvironment,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     async fn run(
         &self,
         store: &Store,
@@ -89,7 +99,9 @@ trait LanguageBackend: Sync {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let environment = self.execution_environment(store, hook)?;
+        let mut environment = self.execution_environment(store, hook)?;
+        self.prepare_execution_environment(hook, hook.work_dir(), &mut environment)
+            .await?;
         let entry = self.prepare_hook_entry(store, hook, &environment)?;
         let run = async |batch: &[&Path]| {
             let output = environment
@@ -236,6 +248,7 @@ pub(crate) enum ShellSupport {
 // golang: install requested version, support env, support additional deps
 // haskell: only system version, support env, support additional deps
 // lua: only system version, support env, support additional deps
+// mise: install requested version, support env, support additional deps
 // node: install requested version, support env, support additional deps (delegated to nodeenv)
 // perl: only system version, support env, support additional deps
 // php: only system version, support env, support additional deps
@@ -264,6 +277,7 @@ impl Language {
             Self::Haskell => &haskell::Haskell,
             Self::Julia => &julia::Julia,
             Self::Lua => &lua::Lua,
+            Self::Mise => &mise::Mise,
             Self::Node => &node::Node,
             Self::Perl => &perl::Perl,
             Self::Php => &php::Php,
@@ -295,6 +309,7 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -318,6 +333,7 @@ impl Language {
             | Self::Golang
             | Self::Haskell
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -349,6 +365,7 @@ impl Language {
             Self::Deno => &[ToolBucket::Deno],
             Self::Dotnet => &[ToolBucket::Dotnet],
             Self::Golang => &[ToolBucket::Go],
+            Self::Mise => &[ToolBucket::Mise],
             Self::Node => &[ToolBucket::Node],
             Self::Python | Self::Pygrep => &[ToolBucket::Uv, ToolBucket::Python],
             Self::Ruby => &[ToolBucket::Ruby],
@@ -389,6 +406,7 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
+            | Self::Mise
             | Self::Perl
             | Self::Php
             | Self::R
@@ -408,6 +426,7 @@ impl Language {
             | Self::Deno
             | Self::Dotnet
             | Self::Golang
+            | Self::Mise
             | Self::Node
             | Self::Python
             | Self::Ruby
@@ -447,6 +466,7 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -481,6 +501,7 @@ impl Language {
             | Self::Golang
             | Self::Haskell
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -560,7 +581,10 @@ impl Language {
     ) -> Result<std::process::ExitStatus> {
         self.ensure_exec_supported(hook)?;
 
-        let environment = self.backend().execution_environment(store, hook)?;
+        let mut environment = self.backend().execution_environment(store, hook)?;
+        self.backend()
+            .prepare_execution_environment(hook, cwd, &mut environment)
+            .await?;
         environment
             .command(hook, cwd, command)?
             .status()
@@ -586,6 +610,7 @@ pub(crate) async fn extract_metadata(hook: &mut Hook) -> Result<()> {
         | Language::Haskell
         | Language::Julia
         | Language::Lua
+        | Language::Mise
         | Language::Node
         | Language::Perl
         | Language::Php
