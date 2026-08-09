@@ -101,7 +101,7 @@ pub(crate) fn digest_from_sha256sums(
             continue;
         };
         let name = name.trim();
-        // GNU-style checksum files may prefix binary-mode filenames with `*` and paths with `./`.
+        // GNU entries use `*` for binary mode and may retain a leading `./` from the input path.
         let name = name.strip_prefix('*').unwrap_or(name);
         let name = name.strip_prefix("./").unwrap_or(name);
         if name == filename {

@@ -53,6 +53,7 @@ pub(crate) mod version;
 // stronger contract than callers need and rejects the borrowed async closures used by backends.
 #[async_trait::async_trait(?Send)]
 trait LanguageBackend: Sync {
+    /// Provisions the environment required by `hook` and returns the prepared hook.
     async fn install(
         &self,
         store: &Store,
@@ -60,8 +61,12 @@ trait LanguageBackend: Sync {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook>;
 
+    /// Checks whether the installed environment described by `info` can be reused.
     async fn check_health(&self, info: &InstallInfo) -> Result<()>;
 
+    /// Builds the language-specific base environment for hook commands.
+    ///
+    /// The default leaves the caller's environment unchanged.
     fn execution_environment(
         &self,
         _store: &Store,
@@ -70,6 +75,9 @@ trait LanguageBackend: Sync {
         Ok(ExecutionEnvironment::default())
     }
 
+    /// Resolves the configured entry after the execution environment is prepared.
+    ///
+    /// This is used for normal hook runs; `prek exec` executes its supplied command directly.
     fn prepare_hook_entry(
         &self,
         store: &Store,
@@ -81,6 +89,11 @@ trait LanguageBackend: Sync {
             .resolve(environment.path(hook), hook.work_dir(), store)?)
     }
 
+    /// Applies asynchronous or working-directory-dependent changes to `environment`.
+    ///
+    /// This is called after [`Self::execution_environment`] and before command resolution. `cwd`
+    /// is the hook work directory for a normal run and the caller's working directory for
+    /// `prek exec`.
     async fn prepare_execution_environment(
         &self,
         _hook: &InstalledHook,
@@ -90,6 +103,10 @@ trait LanguageBackend: Sync {
         Ok(())
     }
 
+    /// Runs the hook for `filenames`, reports progress, and returns its exit code and output.
+    ///
+    /// The default prepares the environment, resolves the entry, and executes filename batches
+    /// from the hook work directory.
     async fn run(
         &self,
         store: &Store,

@@ -318,34 +318,20 @@ The hook entry should point at an executable installed by LuaRocks.
 
 ### mise
 
-The `mise` language is prek-only. Each item in `additional_dependencies` is a
-mise tool specification, and `entry` runs with the installed tools available on
-`PATH`. For remote hooks, prek also installs and activates tools declared by the
-repository root's `mise.toml`. `additional_dependencies` take precedence when
-they select the same tool. The hook repository itself is not installed.
+!!! note "prek-only"
 
-Mise hooks do not require a pre-installed mise runtime when toolchain download
-is available. A remote repository's root `mise.toml` is read from its pinned
-checkout, so relative paths resolve from the repository root. A committed root
-`mise.lock` is honored in locked mode, but prek does not create or update it.
-Local hooks are provisioned only from `additional_dependencies`. Provisioning
-uses a prek-owned mise environment rather than the user's mise configuration.
-For remote hooks, the root config is used only as a provisioning manifest; mise
-tasks and configuration hooks are not run.
+    Mise language support is a prek extension. pre-commit does not have native
+    `mise` support.
 
-The managed mise CLI is shared. Tool installs, plugins, cache, and state are
-scoped to a reusable hook environment. Hooks reuse that entire environment when
-their remote repository and revision, mise version, and
-`additional_dependencies` match. Local hooks with the same mise version and
-dependencies also reuse an environment.
+List the tools a hook needs in `additional_dependencies`, using mise tool
+specifications such as `aqua:golangci/golangci-lint@2`. Before running `entry`,
+prek installs those tools in an isolated environment and adds their executables
+to `PATH`.
 
-Relative `path:` versions in `additional_dependencies` resolve from the remote
-repository root. Local hooks must use an absolute `path:` version because their
-environments can be reused across projects.
-
-On Unix, a working directory containing `:` cannot be represented in mise's
-configuration ceiling. Prek reports an error in that case instead of weakening
-the configuration isolation.
+When downloads are allowed and no compatible mise installation is available,
+prek downloads mise automatically. The mise executable can be shared across
+hooks. Installed tools and other mise data stay in prek's hook cache and do not
+modify the user's mise setup.
 
 ```yaml
 repos:
@@ -361,18 +347,9 @@ repos:
 
 #### `language_version`
 
-`language_version` selects the mise CLI, not the tools listed in
-`additional_dependencies`. Prek requires mise 2026.5.18 or newer; a system mise
-older than that is rejected. It accepts mise semver constraints:
-
-- `default` or `system`
-- Exact mise releases such as `=2026.7.18`
-- Semver ranges such as `>=2026.7, <2027`
-
-A tool without a version selects `latest`. A fuzzy tool version such as `@2`
-stays fixed while its hook environment exists, but may resolve to a newer 2.x
-release after that environment is rebuilt. Use an exact tool version when clean
-rebuilds must be reproducible.
+`language_version` selects the mise CLI, not the installed tools. Prek requires
+mise 2026.5.18 or newer. Supported values are `default`, `system`, exact releases
+such as `=2026.7.18`, and semver ranges such as `>=2026.7, <2027`.
 
 ### node
 

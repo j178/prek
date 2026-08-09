@@ -6,7 +6,6 @@ use crate::languages::bun::BunRequest;
 use crate::languages::deno::DenoRequest;
 use crate::languages::dotnet::DotnetRequest;
 use crate::languages::golang::GoRequest;
-use crate::languages::mise::MiseRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
 use crate::languages::ruby::RubyRequest;
@@ -31,7 +30,6 @@ pub(crate) enum VersionRequest {
     Dotnet(DotnetRequest),
     Deno(DenoRequest),
     Golang(GoRequest),
-    Mise(MiseRequest),
     Ruby(RubyRequest),
     Node(NodeRequest),
     Python(PythonRequest),
@@ -61,11 +59,11 @@ impl_language_version_request!(BunRequest, Bun);
 impl_language_version_request!(DotnetRequest, Dotnet);
 impl_language_version_request!(DenoRequest, Deno);
 impl_language_version_request!(GoRequest, Golang);
-impl_language_version_request!(MiseRequest, Mise);
 impl_language_version_request!(RubyRequest, Ruby);
 impl_language_version_request!(NodeRequest, Node);
 impl_language_version_request!(PythonRequest, Python);
 impl_language_version_request!(RustRequest, Rust);
+impl_language_version_request!(SemverRequest, Semver);
 
 impl LanguageRequest {
     pub(crate) fn is_any(&self) -> bool {
@@ -124,7 +122,6 @@ impl VersionRequest {
             Language::Dotnet => Self::Dotnet(request.parse()?),
             Language::Deno => Self::Deno(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
-            Language::Mise => Self::Mise(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
             Language::Python => Self::Python(request.parse()?),
             Language::Ruby => Self::Ruby(request.parse()?),
@@ -138,6 +135,7 @@ impl VersionRequest {
             | Language::Haskell
             | Language::Julia
             | Language::Lua
+            | Language::Mise
             | Language::Perl
             | Language::Php
             | Language::Pygrep
@@ -154,7 +152,6 @@ impl VersionRequest {
             Self::Dotnet(req) => req.is_any(),
             Self::Deno(req) => req.is_any(),
             Self::Golang(req) => req.is_any(),
-            Self::Mise(req) => req.is_any(),
             Self::Node(req) => req.is_any(),
             Self::Python(req) => req.is_any(),
             Self::Ruby(req) => req.is_any(),
@@ -169,7 +166,6 @@ impl VersionRequest {
             Self::Dotnet(req) => req.satisfied_by(install_info),
             Self::Deno(req) => req.satisfied_by(install_info),
             Self::Golang(req) => req.satisfied_by(install_info),
-            Self::Mise(req) => req.satisfied_by(install_info),
             Self::Node(req) => req.satisfied_by(install_info),
             Self::Python(req) => req.satisfied_by(install_info),
             Self::Ruby(req) => req.satisfied_by(install_info),
@@ -205,9 +201,13 @@ impl SemverRequest {
     }
 
     fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        self.matches(&install_info.language_version)
+    }
+
+    pub(crate) fn matches(&self, version: &semver::Version) -> bool {
         match self {
             Self::Any => true,
-            Self::Range(request) => request.matches(&install_info.language_version),
+            Self::Range(request) => request.matches(version),
         }
     }
 }
@@ -243,5 +243,15 @@ mod tests {
             request.version_request(),
             &VersionRequest::Semver(SemverRequest::Any)
         );
+    }
+
+    #[test]
+    fn semver_exact_versions_require_equals() {
+        let exact: SemverRequest = "=2026.7.18".parse().unwrap();
+        let compatible: SemverRequest = "2026.7.18".parse().unwrap();
+        let newer = "2026.8.2".parse().unwrap();
+
+        assert!(!exact.matches(&newer));
+        assert!(compatible.matches(&newer));
     }
 }

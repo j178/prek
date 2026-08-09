@@ -1,26 +1,14 @@
-use std::path::Path;
-#[cfg(target_os = "linux")]
-use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
+#[cfg(unix)]
+use crate::common::make_executable;
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
-fn visible_entry_names(path: &Path) -> Result<Vec<String>> {
-    let mut names = fs_err::read_dir(path)?
-        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
-        .collect::<std::io::Result<Vec<_>>>()?;
-    names.retain(|name| !name.starts_with('.'));
-    names.sort();
-    Ok(names)
-}
-
 #[test]
-fn managed_install_and_environment_reuse() -> Result<()> {
+fn managed_install_and_additional_dependencies() -> Result<()> {
     // This exercises release-backed installation in the three-platform language-test matrix.
     if !EnvVars.is_set(EnvVars::CI) {
         return Ok(());
@@ -28,72 +16,56 @@ fn managed_install_and_environment_reuse() -> Result<()> {
 
     let context = TestContext::new();
     context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+
+    let hook_repo = context.home_dir().child("mise-hook-repo");
+    fs_err::create_dir_all(&hook_repo)?;
+    fs_err::write(
+        hook_repo.join(".pre-commit-hooks.yaml"),
+        indoc::indoc! {r#"
+            - id: mise-dependency
+              name: mise dependency
+              language: mise
+              language_version: "=2026.7.18"
+              entry: zoxide --version
+              additional_dependencies: ["github:ajeetdsouza/zoxide@0.10.0"]
+              always_run: true
+              verbose: true
+              pass_filenames: false
+        "#},
+    )?;
+    // Only additional_dependencies define provisioning for a mise hook.
+    fs_err::write(hook_repo.join("mise.toml"), "not valid = [")?;
+    git_cmd(&hook_repo).arg("init").assert().success();
+    git_cmd(&hook_repo).args(["add", "."]).assert().success();
+    git_cmd(&hook_repo)
+        .args(["commit", "-m", "Add mise hooks"])
+        .assert()
+        .success();
+    let rev_output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let rev = String::from_utf8(rev_output.stdout)?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
         repos:
-          - repo: local
+          - repo: '{}'
+            rev: {}
             hooks:
-              - id: mise-version
-                name: mise version
-                language: mise
-                language_version: "=2026.7.18"
-                entry: mise --version
-                always_run: true
-                verbose: true
-                pass_filenames: false
-              - id: mise-dependency-one
-                name: mise dependency one
-                language: mise
-                language_version: "=2026.7.18"
-                entry: zoxide --version
-                additional_dependencies: ["github:ajeetdsouza/zoxide@0.10.0"]
-                always_run: true
-                verbose: true
-                pass_filenames: false
-              - id: mise-dependency-two
-                name: mise dependency two
-                language: mise
-                language_version: "=2026.7.18"
-                entry: zoxide --version
-                additional_dependencies: ["github:ajeetdsouza/zoxide@0.10.0"]
-                always_run: true
-                verbose: true
-                pass_filenames: false
-    "#});
+              - id: mise-dependency
+    ", hook_repo.display(), rev.trim()});
     // Make any fallback to the calling project's mise state fail loudly.
-    fs_err::write(context.work_dir().join("mise.toml"), "not valid = [")?;
     fs_err::write(context.work_dir().join(".miserc.toml"), "not valid = [")?;
     context.git_add(".");
 
-    let mise_dir = context.home_dir().child("tools").child("mise");
-    mise_dir.assert(predicates::path::missing());
     let ambient_mise_dir = context.work_dir().join("ambient-mise-data");
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"2026\.7\.18 [^\r\n]+", "2026.7.18 [BUILD]")])
-        .collect::<Vec<_>>();
-
-    // Inherited mise state must not alter or receive the hook environment.
-    cmd_snapshot!(filters.clone(), context.run()
+    cmd_snapshot!(context.filters(), context.run()
+        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists")
         .env(EnvVars::MISE_DATA_DIR, &ambient_mise_dir)
-        .env("MISE_ENV", "prek")
         .env("__MISE_DIFF", "invalid inherited state"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    mise version.............................................................Passed
-    - hook id: mise-version
-    - duration: [TIME]
-
-      2026.7.18 [BUILD]
-    mise dependency one......................................................Passed
-    - hook id: mise-dependency-one
-    - duration: [TIME]
-
-      zoxide 0.10.0
-    mise dependency two......................................................Passed
-    - hook id: mise-dependency-two
+    mise dependency..........................................................Passed
+    - hook id: mise-dependency
     - duration: [TIME]
 
       zoxide 0.10.0
@@ -105,113 +77,32 @@ fn managed_install_and_environment_reuse() -> Result<()> {
         "Inherited MISE_DATA_DIR must not receive hook tools"
     );
 
-    let installed_versions = visible_entry_names(mise_dir.path())?;
-    assert_eq!(
-        installed_versions.len(),
-        1,
-        "Expected one managed mise version, but found: {installed_versions:?}"
-    );
-    assert!(
-        installed_versions
-            .iter()
-            .any(|version| version.contains("2026.7.18")),
-        "Expected mise 2026.7.18 to be installed, but found: {installed_versions:?}"
-    );
+    Ok(())
+}
 
-    let hooks_dir = context.home_dir().child("hooks");
-    let mise_environments = visible_entry_names(hooks_dir.path())?
-        .into_iter()
-        .filter(|name| name.starts_with("mise-"))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        mise_environments.len(),
-        2,
-        "Hooks with identical requirements should share an environment, while different dependency sets stay isolated: {mise_environments:?}"
-    );
-    let tool_env_count = mise_environments
-        .iter()
-        .filter(|name| {
-            fs_err::read_dir(
-                hooks_dir
-                    .child(name.as_str())
-                    .child("mise")
-                    .child("data")
-                    .child("installs")
-                    .path(),
-            )
-            .is_ok_and(|mut entries| entries.next().is_some())
-        })
-        .count();
-    assert_eq!(
-        tool_env_count, 1,
-        "The installed tool should only exist in the dependency environment"
-    );
+#[cfg(unix)]
+#[test]
+fn system_mise_uses_hook_repository_for_tool_commands() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
 
-    cmd_snapshot!(filters.clone(), context.exec().args([
-        "mise-dependency-one",
-        "--",
-        "zoxide",
-        "--version",
-    ]), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    zoxide 0.10.0
-
-    ----- stderr -----
-    ");
-
-    // Cached health checks must not load inherited global mise configuration.
-    let ambient_config_dir = context.work_dir().join("ambient-mise-config");
-    fs_err::create_dir_all(&ambient_config_dir)?;
-    fs_err::write(ambient_config_dir.join("miserc.toml"), "not valid = [")?;
-    context
-        .run()
-        .env(EnvVars::MISE_CONFIG_DIR, ambient_config_dir)
-        .assert()
-        .success();
-
-    assert_eq!(visible_entry_names(mise_dir.path())?, installed_versions);
-    let reused_environments = visible_entry_names(hooks_dir.path())?
-        .into_iter()
-        .filter(|name| name.starts_with("mise-"))
-        .collect::<Vec<_>>();
-    assert_eq!(reused_environments, mise_environments);
-
-    let hook_repo = context.home_dir().child("mise-hook-repo");
-    fs_err::create_dir_all(&hook_repo)?;
+    let hook_repo = context.home_dir().child("mise-system-hook-repo");
+    fs_err::create_dir_all(hook_repo.join("tool"))?;
+    fs_err::write(hook_repo.join("tool/marker"), "hook repository")?;
     fs_err::write(
         hook_repo.join(".pre-commit-hooks.yaml"),
         indoc::indoc! {r#"
-            - id: remote-mise-config
-              name: remote mise config
+            - id: mise-system
+              name: mise system
               language: mise
-              language_version: "=2026.7.18"
-              entry: zoxide --version
-              always_run: true
-              verbose: true
-              pass_filenames: false
-            - id: remote-mise-dependency
-              name: remote mise dependency
-              language: mise
-              language_version: "=2026.7.18"
-              entry: zoxide --version
-              additional_dependencies: ["github:ajeetdsouza/zoxide@0.10.0"]
+              language_version: system
+              entry: mise-test hook
+              additional_dependencies: ["node@path:./tool"]
               always_run: true
               verbose: true
               pass_filenames: false
         "#},
     )?;
-    // The distinct version and template prove that activation came from the remote root.
-    fs_err::write(
-        hook_repo.join("mise.toml"),
-        indoc::indoc! {r#"
-            [tools]
-            "github:ajeetdsouza/zoxide" = '{{ read_file(path="zoxide-version.txt") | trim }}'
-        "#},
-    )?;
-    fs_err::write(hook_repo.join("zoxide-version.txt"), "0.9.8\n")?;
-    fs_err::write(hook_repo.join(".miserc.toml"), "not valid = [")?;
     git_cmd(&hook_repo).arg("init").assert().success();
     git_cmd(&hook_repo).args(["add", "."]).assert().success();
     git_cmd(&hook_repo)
@@ -220,129 +111,107 @@ fn managed_install_and_environment_reuse() -> Result<()> {
         .success();
     let rev_output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
     let rev = String::from_utf8(rev_output.stdout)?;
+
+    let bin_dir = context.home_dir().child("bin");
+    fs_err::create_dir_all(&bin_dir)?;
+    let fake_mise = bin_dir.join("mise-test");
+    fs_err::write(
+        &fake_mise,
+        indoc::indoc! {r#"
+            #!/bin/sh
+            set -eu
+
+            check_isolation() {
+                test "${MISE_NO_CONFIG-}" = "1"
+                test "${MISE_DATA_DIR-}" != "$PREK_TEST_MISE_AMBIENT_DATA"
+                test -z "${MISE_GLOBAL_CONFIG_FILE+x}"
+                test -z "${__MISE_DIFF+x}"
+            }
+
+            case "${1-}" in
+                --version)
+                    test "$PWD" != "$PREK_TEST_MISE_CALLER_CWD"
+                    test "$MISE_CEILING_PATHS" -ef "$PWD"
+                    check_isolation
+                    echo "2026.7.18 fake"
+                    ;;
+                --yes)
+                    case "${2-}" in
+                        install)
+                            test "${3-}" = "--"
+                            test "${4-}" = "node@path:./tool"
+                            test -f tool/marker
+                            test "$MISE_CEILING_PATHS" -ef "$PWD"
+                            check_isolation
+                            ;;
+                        env)
+                            test "${3-}" = "--json"
+                            test "${4-}" = "--"
+                            test "${5-}" = "node@path:./tool"
+                            test -f tool/marker
+                            test "$MISE_CEILING_PATHS" -ef "$PWD"
+                            check_isolation
+                            printf '{"PATH":"%s","TEST_MISE_ACTIVATED":"1"}\n' "$PATH"
+                            ;;
+                        *)
+                            exit 2
+                            ;;
+                    esac
+                    ;;
+                hook)
+                    test "${TEST_MISE_ACTIVATED-}" = "1"
+                    test "$PWD" -ef "$PREK_TEST_MISE_CALLER_CWD"
+                    test "$MISE_CEILING_PATHS" -ef "$PREK_TEST_MISE_CALLER_CWD"
+                    test ! -e tool/marker
+                    check_isolation
+                    echo "fake hook"
+                    ;;
+                *)
+                    exit 2
+                    ;;
+            esac
+        "#},
+    )?;
+    make_executable(&fake_mise)?;
+
     context.write_pre_commit_config(&indoc::formatdoc! {r"
         repos:
           - repo: '{}'
             rev: {}
             hooks:
-              - id: remote-mise-config
-              - id: remote-mise-dependency
+              - id: mise-system
     ", hook_repo.display(), rev.trim()});
-    context.git_add(".pre-commit-config.yaml");
-
-    cmd_snapshot!(filters.clone(), context.run().arg("remote-mise-config"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    remote mise config.......................................................Passed
-    - hook id: remote-mise-config
-    - duration: [TIME]
-
-      zoxide 0.9.8
-
-    ----- stderr -----
-    ");
-
-    // Explicit dependencies override the repository manifest for this hook.
-    cmd_snapshot!(filters.clone(), context.run().arg("remote-mise-dependency"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    remote mise dependency...................................................Passed
-    - hook id: remote-mise-dependency
-    - duration: [TIME]
-
-      zoxide 0.10.0
-
-    ----- stderr -----
-    ");
-
-    #[cfg(target_os = "linux")]
-    {
-        // mise exports PATH as JSON, but the ambient PATH can still contain non-UTF-8 entries.
-        let path_dir = context
-            .work_dir()
-            .join(OsString::from_vec(b"non-utf8-path-\xff".to_vec()))
-            .join("bin");
-        fs_err::create_dir_all(&path_dir)?;
-        std::os::unix::fs::symlink("/bin/true", path_dir.join("mise-path-command"))?;
-        let path = std::env::join_paths(
-            std::iter::once(path_dir).chain(
-                EnvVars
-                    .var_os(EnvVars::PATH)
-                    .as_ref()
-                    .into_iter()
-                    .flat_map(std::env::split_paths),
-            ),
-        )?;
-        context.write_pre_commit_config(indoc::indoc! {r#"
-            repos:
-              - repo: local
-                hooks:
-                  - id: mise-path
-                    name: mise path
-                    language: mise
-                    language_version: "=2026.7.18"
-                    entry: mise-path-command
-                    additional_dependencies: ["github:ajeetdsouza/zoxide@0.10.0"]
-                    always_run: true
-                    pass_filenames: false
-        "#});
-        context
-            .run()
-            .arg("mise-path")
-            .env(EnvVars::PATH, path)
-            .assert()
-            .success();
-
-        // Hook filenames must not pass through mise's UTF-8 environment exchange.
-        let filename = OsString::from_vec(b"non-utf8-\xff".to_vec());
-        context.write_pre_commit_config(indoc::indoc! {r#"
-            repos:
-              - repo: local
-                hooks:
-                  - id: mise-filenames
-                    name: mise filenames
-                    language: mise
-                    language_version: "=2026.7.18"
-                    entry: sh -c 'for path; do test -e "$path" || exit 1; done' --
-                    always_run: true
-        "#});
-        fs_err::write(context.work_dir().join(&filename), "")?;
-        context.git_add(".");
-
-        context.run().arg("mise-filenames").assert().success();
-    }
-
-    Ok(())
-}
-
-#[test]
-fn local_relative_path_dependency_is_rejected() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: mise-relative-path
-                name: mise relative path
-                language: mise
-                language_version: system
-                entry: tool
-                additional_dependencies: ["tool@path:./tool"]
-                always_run: true
-                pass_filenames: false
-    "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.run(), @r"
-    success: false
-    exit_code: 2
+    let ambient_data = context.work_dir().join("ambient-mise-data");
+    let path = std::env::join_paths(
+        std::iter::once(bin_dir.to_path_buf()).chain(
+            EnvVars
+                .var_os(EnvVars::PATH)
+                .as_ref()
+                .into_iter()
+                .flat_map(std::env::split_paths),
+        ),
+    )?;
+    cmd_snapshot!(context.filters(), context.run()
+        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-test")
+        .env(EnvVars::PATH, path)
+        .env(EnvVars::MISE_DATA_DIR, &ambient_data)
+        .env("MISE_GLOBAL_CONFIG_FILE", "invalid ambient config")
+        .env("__MISE_DIFF", "invalid inherited state")
+        .env("PREK_TEST_MISE_AMBIENT_DATA", &ambient_data)
+        .env("PREK_TEST_MISE_CALLER_CWD", context.work_dir().to_path_buf()), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    mise system..............................................................Passed
+    - hook id: mise-system
+    - duration: [TIME]
+
+      fake hook
 
     ----- stderr -----
-    error: Failed to install hook `mise-relative-path`
-      caused by: local mise hook dependency `tool@path:./tool` must use an absolute `path:` version
     ");
+
+    Ok(())
 }
