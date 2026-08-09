@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Idea or feature request
+    url: https://github.com/j178/prek/discussions/new?category=ideas
+    about: Please start a discussion for new ideas and feature requests.
+  - name: Documentation
+    url: https://prek.j178.dev/
+    about: Please consult the documentation before creating an issue.
