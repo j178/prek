@@ -133,7 +133,9 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
     let rev = String::from_utf8(rev_output.stdout)?;
 
     let bin_dir = context.home_dir().child("bin");
+    let ambient_bin = context.home_dir().child("ambient-bin");
     fs_err::create_dir_all(&bin_dir)?;
+    fs_err::create_dir_all(&ambient_bin)?;
     let fake_mise = bin_dir.join("mise-test");
     fs_err::write(
         &fake_mise,
@@ -176,6 +178,10 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
                             test -f tool/marker
                             test "$MISE_CEILING_PATHS" -ef "$PWD"
                             check_isolation
+                            case "$PATH" in
+                                "$PREK_TEST_MISE_AMBIENT_BIN":*) ;;
+                                *) exit 3 ;;
+                            esac
                             private_bin="$MISE_DATA_DIR/installs/mise-test-tool/latest"
                             test -x "$private_bin/mise-test-tool"
                             printf '{"PATH":"%s:%s","TEST_MISE_ACTIVATED":"1"}\n' "$private_bin" "$PATH"
@@ -216,13 +222,15 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
 
     let ambient_data = context.work_dir().join("ambient-mise-data");
     let path = std::env::join_paths(
-        std::iter::once(bin_dir.to_path_buf()).chain(
-            EnvVars
-                .var_os(EnvVars::PATH)
-                .as_ref()
-                .into_iter()
-                .flat_map(std::env::split_paths),
-        ),
+        [ambient_bin.to_path_buf(), bin_dir.to_path_buf()]
+            .into_iter()
+            .chain(
+                EnvVars
+                    .var_os(EnvVars::PATH)
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(std::env::split_paths),
+            ),
     )?;
     cmd_snapshot!(context.filters(), context.run()
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-test")
@@ -231,6 +239,7 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
         .env("MISE_GLOBAL_CONFIG_FILE", "invalid ambient config")
         .env("__MISE_DIFF", "invalid inherited state")
         .env("PREK_TEST_MISE_AMBIENT_DATA", &ambient_data)
+        .env("PREK_TEST_MISE_AMBIENT_BIN", ambient_bin.to_path_buf())
         .env("PREK_TEST_MISE_CALLER_CWD", context.work_dir().to_path_buf())
         .env_remove("PREK_TEST_MISE_HOOK_ENV"), @r"
     success: true

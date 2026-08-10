@@ -228,8 +228,19 @@ impl ExecutionEnvironment {
     pub(crate) fn path<'a>(&'a self, hook: &'a InstalledHook) -> Option<&'a OsStr> {
         hook.env
             .iter()
-            .find_map(|(key, value)| is_path_env(key).then_some(OsStr::new(value)))
-            .or(self.path.as_deref())
+            .find_map(|(key, value)| {
+                if is_path_env(key) {
+                    Some(OsStr::new(value))
+                } else {
+                    None
+                }
+            })
+            .or(self.language_path())
+    }
+
+    /// PATH supplied by the language backend before hook-specific overrides.
+    fn language_path(&self) -> Option<&OsStr> {
+        self.path.as_deref()
     }
 }
 

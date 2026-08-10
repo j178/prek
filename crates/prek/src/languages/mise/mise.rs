@@ -135,14 +135,20 @@ impl LanguageBackend for Mise {
 
     fn execution_environment(
         &self,
-        _store: &Store,
+        store: &Store,
         hook: &InstalledHook,
     ) -> Result<ExecutionEnvironment> {
         let info = hook.install_info().context("mise must be installed")?;
-        let path = activation_base_path(&info.toolchain)?;
 
         let mut environment = ExecutionEnvironment::new();
-        environment.set_path(path);
+        // Only prepend prek's managed bin directory. System mise is already on PATH, and moving
+        // its parent would also reorder unrelated executables in that directory.
+        if info
+            .toolchain
+            .starts_with(store.tools_path(ToolBucket::Mise))
+        {
+            environment.set_path(managed_mise_path(&info.toolchain)?);
+        }
         MiseEnvironment::new(&info.env_path).apply_to_environment(&mut environment);
         Ok(environment)
     }
@@ -162,12 +168,13 @@ impl LanguageBackend for Mise {
         let info = hook.install_info().context("mise must be installed")?;
         let mise_environment = MiseEnvironment::new(&info.env_path);
         let tool_cwd = tool_cwd(hook);
-        let base_path = activation_base_path(&info.toolchain)?;
         // Backends can contribute dynamic environment variables and PATH entries, so activation
         // must be delegated to the selected mise CLI. Hook argv never crosses its UTF-8 boundary.
         let mut command = mise_environment.command(&info.toolchain, tool_cwd)?;
+        if let Some(path) = environment.language_path() {
+            command.env(EnvVars::PATH, path);
+        }
         command
-            .env(EnvVars::PATH, &base_path)
             .arg("env")
             .arg("--json")
             .arg("--")
@@ -206,16 +213,15 @@ fn tool_cwd(hook: &Hook) -> &Path {
     }
 }
 
-/// Builds the PATH used to invoke the selected mise CLI during tool activation.
-///
-/// The selected mise binary comes first, followed by the inherited process PATH.
-fn activation_base_path(mise: &Path) -> Result<std::ffi::OsString> {
+/// Prepends a managed mise CLI to the inherited PATH.
+fn managed_mise_path(mise: &Path) -> Result<OsString> {
     let bin_dir = mise
         .parent()
-        .context("mise executable must have a parent directory")?;
+        .context("mise executable must have a parent directory")?
+        .to_path_buf();
     let base_path = EnvVars.var_os(EnvVars::PATH);
     std::env::join_paths(
-        std::iter::once(bin_dir.to_path_buf()).chain(
+        std::iter::once(bin_dir).chain(
             base_path
                 .as_ref()
                 .into_iter()
