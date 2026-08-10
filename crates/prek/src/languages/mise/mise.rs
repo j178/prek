@@ -181,7 +181,13 @@ impl LanguageBackend for Mise {
             serde_json::from_slice(&output.stdout).context("Failed to parse mise environment")?;
         let activated_path = activated
             .iter()
-            .find_map(|(key, value)| is_path_env(key).then(|| value.clone()))
+            .find_map(|(key, value)| {
+                if is_path_env(key) {
+                    Some(value.clone())
+                } else {
+                    None
+                }
+            })
             .context("mise environment did not include PATH")?;
         // TODO(#2022): Preserve non-UTF-8 PATH entries omitted by `mise env --json`.
         activated.retain(|key, _| !is_path_env(key) && !is_mise_var(OsStr::new(key)));
@@ -233,29 +239,25 @@ fn split_tool_version(tool: &str) -> (&str, Option<&str>) {
     let Some((left, right)) = tool.split_once('@') else {
         return (tool, None);
     };
-    if left.is_empty() {
-        return right
-            .split_once('@')
-            .map(|(name, version)| {
-                (
-                    &tool[..=name.len()],
-                    (!version.is_empty()).then_some(version),
-                )
-            })
-            .unwrap_or((tool, None));
-    }
-    if left.ends_with(':') {
-        return right
-            .split_once('@')
-            .map(|(name, version)| {
-                (
-                    &tool[..=(left.len() + name.len())],
-                    (!version.is_empty()).then_some(version),
-                )
-            })
-            .unwrap_or((tool, None));
-    }
-    (left, (!right.is_empty()).then_some(right))
+    let (backend, version) = if left.is_empty() {
+        let Some((name, version)) = right.split_once('@') else {
+            return (tool, None);
+        };
+        (&tool[..=name.len()], version)
+    } else if left.ends_with(':') {
+        let Some((name, version)) = right.split_once('@') else {
+            return (tool, None);
+        };
+        (&tool[..=(left.len() + name.len())], version)
+    } else {
+        (left, right)
+    };
+    let version = if version.is_empty() {
+        None
+    } else {
+        Some(version)
+    };
+    (backend, version)
 }
 
 #[cfg(test)]
