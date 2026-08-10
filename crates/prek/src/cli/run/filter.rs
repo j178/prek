@@ -764,7 +764,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn filename_filter_skips_non_utf8_paths_with_regex_include() {
+    fn filename_filter_matches_non_utf8_paths_with_regex_include() {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt as _;
 
@@ -772,7 +772,15 @@ mod tests {
         let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
         let filter = FilenameFilter::new(Some(&include), None);
 
-        assert!(!filter.matches(path));
+        assert!(filter.matches(path));
+    }
+
+    #[test]
+    fn filename_filter_regex_keeps_unicode_character_classes() {
+        let include = regex_pattern(r"^\w+\.py$");
+        let filter = FilenameFilter::new(Some(&include), None);
+
+        assert!(filter.matches(Path::new("café.py")));
     }
 
     #[test]
