@@ -2928,7 +2928,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
 
     ----- stderr -----
     error: Failed to run hook `no-commit-to-branch`
-      caused by: Failed to compile regex patterns
+      caused by: Failed to compile regex pattern `*invalid-pattern*`
       caused by: Parsing error at position 0: Target of repeat operator is invalid
     ");
 

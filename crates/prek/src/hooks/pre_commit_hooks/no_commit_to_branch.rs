@@ -31,8 +31,11 @@ impl Args {
         }
 
         for pattern in &self.patterns {
-            let pattern = Regex::new(pattern).context("Failed to compile regex patterns")?;
-            if pattern.is_match(branch)? {
+            let regex = Regex::new(pattern)
+                .with_context(|| format!("Failed to compile regex pattern `{pattern}`"))?;
+            if regex.is_match(branch).with_context(|| {
+                format!("Failed to match branch against regex pattern `{pattern}`")
+            })? {
                 return Ok(true);
             }
         }
@@ -73,13 +76,17 @@ mod tests {
     use super::Args;
 
     #[test]
-    fn pattern_runtime_errors_are_reported() {
+    fn pattern_runtime_errors_include_pattern() {
         let args = Args {
             branches: Vec::new(),
             patterns: vec![r"^(a|aa)+\1$".to_string()],
         };
         let branch = format!("{}b", "a".repeat(40));
 
-        assert!(args.check_protected(&branch).is_err());
+        let err = args.check_protected(&branch).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            r"Failed to match branch against regex pattern `^(a|aa)+\1$`"
+        );
     }
 }
