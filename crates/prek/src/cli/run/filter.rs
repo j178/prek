@@ -764,11 +764,11 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn filename_filter_matches_non_utf8_paths_with_regex_include() {
+    fn filename_filter_regex_matches_valid_suffix_of_non_utf8_path() {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt as _;
 
-        let include = regex_pattern(r".*\.py$");
+        let include = regex_pattern(r"\.py$");
         let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
         let filter = FilenameFilter::new(Some(&include), None);
 
