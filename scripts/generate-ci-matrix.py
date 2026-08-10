@@ -30,6 +30,7 @@ LANGUAGE_TESTS = {
     "haskell": LanguageTest("test(haskell::)", 240),
     "julia": LanguageTest("test(julia::)", 110),
     "lua": LanguageTest("test(lua::)", 35),
+    "mise": LanguageTest("test(mise::)", 90),
     "node": LanguageTest("test(node::)", 35),
     "perl": LanguageTest("test(perl::)", 30),
     "php": LanguageTest("test(php::)", 30),

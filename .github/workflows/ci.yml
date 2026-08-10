@@ -19,6 +19,8 @@ env:
   NODE_VERSION: "20"
   BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
+  # The mise tests install 2026.7.18 separately to cover managed downloads.
+  MISE_VERSION: "2026.8.3"
   PYTHON_VERSION: "3.12"
   PHP_VERSION: "8.4"
   RUBY_VERSION: "3.4"
@@ -556,6 +558,17 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           # Dummy dependency path to satisfy required input while enabling caching
           cache-dependency-path: LICENSE
+
+      - name: "Install mise"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' mise ') }}
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: ${{ env.MISE_VERSION }}
+          install: false
+          cache: false
+          env: false
+          add_shims_to_path: false
+          working_directory: ${{ runner.temp }}
 
       - name: "Install Lua"
         if: ${{ contains(format(' {0} ', matrix.languages), ' lua ') }}

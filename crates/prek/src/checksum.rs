@@ -101,8 +101,9 @@ pub(crate) fn digest_from_sha256sums(
             continue;
         };
         let name = name.trim();
-        // GNU-style checksum files may prefix binary-mode filenames with `*`.
+        // GNU entries use `*` for binary mode and may retain a leading `./` from the input path.
         let name = name.strip_prefix('*').unwrap_or(name);
+        let name = name.strip_prefix("./").unwrap_or(name);
         if name == filename {
             return digest.parse().map(Some);
         }
@@ -164,6 +165,16 @@ mod tests {
             "target.tar.gz",
         )?
         .context("expected target digest")?;
+
+        assert_eq!(digest.to_string(), EMPTY_SHA256);
+        Ok(())
+    }
+
+    #[test]
+    fn parses_sha256sums_relative_filename() -> Result<()> {
+        let digest =
+            digest_from_sha256sums(&format!("{EMPTY_SHA256}  ./target.tar.gz"), "target.tar.gz")?
+                .context("expected target digest")?;
 
         assert_eq!(digest.to_string(), EMPTY_SHA256);
         Ok(())

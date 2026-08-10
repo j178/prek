@@ -35,6 +35,7 @@ mod golang;
 mod haskell;
 mod julia;
 mod lua;
+mod mise;
 mod node;
 mod perl;
 mod php;
@@ -52,6 +53,7 @@ pub(crate) mod version;
 // stronger contract than callers need and rejects the borrowed async closures used by backends.
 #[async_trait::async_trait(?Send)]
 trait LanguageBackend: Sync {
+    /// Provisions the environment required by `hook` and returns the prepared hook.
     async fn install(
         &self,
         store: &Store,
@@ -59,8 +61,12 @@ trait LanguageBackend: Sync {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook>;
 
+    /// Checks whether the installed environment described by `info` can be reused.
     async fn check_health(&self, info: &InstallInfo) -> Result<()>;
 
+    /// Builds the language-specific base environment for hook commands.
+    ///
+    /// The default leaves the caller's environment unchanged.
     fn execution_environment(
         &self,
         _store: &Store,
@@ -69,6 +75,9 @@ trait LanguageBackend: Sync {
         Ok(ExecutionEnvironment::default())
     }
 
+    /// Resolves the configured entry after the execution environment is prepared.
+    ///
+    /// This is used for normal hook runs; `prek exec` executes its supplied command directly.
     fn prepare_hook_entry(
         &self,
         store: &Store,
@@ -80,6 +89,24 @@ trait LanguageBackend: Sync {
             .resolve(environment.path(hook), hook.work_dir(), store)?)
     }
 
+    /// Applies asynchronous or working-directory-dependent changes to `environment`.
+    ///
+    /// This is called after [`Self::execution_environment`] and before command resolution. `cwd`
+    /// is the hook work directory for a normal run and the caller's working directory for
+    /// `prek exec`.
+    async fn prepare_execution_environment(
+        &self,
+        _hook: &InstalledHook,
+        _cwd: &Path,
+        _environment: &mut ExecutionEnvironment,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Runs the hook for `filenames`, reports progress, and returns its exit code and output.
+    ///
+    /// The default prepares the environment, resolves the entry, and executes filename batches
+    /// from the hook work directory.
     async fn run(
         &self,
         store: &Store,
@@ -89,7 +116,9 @@ trait LanguageBackend: Sync {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let environment = self.execution_environment(store, hook)?;
+        let mut environment = self.execution_environment(store, hook)?;
+        self.prepare_execution_environment(hook, hook.work_dir(), &mut environment)
+            .await?;
         let entry = self.prepare_hook_entry(store, hook, &environment)?;
         let run = async |batch: &[&Path]| {
             let output = environment
@@ -199,8 +228,19 @@ impl ExecutionEnvironment {
     pub(crate) fn path<'a>(&'a self, hook: &'a InstalledHook) -> Option<&'a OsStr> {
         hook.env
             .iter()
-            .find_map(|(key, value)| is_path_env(key).then_some(OsStr::new(value)))
-            .or(self.path.as_deref())
+            .find_map(|(key, value)| {
+                if is_path_env(key) {
+                    Some(OsStr::new(value))
+                } else {
+                    None
+                }
+            })
+            .or(self.language_path())
+    }
+
+    /// PATH supplied by the language backend before hook-specific overrides.
+    fn language_path(&self) -> Option<&OsStr> {
+        self.path.as_deref()
     }
 }
 
@@ -236,6 +276,7 @@ pub(crate) enum ShellSupport {
 // golang: install requested version, support env, support additional deps
 // haskell: only system version, support env, support additional deps
 // lua: only system version, support env, support additional deps
+// mise: install requested version, support env, support additional deps
 // node: install requested version, support env, support additional deps (delegated to nodeenv)
 // perl: only system version, support env, support additional deps
 // php: only system version, support env, support additional deps
@@ -264,6 +305,7 @@ impl Language {
             Self::Haskell => &haskell::Haskell,
             Self::Julia => &julia::Julia,
             Self::Lua => &lua::Lua,
+            Self::Mise => &mise::Mise,
             Self::Node => &node::Node,
             Self::Perl => &perl::Perl,
             Self::Php => &php::Php,
@@ -295,6 +337,7 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -318,6 +361,7 @@ impl Language {
             | Self::Golang
             | Self::Haskell
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -349,6 +393,7 @@ impl Language {
             Self::Deno => &[ToolBucket::Deno],
             Self::Dotnet => &[ToolBucket::Dotnet],
             Self::Golang => &[ToolBucket::Go],
+            Self::Mise => &[ToolBucket::Mise],
             Self::Node => &[ToolBucket::Node],
             Self::Python | Self::Pygrep => &[ToolBucket::Uv, ToolBucket::Python],
             Self::Ruby => &[ToolBucket::Ruby],
@@ -389,6 +434,7 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
+            | Self::Mise
             | Self::Perl
             | Self::Php
             | Self::R
@@ -408,6 +454,7 @@ impl Language {
             | Self::Deno
             | Self::Dotnet
             | Self::Golang
+            | Self::Mise
             | Self::Node
             | Self::Python
             | Self::Ruby
@@ -447,6 +494,7 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -481,6 +529,7 @@ impl Language {
             | Self::Golang
             | Self::Haskell
             | Self::Lua
+            | Self::Mise
             | Self::Node
             | Self::Perl
             | Self::Php
@@ -560,7 +609,10 @@ impl Language {
     ) -> Result<std::process::ExitStatus> {
         self.ensure_exec_supported(hook)?;
 
-        let environment = self.backend().execution_environment(store, hook)?;
+        let mut environment = self.backend().execution_environment(store, hook)?;
+        self.backend()
+            .prepare_execution_environment(hook, cwd, &mut environment)
+            .await?;
         environment
             .command(hook, cwd, command)?
             .status()
@@ -586,6 +638,7 @@ pub(crate) async fn extract_metadata(hook: &mut Hook) -> Result<()> {
         | Language::Haskell
         | Language::Julia
         | Language::Lua
+        | Language::Mise
         | Language::Node
         | Language::Perl
         | Language::Php

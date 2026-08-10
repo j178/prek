@@ -5,7 +5,8 @@
 - Prefer the smallest coherent change. Reuse existing mechanisms and avoid wrappers
   or abstractions for speculative or unmeasured gains.
 - Prefer direct `if` or `match` control flow and explicit state types over clever
-  combinators, wrappers, or invalid boolean/`Option` combinations.
+  combinators, wrappers, or invalid boolean/`Option` combinations. Prefer plain
+  `if`/`else` to `.then()` or `.then_some()`.
 - Try hard to avoid `panic!`, `unreachable!`, `.unwrap()`, and `.expect()`. Encode
   those constraints in the type system instead. More explicit code or a larger
   refactor is acceptable when it avoids these calls.

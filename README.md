@@ -359,7 +359,7 @@ prek self update
 ### prek is easier to work with
 
 - No need to install Python or any other runtime just to use `prek`; it is a single binary.
-- Its [language support](https://prek.j178.dev/languages/) covers every language available in `pre-commit`, plus Bun, Deno, and PHP, and it automatically installs managed toolchains when needed for Python, Node.js, Bun, Deno, Go, Rust, and Ruby.
+- Its [language support](https://prek.j178.dev/languages/) covers every language available in `pre-commit`, plus Bun, Deno, mise, and PHP, and it automatically installs managed toolchains when needed for Python, Node.js, Bun, Deno, Go, mise, Rust, and Ruby.
 - It supports native [`prek.toml`](https://prek.j178.dev/configuration/) in addition to pre-commit YAML, and [`prek util yaml-to-toml`](https://prek.j178.dev/reference/cli/#prek-util-yaml-to-toml) helps migrate existing configs.
 - Built-in support for [workspaces](https://prek.j178.dev/workspace/) means monorepos can keep separate configs per project and still run everything from one command, while independent same-depth projects run concurrently without mixing file scopes.
 - [`prek install`](https://prek.j178.dev/reference/cli/#prek-install) and [`prek uninstall`](https://prek.j178.dev/reference/cli/#prek-uninstall) honor repo-local and worktree-local `core.hooksPath`.

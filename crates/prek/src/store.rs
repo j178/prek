@@ -422,6 +422,7 @@ pub(crate) enum ToolBucket {
     Bun,
     Dotnet,
     Deno,
+    Mise,
 }
 
 #[derive(Copy, Clone, Eq, Hash, PartialEq, strum::AsRefStr, strum::Display)]

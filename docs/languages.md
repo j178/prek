@@ -33,6 +33,7 @@ Languages with managed toolchain downloads in prek today:
 - [Bun](#bun)
 - [Deno](#deno)
 - [Golang](#golang)
+- [mise](#mise)
 - [Rust](#rust)
 - [Ruby](#ruby)
 
@@ -314,6 +315,41 @@ prek installs Lua hooks via LuaRocks and runs the configured entry. If the repos
 Lua does not support `language_version` today. It uses the system `lua` / `luarocks` installation.
 
 The hook entry should point at an executable installed by LuaRocks.
+
+### mise
+
+!!! note "prek-only"
+
+    Mise language support is a prek extension. pre-commit does not have native
+    `mise` support.
+
+List the tools a hook needs in `additional_dependencies`, using mise tool
+specifications such as `aqua:golangci/golangci-lint@2`. Before running `entry`,
+prek installs those tools in an isolated environment and adds their executables
+to `PATH`.
+
+When downloads are allowed and no compatible mise installation is available,
+prek downloads mise automatically. The mise executable can be shared across
+hooks. Installed tools and other mise data stay in prek's hook cache and do not
+modify the user's mise setup.
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        language: mise
+        additional_dependencies: ["aqua:golangci/golangci-lint@2"]
+        entry: golangci-lint run --fast-only ./...
+        pass_filenames: false
+```
+
+#### `language_version`
+
+`language_version` selects the mise CLI, not the installed tools. Prek requires
+mise 2026.5.18 or newer. Supported values are `default`, `system`, exact releases
+such as `=2026.7.18`, and semver ranges such as `>=2026.7, <2027`.
 
 ### node
 

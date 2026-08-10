@@ -16,6 +16,7 @@ mod golang;
 mod haskell;
 mod julia;
 mod lua;
+mod mise;
 mod node;
 mod perl;
 mod php;
