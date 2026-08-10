@@ -329,8 +329,7 @@ prek installs those tools in an isolated environment and adds their executables
 to `PATH`.
 
 When downloads are allowed and no compatible mise installation is available,
-prek downloads mise automatically. The mise executable can be shared across
-hooks. Installed tools and other mise data stay in prek's hook cache and do not
+prek downloads mise automatically. Installed tools and other mise data stay in prek's hook cache and do not
 modify the user's mise setup.
 
 ```yaml
