@@ -8,7 +8,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use tracing::debug;
 
 use super::installer::{MiseInstaller, MiseResult, is_supported_version};
-use super::{inherited_mise_vars, is_mise_var};
+use super::{inherited_mise_vars, is_mise_var, mise_ceiling};
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::version::SemverRequest;
@@ -66,11 +66,6 @@ impl MiseEnvironment {
         }
         environment.envs(self.vars());
     }
-}
-
-fn mise_ceiling(cwd: &Path) -> Result<std::ffi::OsString> {
-    std::env::join_paths([cwd])
-        .context("Failed to isolate mise from working directory configuration")
 }
 
 #[derive(Debug, Copy, Clone)]

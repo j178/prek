@@ -10,7 +10,7 @@ use semver::Version;
 use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
-use super::inherited_mise_vars;
+use super::{inherited_mise_vars, mise_ceiling};
 use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::{LockedFile, is_executable};
@@ -72,10 +72,7 @@ impl MiseResult {
                 EnvVars::MISE_SYSTEM_DATA_DIR,
                 isolated.path().join("system-data"),
             )
-            .env(
-                EnvVars::MISE_CEILING_PATHS,
-                std::env::join_paths([isolated.path()])?,
-            )
+            .env(EnvVars::MISE_CEILING_PATHS, mise_ceiling(isolated.path())?)
             .env(EnvVars::MISE_NO_CONFIG, "1")
             .arg("--version")
             .check(true)
