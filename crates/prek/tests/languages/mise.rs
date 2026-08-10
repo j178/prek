@@ -8,7 +8,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use crate::common::{TestContext, cmd_snapshot, git_cmd, make_executable};
 
 #[test]
-fn managed_mise_remains_available_after_installing_dependencies() {
+fn reuses_managed_mise() {
     if !EnvVars.is_set(EnvVars::CI) {
         return;
     }
@@ -36,6 +36,37 @@ fn managed_mise_remains_available_after_installing_dependencies() {
         r"2026\.7\.18 [^\r\n]+ \(\d{4}-\d{2}-\d{2}\)",
         "2026.7.18 [PLATFORM] ([DATE])",
     ));
+
+    cmd_snapshot!(filters.clone(), context.run()
+        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    mise managed.............................................................Passed
+    - hook id: mise-managed
+    - duration: [TIME]
+
+      2026.7.18 [PLATFORM] ([DATE])
+
+    ----- stderr -----
+    "#);
+
+    // A different environment requirement forces another installer call. With downloads disabled
+    // and no system binary, this run can only reuse the managed mise installed above.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: mise-managed
+                name: mise managed
+                language: mise
+                language_version: system
+                entry: mise --version
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+    context.git_add(".");
 
     cmd_snapshot!(filters, context.run()
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
