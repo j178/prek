@@ -104,6 +104,7 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
             test "${MISE_DATA_DIR-}" != "$PREK_TEST_MISE_AMBIENT_DATA"
             test -z "${MISE_GLOBAL_CONFIG_FILE+x}"
             test -z "${__MISE_DIFF+x}"
+            test "${PREK_TEST_MISE_HOOK_ENV-}" = "runtime-only"
             echo "private tool"
         "#},
     )?;
@@ -145,6 +146,7 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
                 test "${MISE_DATA_DIR-}" != "$PREK_TEST_MISE_AMBIENT_DATA"
                 test -z "${MISE_GLOBAL_CONFIG_FILE+x}"
                 test -z "${__MISE_DIFF+x}"
+                test -z "${PREK_TEST_MISE_HOOK_ENV+x}"
             }
 
             case "${1-}" in
@@ -207,6 +209,8 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
             rev: {}
             hooks:
               - id: mise-system
+                env:
+                  PREK_TEST_MISE_HOOK_ENV: runtime-only
     ", hook_repo.display(), rev.trim()});
     context.git_add(".");
 
@@ -227,7 +231,8 @@ fn system_mise_uses_hook_repository_and_prefers_activated_tools() -> Result<()> 
         .env("MISE_GLOBAL_CONFIG_FILE", "invalid ambient config")
         .env("__MISE_DIFF", "invalid inherited state")
         .env("PREK_TEST_MISE_AMBIENT_DATA", &ambient_data)
-        .env("PREK_TEST_MISE_CALLER_CWD", context.work_dir().to_path_buf()), @r"
+        .env("PREK_TEST_MISE_CALLER_CWD", context.work_dir().to_path_buf())
+        .env_remove("PREK_TEST_MISE_HOOK_ENV"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

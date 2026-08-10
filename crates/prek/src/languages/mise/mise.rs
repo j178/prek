@@ -139,7 +139,7 @@ impl LanguageBackend for Mise {
         hook: &InstalledHook,
     ) -> Result<ExecutionEnvironment> {
         let info = hook.install_info().context("mise must be installed")?;
-        let path = activation_base_path(hook, &info.toolchain)?;
+        let path = activation_base_path(&info.toolchain)?;
 
         let mut environment = ExecutionEnvironment::new();
         environment.set_path(path);
@@ -162,16 +162,11 @@ impl LanguageBackend for Mise {
         let info = hook.install_info().context("mise must be installed")?;
         let mise_environment = MiseEnvironment::new(&info.env_path);
         let tool_cwd = tool_cwd(hook);
-        let base_path = activation_base_path(hook, &info.toolchain)?;
+        let base_path = activation_base_path(&info.toolchain)?;
         // Backends can contribute dynamic environment variables and PATH entries, so activation
         // must be delegated to the selected mise CLI. Hook argv never crosses its UTF-8 boundary.
         let mut command = mise_environment.command(&info.toolchain, tool_cwd)?;
         command
-            .envs(
-                hook.env
-                    .iter()
-                    .filter(|(key, _)| !is_mise_var(OsStr::new(key))),
-            )
             .env(EnvVars::PATH, &base_path)
             .arg("env")
             .arg("--json")
@@ -207,18 +202,12 @@ fn tool_cwd(hook: &Hook) -> &Path {
 
 /// Builds the PATH used to invoke the selected mise CLI during tool activation.
 ///
-/// The selected mise binary comes first, followed by the hook's configured PATH or the inherited
-/// process PATH.
-fn activation_base_path(hook: &Hook, mise: &Path) -> Result<std::ffi::OsString> {
+/// The selected mise binary comes first, followed by the inherited process PATH.
+fn activation_base_path(mise: &Path) -> Result<std::ffi::OsString> {
     let bin_dir = mise
         .parent()
         .context("mise executable must have a parent directory")?;
-    let base_path = hook
-        .env
-        .iter()
-        .find_map(|(key, value)| is_path_env(key).then_some(OsStr::new(value)))
-        .map(ToOwned::to_owned)
-        .or_else(|| EnvVars.var_os(EnvVars::PATH));
+    let base_path = EnvVars.var_os(EnvVars::PATH);
     std::env::join_paths(
         std::iter::once(bin_dir.to_path_buf()).chain(
             base_path
