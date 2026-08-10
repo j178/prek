@@ -193,11 +193,7 @@ impl LanguageBackend for Mise {
             .iter()
             .find_map(|(key, value)| is_path_env(key).then(|| value.clone()))
             .context("mise environment did not include PATH")?;
-        let mise_bin = info
-            .toolchain
-            .parent()
-            .context("mise executable must have a parent directory")?;
-        let activated_path = merge_activated_path(mise_bin, &activated_path)?;
+        // TODO(#2022): Preserve non-UTF-8 PATH entries omitted by `mise env --json`.
         activated.retain(|key, _| !is_path_env(key) && !is_mise_var(OsStr::new(key)));
         environment.envs(&activated).set_path(activated_path);
 
@@ -237,18 +233,6 @@ fn activation_base_path(hook: &Hook, mise: &Path) -> Result<std::ffi::OsString> 
         ),
     )
     .context("Failed to join mise PATH")
-}
-
-/// Builds the final hook PATH from mise's JSON response, keeping the selected mise binary first.
-fn merge_activated_path(mise_bin: &Path, activated: &str) -> Result<std::ffi::OsString> {
-    // TODO(#2022): Preserve non-UTF-8 PATH entries omitted by `mise env --json`.
-    let mut paths = vec![mise_bin.to_path_buf()];
-    for path in std::env::split_paths(OsStr::new(activated)) {
-        if !paths.contains(&path) {
-            paths.push(path);
-        }
-    }
-    std::env::join_paths(paths).context("Failed to join activated mise PATH")
 }
 
 fn tools_with_versions(tools: &[String]) -> impl Iterator<Item = String> + '_ {
