@@ -7,7 +7,7 @@ on:
 permissions: {}
 
 env:
-  UV_VERSION: "0.11.32"
+  UV_VERSION: "0.12.1"
 
 jobs:
   sync:
