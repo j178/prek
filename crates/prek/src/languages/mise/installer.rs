@@ -64,6 +64,7 @@ impl MiseResult {
             .env(EnvVars::MISE_DATA_DIR, isolated.path().join("data"))
             .env(EnvVars::MISE_CACHE_DIR, isolated.path().join("cache"))
             .env(EnvVars::MISE_CONFIG_DIR, isolated.path().join("config"))
+            .env(EnvVars::MISE_STATE_DIR, isolated.path().join("state"))
             .env(
                 EnvVars::MISE_SYSTEM_CONFIG_DIR,
                 isolated.path().join("system-config"),
@@ -232,20 +233,23 @@ impl MiseInstaller {
         })
         .await
         .context("Failed to download mise")?;
-        let extracted = archive::extract_archive(download.path())
-            .await
-            .context("Failed to extract mise")?;
-
-        let source = bin_dir(&extracted)
-            .join("mise")
-            .with_extension(EXE_EXTENSION);
         let install_dir = tempfile::Builder::new()
             .prefix(".install-")
             .tempdir_in(&self.root)?;
         let target_bin_dir = bin_dir(install_dir.path());
         fs_err::tokio::create_dir_all(&target_bin_dir).await?;
         let target_binary = target_bin_dir.join("mise").with_extension(EXE_EXTENSION);
-        fs_err::tokio::rename(&source, &target_binary).await?;
+        if HOST.operating_system == OperatingSystem::Windows {
+            fs_err::tokio::copy(download.path(), &target_binary).await?;
+        } else {
+            let extracted = archive::extract_archive(download.path())
+                .await
+                .context("Failed to extract mise")?;
+            let source = bin_dir(&extracted)
+                .join("mise")
+                .with_extension(EXE_EXTENSION);
+            fs_err::tokio::rename(&source, &target_binary).await?;
+        }
         crate::fs::make_executable(&target_binary)?;
 
         let target = self.root.join(version.to_string());
@@ -293,7 +297,9 @@ fn release_platform(host: &Triple) -> Result<(String, &'static str)> {
         ),
     };
     let extension = if host.operating_system == OperatingSystem::Windows {
-        "zip"
+        // mise's signed ZIP starts with a zipsign preamble, which async_zip's streaming reader
+        // cannot skip.
+        "exe"
     } else {
         "tar.gz"
     };

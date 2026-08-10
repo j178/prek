@@ -280,6 +280,10 @@ mod tests {
                 "github:ajeetdsouza/zoxide",
                 "github:ajeetdsouza/zoxide@latest",
             ),
+            (
+                "ubi:BurntSushi/ripgrep[exe=rg]",
+                "ubi:BurntSushi/ripgrep[exe=rg]@latest",
+            ),
             ("npm:@antfu/ni", "npm:@antfu/ni@latest"),
             ("npm:@antfu/ni@1", "npm:@antfu/ni@1"),
             ("@biomejs/biome", "@biomejs/biome@latest"),
