@@ -32,7 +32,7 @@ impl Args {
 
         for pattern in &self.patterns {
             let pattern = Regex::new(pattern).context("Failed to compile regex patterns")?;
-            if pattern.is_match(branch).unwrap_or(false) {
+            if pattern.is_match(branch)? {
                 return Ok(true);
             }
         }
@@ -65,5 +65,21 @@ pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
         Ok(HookOutput::unchanged(1, err_msg.into_bytes()))
     } else {
         Ok(HookOutput::unchanged(0, Vec::new()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Args;
+
+    #[test]
+    fn pattern_runtime_errors_are_reported() {
+        let args = Args {
+            branches: Vec::new(),
+            patterns: vec![r"^(a|aa)+\1$".to_string()],
+        };
+        let branch = format!("{}b", "a".repeat(40));
+
+        assert!(args.check_protected(&branch).is_err());
     }
 }
