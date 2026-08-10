@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.4.13
+
+Released on 2026-08-10.
+
+### Highlights
+
+#### Manage hook tools with mise
+
+The new `language: mise` support lets hooks install tools using
+[`mise`](https://mise.jdx.dev/) in an isolated environment:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        language: mise
+        additional_dependencies: ["aqua:golangci/golangci-lint@2"]
+        entry: golangci-lint run --fast-only ./...
+        pass_filenames: false
+```
+
+#### Run commands in hook environments
+
+The new `prek exec` subcommand can run an explicit command in a configured
+hook's prepared environment. For example, the hook above makes its managed
+binary available to this command:
+
+```console
+$ prek exec golangci-lint -- golangci-lint --version
+```
+
+### Enhancements
+
+- Add `mise` language support ([#2540](https://github.com/j178/prek/pull/2540))
+- Add `deny-filename-pattern` and `require-filename-pattern` hooks ([#2488](https://github.com/j178/prek/pull/2488))
+- Add `prek exec` for running commands in a hook environment ([#2478](https://github.com/j178/prek/pull/2478))
+- Add `yaml-language-server:` comment to YAML sample config ([#2486](https://github.com/j178/prek/pull/2486))
+- Make `prek cache size` output terminal-aware ([#2508](https://github.com/j178/prek/pull/2508))
+- Match file regexes against path bytes ([#2541](https://github.com/j178/prek/pull/2541))
+- Show hook aliases in run output ([#2497](https://github.com/j178/prek/pull/2497))
+- Show hook descriptions in run output ([#2490](https://github.com/j178/prek/pull/2490))
+
+### Performance
+
+- Avoid env cache scans for skipped hooks ([#2502](https://github.com/j178/prek/pull/2502))
+- Cache Node version queries ([#2500](https://github.com/j178/prek/pull/2500))
+
+### Bug fixes
+
+- Fix Node hook installation with npm 11 ([#2487](https://github.com/j178/prek/pull/2487))
+- Isolate dependency installs from inherited Git repository state ([#2506](https://github.com/j178/prek/pull/2506))
+
+### Documentation
+
+- Document combined group filtering ([#2495](https://github.com/j178/prek/pull/2495))
+- Explain what prek does in README ([#2507](https://github.com/j178/prek/pull/2507))
+- Refresh "Why prek" highlights ([#2474](https://github.com/j178/prek/pull/2474))
+
+### Contributors
+
+- @will-wright-eng
+- @Repiteo
+- @j178
+
 ## 0.4.12
 
 Released on 2026-08-03.
