@@ -18,41 +18,52 @@ pub(crate) struct Args {
     /// Allow multiple YAML documents.
     #[arg(long, short = 'm', visible_alias = "multi")]
     allow_multiple_documents: bool,
+    /// Parse YAML syntax without loading it. Implies `--allow-multiple-documents`.
+    #[arg(long)]
+    r#unsafe: bool,
     #[arg(value_name = "FILENAMES")]
     filenames: Vec<PathBuf>,
-    // `--unsafe` flag is not supported yet.
-    // #[arg(long)]
-    // r#unsafe: bool,
+}
+
+#[derive(Clone, Copy)]
+enum CheckMode {
+    Load { multiple: bool },
+    SyntaxOnly,
 }
 
 /// Runs the `check-yaml` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
+    let mode = if args.r#unsafe {
+        CheckMode::SyntaxOnly
+    } else {
+        CheckMode::Load {
+            multiple: args.allow_multiple_documents,
+        }
+    };
 
     run_concurrent_file_checks(
         hook_filenames(&args.filenames, filenames),
         *INTERNAL_CONCURRENCY,
-        |filename| {
-            check_file(
-                hook.project().relative_path(),
-                filename,
-                args.allow_multiple_documents,
-            )
-        },
+        |filename| check_file(hook.project().relative_path(), filename, mode),
     )
     .await
 }
 
-async fn check_file(
-    file_base: &Path,
-    filename: &Path,
-    allow_multi_docs: bool,
-) -> Result<HookOutput> {
+async fn check_file(file_base: &Path, filename: &Path, mode: CheckMode) -> Result<HookOutput> {
     let content = fs_err::tokio::read(file_base.join(filename)).await?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
+    let output = match mode {
+        CheckMode::Load { multiple } => check_loaded(filename, &content, multiple),
+        CheckMode::SyntaxOnly => check_syntax(filename, &content),
+    };
+    Ok(output)
+}
+
+fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> HookOutput {
     let options = serde_saphyr::options! {
         budget: serde_saphyr::budget! {
             // `check-yaml` is a syntax/structure validator, not a service parsing
@@ -66,33 +77,53 @@ async fn check_file(
         // legal YAML, not whether an untyped data model can represent them. See #2544.
         reject_non_finite_typeless_float: false,
     };
-    if allow_multi_docs {
-        if let Err(e) =
-            serde_saphyr::from_slice_multiple_with_options::<IgnoredAny>(&content, options)
-        {
-            let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
-            return Ok(HookOutput::unchanged(1, error_message.into_bytes()));
-        }
-        Ok(HookOutput::unchanged(0, Vec::new()))
+    let result = if allow_multi_docs {
+        serde_saphyr::from_slice_multiple_with_options::<IgnoredAny>(content, options).map(|_| ())
     } else {
-        match serde_saphyr::from_slice_with_options::<IgnoredAny>(&content, options) {
-            Ok(_) => Ok(HookOutput::unchanged(0, Vec::new())),
-            Err(e) => {
-                let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
-                let error_message =
-                    format!("{}: Failed to yaml decode ({err})\n", filename.display());
-                Ok(HookOutput::unchanged(1, error_message.into_bytes()))
-            }
+        serde_saphyr::from_slice_with_options::<IgnoredAny>(content, options).map(|_| ())
+    };
+    match result {
+        Ok(()) => HookOutput::unchanged(0, Vec::new()),
+        Err(e) => {
+            let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
+            let error_message = format!("{}: Failed to yaml decode ({err})\n", filename.display());
+            HookOutput::unchanged(1, error_message.into_bytes())
         }
     }
+}
+
+fn check_syntax(filename: &Path, content: &[u8]) -> HookOutput {
+    let content = match std::str::from_utf8(content) {
+        Ok(content) => content,
+        Err(error) => {
+            let error_message =
+                format!("{}: Failed to decode UTF-8 ({error})\n", filename.display());
+            return HookOutput::unchanged(1, error_message.into_bytes());
+        }
+    };
+
+    // TODO: `granit-parser` resolves aliases while producing parser events, so this is stricter
+    // than upstream's syntax-only mode for aliases that reference an undefined anchor.
+    for event in granit_parser::Parser::new_from_str(content) {
+        if let Err(error) = event {
+            let error_message = format!("{}: Failed to yaml parse ({error})\n", filename.display());
+            return HookOutput::unchanged(1, error_message.into_bytes());
+        }
+    }
+
+    HookOutput::unchanged(0, Vec::new())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
     use std::fmt::Write;
     use std::path::PathBuf;
     use tempfile::tempdir;
+
+    const LOAD_SINGLE_DOCUMENT: CheckMode = CheckMode::Load { multiple: false };
+    const LOAD_MULTIPLE_DOCUMENTS: CheckMode = CheckMode::Load { multiple: true };
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
@@ -104,6 +135,14 @@ mod tests {
         Ok(file_path)
     }
 
+    #[test]
+    fn test_unsafe_argument() -> Result<()> {
+        let args = Args::try_parse_from(["check-yaml", "--unsafe", "config.yaml"])?;
+        assert!(args.r#unsafe);
+        assert_eq!(args.filenames, [PathBuf::from("config.yaml")]);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_valid_yaml() -> Result<()> {
         let dir = tempdir()?;
@@ -111,7 +150,7 @@ mod tests {
 key2: value2
 ";
         let file_path = create_test_file(&dir, "valid.yaml", content).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
         Ok(())
@@ -125,7 +164,7 @@ positive_infinity: .inf
 negative_infinity: -.inf
 ";
         let file_path = create_test_file(&dir, "non-finite.yaml", content).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(
             result.exit_status,
             0,
@@ -143,7 +182,7 @@ negative_infinity: -.inf
 key2: value2: another_value
 ";
         let file_path = create_test_file(&dir, "invalid.yaml", content).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
         Ok(())
@@ -156,7 +195,7 @@ key2: value2: another_value
 key1: value2
 ";
         let file_path = create_test_file(&dir, "duplicate.yaml", content).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
         Ok(())
@@ -167,7 +206,7 @@ key1: value2
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.yaml", content).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
         Ok(())
@@ -184,13 +223,79 @@ key2: value2
 ";
         let file_path = create_test_file(&dir, "multi.yaml", content).await?;
 
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
 
-        let result = check_file(Path::new(""), &file_path, true).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_MULTIPLE_DOCUMENTS).await?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_unsafe_allows_multiple_documents() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"---\nkey1: value1\n---\nkey2: value2\n";
+        let file_path = create_test_file(&dir, "multi.yaml", content).await?;
+
+        let result = check_file(Path::new(""), &file_path, CheckMode::SyntaxOnly).await?;
+        assert_eq!(
+            result.exit_status,
+            0,
+            "{}",
+            String::from_utf8_lossy(&result.output)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_unsafe_checks_later_documents() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"---\nkey: value\n---\n[";
+        let file_path = create_test_file(&dir, "invalid-multi.yaml", content).await?;
+
+        let result = check_file(Path::new(""), &file_path, CheckMode::SyntaxOnly).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_unsafe_allows_values_rejected_while_loading() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"duplicate: first\nduplicate: second\ntarget:\n  <<: not-a-map\n";
+        let file_path = create_test_file(&dir, "unsafe.yaml", content).await?;
+
+        let result = check_file(Path::new(""), &file_path, CheckMode::SyntaxOnly).await?;
+        assert_eq!(
+            result.exit_status,
+            0,
+            "{}",
+            String::from_utf8_lossy(&result.output)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_unsafe_rejects_invalid_syntax() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = create_test_file(&dir, "invalid.yaml", b"[").await?;
+
+        let result = check_file(Path::new(""), &file_path, CheckMode::SyntaxOnly).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(!result.output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_unsafe_rejects_invalid_utf8() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = create_test_file(&dir, "invalid.yaml", b"key: \xff").await?;
+
+        let result = check_file(Path::new(""), &file_path, CheckMode::SyntaxOnly).await?;
+        assert_eq!(result.exit_status, 1);
+        assert!(String::from_utf8_lossy(&result.output).contains("Failed to decode UTF-8"));
         Ok(())
     }
 
@@ -212,7 +317,7 @@ response:
       BKa2qJVpyDuvhldbu0LOFtnicypnC0z2yV8AAAD//wMALvIkjL4DAAA=
 ";
         let file_path = create_test_file(&dir, "binary.yaml", content).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
         Ok(())
@@ -231,7 +336,7 @@ response:
         }
 
         let file_path = create_test_file(&dir, "many-aliases.yaml", content.as_bytes()).await?;
-        let result = check_file(Path::new(""), &file_path, false).await?;
+        let result = check_file(Path::new(""), &file_path, LOAD_SINGLE_DOCUMENT).await?;
         assert_eq!(
             result.exit_status,
             0,

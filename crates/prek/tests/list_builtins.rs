@@ -47,7 +47,7 @@ fn list_builtins_basic() {
 fn list_builtins_verbose() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -98,6 +98,8 @@ fn list_builtins_verbose() {
       Checks YAML files for parseable syntax.
       flags:
         -m, --allow-multiple-documents  Allow multiple YAML documents [alias: --multi]
+            --unsafe                    Parse YAML syntax without loading it. Implies
+                                        `--allow-multiple-documents`
 
     deny-filename-pattern
       Fails if any selected filename matches a regular expression.
@@ -174,7 +176,7 @@ fn list_builtins_verbose() {
 
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]

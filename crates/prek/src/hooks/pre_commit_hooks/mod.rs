@@ -128,14 +128,6 @@ pub(crate) enum PreCommitHooks {
 }
 
 impl PreCommitHooks {
-    pub(crate) fn check_supported(&self, hook: &Hook) -> bool {
-        match self {
-            // `check-yaml` does not support `--unsafe` flag yet.
-            Self::CheckYaml => !hook.args.iter().any(|s| s.starts_with("--unsafe")),
-            _ => true,
-        }
-    }
-
     pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
         debug!("Running hook `{}` in fast path", hook.id);
         let future: HookFuture<'_> = match self {

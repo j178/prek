@@ -2008,6 +2008,7 @@ dependencies = [
  "fs-err",
  "futures-util",
  "globset",
+ "granit-parser",
  "hex",
  "http",
  "ignore",
