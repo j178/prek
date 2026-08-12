@@ -90,12 +90,7 @@ fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
         return None;
     }
 
-    let implemented = PreCommitHooks::from_str(hook.id.as_str()).ok()?;
-    if implemented.check_supported(hook) {
-        Some(implemented)
-    } else {
-        None
-    }
+    PreCommitHooks::from_str(hook.id.as_str()).ok()
 }
 
 /// Returns whether a hook requires a Git diff to determine file changes.
