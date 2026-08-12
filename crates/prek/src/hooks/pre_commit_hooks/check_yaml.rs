@@ -57,10 +57,14 @@ async fn check_file(
         budget: serde_saphyr::budget! {
             // `check-yaml` is a syntax/structure validator, not a service parsing
             // untrusted YAML at runtime. Keep the absolute caps, but allow
-            // high-reuse anchors that are common in compose-style files.
+            // high-reuse anchors that are common in compose-style files. See #1838.
             enforce_alias_anchor_ratio: false,
         },
+        // Do not require `!!binary` scalars to decode as UTF-8. See #1102.
         ignore_binary_tag_for_string: true,
+        // The scalar values are discarded, so only validate whether they are
+        // legal YAML, not whether an untyped data model can represent them. See #2544.
+        reject_non_finite_typeless_float: false,
     };
     if allow_multi_docs {
         if let Err(e) =
@@ -109,6 +113,25 @@ key2: value2
         let file_path = create_test_file(&dir, "valid.yaml", content).await?;
         let result = check_file(Path::new(""), &file_path, false).await?;
         assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_yaml_with_non_finite_floats() -> Result<()> {
+        let dir = tempdir()?;
+        let content = br"nan: .nan
+positive_infinity: .inf
+negative_infinity: -.inf
+";
+        let file_path = create_test_file(&dir, "non-finite.yaml", content).await?;
+        let result = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(
+            result.exit_status,
+            0,
+            "{}",
+            String::from_utf8_lossy(&result.output)
+        );
         assert!(result.output.is_empty());
         Ok(())
     }
