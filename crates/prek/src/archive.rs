@@ -26,17 +26,23 @@ use std::path::{Component, Path, PathBuf};
 use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
 use async_zip::base::read::stream::ZipFileReader;
 use rustc_hash::FxHashSet;
+use tar_codec::extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy};
+use tar_codec::{
+    Archive, DecodeError, DecodePolicy, ExtractError, PaxDecodePolicy, PaxVendorExtensionPolicy,
+    TarArchive,
+};
 use tokio::io::{AsyncRead, BufReader};
-use tokio_tar::ArchiveBuilder;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    AsyncZip(#[from] async_zip::error::ZipError),
-    #[error(transparent)]
+    #[error("I/O operation failed during extraction")]
     Io(#[from] std::io::Error),
+    #[error("Invalid zip file structure")]
+    Zip(#[from] async_zip::error::ZipError),
+    #[error("Invalid tar file")]
+    Tar(#[from] ExtractError<DecodeError>),
     #[error("Unsupported archive type: {0}")]
     UnsupportedArchive(PathBuf),
     #[error(
@@ -263,6 +269,42 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
     Ok(())
 }
 
+/// Unpack the given tar archive into the destination directory.
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_in<R: AsyncRead + Unpin>(
+    reader: R,
+    dst: &Path,
+) -> Result<(), ExtractError<DecodeError>> {
+    let decode_policy = DecodePolicy::default().pax_policy(
+        PaxDecodePolicy::default()
+            // NOTE: We intentionally allow (ignore) `SCHILY.*` and `LIBARCHIVE.*`
+            // pax extensions here, but continue to forbid others.
+            // The rationale here is that we know these vendor namespaces don't affect framing in
+            // any way, whereas others (like GNU sparse extensions) can.
+            .vendor_extension_policy(PaxVendorExtensionPolicy::ignore(["SCHILY", "LIBARCHIVE"]))
+            // NOTE: We allow pax records to contain non-UTF-8 values.
+            // This is a violation of the pax spec, but is prevalent in the
+            // wild thanks to both GNU tar and libarchive encoding `SCHILY.xattr`
+            // as raw binary.
+            .allow_non_utf8_pax_vendor_values(true),
+    );
+    let archive = TarArchive::new(reader).with_policy(decode_policy);
+    archive.extract_in(dst, tar_extract_policy()).await?;
+    Ok(())
+}
+
+fn tar_extract_policy() -> ExtractPolicy {
+    // Keep tar-codec's defaults, including name validation, hardlink rejection, and rejection of
+    // pre-existing link targets. uv extracts archives into new temporary directories.
+    if cfg!(windows) {
+        ExtractPolicy::default()
+            .link_policy(LinkPolicy::default().symlink_policy(SymlinkPolicy::Skip))
+    } else {
+        ExtractPolicy::default()
+    }
+}
+
 /// Unpack a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
@@ -272,15 +314,7 @@ pub async fn untar_gz<R: AsyncRead + Unpin>(
 ) -> Result<(), Error> {
     let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let reader = GzipDecoder::new(reader);
-
-    let mut archive = ArchiveBuilder::new(reader)
-        .set_preserve_mtime(true)
-        .set_preserve_permissions(true)
-        .set_allow_external_symlinks(false)
-        .build();
-
-    archive.unpack(target.as_ref()).await?;
-    Ok(())
+    untar_in(reader, target.as_ref()).await.map_err(Error::from)
 }
 
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
@@ -292,15 +326,7 @@ pub async fn untar_xz<R: AsyncRead + Unpin>(
 ) -> Result<(), Error> {
     let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let reader = XzDecoder::new(reader);
-
-    let mut archive = ArchiveBuilder::new(reader)
-        .set_preserve_mtime(true)
-        .set_preserve_permissions(true)
-        .set_allow_external_symlinks(false)
-        .build();
-
-    archive.unpack(target.as_ref()).await?;
-    Ok(())
+    untar_in(reader, target.as_ref()).await.map_err(Error::from)
 }
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
