@@ -99,7 +99,7 @@ pub(crate) async fn run(
             .await
             .context("Failed to init hooks")?
     };
-    let selected_hooks: Vec<_> = hooks
+    let mut selected_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))
         .filter(|h| group_filters.matches_hook(h))
@@ -130,22 +130,15 @@ pub(crate) async fn run(
 
     let (stage_filter, input_mode) =
         infer_stage_and_input_mode(hook_stage, has_group_filters, &selected_hooks, &selectors);
-    let filtered_hooks: Vec<Arc<Hook>> = if let Some(stage_filter) = stage_filter {
-        selected_hooks
-            .iter()
-            .filter(|h| h.stages.contains(stage_filter))
-            .cloned()
-            .collect()
+    if let Some(stage_filter) = stage_filter {
+        selected_hooks.retain(|h| h.stages.contains(stage_filter));
     } else {
         // Group selection without an explicit stage uses normal file input, so
         // hooks that can only consume Git message files cannot run correctly.
-        selected_hooks
-            .into_iter()
-            .filter(|hook| !uses_only_message_file_input(hook))
-            .collect()
-    };
+        selected_hooks.retain(|hook| !uses_only_message_file_input(hook));
+    }
 
-    if filtered_hooks.is_empty() {
+    if selected_hooks.is_empty() {
         if let Some(stage) = stage_filter {
             debug!("No hooks found for stage {stage} after filtering, exit early");
         } else {
@@ -159,7 +152,7 @@ pub(crate) async fn run(
 
     debug!(
         "Hooks going to run: {:?}",
-        filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
+        selected_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
 
     // Clear any unstaged changes from the git working directory.
@@ -201,7 +194,7 @@ pub(crate) async fn run(
         &workspace,
         &input,
         &file_index,
-        &filtered_hooks,
+        &selected_hooks,
     )
     .await?;
 

@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -535,19 +535,10 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         )
     })?;
 
-    let filenames = collect_files_for_selection(git_root, root, selection).await?;
-
-    // Convert filenames to be relative to the workspace root.
-    let mut filenames = filenames
-        .into_iter()
-        .filter_map(|filename| {
-            // Only keep files under the workspace root.
-            filename
-                .strip_prefix(relative_root)
-                .map(|p| fs::normalize_path(p.to_path_buf()))
-                .ok()
-        })
-        .collect::<Vec<_>>();
+    let mut filenames = collect_files_for_selection(git_root, root, selection).await?;
+    if !relative_root.as_os_str().is_empty() {
+        filenames.retain_mut(|filename| strip_prefix_in_place(filename, relative_root));
+    }
 
     // Sort filenames if in tests to make the order consistent.
     if EnvVars.is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
@@ -555,6 +546,34 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
     }
 
     Ok(RunInput::Files(filenames))
+}
+
+fn strip_prefix_in_place(path: &mut PathBuf, prefix: &Path) -> bool {
+    // Examples with prefix `"workspace"`:
+    // - `"other/file.rs"` does not match, so the path is unchanged.
+    // - `"workspace/file.rs"` becomes `"file.rs"` by draining `"workspace/"`.
+    // - `"workspace/file.rs/"` also becomes `"file.rs"`, because `strip_prefix`
+    //   works on components and discards the trailing separator. Since that result
+    //   is not a byte suffix of the original path, this case uses the copy below.
+    let start = {
+        let Ok(stripped) = path.strip_prefix(prefix) else {
+            return false;
+        };
+        let path_bytes = path.as_os_str().as_encoded_bytes();
+        let stripped_bytes = stripped.as_os_str().as_encoded_bytes();
+        let Some(before) = path_bytes.strip_suffix(stripped_bytes) else {
+            *path = stripped.to_path_buf();
+            return true;
+        };
+        before.len()
+    };
+    let mut bytes = std::mem::take(path).into_os_string().into_encoded_bytes();
+    drop(bytes.drain(..start));
+
+    // SAFETY: the retained suffix is the valid `Path` returned by `strip_prefix`,
+    // moved without modification and rebuilt on the same target.
+    *path = PathBuf::from(unsafe { OsString::from_encoded_bytes_unchecked(bytes) });
+    true
 }
 
 fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
@@ -711,6 +730,38 @@ mod tests {
         .into();
 
         assert_eq!(selection.refs(), (None, Some("local-sha")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn strip_prefix_in_place_preserves_non_utf8_names() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let mut filename = PathBuf::from(OsStr::from_bytes(b"workspace/bad-\xff.py"));
+
+        let stripped = strip_prefix_in_place(&mut filename, Path::new("workspace"));
+
+        assert_eq!(
+            (stripped, filename),
+            (true, PathBuf::from(OsStr::from_bytes(b"bad-\xff.py")))
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_prefix_in_place_preserves_non_utf8_names() {
+        use std::os::windows::ffi::OsStringExt as _;
+
+        let mut filename = OsString::from(r"workspace\");
+        filename.push(OsString::from_wide(&[0xD800]));
+        let mut filename = PathBuf::from(filename);
+
+        let stripped = strip_prefix_in_place(&mut filename, Path::new("workspace"));
+
+        assert_eq!(
+            (stripped, filename),
+            (true, PathBuf::from(OsString::from_wide(&[0xD800])))
+        );
     }
 
     fn glob_pattern(pattern: &str) -> FilePattern {
