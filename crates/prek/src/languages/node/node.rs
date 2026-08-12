@@ -306,13 +306,11 @@ impl Npm<'_> {
             .await
             .context("Failed to pack Node hook repository")?;
 
-        let archives = fs_err::read_dir(temp_dir.path())
+        let mut archives = fs_err::read_dir(temp_dir.path())
             .context("Failed to read npm pack directory")?
             .map(|entry| entry.map(|entry| entry.path()))
-            .collect::<std::io::Result<Vec<_>>>()?
-            .into_iter()
-            .filter(|path| path.extension().is_some_and(|extension| extension == "tgz"))
-            .collect::<Vec<_>>();
+            .collect::<std::io::Result<Vec<_>>>()?;
+        archives.retain(|path| path.extension().is_some_and(|extension| extension == "tgz"));
         let archive = match archives.as_slice() {
             [archive] => archive.clone(),
             _ => {
