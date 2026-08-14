@@ -96,6 +96,7 @@ similar = { version = "3.0.0" }
 ssl-certs = { version = "0.1.1" }
 strum = { version = "0.28.0", features = ["derive"] }
 target-lexicon = { version = "0.13.0" }
+tar-codec = { version = "0.0.13" }
 tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = [
@@ -109,7 +110,6 @@ tokio = { version = "1.47.1", features = [
   "net",
   "time"
 ] }
-tokio-tar = { version = "0.6.4", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13", features = ["compat", "io"] }
 toml = { version = "1.0.1", default-features = false, features = [
   "fast_hash",
