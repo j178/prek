@@ -34,7 +34,7 @@ use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
 use crate::run::HOOK_CONCURRENCY;
 use crate::store::Store;
-use crate::terminal::USE_COLOR;
+use crate::terminal::{USE_COLOR, sanitize_output};
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 
@@ -947,12 +947,15 @@ impl<'a> HookRunSession<'a> {
                         file.write_all(output)?;
                         file.flush()?;
                     } else {
+                        let text = sanitize_output(output);
+                        if text.is_empty() {
+                            continue;
+                        }
                         if show_group_ui {
                             writeln!(stdout, "{group_separator}")?;
                         } else {
                             writeln!(stdout)?;
                         }
-                        let text = String::from_utf8_lossy(output);
                         for line in text.lines() {
                             if line.is_empty() {
                                 if show_group_ui {

@@ -1,10 +1,10 @@
-//! Terminal capability setup, progress rendering, and captured-output filtering.
+//! Terminal capability setup, progress rendering, and output sanitization.
 //!
-//! Terminal streams contain instructions, not just text. Preview output keeps
-//! only decoded text. PTY capture uses the same parse to retain SGR styling for
-//! final replay and resolve line-overwrite instructions in a private buffer.
-//! Other terminal instructions have no useful meaning in a linear transcript
-//! and are discarded instead of being replayed on the user's terminal.
+//! Terminal streams contain instructions, not just text. Before captured hook
+//! output is displayed, it is converted into a linear transcript that retains
+//! SGR styling and resolves line overwrites. Other terminal instructions have
+//! no useful meaning in that transcript and are discarded instead of being
+//! replayed on the user's terminal.
 //!
 //! # Terminology
 //!
@@ -23,8 +23,8 @@
 //! - **OSC** (Operating System Command, beginning with `ESC ]`) carries commands
 //!   such as window titles and hyperlinks. **DCS** (Device Control String,
 //!   beginning with `ESC P`) carries device-specific data.
-//! - **C0/C1 controls** are non-printing control characters. Of these, the linear
-//!   output keeps LF (`\n`), CR (`\r`), and tab (`\t`) for text layout.
+//! - **C0/C1 controls** are non-printing control characters. Of these, LF (`\n`),
+//!   CR (`\r`), and tab (`\t`) affect the transcript's text layout.
 //! - **CR** returns the cursor to the start of the current line without advancing
 //!   it; progress displays commonly use it to overwrite a previous frame. **LF**
 //!   advances to the next line.
@@ -40,13 +40,12 @@ use console::Term;
 use indicatif::{ProgressDrawTarget, TermLike};
 
 /// Whether stderr's resolved color choice permits ANSI styling.
-pub(crate) static USE_COLOR: LazyLock<bool> =
-    LazyLock::new(|| match anstream::Stderr::choice(&std::io::stderr()) {
-        ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
-        ColorChoice::Never => false,
-        // We just asked anstream for a choice, that can't be auto.
-        ColorChoice::Auto => unreachable!(),
-    });
+pub(crate) static USE_COLOR: LazyLock<bool> = LazyLock::new(|| {
+    matches!(
+        anstream::Stderr::choice(&std::io::stderr()),
+        ColorChoice::Always | ColorChoice::AlwaysAnsi
+    )
+});
 
 /// Enables virtual terminal processing on platforms that require it for ANSI output.
 pub(crate) fn enable_ansi_colors() {
@@ -127,89 +126,16 @@ pub(crate) fn progress_draw_target() -> ProgressDrawTarget {
     }
 }
 
-/// Advances an incremental parser while retaining incomplete input for the next chunk.
-fn parse(parser: &mut Parser<DefaultCharAccumulator>, output: &mut impl Perform, input: &[u8]) {
-    for byte in input {
-        parser.advance(output, *byte);
+/// Converts captured terminal bytes into text that is safe to display later.
+pub(crate) fn sanitize_output(input: &[u8]) -> String {
+    let mut parser = Parser::<DefaultCharAccumulator>::default();
+    let mut output = TerminalOutput::default();
+    let input = String::from_utf8_lossy(input);
+    for byte in input.bytes() {
+        parser.advance(&mut output, byte);
     }
+    output.text
 }
-
-/// Plain text emitted while parsing one captured-output chunk.
-#[derive(Default)]
-struct PreviewText {
-    text: String,
-}
-
-impl PreviewText {
-    /// Appends one decoded printable character.
-    fn push_char(&mut self, c: char) {
-        if !c.is_control() {
-            self.text.push(c);
-        }
-    }
-
-    /// Retains only controls needed to lay out the preview as text lines.
-    fn push_control(&mut self, byte: u8) {
-        if matches!(byte, b'\n' | b'\r' | b'\t') {
-            self.text.push(char::from(byte));
-        }
-    }
-}
-
-impl Perform for PreviewText {
-    fn print(&mut self, c: char) {
-        self.push_char(c);
-    }
-
-    fn execute(&mut self, byte: u8) {
-        self.push_control(byte);
-    }
-}
-
-/// Incrementally decodes captured bytes into ANSI-free preview text.
-#[derive(Default)]
-pub(crate) struct PreviewFilter {
-    parser: Parser<DefaultCharAccumulator>,
-    preview: PreviewText,
-}
-
-impl PreviewFilter {
-    /// Parses one chunk and returns the plain text produced by that chunk.
-    ///
-    /// Incomplete UTF-8 and terminal sequences remain buffered until a later call.
-    pub(crate) fn push(&mut self, input: &[u8]) -> &str {
-        self.preview.text.clear();
-        parse(&mut self.parser, &mut self.preview, input);
-        &self.preview.text
-    }
-}
-
-/// Produces a safe linear transcript and plain preview from a PTY byte stream.
-#[derive(Default)]
-pub(crate) struct TerminalOutputFilter {
-    parser: Parser<DefaultCharAccumulator>,
-    output: TerminalOutput,
-}
-
-impl TerminalOutputFilter {
-    /// Parses one PTY chunk and returns its ANSI-free preview text.
-    ///
-    /// The same parse appends printable text and SGR styling to the final transcript.
-    pub(crate) fn push(&mut self, input: &[u8]) -> &str {
-        self.output.preview.text.clear();
-        parse(&mut self.parser, &mut self.output, input);
-        &self.output.preview.text
-    }
-
-    /// Returns the completed transcript with terminal movement already resolved or removed.
-    pub(crate) fn finish(self) -> String {
-        self.output.text
-    }
-}
-
-/// SGR sequence chain needed to recreate a terminal's current text style.
-#[derive(Clone, Default, Eq, PartialEq)]
-struct StyleState(String);
 
 /// Applies supported terminal actions while accumulating a linear transcript.
 #[derive(Default)]
@@ -217,11 +143,9 @@ struct TerminalOutput {
     text: String,
     line_start: usize,
     pending_cr: bool,
-    active_style: StyleState,
-    emitted_style: StyleState,
-    // Truncating the current line returns the retained output to this style.
-    line_start_style: StyleState,
-    preview: PreviewText,
+    active_style: String,
+    line_start_style: String,
+    restore_style: bool,
 }
 
 impl TerminalOutput {
@@ -232,19 +156,17 @@ impl TerminalOutput {
             self.pending_cr = false;
         }
 
-        if self.emitted_style != self.active_style {
-            // Line erasure removes buffered SGR bytes, but the child terminal
-            // keeps their effect. Restore that style before replacement text.
+        if self.restore_style {
             self.text.push_str("\x1b[0m");
-            self.text.push_str(&self.active_style.0);
-            self.emitted_style.clone_from(&self.active_style);
+            self.text.push_str(&self.active_style);
+            self.restore_style = false;
         }
     }
 
-    /// Removes the buffered current line and restores its starting style state.
+    /// Removes the buffered current line without changing the terminal's active style.
     fn clear_current_line(&mut self) {
         self.text.truncate(self.line_start);
-        self.emitted_style.clone_from(&self.line_start_style);
+        self.restore_style = self.active_style != self.line_start_style;
     }
 
     /// Commits the current line and records the style inherited by the next line.
@@ -252,11 +174,17 @@ impl TerminalOutput {
         self.pending_cr = false;
         self.text.push('\n');
         self.line_start = self.text.len();
-        self.line_start_style.clone_from(&self.emitted_style);
+        if !self.restore_style {
+            self.line_start_style.clone_from(&self.active_style);
+        }
     }
 
     /// Preserves an SGR sequence and updates the style state used after overwrites.
     fn push_sgr(&mut self, params: &Params) {
+        if !self.pending_cr {
+            self.prepare_for_text();
+        }
+
         let Some(sequence) = sgr_sequence(params.iter()) else {
             return;
         };
@@ -273,11 +201,9 @@ impl TerminalOutput {
         // the style after a line overwrite.
         if let Some(last_reset) = last_reset {
             let style = sgr_sequence(params.iter().skip(last_reset + 1)).unwrap_or_default();
-            self.active_style.0.clone_from(&style);
-            self.emitted_style.0 = style;
+            self.active_style.clone_from(&style);
         } else {
-            self.active_style.0.push_str(&sequence);
-            self.emitted_style.0.push_str(&sequence);
+            self.active_style.push_str(&sequence);
         }
     }
 
@@ -298,11 +224,10 @@ impl TerminalOutput {
 }
 
 impl Perform for TerminalOutput {
-    /// Writes printable text to both the transcript and live preview.
+    /// Writes printable text to the transcript.
     fn print(&mut self, c: char) {
         self.prepare_for_text();
         self.text.push(c);
-        self.preview.push_char(c);
     }
 
     /// Applies line-layout controls and discards other C0 and C1 controls.
@@ -316,7 +241,6 @@ impl Perform for TerminalOutput {
             }
             _ => {}
         }
-        self.preview.push_control(byte);
     }
 
     /// Preserves SGR, applies EL, and discards all other CSI actions.
@@ -358,63 +282,50 @@ fn sgr_sequence<'a>(params: impl Iterator<Item = &'a [u16]>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PreviewFilter, TerminalOutputFilter};
-
-    #[test]
-    fn preview_filter_handles_sequences_split_across_chunks() {
-        let mut filter = PreviewFilter::default();
-        let mut preview = String::new();
-        for chunk in [
-            b"\x1b[1;3".as_slice(),
-            b"2mgreen\x1b[0m \xe7".as_slice(),
-            b"\xbb\xbf\n".as_slice(),
-        ] {
-            preview.push_str(filter.push(chunk));
-        }
-
-        assert_eq!(preview, "green \u{7eff}\n");
-    }
-
-    fn filter(input: &[u8]) -> (String, String) {
-        let mut filter = TerminalOutputFilter::default();
-        let preview = filter.push(input).to_owned();
-        (filter.finish(), preview)
-    }
+    use super::sanitize_output;
 
     #[test]
     fn preserves_sgr_colors() {
-        let (output, _) = filter(b"\x1b[1;32mgreen\x1b[0m");
+        let output = sanitize_output(b"\x1b[1;32mgreen\x1b[0m");
 
         assert_eq!(output, "\x1b[1;32mgreen\x1b[0m");
     }
 
     #[test]
+    fn replaces_invalid_utf8() {
+        let output = sanitize_output(b"before\xffafter");
+
+        assert_eq!(output, "before\u{fffd}after");
+    }
+
+    #[test]
     fn filters_terminal_controls() {
-        let output = filter(
+        let output = sanitize_output(
             b"discarded\r\x1b[2K\x1b[31mred\x1b[0m\n\
               \x1b[1A\x1b[1B\x1b]0;title\x07\x1bPdata\x1b\\plain\x1b[?25l",
         );
 
-        assert_eq!(
-            output,
-            (
-                "\x1b[31mred\x1b[0m\nplain".to_owned(),
-                "discarded\rred\nplain".to_owned(),
-            )
-        );
+        assert_eq!(output, "\x1b[31mred\x1b[0m\nplain");
     }
 
     #[test]
     fn treats_bare_carriage_return_as_line_overwrite() {
-        let (output, _) = filter(b"first\r\nold\rnew");
+        let output = sanitize_output(b"first\r\nold\rnew");
 
         assert_eq!(output, "first\nnew");
     }
 
     #[test]
     fn reapplies_color_after_line_overwrite() {
-        let (output, _) = filter(b"\x1b[31mold\rnew\x1b[0m");
+        let output = sanitize_output(b"\x1b[31mold\rnew\x1b[0m");
 
         assert_eq!(output, "\x1b[0m\x1b[31mnew\x1b[0m");
+    }
+
+    #[test]
+    fn restores_reset_after_overwriting_inherited_style() {
+        let output = sanitize_output(b"\x1b[1mfirst\n\x1b[0mold\rnew");
+
+        assert_eq!(output, "\x1b[1mfirst\n\x1b[0mnew");
     }
 }

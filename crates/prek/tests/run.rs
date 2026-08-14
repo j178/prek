@@ -2085,7 +2085,7 @@ fn log_file() {
               - id: trailing-whitespace
                 name: trailing-whitespace
                 language: system
-                entry: python3 -c 'print("Fixing files"); exit(1)'
+                entry: python3 -c 'import sys; sys.stdout.buffer.write(b"\x1b[2Kraw\xff"); exit(1)'
                 always_run: true
                 log_file: log.txt
     "#});
@@ -2102,8 +2102,8 @@ fn log_file() {
     ----- stderr -----
     "#);
 
-    let log = context.read("log.txt");
-    assert_eq!(log, "Fixing files");
+    let log = fs_err::read(context.work_dir().join("log.txt")).expect("log file should exist");
+    assert_eq!(log, b"\x1b[2Kraw\xff");
 }
 
 /// Pass pre-commit environment variables to the hook.

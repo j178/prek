@@ -58,6 +58,7 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use anstyle_parse::{DefaultCharAccumulator, Parser, Perform};
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
@@ -113,11 +114,11 @@ impl HookBar {
         1 + self.output_bars.len()
     }
 
-    /// Streams decoded output text into the preview rows.
+    /// Streams one output chunk into the preview rows.
     ///
-    /// Returns whether this text inserted any new preview rows.
-    fn push_output(&mut self, reporter: &ProgressReporter, width: usize, text: &str) -> bool {
-        self.output_preview.push_text(text);
+    /// Returns whether this chunk inserted any new preview rows.
+    fn push_output(&mut self, reporter: &ProgressReporter, width: usize, chunk: &[u8]) -> bool {
+        self.output_preview.push_chunk(chunk);
         if self.output_bars.is_empty() && self.started_at.elapsed() < HOOK_OUTPUT_PREVIEW_DELAY {
             return false;
         }
@@ -354,43 +355,56 @@ pub(crate) fn project_status_marker(failed: bool) -> String {
     }
 }
 
-/// Rolling text preview for a running hook's streamed output.
-///
-/// `lines` is always the visible window, capped at `HOOK_OUTPUT_PREVIEW_LINES`.
-/// If `line_open` is true, the last line is still accepting characters from the
-/// current unterminated output line. A pending carriage return either joins a
-/// following `\n` as CRLF or clears that current line to emulate terminal
-/// "overwrite this line" output.
+/// Incrementally decodes a hook's output into a rolling plain-text preview.
 #[derive(Debug, Default)]
 struct OutputPreview {
+    // The parser contains fixed protocol buffers and would otherwise dominate `HookBar`'s size.
+    parser: Box<Parser<DefaultCharAccumulator>>,
+    text: PreviewText,
+}
+
+impl OutputPreview {
+    fn push_chunk(&mut self, chunk: &[u8]) {
+        for byte in chunk {
+            self.parser.advance(&mut self.text, *byte);
+        }
+    }
+
+    fn visible_lines(&self) -> &[String] {
+        &self.text.lines
+    }
+}
+
+/// The visible preview window produced by [`OutputPreview`].
+///
+/// A pending carriage return either joins a following line feed as CRLF or
+/// clears the current line, matching the overwrite convention used by progress
+/// displays.
+#[derive(Debug, Default)]
+struct PreviewText {
     lines: Vec<String>,
     line_open: bool,
     pending_cr: bool,
 }
 
-impl OutputPreview {
-    fn push_text(&mut self, text: &str) {
-        for ch in text.chars() {
-            if self.pending_cr {
-                if ch == '\n' {
-                    self.finish_line();
-                    self.pending_cr = false;
-                    continue;
-                }
-                self.current_line_mut().clear();
+impl PreviewText {
+    fn push_char(&mut self, ch: char) {
+        if self.pending_cr {
+            if ch == '\n' {
+                self.finish_line();
                 self.pending_cr = false;
+                return;
             }
-            match ch {
-                '\n' => self.finish_line(),
-                '\r' => self.pending_cr = true,
-                '\t' => self.current_line_mut().push(' '),
-                ch => self.current_line_mut().push(ch),
-            }
+            self.current_line_mut().clear();
+            self.pending_cr = false;
         }
-    }
-
-    fn visible_lines(&self) -> &[String] {
-        &self.lines
+        match ch {
+            '\n' => self.finish_line(),
+            '\r' => self.pending_cr = true,
+            '\t' => self.current_line_mut().push(' '),
+            ch if !ch.is_control() => self.current_line_mut().push(ch),
+            _ => {}
+        }
     }
 
     fn current_line_mut(&mut self) -> &mut String {
@@ -416,6 +430,18 @@ impl OutputPreview {
         if self.lines.len() > HOOK_OUTPUT_PREVIEW_LINES {
             let overflow = self.lines.len() - HOOK_OUTPUT_PREVIEW_LINES;
             self.lines.drain(..overflow);
+        }
+    }
+}
+
+impl Perform for PreviewText {
+    fn print(&mut self, c: char) {
+        self.push_char(c);
+    }
+
+    fn execute(&mut self, byte: u8) {
+        if matches!(byte, b'\n' | b'\r' | b'\t') {
+            self.push_char(char::from(byte));
         }
     }
 }
@@ -575,14 +601,14 @@ impl HookRunReporter {
         }
     }
 
-    fn on_run_output(&self, id: usize, text: &str) {
+    fn on_run_output(&self, id: usize, chunk: &[u8]) {
         let width = self.dots.saturating_sub(HOOK_OUTPUT_PREVIEW_PREFIX.width());
         let removed = {
             let mut running = self.running.lock().unwrap();
             let Some(run_bar) = running.get_mut(&id) else {
                 return;
             };
-            if !run_bar.push_output(&self.reporter, width, text) {
+            if !run_bar.push_output(&self.reporter, width, chunk) {
                 return;
             }
 
@@ -809,8 +835,8 @@ pub(crate) struct HookOutputSink<'a> {
 }
 
 impl OutputSink for HookOutputSink<'_> {
-    fn write_text(&mut self, text: &str) {
-        self.reporter.on_run_output(self.progress, text);
+    fn write_chunk(&mut self, chunk: &[u8]) {
+        self.reporter.on_run_output(self.progress, chunk);
     }
 }
 
@@ -929,7 +955,7 @@ mod tests {
     fn output_preview_keeps_crlf_line() {
         let mut preview = OutputPreview::default();
 
-        preview.push_text("processing file\r\n");
+        preview.push_chunk(b"processing file\r\n");
 
         assert_eq!(preview.visible_lines(), ["processing file"]);
     }
@@ -938,8 +964,8 @@ mod tests {
     fn output_preview_handles_split_crlf() {
         let mut preview = OutputPreview::default();
 
-        preview.push_text("processing file\r");
-        preview.push_text("\n");
+        preview.push_chunk(b"processing file\r");
+        preview.push_chunk(b"\n");
 
         assert_eq!(preview.visible_lines(), ["processing file"]);
     }
@@ -948,16 +974,27 @@ mod tests {
     fn output_preview_replaces_carriage_return_line() {
         let mut preview = OutputPreview::default();
 
-        preview.push_text("first\rsecond");
+        preview.push_chunk(b"first\rsecond");
 
         assert_eq!(preview.visible_lines(), ["second"]);
+    }
+
+    #[test]
+    fn output_preview_handles_sequences_split_across_chunks() {
+        let mut preview = OutputPreview::default();
+
+        preview.push_chunk(b"\x1b[1;3");
+        preview.push_chunk(b"2mgreen\x1b[0m \xe7");
+        preview.push_chunk(b"\xbb\xbf\n");
+
+        assert_eq!(preview.visible_lines(), ["green \u{7eff}"]);
     }
 
     #[test]
     fn output_preview_keeps_last_preview_window() {
         let mut preview = OutputPreview::default();
 
-        preview.push_text("one\ntwo\nthree\nfour\n");
+        preview.push_chunk(b"one\ntwo\nthree\nfour\n");
 
         assert_eq!(preview.visible_lines(), ["two", "three", "four"]);
     }
@@ -967,7 +1004,7 @@ mod tests {
         let reporter = HookRunReporter::new(Printer::Silent, 80, false);
         let mut hook_bar = running_hook_bar(&reporter, Instant::now());
 
-        let inserted = hook_bar.push_output(&reporter.reporter, 80, "first\n");
+        let inserted = hook_bar.push_output(&reporter.reporter, 80, b"first\n");
 
         assert!(!inserted);
         assert!(hook_bar.output_bars.is_empty());
@@ -979,9 +1016,9 @@ mod tests {
         let reporter = HookRunReporter::new(Printer::Silent, 80, false);
         let mut hook_bar = running_hook_bar(&reporter, Instant::now());
 
-        hook_bar.push_output(&reporter.reporter, 80, "first\n");
+        hook_bar.push_output(&reporter.reporter, 80, b"first\n");
         hook_bar.started_at = elapsed_start();
-        let inserted = hook_bar.push_output(&reporter.reporter, 80, "second\n");
+        let inserted = hook_bar.push_output(&reporter.reporter, 80, b"second\n");
 
         assert!(inserted);
         let messages = hook_bar
