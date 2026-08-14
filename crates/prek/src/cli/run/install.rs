@@ -2,9 +2,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceCell;
+use asyncband::semaphore::Semaphore;
 use futures_util::stream::{FuturesUnordered, StreamExt};
-use mea::once::OnceCell;
-use mea::semaphore::Semaphore;
 use tracing::{debug, warn};
 
 use crate::cli::reporter::HookInstallReporter;

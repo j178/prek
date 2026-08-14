@@ -59,7 +59,7 @@ granit-parser = { workspace = true }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { workspace = true }
-mea = { workspace = true }
+asyncband = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 regex = { workspace = true }

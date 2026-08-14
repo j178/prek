@@ -1,7 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use mea::once::OnceCell;
+use asyncband::once::OnceCell;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use tracing::debug;

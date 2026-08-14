@@ -6,9 +6,9 @@ use std::slice;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
+use asyncband::semaphore::Semaphore;
 use futures_util::TryStreamExt;
 use futures_util::stream::FuturesUnordered;
-use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
