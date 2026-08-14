@@ -29,21 +29,15 @@
 //!   it; progress displays commonly use it to overwrite a previous frame. **LF**
 //!   advances to the next line.
 
-#[cfg(not(windows))]
 use std::fmt::Write as _;
-#[cfg(windows)]
 use std::io;
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
-#[cfg(not(windows))]
 use anstyle_parse::Params;
 use anstyle_parse::{DefaultCharAccumulator, Parser, Perform};
-#[cfg(windows)]
 use console::Term;
-use indicatif::ProgressDrawTarget;
-#[cfg(windows)]
-use indicatif::TermLike;
+use indicatif::{ProgressDrawTarget, TermLike};
 
 /// Whether stderr's resolved color choice permits ANSI styling.
 pub(crate) static USE_COLOR: LazyLock<bool> =
@@ -63,13 +57,11 @@ pub(crate) fn enable_ansi_colors() {
 // can disable virtual terminal processing while prek's spinner is active.
 // Indicatif buffers its ANSI output until flush; re-enable VT immediately before
 // that output reaches the console. See https://github.com/j178/prek/issues/1237.
-#[cfg(windows)]
 #[derive(Debug)]
 struct WindowsVtTerm {
     inner: Term,
 }
 
-#[cfg(windows)]
 impl WindowsVtTerm {
     fn stderr() -> Self {
         Self {
@@ -78,7 +70,6 @@ impl WindowsVtTerm {
     }
 }
 
-#[cfg(windows)]
 impl TermLike for WindowsVtTerm {
     fn width(&self) -> u16 {
         self.inner.size().1
@@ -123,20 +114,17 @@ impl TermLike for WindowsVtTerm {
 }
 
 /// Returns the progress draw target for the current terminal.
-#[cfg(windows)]
 pub(crate) fn progress_draw_target() -> ProgressDrawTarget {
-    let term = WindowsVtTerm::stderr();
-    if term.inner.features().colors_supported() {
-        ProgressDrawTarget::term_like_with_hz(Box::new(term), 20)
+    if cfg!(windows) {
+        let term = WindowsVtTerm::stderr();
+        if term.inner.features().colors_supported() {
+            ProgressDrawTarget::term_like_with_hz(Box::new(term), 20)
+        } else {
+            ProgressDrawTarget::hidden()
+        }
     } else {
-        ProgressDrawTarget::hidden()
+        ProgressDrawTarget::stderr()
     }
-}
-
-/// Returns the progress draw target for the current terminal.
-#[cfg(not(windows))]
-pub(crate) fn progress_draw_target() -> ProgressDrawTarget {
-    ProgressDrawTarget::stderr()
 }
 
 /// Advances an incremental parser while retaining incomplete input for the next chunk.
@@ -197,14 +185,12 @@ impl PreviewFilter {
 }
 
 /// Produces a safe linear transcript and plain preview from a PTY byte stream.
-#[cfg(not(windows))]
 #[derive(Default)]
 pub(crate) struct TerminalOutputFilter {
     parser: Parser<DefaultCharAccumulator>,
     output: TerminalOutput,
 }
 
-#[cfg(not(windows))]
 impl TerminalOutputFilter {
     /// Parses one PTY chunk and returns its ANSI-free preview text.
     ///
@@ -222,12 +208,10 @@ impl TerminalOutputFilter {
 }
 
 /// SGR sequence chain needed to recreate a terminal's current text style.
-#[cfg(not(windows))]
 #[derive(Clone, Default, Eq, PartialEq)]
 struct StyleState(String);
 
 /// Applies supported terminal actions while accumulating a linear transcript.
-#[cfg(not(windows))]
 #[derive(Default)]
 struct TerminalOutput {
     text: String,
@@ -240,7 +224,6 @@ struct TerminalOutput {
     preview: PreviewText,
 }
 
-#[cfg(not(windows))]
 impl TerminalOutput {
     /// Resolves a pending overwrite and restores the active style before writing text.
     fn prepare_for_text(&mut self) {
@@ -314,7 +297,6 @@ impl TerminalOutput {
     }
 }
 
-#[cfg(not(windows))]
 impl Perform for TerminalOutput {
     /// Writes printable text to both the transcript and live preview.
     fn print(&mut self, c: char) {
@@ -352,7 +334,6 @@ impl Perform for TerminalOutput {
 }
 
 /// Encodes parsed SGR parameters as a canonical CSI `m` sequence.
-#[cfg(not(windows))]
 fn sgr_sequence<'a>(params: impl Iterator<Item = &'a [u16]>) -> Option<String> {
     let mut sequence = String::from("\x1b[");
     let mut has_params = false;
@@ -377,9 +358,7 @@ fn sgr_sequence<'a>(params: impl Iterator<Item = &'a [u16]>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::PreviewFilter;
-    #[cfg(not(windows))]
-    use super::TerminalOutputFilter;
+    use super::{PreviewFilter, TerminalOutputFilter};
 
     #[test]
     fn preview_filter_handles_sequences_split_across_chunks() {
@@ -396,7 +375,6 @@ mod tests {
         assert_eq!(preview, "green \u{7eff}\n");
     }
 
-    #[cfg(not(windows))]
     fn filter(input: &[u8]) -> (String, String) {
         let mut filter = TerminalOutputFilter::default();
         let preview = filter.push(input).to_owned();
@@ -404,7 +382,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
     fn preserves_sgr_colors() {
         let (output, _) = filter(b"\x1b[1;32mgreen\x1b[0m");
 
@@ -412,7 +389,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
     fn filters_terminal_controls() {
         let output = filter(
             b"discarded\r\x1b[2K\x1b[31mred\x1b[0m\n\
@@ -429,7 +405,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
     fn treats_bare_carriage_return_as_line_overwrite() {
         let (output, _) = filter(b"first\r\nold\rnew");
 
@@ -437,7 +412,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
     fn reapplies_color_after_line_overwrite() {
         let (output, _) = filter(b"\x1b[31mold\rnew\x1b[0m");
 
