@@ -6,8 +6,8 @@ use std::string::ToString;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
-use mea::once::OnceMap;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxBuildHasher;
 use target_lexicon::{Architecture, HOST, OperatingSystem};

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use mea::once::OnceMap;
+use asyncband::once::OnceMap;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use rustc_hash::FxBuildHasher;

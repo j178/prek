@@ -221,6 +221,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "asyncband"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94a214ba60d6231afd0e805e3c27c45a1626d9debaa5a5061c45a1ea1b2f1ed0"
+dependencies = [
+ "hashbrown",
+ "slab",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1620,15 +1630,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mea"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31fc7d159de0085ab6dd7ff145a9819442cfd3d098f783263120503c3f3e58b0"
-dependencies = [
- "slab",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1993,6 +1994,7 @@ dependencies = [
  "astral_async_zip",
  "async-compression",
  "async-trait",
+ "asyncband",
  "aws-lc-rs",
  "axoupdater",
  "bstr",
@@ -2021,7 +2023,6 @@ dependencies = [
  "libc",
  "liblzma",
  "markdown",
- "mea",
  "memchr",
  "owo-colors",
  "pprof",
