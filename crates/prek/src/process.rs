@@ -24,7 +24,9 @@
 // IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+//! Adapts [axoprocess](https://docs.rs/axoprocess) command helpers to use
+//! [`tokio::process::Command`] instead of [`std::process::Command`].
+
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::PipeReader;
@@ -40,7 +42,7 @@ use tracing::{enabled, trace};
 
 use crate::run::HookRunOutput;
 #[cfg(not(windows))]
-use crate::run::USE_COLOR;
+use crate::terminal::USE_COLOR;
 
 /// An error from executing a command.
 #[derive(Debug, Error)]
@@ -115,6 +117,7 @@ pub struct Cmd {
     check_status: bool,
 }
 
+/// Receives captured output as it is read from the child process.
 pub(crate) trait OutputSink {
     fn write_chunk(&mut self, chunk: &[u8]);
 }
@@ -675,19 +678,13 @@ fn write_command_line<'a>(
 #[cfg(all(test, not(windows)))]
 mod tests {
     use std::error::Error as _;
-    use std::sync::{Arc, Mutex};
 
     use super::{Cmd, OutputSink, write_command_line};
 
-    #[derive(Default)]
-    struct RecordingSink {
-        chunks: Arc<Mutex<usize>>,
-    }
+    struct NullSink;
 
-    impl OutputSink for RecordingSink {
-        fn write_chunk(&mut self, _chunk: &[u8]) {
-            *self.chunks.lock().unwrap() += 1;
-        }
+    impl OutputSink for NullSink {
+        fn write_chunk(&mut self, _chunk: &[u8]) {}
     }
 
     fn command_log_string(cmd: &Cmd) -> String {
@@ -808,7 +805,7 @@ mod tests {
                 .arg("-c")
                 .arg("printf 'FINAL\\n'")
                 .check(false)
-                .run_on_pty(RecordingSink::default())
+                .run_on_pty(NullSink)
                 .await
                 .expect("pty command should succeed");
 
@@ -816,5 +813,18 @@ mod tests {
             let output = String::from_utf8_lossy(&output.bytes).replace("\r\n", "\n");
             assert_eq!(output, "FINAL\n");
         }
+    }
+
+    #[tokio::test]
+    async fn pty_output_preserves_raw_bytes() {
+        let output = Cmd::new("/bin/sh")
+            .arg("-c")
+            .arg(r"printf '\033[2Kraw\377'")
+            .check(false)
+            .run_on_pty(NullSink)
+            .await
+            .expect("pty command should succeed");
+
+        assert_eq!(output.bytes, b"\x1b[2Kraw\xff");
     }
 }

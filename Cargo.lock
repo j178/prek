@@ -1986,6 +1986,7 @@ dependencies = [
  "aho-corasick",
  "annotate-snippets",
  "anstream",
+ "anstyle-parse",
  "anstyle-query",
  "anyhow",
  "assert_cmd",

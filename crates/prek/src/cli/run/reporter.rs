@@ -58,7 +58,8 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use console::{Term, strip_ansi_codes};
+use anstyle_parse::{DefaultCharAccumulator, Parser, Perform};
+use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
@@ -354,46 +355,56 @@ pub(crate) fn project_status_marker(failed: bool) -> String {
     }
 }
 
-/// Rolling text preview for a running hook's streamed output.
-///
-/// `lines` is always the visible window, capped at `HOOK_OUTPUT_PREVIEW_LINES`.
-/// If `line_open` is true, the last line is still accepting characters from the
-/// current unterminated output line. A pending carriage return either joins a
-/// following `\n` as CRLF or clears that current line to emulate terminal
-/// "overwrite this line" output.
+/// Incrementally decodes a hook's output into a rolling plain-text preview.
 #[derive(Debug, Default)]
 struct OutputPreview {
+    // The parser contains fixed protocol buffers and would otherwise dominate `HookBar`'s size.
+    parser: Box<Parser<DefaultCharAccumulator>>,
+    text: PreviewText,
+}
+
+impl OutputPreview {
+    fn push_chunk(&mut self, chunk: &[u8]) {
+        for byte in chunk {
+            self.parser.advance(&mut self.text, *byte);
+        }
+    }
+
+    fn visible_lines(&self) -> &[String] {
+        &self.text.lines
+    }
+}
+
+/// The visible preview window produced by [`OutputPreview`].
+///
+/// A pending carriage return either joins a following line feed as CRLF or
+/// clears the current line, matching the overwrite convention used by progress
+/// displays.
+#[derive(Debug, Default)]
+struct PreviewText {
     lines: Vec<String>,
     line_open: bool,
     pending_cr: bool,
 }
 
-impl OutputPreview {
-    fn push_chunk(&mut self, chunk: &[u8]) {
-        // Preview text is lossy by design: the full bytes are still collected by `process`.
-        let text = String::from_utf8_lossy(chunk);
-        let text = strip_ansi_codes(&text);
-        for ch in text.chars().filter(|ch| is_preview_char(*ch)) {
-            if self.pending_cr {
-                if ch == '\n' {
-                    self.finish_line();
-                    self.pending_cr = false;
-                    continue;
-                }
-                self.current_line_mut().clear();
+impl PreviewText {
+    fn push_char(&mut self, ch: char) {
+        if self.pending_cr {
+            if ch == '\n' {
+                self.finish_line();
                 self.pending_cr = false;
+                return;
             }
-            match ch {
-                '\n' => self.finish_line(),
-                '\r' => self.pending_cr = true,
-                '\t' => self.current_line_mut().push(' '),
-                ch => self.current_line_mut().push(ch),
-            }
+            self.current_line_mut().clear();
+            self.pending_cr = false;
         }
-    }
-
-    fn visible_lines(&self) -> &[String] {
-        &self.lines
+        match ch {
+            '\n' => self.finish_line(),
+            '\r' => self.pending_cr = true,
+            '\t' => self.current_line_mut().push(' '),
+            ch if !ch.is_control() => self.current_line_mut().push(ch),
+            _ => {}
+        }
     }
 
     fn current_line_mut(&mut self) -> &mut String {
@@ -423,8 +434,16 @@ impl OutputPreview {
     }
 }
 
-fn is_preview_char(ch: char) -> bool {
-    matches!(ch, '\n' | '\r' | '\t') || !ch.is_control()
+impl Perform for PreviewText {
+    fn print(&mut self, c: char) {
+        self.push_char(c);
+    }
+
+    fn execute(&mut self, byte: u8) {
+        if matches!(byte, b'\n' | b'\r' | b'\t') {
+            self.push_char(char::from(byte));
+        }
+    }
 }
 
 const HOOK_OUTPUT_PREVIEW_LINES: usize = 3;
@@ -961,12 +980,14 @@ mod tests {
     }
 
     #[test]
-    fn output_preview_strips_ansi_codes() {
+    fn output_preview_handles_sequences_split_across_chunks() {
         let mut preview = OutputPreview::default();
 
-        preview.push_chunk(b"\x1b[31mred\x1b[0m\n");
+        preview.push_chunk(b"\x1b[1;3");
+        preview.push_chunk(b"2mgreen\x1b[0m \xe7");
+        preview.push_chunk(b"\xbb\xbf\n");
 
-        assert_eq!(preview.visible_lines(), ["red"]);
+        assert_eq!(preview.visible_lines(), ["green \u{7eff}"]);
     }
 
     #[test]

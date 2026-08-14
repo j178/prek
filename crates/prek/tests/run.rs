@@ -2085,7 +2085,7 @@ fn log_file() {
               - id: trailing-whitespace
                 name: trailing-whitespace
                 language: system
-                entry: python3 -c 'print("Fixing files"); exit(1)'
+                entry: python3 -c 'import sys; sys.stdout.buffer.write(b"\x1b[2Kraw\xff"); exit(1)'
                 always_run: true
                 log_file: log.txt
     "#});
@@ -2102,8 +2102,8 @@ fn log_file() {
     ----- stderr -----
     "#);
 
-    let log = context.read("log.txt");
-    assert_eq!(log, "Fixing files");
+    let log = fs_err::read(context.work_dir().join("log.txt")).expect("log file should exist");
+    assert_eq!(log, b"\x1b[2Kraw\xff");
 }
 
 /// Pass pre-commit environment variables to the hook.
@@ -3209,6 +3209,61 @@ fn color() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn tty_output_preserves_color_without_replaying_terminal_controls() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+      repos:
+        - repo: local
+          hooks:
+            - id: terminal-output
+              name: terminal-output
+              language: python
+              entry: python ./terminal_output.py
+              verbose: true
+              pass_filenames: false
+  "});
+
+    let script = indoc::indoc! {r"
+      import sys
+
+      sys.stdout.write('discarded\r')
+      sys.stdout.write('\033[2K')
+      sys.stdout.write('\033[1;32mgreen\033[0m\n')
+      sys.stdout.write('\033[1A\033[1B')
+      sys.stdout.write('\033]0;title\007plain\n')
+      sys.stdout.flush()
+  "};
+    context
+        .work_dir()
+        .child("terminal_output.py")
+        .write_str(script)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.run().arg("--color=always"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    terminal-output[32m..........................................................[39m[42mPassed[49m
+    [2m- hook id: terminal-output[0m
+    [2m- duration: [TIME][0m
+
+      [1;32mgreen[0m
+      plain
+
+    ----- stderr -----
+    "#
+    );
 
     Ok(())
 }

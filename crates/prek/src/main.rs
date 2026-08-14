@@ -24,9 +24,9 @@ use crate::cli::{
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
-use crate::run::USE_COLOR;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
+use crate::terminal::USE_COLOR;
 
 mod archive;
 mod checksum;
@@ -52,6 +52,7 @@ mod run;
 mod schema;
 mod settings;
 mod store;
+mod terminal;
 mod version;
 mod warnings;
 mod workspace;
@@ -150,8 +151,7 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<ExitStatus> {
-    // Enabled ANSI colors on Windows.
-    let _ = anstyle_query::windows::enable_ansi_colors();
+    terminal::enable_ansi_colors();
 
     ColorChoice::write_global(cli.globals.color.into());
 

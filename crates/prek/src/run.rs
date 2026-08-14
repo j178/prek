@@ -3,7 +3,6 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::LazyLock;
 
-use anstream::ColorChoice;
 use futures_util::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashMap;
@@ -12,14 +11,6 @@ use tracing::trace;
 use crate::config::PassFilenames;
 use crate::hook::Hook;
 use crate::warn_user;
-
-pub(crate) static USE_COLOR: LazyLock<bool> =
-    LazyLock::new(|| match anstream::Stderr::choice(&std::io::stderr()) {
-        ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
-        ColorChoice::Never => false,
-        // We just asked anstream for a choice, that can't be auto
-        ColorChoice::Auto => unreachable!(),
-    });
 
 fn cpu_count() -> usize {
     std::thread::available_parallelism()
