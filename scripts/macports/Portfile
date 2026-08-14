@@ -70,7 +70,6 @@ cargo.crates \
     astral-tokio-tar                 0.6.0  3c23f3af104b40a3430ccb90ed5f7bd877a8dc5c26fc92fde51a22b40890dcf9 \
     astral_async_zip                0.0.17  ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba \
     async-compression               0.4.41  d0f9ee0f6e02ffd7ad5816e9464499fba7b3effd01123b515c41d1697c43dad1 \
-    asyncband                        0.6.7  94a214ba60d6231afd0e805e3c27c45a1626d9debaa5a5061c45a1ea1b2f1ed0 \
     atomic-waker                     1.1.2  1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0 \
     autocfg                          1.5.0  c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8 \
     aws-lc-rs                       1.16.2  a054912289d18629dc78375ba2c3726a3afe3ff71b4edba9dedfca0e3446d1fc \
@@ -225,6 +224,7 @@ cargo.crates \
     lru-slab                         0.1.2  112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154 \
     markdown                         1.0.0  a5cab8f2cadc416a82d2e783a1946388b31654d391d1c7d92cc1f03e295b1deb \
     matchers                         0.2.0  d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9 \
+    mea                              0.6.3  6747f54621d156e1b47eb6b25f39a941b9fc347f98f67d25d8881ff99e8ed832 \
     memchr                           2.8.0  f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79 \
     memmap2                         0.9.10  714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3 \
     miette                           7.6.0  5f98efec8807c63c752b5bd61f862c165c115b0a35685bdcfd9238c7aeb592b7 \
