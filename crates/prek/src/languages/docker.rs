@@ -16,8 +16,9 @@ use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::process::Cmd;
-use crate::run::{USE_COLOR, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::Store;
+use crate::terminal::USE_COLOR;
 use crate::warn_user;
 
 static CGROUP_V2_CONTAINER_ID_RE: LazyLock<Regex> = LazyLock::new(|| {

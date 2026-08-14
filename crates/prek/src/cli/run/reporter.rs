@@ -58,7 +58,7 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use console::{Term, strip_ansi_codes};
+use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
@@ -113,11 +113,11 @@ impl HookBar {
         1 + self.output_bars.len()
     }
 
-    /// Streams one output chunk into the preview rows.
+    /// Streams decoded output text into the preview rows.
     ///
-    /// Returns whether this chunk inserted any new preview rows.
-    fn push_output(&mut self, reporter: &ProgressReporter, width: usize, chunk: &[u8]) -> bool {
-        self.output_preview.push_chunk(chunk);
+    /// Returns whether this text inserted any new preview rows.
+    fn push_output(&mut self, reporter: &ProgressReporter, width: usize, text: &str) -> bool {
+        self.output_preview.push_text(text);
         if self.output_bars.is_empty() && self.started_at.elapsed() < HOOK_OUTPUT_PREVIEW_DELAY {
             return false;
         }
@@ -369,11 +369,8 @@ struct OutputPreview {
 }
 
 impl OutputPreview {
-    fn push_chunk(&mut self, chunk: &[u8]) {
-        // Preview text is lossy by design: the full bytes are still collected by `process`.
-        let text = String::from_utf8_lossy(chunk);
-        let text = strip_ansi_codes(&text);
-        for ch in text.chars().filter(|ch| is_preview_char(*ch)) {
+    fn push_text(&mut self, text: &str) {
+        for ch in text.chars() {
             if self.pending_cr {
                 if ch == '\n' {
                     self.finish_line();
@@ -421,10 +418,6 @@ impl OutputPreview {
             self.lines.drain(..overflow);
         }
     }
-}
-
-fn is_preview_char(ch: char) -> bool {
-    matches!(ch, '\n' | '\r' | '\t') || !ch.is_control()
 }
 
 const HOOK_OUTPUT_PREVIEW_LINES: usize = 3;
@@ -582,14 +575,14 @@ impl HookRunReporter {
         }
     }
 
-    fn on_run_output(&self, id: usize, chunk: &[u8]) {
+    fn on_run_output(&self, id: usize, text: &str) {
         let width = self.dots.saturating_sub(HOOK_OUTPUT_PREVIEW_PREFIX.width());
         let removed = {
             let mut running = self.running.lock().unwrap();
             let Some(run_bar) = running.get_mut(&id) else {
                 return;
             };
-            if !run_bar.push_output(&self.reporter, width, chunk) {
+            if !run_bar.push_output(&self.reporter, width, text) {
                 return;
             }
 
@@ -816,8 +809,8 @@ pub(crate) struct HookOutputSink<'a> {
 }
 
 impl OutputSink for HookOutputSink<'_> {
-    fn write_chunk(&mut self, chunk: &[u8]) {
-        self.reporter.on_run_output(self.progress, chunk);
+    fn write_text(&mut self, text: &str) {
+        self.reporter.on_run_output(self.progress, text);
     }
 }
 
@@ -936,7 +929,7 @@ mod tests {
     fn output_preview_keeps_crlf_line() {
         let mut preview = OutputPreview::default();
 
-        preview.push_chunk(b"processing file\r\n");
+        preview.push_text("processing file\r\n");
 
         assert_eq!(preview.visible_lines(), ["processing file"]);
     }
@@ -945,8 +938,8 @@ mod tests {
     fn output_preview_handles_split_crlf() {
         let mut preview = OutputPreview::default();
 
-        preview.push_chunk(b"processing file\r");
-        preview.push_chunk(b"\n");
+        preview.push_text("processing file\r");
+        preview.push_text("\n");
 
         assert_eq!(preview.visible_lines(), ["processing file"]);
     }
@@ -955,25 +948,16 @@ mod tests {
     fn output_preview_replaces_carriage_return_line() {
         let mut preview = OutputPreview::default();
 
-        preview.push_chunk(b"first\rsecond");
+        preview.push_text("first\rsecond");
 
         assert_eq!(preview.visible_lines(), ["second"]);
-    }
-
-    #[test]
-    fn output_preview_strips_ansi_codes() {
-        let mut preview = OutputPreview::default();
-
-        preview.push_chunk(b"\x1b[31mred\x1b[0m\n");
-
-        assert_eq!(preview.visible_lines(), ["red"]);
     }
 
     #[test]
     fn output_preview_keeps_last_preview_window() {
         let mut preview = OutputPreview::default();
 
-        preview.push_chunk(b"one\ntwo\nthree\nfour\n");
+        preview.push_text("one\ntwo\nthree\nfour\n");
 
         assert_eq!(preview.visible_lines(), ["two", "three", "four"]);
     }
@@ -983,7 +967,7 @@ mod tests {
         let reporter = HookRunReporter::new(Printer::Silent, 80, false);
         let mut hook_bar = running_hook_bar(&reporter, Instant::now());
 
-        let inserted = hook_bar.push_output(&reporter.reporter, 80, b"first\n");
+        let inserted = hook_bar.push_output(&reporter.reporter, 80, "first\n");
 
         assert!(!inserted);
         assert!(hook_bar.output_bars.is_empty());
@@ -995,9 +979,9 @@ mod tests {
         let reporter = HookRunReporter::new(Printer::Silent, 80, false);
         let mut hook_bar = running_hook_bar(&reporter, Instant::now());
 
-        hook_bar.push_output(&reporter.reporter, 80, b"first\n");
+        hook_bar.push_output(&reporter.reporter, 80, "first\n");
         hook_bar.started_at = elapsed_start();
-        let inserted = hook_bar.push_output(&reporter.reporter, 80, b"second\n");
+        let inserted = hook_bar.push_output(&reporter.reporter, 80, "second\n");
 
         assert!(inserted);
         let messages = hook_bar

@@ -24,7 +24,9 @@
 // IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+//! Adapts [axoprocess](https://docs.rs/axoprocess) command helpers to use
+//! [`tokio::process::Command`] instead of [`std::process::Command`].
+
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::PipeReader;
@@ -39,8 +41,9 @@ use tokio::io::AsyncReadExt;
 use tracing::{enabled, trace};
 
 use crate::run::HookRunOutput;
+use crate::terminal::PreviewFilter;
 #[cfg(not(windows))]
-use crate::run::USE_COLOR;
+use crate::terminal::{TerminalOutputFilter, USE_COLOR};
 
 /// An error from executing a command.
 #[derive(Debug, Error)]
@@ -115,8 +118,10 @@ pub struct Cmd {
     check_status: bool,
 }
 
+/// Receives decoded preview text with ANSI sequences removed.
+/// Newlines, carriage returns, and tabs are retained for line layout.
 pub(crate) trait OutputSink {
-    fn write_chunk(&mut self, chunk: &[u8]);
+    fn write_text(&mut self, text: &str);
 }
 
 #[derive(Debug)]
@@ -131,9 +136,29 @@ impl From<MergedOutput> for HookRunOutput {
     }
 }
 
-fn write_output_chunk(output: &mut Vec<u8>, sink: &mut impl OutputSink, chunk: &[u8]) {
+fn write_output_chunk(
+    output: &mut Vec<u8>,
+    preview: &mut PreviewFilter,
+    sink: &mut impl OutputSink,
+    chunk: &[u8],
+) {
     output.extend_from_slice(chunk);
-    sink.write_chunk(chunk);
+    let text = preview.push(chunk);
+    if !text.is_empty() {
+        sink.write_text(text);
+    }
+}
+
+#[cfg(not(windows))]
+fn write_pty_output_chunk(
+    output: &mut TerminalOutputFilter,
+    sink: &mut impl OutputSink,
+    chunk: &[u8],
+) {
+    let text = output.push(chunk);
+    if !text.is_empty() {
+        sink.write_text(text);
+    }
 }
 
 struct AsyncPipeReader {
@@ -240,8 +265,8 @@ impl Cmd {
         self.maybe_check_output(output)
     }
 
-    /// Captures stdout and stderr through the same pipe and streams chunks into
-    /// `sink` as they are read.
+    /// Captures stdout and stderr through the same pipe and streams decoded text
+    /// into `sink` as it is read.
     pub(crate) async fn output_with_sink<S: OutputSink>(
         &mut self,
         mut sink: S,
@@ -251,6 +276,7 @@ impl Cmd {
 
         let mut buffer = [0u8; 4096];
         let mut bytes = Vec::new();
+        let mut preview = PreviewFilter::default();
         loop {
             let n = reader
                 .read(&mut buffer)
@@ -259,7 +285,7 @@ impl Cmd {
             if n == 0 {
                 break;
             }
-            write_output_chunk(&mut bytes, &mut sink, &buffer[..n]);
+            write_output_chunk(&mut bytes, &mut preview, &mut sink, &buffer[..n]);
         }
 
         let status = child.wait().await.map_err(|cause| self.exec_error(cause))?;
@@ -337,14 +363,14 @@ impl Cmd {
         drop(pts);
 
         let mut buffer = [0u8; 4096];
-        let mut bytes = Vec::new();
+        let mut output = TerminalOutputFilter::default();
 
         let status = loop {
             tokio::select! {
                 read_result = pty.read(&mut buffer) => {
                     match read_result {
                         Ok(0) => break child.wait().await.map_err(|cause| self.exec_error(cause))?,
-                        Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
+                        Ok(n) => write_pty_output_chunk(&mut output, &mut sink, &buffer[..n]),
                         // Linux reports PTY master EOF as EIO after all slave handles close.
                         Err(err) if err.raw_os_error() == Some(libc::EIO) => {
                             break child.wait().await.map_err(|cause| self.exec_error(cause))?;
@@ -359,7 +385,7 @@ impl Cmd {
                     loop {
                         match pty.try_read(&mut buffer) {
                             Ok(0) => break,
-                            Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
+                            Ok(n) => write_pty_output_chunk(&mut output, &mut sink, &buffer[..n]),
                             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
                             // Linux reports PTY master EOF as EIO after all slave handles close.
                             Err(err) if err.raw_os_error() == Some(libc::EIO) => break,
@@ -375,7 +401,10 @@ impl Cmd {
         child.stdout.take();
         child.stderr.take();
 
-        self.maybe_check_captured_output(MergedOutput { status, bytes })
+        self.maybe_check_captured_output(MergedOutput {
+            status,
+            bytes: output.finish().into_bytes(),
+        })
     }
 
     /// Equivalent to [`std::process::Command::status`]
@@ -675,19 +704,13 @@ fn write_command_line<'a>(
 #[cfg(all(test, not(windows)))]
 mod tests {
     use std::error::Error as _;
-    use std::sync::{Arc, Mutex};
 
     use super::{Cmd, OutputSink, write_command_line};
 
-    #[derive(Default)]
-    struct RecordingSink {
-        chunks: Arc<Mutex<usize>>,
-    }
+    struct NullSink;
 
-    impl OutputSink for RecordingSink {
-        fn write_chunk(&mut self, _chunk: &[u8]) {
-            *self.chunks.lock().unwrap() += 1;
-        }
+    impl OutputSink for NullSink {
+        fn write_text(&mut self, _text: &str) {}
     }
 
     fn command_log_string(cmd: &Cmd) -> String {
@@ -808,12 +831,12 @@ mod tests {
                 .arg("-c")
                 .arg("printf 'FINAL\\n'")
                 .check(false)
-                .run_on_pty(RecordingSink::default())
+                .run_on_pty(NullSink)
                 .await
                 .expect("pty command should succeed");
 
             assert!(output.status.success());
-            let output = String::from_utf8_lossy(&output.bytes).replace("\r\n", "\n");
+            let output = String::from_utf8_lossy(&output.bytes);
             assert_eq!(output, "FINAL\n");
         }
     }

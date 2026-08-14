@@ -32,8 +32,9 @@ use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
-use crate::run::{HOOK_CONCURRENCY, USE_COLOR};
+use crate::run::HOOK_CONCURRENCY;
 use crate::store::Store;
+use crate::terminal::USE_COLOR;
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 

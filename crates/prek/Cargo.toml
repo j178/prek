@@ -29,6 +29,7 @@ prek-identify = { workspace = true, features = ["serde"] }
 aho-corasick = { workspace = true }
 annotate-snippets = { workspace = true }
 anstream = { workspace = true }
+anstyle-parse = { workspace = true }
 anstyle-query = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
