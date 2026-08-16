@@ -71,6 +71,8 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
             // high-reuse anchors that are common in compose-style files. See #1838.
             enforce_alias_anchor_ratio: false,
         },
+        // Comments do not affect syntax or structure validation. See #2501.
+        emit_comments: false,
         // Do not require `!!binary` scalars to decode as UTF-8. See #1102.
         ignore_binary_tag_for_string: true,
         // The scalar values are discarded, so only validate whether they are
@@ -102,9 +104,15 @@ fn check_syntax(filename: &Path, content: &[u8]) -> HookOutput {
         }
     };
 
+    let options = granit_parser::options! {
+        // Comments do not affect syntax validation. See #2501.
+        emit_comments: false,
+    };
+
     // TODO: `granit-parser` resolves aliases while producing parser events, so this is stricter
     // than upstream's syntax-only mode for aliases that reference an undefined anchor.
-    for event in granit_parser::Parser::new_from_str(content) {
+    for event in granit_parser::Parser::with_options(granit_parser::StrInput::new(content), options)
+    {
         if let Err(error) = event {
             let error_message = format!("{}: Failed to yaml parse ({error})\n", filename.display());
             return HookOutput::unchanged(1, error_message.into_bytes());
@@ -344,6 +352,29 @@ response:
             String::from_utf8_lossy(&result.output)
         );
         assert!(result.output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_yaml_with_many_consecutive_comments() -> Result<()> {
+        let dir = tempdir()?;
+        let mut content = "items:\n".to_string();
+        for index in 0..100 {
+            let _ = writeln!(content, "  # comment {index}");
+        }
+        content.push_str("  - value\n");
+
+        let file_path = create_test_file(&dir, "many-comments.yaml", content.as_bytes()).await?;
+        for mode in [LOAD_SINGLE_DOCUMENT, CheckMode::SyntaxOnly] {
+            let result = check_file(Path::new(""), &file_path, mode).await?;
+            assert_eq!(
+                result.exit_status,
+                0,
+                "{}",
+                String::from_utf8_lossy(&result.output)
+            );
+            assert!(result.output.is_empty());
+        }
         Ok(())
     }
 }
