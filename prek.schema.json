@@ -404,8 +404,7 @@
       },
       "required": [
         "id"
-      ],
-      "additionalProperties": true
+      ]
     },
     "Language": {
       "type": "string",
@@ -688,8 +687,7 @@
         "name",
         "entry",
         "language"
-      ],
-      "additionalProperties": true
+      ]
     },
     "MetaRepo": {
       "type": "object",
@@ -855,8 +853,7 @@
       },
       "required": [
         "id"
-      ],
-      "additionalProperties": true
+      ]
     },
     "MetaHooks": {
       "type": "string",
@@ -1030,8 +1027,7 @@
       },
       "required": [
         "id"
-      ],
-      "additionalProperties": true
+      ]
     },
     "BuiltinHooks": {
       "type": "string",
