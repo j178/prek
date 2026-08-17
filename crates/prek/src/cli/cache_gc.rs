@@ -387,12 +387,11 @@ fn hook_env_requirements_from_config(
                 let remote_repo = RepoIdentityRef::new(repo_config.source(), &repo_config.rev);
 
                 for hook_config in &repo_config.hooks {
-                    let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
+                    let Some(manifest_hook) = repo.manifest_hook(&hook_config.id) else {
                         continue;
                     };
 
-                    let mut hook_spec = manifest_hook.clone();
-                    hook_spec.apply_remote_hook_overrides(hook_config);
+                    let hook_spec = HookSpec::from_remote(manifest_hook.clone(), hook_config);
 
                     match HookEnvRequirement::from_hook_spec(config, hook_spec, Some(remote_repo)) {
                         Ok(Some(requirement)) => requirements.push(requirement),

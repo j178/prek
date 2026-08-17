@@ -514,9 +514,9 @@ impl Language {
 
     pub(crate) fn ensure_exec_supported(self, hook: &Hook) -> Result<()> {
         match hook.repo() {
-            Repo::Meta { .. } => anyhow::bail!("`prek exec` does not support meta hooks"),
-            Repo::Builtin { .. } => anyhow::bail!("`prek exec` does not support builtin hooks"),
-            Repo::Remote { .. } | Repo::Local { .. } => {}
+            Repo::Meta => anyhow::bail!("`prek exec` does not support meta hooks"),
+            Repo::Builtin => anyhow::bail!("`prek exec` does not support builtin hooks"),
+            Repo::Remote { .. } | Repo::Local => {}
         }
 
         match self {
@@ -571,13 +571,13 @@ impl Language {
         'p: 'a,
     {
         match hook.repo() {
-            Repo::Meta { .. } => {
+            Repo::Meta => {
                 hooks::MetaHooks::from_str(&hook.id)
                     .unwrap()
                     .run(store, hook, filenames, reporter)
                     .await
             }
-            Repo::Builtin { .. } => {
+            Repo::Builtin => {
                 hooks::BuiltinHooks::from_str(&hook.id)
                     .unwrap()
                     .run(store, hook, filenames, reporter)
@@ -587,7 +587,7 @@ impl Language {
             Repo::Remote { .. } if hooks::check_fast_path(hook) => {
                 hooks::run_fast_path(store, hook, filenames, reporter).await
             }
-            Repo::Remote { .. } | Repo::Local { .. } => {
+            Repo::Remote { .. } | Repo::Local => {
                 let (exit_status, output) =
                     self.backend().run(store, hook, filenames, reporter).await?;
                 if self.can_modify_files() {
