@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.14
+
+Released on 2026-08-17.
+
+### Enhancements
+
+- Support check-yaml unsafe mode ([#2546](https://github.com/j178/prek/pull/2546))
+
+### Performance
+
+- Reuse allocations in common filters ([#2548](https://github.com/j178/prek/pull/2548))
+
+### Bug fixes
+
+- Accept non-finite floats in check-yaml ([#2545](https://github.com/j178/prek/pull/2545))
+- Allow comment-heavy YAML in check-yaml ([#2554](https://github.com/j178/prek/pull/2554))
+- Sanitize captured terminal output before replay ([#2552](https://github.com/j178/prek/pull/2552))
+
+### Contributors
+
+- @j178
+
 ## 0.4.13
 
 Released on 2026-08-10.
