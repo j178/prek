@@ -1,5 +1,5 @@
 ---
-source: crates/prek/src/config.rs
+source: crates/prek/src/config/mod.rs
 expression: result
 ---
 Config {
@@ -14,18 +14,14 @@ Config {
                         id: "cargo-fmt",
                         name: "cargo fmt",
                         entry: "cargo fmt",
-                        language: System,
+                        language: Rust,
                         priority: None,
                         groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
                             exclude: None,
-                            types: Some(
-                                [
-                                    "rust",
-                                ],
-                            ),
+                            types: None,
                             types_or: None,
                             exclude_types: None,
                             additional_dependencies: None,
@@ -46,9 +42,7 @@ Config {
                         },
                     },
                 ],
-                _unused_keys: {
-                    "unknown_field": String("some_value"),
-                },
+                _unused_keys: {},
             },
         ),
     ],

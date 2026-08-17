@@ -1,20 +1,21 @@
 ---
-source: crates/prek/src/config.rs
-expression: config
+source: crates/prek/src/config/mod.rs
+expression: result
 ---
 Config {
     update: None,
     priorities: {},
     repos: [
-        Local(
-            LocalRepo {
-                repo: "local",
+        Remote(
+            RemoteRepo {
+                repo: "https://github.com/crate-ci/typos",
+                rev: "v1.0.0",
                 hooks: [
-                    LocalHook {
-                        id: "test-yaml",
-                        name: "Test YAML compatibility",
-                        entry: "prek --help",
-                        language: System,
+                    RemoteHook {
+                        id: "typos",
+                        name: None,
+                        entry: None,
+                        language: None,
                         priority: None,
                         groups: None,
                         options: HookOptions {
@@ -29,19 +30,13 @@ Config {
                             env: None,
                             always_run: None,
                             fail_fast: None,
-                            pass_filenames: Some(
-                                None,
-                            ),
+                            pass_filenames: None,
                             description: None,
                             language_version: None,
                             log_file: None,
                             shell: None,
-                            require_serial: Some(
-                                true,
-                            ),
-                            stages: Some(
-                                Stages(pre-commit),
-                            ),
+                            require_serial: None,
+                            stages: None,
                             verbose: None,
                             minimum_prek_version: None,
                             _unused_keys: {},
@@ -61,19 +56,5 @@ Config {
     fail_fast: None,
     minimum_prek_version: None,
     orphan: None,
-    _unused_keys: {
-        "local": Object {
-            "language": String("system"),
-            "pass_filenames": Bool(false),
-            "require_serial": Bool(true),
-        },
-        "local-commit": Object {
-            "stages": Array [
-                String("pre-commit"),
-            ],
-            "language": String("system"),
-            "pass_filenames": Bool(false),
-            "require_serial": Bool(true),
-        },
-    },
+    _unused_keys: {},
 }

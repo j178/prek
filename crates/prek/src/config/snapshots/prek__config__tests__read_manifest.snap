@@ -1,5 +1,5 @@
 ---
-source: crates/prek/src/config.rs
+source: crates/prek/src/config/mod.rs
 expression: manifest
 ---
 Manifest {

@@ -1,28 +1,31 @@
 ---
-source: crates/prek/src/config.rs
+source: crates/prek/src/config/mod.rs
 expression: result
 ---
 Config {
     update: None,
     priorities: {},
     repos: [
-        Remote(
-            RemoteRepo {
-                repo: "https://github.com/crate-ci/typos",
-                rev: "v1.0.0",
+        Local(
+            LocalRepo {
+                repo: "local",
                 hooks: [
-                    RemoteHook {
-                        id: "typos",
-                        name: None,
-                        entry: None,
-                        language: None,
+                    LocalHook {
+                        id: "cargo-fmt",
+                        name: "cargo fmt",
+                        entry: "cargo fmt",
+                        language: System,
                         priority: None,
                         groups: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
                             exclude: None,
-                            types: None,
+                            types: Some(
+                                [
+                                    "rust",
+                                ],
+                            ),
                             types_or: None,
                             exclude_types: None,
                             additional_dependencies: None,
@@ -43,7 +46,9 @@ Config {
                         },
                     },
                 ],
-                _unused_keys: {},
+                _unused_keys: {
+                    "unknown_field": String("some_value"),
+                },
             },
         ),
     ],
