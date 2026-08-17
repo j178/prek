@@ -18,12 +18,12 @@ hooks = [
   { id = "mixed-line-ending" },
   { id = "check-yaml" },
   { id = "check-toml" },
-  { id = "end-of-file-fixer" }
+  { id = "end-of-file-fixer" },
 ]
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = "bee27e3a4fd1ea2111cf90ab89cd076c870fce14"  # frozen: v1.48.0
+rev = "8a48f81b6c64dcfea44b3633223084c4be58ac5f"  # frozen: v1.49.0
 hooks = [{ id = "typos" }]
 
 [[repos]]
@@ -37,24 +37,32 @@ hooks = [
     additional_dependencies = [
       "mdformat-frontmatter==2.1.2",
       "mdformat-mkdocs==5.2.1",
-      "mdformat-simple-breaks==0.1.0"
+      "mdformat-simple-breaks==0.1.0",
     ]
   }
 ]
 
 [[repos]]
 repo = "https://github.com/python-jsonschema/check-jsonschema"
-rev = "6b63472e72e1a91ed8a2f6d483790dfb644fa1d3"  # frozen: 0.37.4
+rev = "12e63946db2c5cfcc9030fac21c3883ba88c6ed8"  # frozen: 0.38.0
 hooks = [
-  { id = "check-metaschema", files = { glob = "prek.schema.json" } },
+  {
+    id = "check-metaschema",
+    files = { glob = "prek.schema.json" },
+  },
   { id = "check-github-workflows" },
-  { id = "check-renovate", additional_dependencies = ["json5"] }
+  {
+    id = "check-renovate",
+    additional_dependencies = ["json5"],
+  }
 ]
 
 [[repos]]
 repo = "https://github.com/tombi-toml/tombi-pre-commit"
-rev = "fa5f9b65866b1bcfca4ddc351288aa226f17d9db"  # frozen: v1.2.5
-hooks = [{ id = "tombi-format", args = ["--offline"], files = '\.toml$' }]
+rev = "dd68bbd8cdd8891c942fb6f33a6e87a477b2c375"  # frozen: v1.4.1
+hooks = [
+  { id = "tombi-format", args = ["--offline"], files = '\.toml$' },
+]
 
 [[repos]]
 repo = "local"
@@ -65,7 +73,7 @@ hooks = [
     entry = "cargo fmt --",
     language = "system",
     types = ["rust"],
-    pass_filenames = false
+    pass_filenames = false,
   },
   {
     id = "cargo-clippy",
@@ -73,6 +81,6 @@ hooks = [
     language = "system",
     types = ["rust"],
     pass_filenames = false,
-    entry = "cargo clippy --all-targets --all-features -- -D warnings"
+    entry = "cargo clippy --all-targets --all-features -- -D warnings",
   }
 ]
