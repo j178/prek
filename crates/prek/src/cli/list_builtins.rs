@@ -28,25 +28,26 @@ pub(crate) fn list_builtins(
         (variant, hook)
     });
 
+    let mut stdout = printer.stdout_important();
     match output_format {
         ListOutputFormat::Text => {
             if verbose {
                 for (variant, hook) in hooks {
-                    writeln!(printer.stdout_important(), "{}", hook.id.bold())?;
+                    writeln!(stdout, "{}", hook.id.bold())?;
                     if let Some(description) = &hook.options.description {
-                        writeln!(printer.stdout_important(), "  {description}")?;
+                        writeln!(stdout, "  {description}")?;
                     }
                     if let Some(flags_help) = variant.flags_help() {
-                        writeln!(printer.stdout_important(), "  flags:")?;
+                        writeln!(stdout, "  flags:")?;
                         for line in flags_help.lines() {
-                            writeln!(printer.stdout_important(), "  {line}")?;
+                            writeln!(stdout, "  {line}")?;
                         }
                     }
-                    writeln!(printer.stdout_important())?;
+                    writeln!(stdout)?;
                 }
             } else {
                 for (_, hook) in hooks {
-                    writeln!(printer.stdout_important(), "{}", hook.id)?;
+                    writeln!(stdout, "{}", hook.id)?;
                 }
             }
         }
@@ -59,7 +60,7 @@ pub(crate) fn list_builtins(
                 })
                 .collect();
             let json_output = serde_json::to_string_pretty(&serializable)?;
-            writeln!(printer.stdout_important(), "{json_output}")?;
+            writeln!(stdout, "{json_output}")?;
         }
     }
 

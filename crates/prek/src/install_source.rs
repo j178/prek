@@ -20,39 +20,28 @@ impl InstallSource {
         let components: Vec<_> = canonical.components().map(Component::as_os_str).collect();
 
         /// Check whether `components` contains a contiguous subsequence matching `pattern`.
-        fn contains_sequence(components: &[&OsStr], pattern: &[&OsStr]) -> bool {
+        fn contains_sequence(components: &[&OsStr], pattern: &[&str]) -> bool {
             components.windows(pattern.len()).any(|w| w == pattern)
         }
 
-        let prek = OsStr::new("prek");
-
         // Homebrew: .../Cellar/prek/...
-        if contains_sequence(&components, &[OsStr::new("Cellar"), prek]) {
+        if contains_sequence(&components, &["Cellar", "prek"]) {
             return Some(Self::Homebrew);
         }
         // uv tool: .../uv/tools/prek/...
-        if contains_sequence(&components, &[OsStr::new("uv"), OsStr::new("tools"), prek]) {
+        if contains_sequence(&components, &["uv", "tools", "prek"]) {
             return Some(Self::UvTool);
         }
         // pipx: .../pipx/venvs/prek/...
-        if contains_sequence(
-            &components,
-            &[OsStr::new("pipx"), OsStr::new("venvs"), prek],
-        ) {
+        if contains_sequence(&components, &["pipx", "venvs", "prek"]) {
             return Some(Self::Pipx);
         }
         // asdf: .../.asdf/installs/prek/...
-        if contains_sequence(
-            &components,
-            &[OsStr::new(".asdf"), OsStr::new("installs"), prek],
-        ) {
+        if contains_sequence(&components, &[".asdf", "installs", "prek"]) {
             return Some(Self::Asdf);
         }
         // mise: .../mise/installs/prek/...
-        if contains_sequence(
-            &components,
-            &[OsStr::new("mise"), OsStr::new("installs"), prek],
-        ) {
+        if contains_sequence(&components, &["mise", "installs", "prek"]) {
             return Some(Self::Mise);
         }
 

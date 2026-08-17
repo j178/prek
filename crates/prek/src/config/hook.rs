@@ -448,7 +448,7 @@ struct HookWire {
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     minimum_prek_version: Option<String>,
     #[serde(flatten)]
-    unused: BTreeMap<String, serde_json::Value>,
+    _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 impl HookWire {
@@ -474,7 +474,7 @@ impl HookWire {
             stages: self.stages.take(),
             verbose: self.verbose.take(),
             minimum_prek_version: self.minimum_prek_version.take(),
-            _unused_keys: std::mem::take(&mut self.unused),
+            _unused_keys: std::mem::take(&mut self._unused_keys),
         }
     }
 }

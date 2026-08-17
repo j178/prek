@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer};
 
 use super::Error;
 
-pub(crate) fn validate_name(name: &str) -> std::result::Result<(), &'static str> {
+pub(crate) fn validate_name(name: &str) -> Result<(), &'static str> {
     if name.is_empty() {
         Err("cannot be empty")
     } else if name.chars().any(char::is_whitespace) {
@@ -25,14 +25,14 @@ pub(crate) struct PriorityAlias(
 impl TryFrom<String> for PriorityAlias {
     type Error = String;
 
-    fn try_from(alias: String) -> std::result::Result<Self, Self::Error> {
+    fn try_from(alias: String) -> Result<Self, Self::Error> {
         validate_name(&alias).map_err(|reason| priority_alias_error(&alias, reason))?;
         Ok(Self(alias))
     }
 }
 
 impl<'de> Deserialize<'de> for PriorityAlias {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -61,7 +61,7 @@ pub(crate) enum Priority {
 }
 
 impl<'de> Deserialize<'de> for Priority {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -95,7 +95,7 @@ impl Priority {
         &self,
         priorities: &BTreeMap<PriorityAlias, u32>,
         hook: &str,
-    ) -> std::result::Result<u32, Error> {
+    ) -> Result<u32, Error> {
         match self {
             Self::Number(priority) => Ok(*priority),
             Self::Alias(alias) => {
@@ -115,9 +115,7 @@ fn priority_alias_error(alias: &str, reason: &str) -> String {
     format!("priority alias `{alias}` {reason}")
 }
 
-pub(super) fn deserialize_groups<'de, D>(
-    deserializer: D,
-) -> std::result::Result<Option<Vec<String>>, D::Error>
+pub(super) fn deserialize_groups<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
 where
     D: Deserializer<'de>,
 {
