@@ -227,6 +227,7 @@ impl Project {
             "Loading project configuration"
         );
 
+        let config_path = std::path::absolute(config_path).map_err(config::Error::from)?;
         let config = read_config(&config_path)?;
 
         let config_dir = config_path
@@ -238,7 +239,7 @@ impl Project {
         Ok(Self {
             root,
             config,
-            config_path: config_path.into_owned(),
+            config_path,
             idx: 0,
             relative_path: PathBuf::new(),
         })

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::Result;
@@ -260,6 +260,48 @@ fn run_does_not_rewrite_unchanged_config_tracking_file() -> Result<()> {
     assert_eq!(
         fs_err::metadata(tracking_file.path())?.modified()?,
         original_modified
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_tracks_relative_config_as_absolute_path() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: Noop
+                language: system
+                entry: "true"
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    context
+        .run()
+        .arg("--config")
+        .arg(PRE_COMMIT_CONFIG_YAML)
+        .assert()
+        .success();
+
+    let tracking_file = context.home_dir().child("config-tracking.json");
+    let tracked: Vec<PathBuf> =
+        serde_json::from_str(&fs_err::read_to_string(tracking_file.path())?)?;
+
+    assert_eq!(
+        tracked,
+        vec![
+            context
+                .work_dir()
+                .child(PRE_COMMIT_CONFIG_YAML)
+                .path()
+                .to_path_buf()
+        ]
     );
 
     Ok(())
