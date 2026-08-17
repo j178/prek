@@ -283,13 +283,14 @@ fn validate_manifest() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `hooks-1.yaml`
-      caused by: error: line 6 column 5: missing field `entry`
-     --> <input>:6:5
+      caused by: error: line 1 column 5: missing field `entry`
+     --> <input>:1:5
       |
-    4 |     language: python
-    5 |     stages: [pre-commit, pre-push, manual]
-    6 |     minimum_pre_commit_version: 3.2.0
+    1 | -   id: check-added-large-files
       |     ^ missing field `entry`
+    2 |     name: check for added large files
+    3 |     description: prevents giant files from being committed.
+      |
     ");
 
     Ok(())

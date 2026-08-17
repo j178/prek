@@ -663,7 +663,7 @@ pub(crate) enum Shell {
 }
 
 /// Common hook options.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct HookOptions {
     /// Not documented in the official docs.
@@ -718,10 +718,9 @@ pub(crate) struct HookOptions {
     /// Default is false.
     pub verbose: Option<bool>,
     /// The minimum version of prek required to run this hook.
-    #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
 
-    #[serde(skip_serializing, flatten)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
@@ -770,9 +769,76 @@ impl HookOptions {
     }
 }
 
+/// Flat serde representation for all hook kinds.
+///
+/// Keeping the option fields at this level preserves source spans that serde's
+/// nested `flatten` buffering would otherwise discard.
+#[derive(Debug, Deserialize)]
+struct HookWire {
+    id: String,
+    name: Option<String>,
+    entry: Option<String>,
+    language: Option<Language>,
+    priority: Option<Priority>,
+    #[serde(default, deserialize_with = "deserialize_groups")]
+    groups: Option<Vec<String>>,
+    alias: Option<String>,
+    files: Option<FilePattern>,
+    exclude: Option<FilePattern>,
+    types: Option<TagSet>,
+    types_or: Option<TagSet>,
+    exclude_types: Option<TagSet>,
+    additional_dependencies: Option<Vec<String>>,
+    args: Option<Vec<String>>,
+    env: Option<FxHashMap<String, String>>,
+    always_run: Option<bool>,
+    fail_fast: Option<bool>,
+    pass_filenames: Option<PassFilenames>,
+    description: Option<String>,
+    language_version: Option<String>,
+    log_file: Option<String>,
+    shell: Option<Shell>,
+    require_serial: Option<bool>,
+    stages: Option<Stages>,
+    verbose: Option<bool>,
+    #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
+    minimum_prek_version: Option<String>,
+    #[serde(flatten)]
+    unused: BTreeMap<String, serde_json::Value>,
+}
+
+impl HookWire {
+    fn take_options(&mut self) -> HookOptions {
+        HookOptions {
+            alias: self.alias.take(),
+            files: self.files.take(),
+            exclude: self.exclude.take(),
+            types: self.types.take(),
+            types_or: self.types_or.take(),
+            exclude_types: self.exclude_types.take(),
+            additional_dependencies: self.additional_dependencies.take(),
+            args: self.args.take(),
+            env: self.env.take(),
+            always_run: self.always_run.take(),
+            fail_fast: self.fail_fast.take(),
+            pass_filenames: self.pass_filenames.take(),
+            description: self.description.take(),
+            language_version: self.language_version.take(),
+            log_file: self.log_file.take(),
+            shell: self.shell.take(),
+            require_serial: self.require_serial.take(),
+            stages: self.stages.take(),
+            verbose: self.verbose.take(),
+            minimum_prek_version: self.minimum_prek_version.take(),
+            _unused_keys: std::mem::take(&mut self.unused),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(try_from = "RemoteHook", rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(!try_from))]
 pub(crate) struct ManifestHook {
     /// The id of the hook.
     pub id: String,
@@ -782,8 +848,28 @@ pub(crate) struct ManifestHook {
     pub entry: String,
     /// The language of the hook. Tells prek how to install and run the hook.
     pub language: Language,
-    #[serde(flatten)]
+    #[cfg_attr(feature = "schemars", serde(flatten))]
     pub options: HookOptions,
+}
+
+impl TryFrom<RemoteHook> for ManifestHook {
+    type Error = serde::de::value::Error;
+
+    fn try_from(hook: RemoteHook) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            id: hook.id,
+            name: hook
+                .name
+                .ok_or_else(|| Self::Error::missing_field("name"))?,
+            entry: hook
+                .entry
+                .ok_or_else(|| Self::Error::missing_field("entry"))?,
+            language: hook
+                .language
+                .ok_or_else(|| Self::Error::missing_field("language"))?,
+            options: hook.options,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -797,8 +883,9 @@ pub(crate) struct Manifest {
 ///
 /// All keys in manifest hook dict are valid in a config hook dict, but are optional.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(from = "HookWire", rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(!from))]
 pub(crate) struct RemoteHook {
     /// The id of the hook.
     pub id: String,
@@ -816,19 +903,34 @@ pub(crate) struct RemoteHook {
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
-    #[serde(default, deserialize_with = "deserialize_groups")]
     #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
     pub groups: Option<Vec<String>>,
-    #[serde(flatten)]
+    #[cfg_attr(feature = "schemars", serde(flatten))]
     pub options: HookOptions,
+}
+
+impl From<HookWire> for RemoteHook {
+    fn from(mut hook: HookWire) -> Self {
+        let options = hook.take_options();
+        Self {
+            id: hook.id,
+            name: hook.name,
+            entry: hook.entry,
+            language: hook.language,
+            priority: hook.priority,
+            groups: hook.groups,
+            options,
+        }
+    }
 }
 
 /// A local hook in the configuration file.
 ///
 /// This is similar to `ManifestHook`, but includes config-only fields (like `priority`).
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(try_from = "RemoteHook", rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(!try_from))]
 pub(crate) struct LocalHook {
     /// The id of the hook.
     pub id: String,
@@ -843,18 +945,38 @@ pub(crate) struct LocalHook {
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
-    #[serde(default, deserialize_with = "deserialize_groups")]
     #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
     pub groups: Option<Vec<String>>,
-    #[serde(flatten)]
+    #[cfg_attr(feature = "schemars", serde(flatten))]
     pub options: HookOptions,
+}
+
+impl TryFrom<RemoteHook> for LocalHook {
+    type Error = serde::de::value::Error;
+
+    fn try_from(hook: RemoteHook) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            id: hook.id,
+            name: hook
+                .name
+                .ok_or_else(|| Self::Error::missing_field("name"))?,
+            entry: hook
+                .entry
+                .ok_or_else(|| Self::Error::missing_field("entry"))?,
+            language: hook
+                .language
+                .ok_or_else(|| Self::Error::missing_field("language"))?,
+            priority: hook.priority,
+            groups: hook.groups,
+            options: hook.options,
+        })
+    }
 }
 
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
 #[serde(try_from = "RemoteHook")]
 pub(crate) struct MetaHook {
     /// The id of the hook.
@@ -866,9 +988,7 @@ pub(crate) struct MetaHook {
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
-    #[serde(default, deserialize_with = "deserialize_groups")]
     pub groups: Option<Vec<String>>,
-    #[serde(flatten)]
     pub options: HookOptions,
 }
 
@@ -957,12 +1077,10 @@ pub(crate) struct BuiltinHook {
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
     /// Group names cannot be empty or contain whitespace.
-    #[serde(default, deserialize_with = "deserialize_groups")]
     pub groups: Option<Vec<String>>,
     /// Common hook options.
     ///
     /// Builtin hooks allow the same set of options overrides as other hooks.
-    #[serde(flatten)]
     pub options: HookOptions,
 }
 
@@ -1198,7 +1316,7 @@ impl<'de> Deserialize<'de> for Repo {
                             HooksValue::Local(hooks) => hooks,
                             HooksValue::Remote(hooks) => hooks
                                 .into_iter()
-                                .map(remote_hook_to_local::<M::Error>)
+                                .map(|hook| LocalHook::try_from(hook).map_err(M::Error::custom))
                                 .collect::<Result<Vec<_>, _>>()?,
                             HooksValue::Meta(_) | HooksValue::Builtin(_) => {
                                 return Err(M::Error::custom("invalid hooks for local repo"));
@@ -1272,21 +1390,6 @@ impl<'de> Deserialize<'de> for Repo {
 
         deserializer.deserialize_map(RepoVisitor)
     }
-}
-
-fn remote_hook_to_local<E>(hook: RemoteHook) -> Result<LocalHook, E>
-where
-    E: DeError,
-{
-    Ok(LocalHook {
-        id: hook.id,
-        name: hook.name.ok_or_else(|| E::missing_field("name"))?,
-        entry: hook.entry.ok_or_else(|| E::missing_field("entry"))?,
-        language: hook.language.ok_or_else(|| E::missing_field("language"))?,
-        priority: hook.priority,
-        groups: hook.groups,
-        options: hook.options,
-    })
 }
 
 /// A configuration value that accepts either one string or a list of strings.
@@ -2075,17 +2178,18 @@ mod tests {
                       - rust
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
-        insta::assert_snapshot!(err, @"
-        error: line 7 column 9: missing field `language`
-         --> <input>:7:9
+        insta::assert_snapshot!(err, @r#"
+        error: line 4 column 9: missing field `language`
+         --> <input>:4:9
           |
+        2 |   - repo: local
+        3 |     hooks:
+        4 |       - id: cargo-fmt
+          |         ^ missing field `language`
         5 |         name: cargo fmt
         6 |         entry: cargo fmt
-        7 |         types:
-          |         ^ missing field `language`
-        8 |           - rust
           |
-        ");
+        "#);
 
         let yaml = indoc::indoc! { r"
             repos:
@@ -2498,16 +2602,15 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
-            insta::assert_snapshot!(err, @"
-            error: line 1 column 3: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
-             --> <input>:1:3
+            insta::assert_snapshot!(err, @r#"
+            error: line 5 column 25: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
+             --> <input>:5:25
               |
-            1 | - id: test-hook
-              |   ^ `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
-            2 |   name: Test Hook
             3 |   entry: echo test
-              |
-            ");
+            4 |   language: system
+            5 |   minimum_prek_version: '10.0.0'
+              |                         ^ `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again.
+            "#);
         });
     }
 
@@ -2560,18 +2663,15 @@ mod tests {
                     types: [pythoon] # Deliberate typo
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_types).unwrap_err();
-        insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
-         --> <input>:4:9
+        insta::assert_snapshot!(err, @r##"
+        error: line 8 column 16: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
+         --> <input>:8:16
           |
-        2 |   - repo: local
-        3 |     hooks:
-        4 |       - id: my-hook
-          |         ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
-        5 |         name: My Hook
         6 |         entry: echo
-          |
-        ");
+        7 |         language: system
+        8 |         types: [pythoon] # Deliberate typo
+          |                ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
+        "##);
 
         // Invalid tag in 'types_or' should fail
         let yaml_invalid_types_or = indoc::indoc! { r"
@@ -2585,18 +2685,15 @@ mod tests {
                     types_or: [invalidtag]
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_types_or).unwrap_err();
-        insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
-         --> <input>:4:9
+        insta::assert_snapshot!(err, @r#"
+        error: line 8 column 19: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
+         --> <input>:8:19
           |
-        2 |   - repo: local
-        3 |     hooks:
-        4 |       - id: my-hook
-          |         ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
-        5 |         name: My Hook
         6 |         entry: echo
-          |
-        ");
+        7 |         language: system
+        8 |         types_or: [invalidtag]
+          |                   ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
+        "#);
 
         // Invalid tag in 'exclude_types' should fail
         let yaml_invalid_exclude_types = indoc::indoc! { r"
@@ -2610,18 +2707,82 @@ mod tests {
                     exclude_types: [not-a-real-tag]
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_exclude_types).unwrap_err();
-        insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
-         --> <input>:4:9
+        insta::assert_snapshot!(err, @r#"
+        error: line 8 column 24: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
+         --> <input>:8:24
           |
-        2 |   - repo: local
-        3 |     hooks:
-        4 |       - id: my-hook
-          |         ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
-        5 |         name: My Hook
         6 |         entry: echo
+        7 |         language: system
+        8 |         exclude_types: [not-a-real-tag]
+          |                        ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
+        "#);
+    }
+
+    #[test]
+    fn hook_option_errors_point_to_the_value() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: lint
+                    name: Lint
+                    entry: echo lint
+                    language: system
+                    always_run: not-a-bool
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @r#"
+        error: line 8 column 21: invalid boolean
+         --> <input>:8:21
           |
-        ");
+        6 |         entry: echo lint
+        7 |         language: system
+        8 |         always_run: not-a-bool
+          |                     ^ invalid boolean
+        "#);
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - hooks:
+                  - id: lint
+                    name: Lint
+                    entry: echo lint
+                    language: system
+                    always_run: not-a-bool
+                repo: local
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @r#"
+        error: line 7 column 21: invalid boolean
+         --> <input>:7:21
+          |
+        5 |         entry: echo lint
+        6 |         language: system
+        7 |         always_run: not-a-bool
+          |                     ^ invalid boolean
+        8 |     repo: local
+          |
+        "#);
+
+        let toml = indoc::indoc! {r#"
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "lint"
+            name = "Lint"
+            entry = "echo lint"
+            language = "system"
+            always_run = "not-a-bool"
+        "#};
+        let err = toml::from_str::<Config>(toml).unwrap_err();
+        insta::assert_snapshot!(err, @r#"
+        TOML parse error at line 9, column 14
+          |
+        9 | always_run = "not-a-bool"
+          |              ^^^^^^^^^^^^
+        invalid type: string "not-a-bool", expected a boolean
+        "#);
     }
 
     #[test]
