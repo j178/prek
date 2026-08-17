@@ -349,7 +349,7 @@ impl Store {
     /// Get all tracked config files.
     ///
     /// Seed `config-tracking.json` from the workspace discovery cache if it doesn't exist.
-    /// This is a one-time upgrade helper: it only does work when tracking is empty.
+    /// This is a one-time upgrade helper: it only does work when the tracking file is absent.
     pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
         let tracking_file = self.config_tracking_file();
         match fs_err::read_to_string(&tracking_file) {
@@ -364,18 +364,16 @@ impl Store {
             }
         }
 
-        let cached = WorkspaceCache::cached_config_paths(self);
-        if cached.is_empty() {
-            return Ok(FxHashSet::default());
+        let tracked = WorkspaceCache::cached_config_paths(self);
+        if !tracked.is_empty() {
+            debug!(
+                count = tracked.len(),
+                "Bootstrapping config tracking from workspace cache"
+            );
+            self.update_tracked_configs(&tracked)?;
         }
 
-        debug!(
-            count = cached.len(),
-            "Bootstrapping config tracking from workspace cache"
-        );
-        self.update_tracked_configs(&cached)?;
-
-        Ok(cached)
+        Ok(tracked)
     }
 
     /// Track new config files for GC.
@@ -384,27 +382,20 @@ impl Store {
         config_paths: impl Iterator<Item = &'a Path>,
     ) -> Result<(), Error> {
         let mut tracked = self.tracked_configs()?;
-        let mut changed = false;
-        for config_path in config_paths {
-            changed |= tracked.insert(config_path.to_path_buf());
-        }
+        let previous_len = tracked.len();
+        tracked.extend(config_paths.map(Path::to_path_buf));
 
-        if !changed {
-            return Ok(());
+        if tracked.len() != previous_len {
+            self.update_tracked_configs(&tracked)?;
         }
-
-        let tracking_file = self.config_tracking_file();
-        let content = serde_json::to_string_pretty(&tracked)?;
-        fs_err::write(&tracking_file, content)?;
 
         Ok(())
     }
 
     /// Update the tracked configs file.
     pub(crate) fn update_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
-        let tracking_file = self.config_tracking_file();
         let content = serde_json::to_string_pretty(configs)?;
-        fs_err::write(&tracking_file, content)?;
+        fs_err::write(self.config_tracking_file(), content)?;
 
         Ok(())
     }
