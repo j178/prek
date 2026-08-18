@@ -219,10 +219,9 @@ impl ExecutionEnvironment {
         let command = resolve_command(command.to_vec(), self.path(hook), cwd);
         let (program, args) = command.split_first().context("Command cannot be empty")?;
         let mut cmd = Cmd::new(program);
-        cmd.current_dir(cwd).args(args).check(false);
-        if let Some(work_tree) = git::hook_work_tree(cwd) {
-            cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
-        }
+        git::apply_hook_work_tree(cmd.current_dir(cwd), cwd)
+            .args(args)
+            .check(false);
         self.patch.apply(&mut cmd);
         cmd.envs(&hook.env);
         Ok(cmd)

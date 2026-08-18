@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
-use crate::git::GitCommandExt;
+use crate::git::{self, GitCommandExt};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::process::Cmd;
@@ -117,8 +117,11 @@ impl LanguageBackend for Julia {
         }
 
         let run = async |batch: &[&Path]| {
-            let output = Cmd::new("julia")
-                .current_dir(hook.work_dir())
+            let mut cmd = Cmd::new("julia");
+            cmd.current_dir(hook.work_dir());
+            git::apply_hook_work_tree(&mut cmd, hook.work_dir());
+
+            let output = cmd
                 .arg("--startup-file=no")
                 .arg(format!("--project={}", env_dir.display()))
                 .args(&entry)

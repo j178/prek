@@ -62,7 +62,16 @@ fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
 }
 
-/// The work tree to expose to a hook subprocess started in `cwd`.
+fn hook_work_tree(cwd: &Path) -> Option<&'static Path> {
+    let work_tree = git_work_tree()?;
+    let root = GIT_ROOT.as_ref().ok()?;
+    if cwd == root {
+        return None;
+    }
+    Some(work_tree)
+}
+
+/// Give a hook subprocess started in `cwd` the work tree Git did not expose.
 ///
 /// Committing from a linked worktree makes Git export an absolute `GIT_DIR` without a
 /// `GIT_WORK_TREE`, which tells Git to treat the current directory as the work tree root.
@@ -70,13 +79,11 @@ fn git_work_tree() -> Option<&'static Path> {
 /// resolve the repository root to that subdirectory and rewrite the index as if the
 /// sub-project were the whole repository. Hooks running at the git root already resolve
 /// the root correctly, so they keep inheriting the environment Git gave us.
-pub(crate) fn hook_work_tree(cwd: &Path) -> Option<&'static Path> {
-    let work_tree = git_work_tree()?;
-    let root = GIT_ROOT.as_ref().ok()?;
-    if cwd == root {
-        return None;
+pub(crate) fn apply_hook_work_tree<'a>(cmd: &'a mut Cmd, cwd: &Path) -> &'a mut Cmd {
+    if let Some(work_tree) = hook_work_tree(cwd) {
+        cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
     }
-    Some(work_tree)
+    cmd
 }
 
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
