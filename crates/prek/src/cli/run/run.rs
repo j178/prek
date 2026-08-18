@@ -940,6 +940,16 @@ impl<'a> HookRunSession<'a> {
                 let output = result.output.trim_ascii();
                 if !output.is_empty() {
                     if let Some(file) = result.hook.log_file.as_deref() {
+                        let file = Path::new(file);
+                        let config_file = result.hook.project().config_file();
+                        let file = if file.is_relative() {
+                            let config_dir = config_file
+                                .parent()
+                                .context("Configuration file must have a parent directory")?;
+                            config_dir.join(file)
+                        } else {
+                            file.to_path_buf()
+                        };
                         let mut file = fs_err::OpenOptions::new()
                             .create(true)
                             .append(true)

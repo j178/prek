@@ -2116,11 +2116,14 @@ fn global_path_options_expand_tilde() -> Result<()> {
 
 /// Test hook `log_file` option.
 #[test]
-fn log_file() {
+fn log_file() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let config_dir = context.work_dir().child("config");
+    config_dir.create_dir_all()?;
+    let config_file = config_dir.child(PRE_COMMIT_CONFIG_YAML);
+    config_file.write_str(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -2130,10 +2133,10 @@ fn log_file() {
                 entry: python3 -c 'import sys; sys.stdout.buffer.write(b"\x1b[2Kraw\xff"); exit(1)'
                 always_run: true
                 log_file: log.txt
-    "#});
+    "#})?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-c").arg(config_file.path()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2144,8 +2147,10 @@ fn log_file() {
     ----- stderr -----
     "#);
 
-    let log = fs_err::read(context.work_dir().join("log.txt")).expect("log file should exist");
+    let log = fs_err::read(config_dir.join("log.txt"))?;
     assert_eq!(log, b"\x1b[2Kraw\xff");
+
+    Ok(())
 }
 
 /// Pass pre-commit environment variables to the hook.

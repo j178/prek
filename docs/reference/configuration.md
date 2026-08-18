@@ -1390,6 +1390,7 @@ Print hook output even when the hook succeeds.
 ### `log_file`
 
 Write hook output to a file when the hook fails (and also when `verbose: true`).
+Relative paths are resolved from the directory containing the configuration file.
 
 - Type: string path
 
