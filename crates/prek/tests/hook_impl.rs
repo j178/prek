@@ -647,6 +647,129 @@ fn git_dir_synthesized_git_work_tree_not_leaked_to_hook() {
     ");
 }
 
+/// Committing from a linked worktree makes Git export an absolute `GIT_DIR` without a
+/// `GIT_WORK_TREE`, so Git falls back to treating the hook's working directory as the
+/// work tree root. A workspace hook runs in its own project directory, so a Git command
+/// it runs must still resolve the repository root, not the project directory.
+#[test]
+fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! { r"
+        repos:
+        - repo: local
+          hooks:
+           - id: root-noop
+             name: root-noop
+             language: system
+             entry: true
+             always_run: true
+             pass_filenames: false
+    "});
+
+    let project = context.work_dir().child("sub");
+    project.create_dir_all()?;
+    project.child(PRE_COMMIT_CONFIG_YAML).write_str(indoc! { r"
+        repos:
+        - repo: local
+          hooks:
+           - id: sub-git-add
+             name: sub-git-add
+             language: system
+             entry: git add -u
+             always_run: true
+             pass_filenames: false
+    "})?;
+
+    context.work_dir().child("README.md").write_str("root\n")?;
+    context.work_dir().child("tracked.txt").write_str("b\n")?;
+    project.child("README.md").write_str("sub\n")?;
+    let nested = context.work_dir().child("deep").child("nested");
+    nested.create_dir_all()?;
+    nested.child("a.txt").write_str("a\n")?;
+
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    git_cmd(context.work_dir())
+        .args(["worktree", "add", "worktree", "HEAD"])
+        .assert()
+        .success();
+
+    let worktree = context.work_dir().child("worktree");
+    worktree.child("tracked.txt").write_str("b2\n")?;
+    git_cmd(&worktree)
+        .args(["add", "tracked.txt"])
+        .assert()
+        .success();
+
+    let mut commit = git_cmd(&worktree);
+    commit
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Commit from the linked worktree");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [detached HEAD abc1234] Commit from the linked worktree
+     1 file changed, 1 insertion(+), 1 deletion(-)
+
+    ----- stderr -----
+    ✓ sub
+      sub-git-add............................................................Passed
+    ✓ <workspace>
+      root-noop..............................................................Passed
+    ");
+
+    // The hook's `git add -u` must not rewrite the index as if `sub` were the repository.
+    let mut ls_files = git_cmd(&worktree);
+    ls_files.arg("ls-files");
+    cmd_snapshot!(context.filters(), ls_files, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .pre-commit-config.yaml
+    README.md
+    deep/nested/a.txt
+    sub/.pre-commit-config.yaml
+    sub/README.md
+    tracked.txt
+
+    ----- stderr -----
+    ");
+
+    let mut status = git_cmd(&worktree);
+    status.args(["status", "--porcelain"]);
+    cmd_snapshot!(context.filters(), status, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();

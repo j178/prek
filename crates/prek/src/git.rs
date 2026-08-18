@@ -38,7 +38,8 @@ pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
 // Git hooks can expose `GIT_DIR` without `GIT_WORK_TREE`. Keep the derived
-// work tree scoped to prek's own git commands so user hooks do not inherit it.
+// work tree scoped to prek's own git commands so user hooks do not inherit it,
+// except for hooks that run outside the git root, see [`hook_work_tree`].
 static GIT_WORK_TREE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 pub(crate) fn init_git_work_tree() -> Result<()> {
@@ -59,6 +60,23 @@ pub(crate) fn init_git_work_tree() -> Result<()> {
 
 fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
+}
+
+/// The work tree to expose to a hook subprocess started in `cwd`.
+///
+/// Committing from a linked worktree makes Git export an absolute `GIT_DIR` without a
+/// `GIT_WORK_TREE`, which tells Git to treat the current directory as the work tree root.
+/// A workspace hook runs in its own project directory, so any Git command it runs would
+/// resolve the repository root to that subdirectory and rewrite the index as if the
+/// sub-project were the whole repository. Hooks running at the git root already resolve
+/// the root correctly, so they keep inheriting the environment Git gave us.
+pub(crate) fn hook_work_tree(cwd: &Path) -> Option<&'static Path> {
+    let work_tree = git_work_tree()?;
+    let root = GIT_ROOT.as_ref().ok()?;
+    if cwd == root {
+        return None;
+    }
+    Some(work_tree)
 }
 
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
