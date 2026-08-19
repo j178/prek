@@ -37,9 +37,10 @@ pub(crate) enum Error {
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
-// Git hooks can expose `GIT_DIR` without `GIT_WORK_TREE`. Keep the derived
-// work tree scoped to prek's own git commands so user hooks do not inherit it,
-// except for hooks that run outside the git root, see [`hook_work_tree`].
+// Git can expose `GIT_DIR` without `GIT_WORK_TREE` to hooks. Keep the derived
+// work tree in process-local state so it is added only to prek's own Git commands
+// and hook commands whose working directory would otherwise break the inherited
+// current-repository context.
 static GIT_WORK_TREE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 pub(crate) fn init_git_work_tree() -> Result<()> {
@@ -71,14 +72,19 @@ fn hook_work_tree(cwd: &Path) -> Option<&'static Path> {
     Some(work_tree)
 }
 
-/// Give a hook subprocess started in `cwd` the work tree Git did not expose.
+/// Preserve Git's current-repository context for a hook started in `cwd`.
 ///
-/// Committing from a linked worktree makes Git export an absolute `GIT_DIR` without a
-/// `GIT_WORK_TREE`, which tells Git to treat the current directory as the work tree root.
-/// A workspace hook runs in its own project directory, so any Git command it runs would
-/// resolve the repository root to that subdirectory and rewrite the index as if the
-/// sub-project were the whole repository. Hooks running at the git root already resolve
-/// the root correctly, so they keep inheriting the environment Git gave us.
+/// Git exports repository-local environment variables so Git commands started by a hook
+/// operate on the repository that invoked it. In a linked worktree, Git can export an
+/// absolute `GIT_DIR` without `GIT_WORK_TREE`. If prek then starts a workspace hook below
+/// the repository root, Git treats that subdirectory as the work tree and can rewrite the
+/// current repository's index as if the sub-project were the whole repository.
+///
+/// Supplying the missing work tree preserves the inherited context. Hooks at the repository
+/// root need no completion and inherit Git's environment unchanged. prek cannot infer
+/// foreign-repository intent from `cwd`, so a hook that intentionally operates on another
+/// repository is responsible for clearing repository-local Git variables before starting
+/// that Git command.
 pub(crate) fn apply_hook_work_tree<'a>(cmd: &'a mut Cmd, cwd: &Path) -> &'a mut Cmd {
     if let Some(work_tree) = hook_work_tree(cwd) {
         cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
