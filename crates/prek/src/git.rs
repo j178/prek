@@ -7,6 +7,7 @@ use std::sync::{LazyLock, OnceLock};
 use anyhow::Result;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
+use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
 
@@ -38,9 +39,8 @@ pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
 // Git can expose `GIT_DIR` without `GIT_WORK_TREE` to hooks. Keep the derived
-// work tree in process-local state so it is added only to prek's own Git commands
-// and hook commands whose working directory would otherwise break the inherited
-// current-repository context.
+// work tree in process-local state and add it only when preserving the current
+// repository requires it.
 static GIT_WORK_TREE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 pub(crate) fn init_git_work_tree() -> Result<()> {
@@ -61,35 +61,6 @@ pub(crate) fn init_git_work_tree() -> Result<()> {
 
 fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
-}
-
-fn hook_work_tree(cwd: &Path) -> Option<&'static Path> {
-    let work_tree = git_work_tree()?;
-    let root = GIT_ROOT.as_ref().ok()?;
-    if cwd == root {
-        return None;
-    }
-    Some(work_tree)
-}
-
-/// Preserve Git's current-repository context for a hook started in `cwd`.
-///
-/// Git exports repository-local environment variables so Git commands started by a hook
-/// operate on the repository that invoked it. In a linked worktree, Git can export an
-/// absolute `GIT_DIR` without `GIT_WORK_TREE`. If prek then starts a workspace hook below
-/// the repository root, Git treats that subdirectory as the work tree and can rewrite the
-/// current repository's index as if the sub-project were the whole repository.
-///
-/// Supplying the missing work tree preserves the inherited context. Hooks at the repository
-/// root need no completion and inherit Git's environment unchanged. prek cannot infer
-/// foreign-repository intent from `cwd`, so a hook that intentionally operates on another
-/// repository is responsible for clearing repository-local Git variables before starting
-/// that Git command.
-pub(crate) fn apply_hook_work_tree<'a>(cmd: &'a mut Cmd, cwd: &Path) -> &'a mut Cmd {
-    if let Some(work_tree) = hook_work_tree(cwd) {
-        cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
-    }
-    cmd
 }
 
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
@@ -122,6 +93,17 @@ static GIT_REPO_LOCAL_ENVS: &[&str] = &[
 ];
 
 pub(crate) trait GitCommandExt {
+    /// Keep nested Git commands operating on the repository that invoked the hook.
+    ///
+    /// Git treats the current directory as the work tree when `GIT_DIR` is set but
+    /// `GIT_WORK_TREE` is not. If prek starts the hook in a subdirectory, this method passes
+    /// the original work tree explicitly so Git commands in the hook still use the repository
+    /// that invoked prek.
+    ///
+    /// A hook that intentionally operates on another repository must clear Git's
+    /// repository-local environment before starting Git.
+    fn preserve_current_worktree(&mut self, hook_cwd: &Path) -> &mut Self;
+
     fn sanitize_git_repo_env(&mut self) -> &mut Self;
 }
 
@@ -133,6 +115,18 @@ pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
 }
 
 impl GitCommandExt for Cmd {
+    fn preserve_current_worktree(&mut self, hook_cwd: &Path) -> &mut Self {
+        let Some(work_tree) = git_work_tree() else {
+            return self;
+        };
+        let is_work_tree_root =
+            hook_cwd == work_tree || is_same_file(hook_cwd, work_tree).unwrap_or(false);
+        if !is_work_tree_root {
+            self.env(EnvVars::GIT_WORK_TREE, work_tree);
+        }
+        self
+    }
+
     fn sanitize_git_repo_env(&mut self) -> &mut Self {
         for key in GIT_REPO_LOCAL_ENVS {
             self.env_remove(key);

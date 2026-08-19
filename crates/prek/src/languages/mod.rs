@@ -15,7 +15,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
 use crate::config::Language;
 use crate::fs::PathClean;
-use crate::git;
+use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
 use crate::hooks::{self, HookOutput};
@@ -219,7 +219,8 @@ impl ExecutionEnvironment {
         let command = resolve_command(command.to_vec(), self.path(hook), cwd);
         let (program, args) = command.split_first().context("Command cannot be empty")?;
         let mut cmd = Cmd::new(program);
-        git::apply_hook_work_tree(cmd.current_dir(cwd), cwd)
+        cmd.current_dir(cwd)
+            .preserve_current_worktree(cwd)
             .args(args)
             .check(false);
         self.patch.apply(&mut cmd);
