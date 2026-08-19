@@ -35,6 +35,39 @@ If `core.hooksPath` is only configured globally or system-wide, prek refuses to 
 
 Use `prek install --force` to install into the repository's default hooks directory anyway. Use `--git-dir <GIT_DIR>` instead when you need to choose an explicit installation target.
 
+## Why can `git clone` fail inside a hook?
+
+A hook can run Git for two different purposes:
+
+- **Operate on the current repository:** Do nothing. `prek` preserves the Git
+  environment inherited by the hook, so commands such as `git status`, `git diff`,
+  and `git add` target the repository being checked. This remains true when a
+  workspace hook runs from a subdirectory. For linked worktrees, `prek` supplies
+  a missing `GIT_WORK_TREE` when necessary to preserve this behavior.
+- **Operate on a separate repository:** Clear Git's repository-local environment
+  variables before running Git. This applies to `git clone` and commands that
+  target another repository or worktree.
+
+The default is the current repository because `prek` cannot determine the hook's
+intent from its working directory. A workspace hook running in a subdirectory may
+still need to modify the repository being checked.
+
+For a separate repository, changing directories or using `git -C` is not enough.
+Inherited variables such as `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE` can
+still redirect Git to the current repository. In a POSIX shell, isolate the
+operation in a subshell:
+
+```bash
+(
+    unset $(git rev-parse --local-env-vars)
+    git clone https://example.com/owner/repo.git destination
+)
+```
+
+For hooks written without a shell, remove every variable named by
+`git rev-parse --local-env-vars` from the environment of the child Git process.
+Git documents the same rule in its [hook documentation](https://git-scm.com/docs/githooks#_description).
+
 ## How do I use hooks from private repositories?
 
 prek supports cloning hooks from private repositories that require authentication.
