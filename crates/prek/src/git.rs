@@ -7,6 +7,7 @@ use std::sync::{LazyLock, OnceLock};
 use anyhow::Result;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
+use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
 
@@ -37,8 +38,9 @@ pub(crate) enum Error {
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
-// Git hooks can expose `GIT_DIR` without `GIT_WORK_TREE`. Keep the derived
-// work tree scoped to prek's own git commands so user hooks do not inherit it.
+// Git can expose `GIT_DIR` without `GIT_WORK_TREE` to hooks. Keep the derived
+// work tree in process-local state and add it only when preserving the current
+// repository requires it.
 static GIT_WORK_TREE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 pub(crate) fn init_git_work_tree() -> Result<()> {
@@ -91,6 +93,17 @@ static GIT_REPO_LOCAL_ENVS: &[&str] = &[
 ];
 
 pub(crate) trait GitCommandExt {
+    /// Keep nested Git commands operating on the repository that invoked the hook.
+    ///
+    /// Git treats the current directory as the work tree when `GIT_DIR` is set but
+    /// `GIT_WORK_TREE` is not. If prek starts the hook in a subdirectory, this method passes
+    /// the original work tree explicitly so Git commands in the hook still use the repository
+    /// that invoked prek.
+    ///
+    /// A hook that intentionally operates on another repository must clear Git's
+    /// repository-local environment before starting Git.
+    fn preserve_current_worktree(&mut self, hook_cwd: &Path) -> &mut Self;
+
     fn sanitize_git_repo_env(&mut self) -> &mut Self;
 }
 
@@ -102,6 +115,18 @@ pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
 }
 
 impl GitCommandExt for Cmd {
+    fn preserve_current_worktree(&mut self, hook_cwd: &Path) -> &mut Self {
+        let Some(work_tree) = git_work_tree() else {
+            return self;
+        };
+        let is_work_tree_root =
+            hook_cwd == work_tree || is_same_file(hook_cwd, work_tree).unwrap_or(false);
+        if !is_work_tree_root {
+            self.env(EnvVars::GIT_WORK_TREE, work_tree);
+        }
+        self
+    }
+
     fn sanitize_git_repo_env(&mut self) -> &mut Self {
         for key in GIT_REPO_LOCAL_ENVS {
             self.env_remove(key);
