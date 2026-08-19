@@ -200,8 +200,7 @@ debug = "full"
 lto = false
 codegen-units = 16
 
-[profile.minimal-size]
-inherits = "release"
+[profile.release]
 # Enable Full LTO for the best optimizations
 lto = "fat"
 # Reduce codegen units to 1 for better optimizations
@@ -209,6 +208,6 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
-# The profile that 'cargo dist' will build with
-[profile.dist]
-inherits = "minimal-size"
+[profile.minimal-size]
+inherits = "release"
+opt-level = "z"
