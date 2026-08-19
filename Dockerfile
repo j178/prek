@@ -55,8 +55,8 @@ COPY crates crates
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
-  cargo zigbuild --bin prek --profile dist --target $(cat rust_target.txt)
-RUN cp target/$(cat rust_target.txt)/dist/prek /prek
+  cargo zigbuild --bin prek --release --target $(cat rust_target.txt)
+RUN cp target/$(cat rust_target.txt)/release/prek /prek
 # TODO: Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /prek
 

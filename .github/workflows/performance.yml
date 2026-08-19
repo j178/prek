@@ -43,7 +43,7 @@ jobs:
         id: bloat_head
         run: |
           # Build head branch
-          cargo bloat --release | tee bloat_head.txt >&1
+          cargo bloat | tee bloat_head.txt >&1
 
       - name: Checkout base
         run: |
@@ -53,7 +53,7 @@ jobs:
         id: bloat_base
         run: |
           # Build base branch
-          cargo bloat --release | tee bloat_base.txt >&1
+          cargo bloat | tee bloat_base.txt >&1
 
       - name: Compare bloat results
         shell: python

@@ -72,7 +72,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
           sccache: 'true'
         env:
           # Disable prebuilt NASM objects so we always compile assembly from source.
@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           ARCHIVE_FILE=prek-${{ matrix.platform.target }}.zip
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/dist/prek.exe
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/prek.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -114,7 +114,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
           sccache: 'true'
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -128,7 +128,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -159,7 +159,7 @@ jobs:
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
           # from 64-bit version of the container, breaking the pattern from other builds.
           container: quay.io/pypa/manylinux2014
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
           # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
@@ -199,7 +199,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -237,7 +237,7 @@ jobs:
           # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
           manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -253,7 +253,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -282,7 +282,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           manylinux: auto
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
         env:
           CFLAGS_s390x_unknown_linux_gnu: -march=z10
@@ -301,7 +301,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -330,7 +330,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           manylinux: auto
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -346,7 +346,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -375,7 +375,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
-          args: --profile dist --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -391,7 +391,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -423,7 +423,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: --profile dist --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
+          args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - name: "Upload wheels"
@@ -441,7 +441,7 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/dist/prek $ARCHIVE_NAME/prek
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
