@@ -234,7 +234,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
+
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
@@ -294,14 +297,17 @@ jobs:
   cargo-test-without-uv:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     name: "cargo test | without uv"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
+
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
@@ -364,8 +370,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+
+      - name: "Install mold"
         if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: ./scripts/install-mold.sh
+
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
@@ -502,7 +511,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
         if: ${{ matrix.os == 'ubuntu-latest' }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
