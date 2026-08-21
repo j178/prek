@@ -1,20 +1,111 @@
 # /// script
 # requires-python = ">=3.14"
-# dependencies = [
-#     "httpx>=0.28.1",
-# ]
 # ///
 
 from __future__ import annotations
 
+import argparse
+import base64
+import json
 import os
-import re
+import platform
 import shutil
 import subprocess
 import sys
+import tarfile
+import tomllib
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
-import httpx
+
+MACPORTS_REPO = "macports/macports-ports"
+MACPORTS_BRANCH = "master"
+MACPORTS_PORTFILE = "devel/prek/Portfile"
+
+PULL_REQUEST_BODY_TEMPLATE = """#### Description
+
+Update prek to {version}
+
+###### Type(s)
+
+- [ ] bugfix
+- [ ] enhancement
+- [ ] security fix
+
+###### Tested on
+
+macOS {macos_version} {macos_build} {arch}
+Xcode {xcode_version} {xcode_build}
+
+###### Verification
+Have you
+
+- [x] followed our [Commit Message Guidelines](https://trac.macports.org/wiki/CommitMessages)?
+- [x] squashed and [minimized your commits](https://guide.macports.org/#project.github)?
+- [x] checked that there are no other open [pull requests](https://github.com/macports/macports-ports/pulls) for the same change?
+- [ ] referenced existing tickets on [Trac](https://trac.macports.org/wiki/Tickets) with full URL in commit message?
+- [x] checked your Portfile with `port lint`?
+- [x] tried existing tests with `sudo port test`?
+- [x] tried a full install with `sudo port -vst install`?
+- [x] tested basic functionality of all binary files?
+- [x] checked that the Portfile most important variants have not been broken?
+"""
+
+PORTFILE_TEMPLATE = r"""# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+PortGroup           cargo   1.0
+PortGroup           github  1.0
+
+github.setup        j178 prek {version} v
+github.tarball_from archive
+revision            0
+
+description         A fast Git hook manager written in Rust, drop-in alternative to pre-commit.
+long_description    {*}${description}
+
+categories          devel
+installs_libs       no
+license             MIT
+maintainers         {@j178 j178.dev:hi} openmaintainer
+homepage            https://prek.j178.dev
+
+checksums           ${distname}${extract.suffix} \
+                    rmd160  {rmd160} \
+                    sha256  {sha256} \
+                    size    {size}
+
+post-build {
+    # Generate shell completions for supported shells
+    set prek_bin ${worksrcpath}/target/[cargo.rust_platform]/release/${name}
+    foreach shell {zsh bash fish} {
+        system -W ${worksrcpath} "COMPLETE=${shell} ${prek_bin} > ${name}.${shell}"
+    }
+}
+
+destroot {
+    set bindir ${worksrcpath}/target/[cargo.rust_platform]/release
+    xinstall -m 0755 ${bindir}/${name} ${destroot}${prefix}/bin/
+
+    set zsh_comp_path ${destroot}${prefix}/share/zsh/site-functions
+    xinstall -d ${zsh_comp_path}
+    xinstall -m 0644 ${worksrcpath}/${name}.zsh ${zsh_comp_path}/_${name}
+
+    set bash_comp_path ${destroot}${prefix}/share/bash-completion/completions
+    xinstall -d ${bash_comp_path}
+    xinstall -m 0644 ${worksrcpath}/${name}.bash ${bash_comp_path}/${name}
+
+    set fish_comp_path ${destroot}${prefix}/share/fish/vendor_completions.d
+    xinstall -d ${fish_comp_path}
+    xinstall -m 0644 ${worksrcpath}/${name}.fish ${fish_comp_path}
+}
+
+build.args-append   -p prek
+
+{cargo_crates}
+"""
 
 
 def run(cmd: list[str], *, capture: bool = False) -> str:
@@ -34,34 +125,18 @@ def repo_root() -> Path:
     return Path(root)
 
 
-def read_version(cargo_toml: Path) -> str:
-    content = cargo_toml.read_text(encoding="utf-8")
-    match = re.search(r'^version\s*=\s*"([^"]+)"', content, flags=re.MULTILINE)
-    if not match:
-        raise RuntimeError(f"Failed to read version from {cargo_toml}")
-    return match.group(1)
-
-
-def replace_github_setup_version(portfile_text: str, version: str) -> str:
-    updated = re.sub(
-        r'^(github\.setup\s+\S+\s+\S+\s+)\S+',
-        rf'\g<1>{version}',
-        portfile_text,
-        count=1,
-        flags=re.MULTILINE,
+def current_tag(root: Path) -> str:
+    return run(
+        ["git", "-C", str(root), "describe", "--tags", "--abbrev=0"],
+        capture=True,
     )
-    if updated == portfile_text:
-        raise RuntimeError("Could not locate github.setup line in Portfile")
-    return updated
 
 
 def download_distfile(version: str) -> Path:
     distfile = Path(f"/tmp/prek-v{version}.tar.gz")
     url = f"https://github.com/j178/prek/archive/v{version}.tar.gz"
-    with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        distfile.write_bytes(response.content)
+    with urlopen(url, timeout=60) as response, distfile.open("wb") as output:
+        shutil.copyfileobj(response, output)
     return distfile
 
 
@@ -72,95 +147,187 @@ def openssl_digest(algorithm: str, file_path: Path) -> str:
     return out.split("= ", 1)[1].strip()
 
 
-def update_checksums_block(portfile_text: str, rmd160: str, sha256: str, size: int) -> str:
-    updated = re.sub(
-        r"(^\s*rmd160\s+)\S+(\s*\\\s*$)",
-        rf"\g<1>{rmd160}\g<2>",
-        portfile_text,
-        count=1,
-        flags=re.MULTILINE,
+def generate_cargo_crates(distfile: Path, version: str) -> str:
+    cargo_lock_path = f"prek-{version}/Cargo.lock"
+    with tarfile.open(distfile, "r:gz") as archive:
+        try:
+            cargo_lock = archive.extractfile(cargo_lock_path)
+        except KeyError:
+            raise RuntimeError(f"{cargo_lock_path} not found in {distfile}") from None
+        if cargo_lock is None:
+            raise RuntimeError(f"{cargo_lock_path} is not a file in {distfile}")
+        with cargo_lock:
+            packages = tomllib.load(cargo_lock)["package"]
+
+    crates = [
+        (package["name"], package["version"], package["checksum"])
+        for package in packages
+        if "checksum" in package
+    ]
+    if not crates:
+        raise RuntimeError(f"No packages with checksums found in {cargo_lock_path}")
+
+    lines = [
+        f"    {name:<28}  {version:>8}  {checksum}"
+        for name, version, checksum in crates
+    ]
+    return "cargo.crates \\\n" + " \\\n".join(lines)
+
+
+def gh_api(
+    endpoint: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+    allow_not_found: bool = False,
+) -> Any:
+    cmd = ["gh", "api", "--method", method, endpoint]
+    input_text = None
+    if payload is not None:
+        cmd.extend(["--input", "-"])
+        input_text = json.dumps(payload)
+
+    result = subprocess.run(
+        cmd,
+        check=False,
+        text=True,
+        input=input_text,
+        capture_output=True,
     )
-    updated = re.sub(
-        r"(^\s*sha256\s+)\S+(\s*\\\s*$)",
-        rf"\g<1>{sha256}\g<2>",
-        updated,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    updated = re.sub(
-        r"(^\s*size\s+)\d+(\s*$)",
-        rf"\g<1>{size}\g<2>",
-        updated,
-        count=1,
-        flags=re.MULTILINE,
-    )
-
-    if updated == portfile_text or "rmd160" not in updated or "sha256" not in updated:
-        raise RuntimeError("Could not locate checksum lines in Portfile")
-    return updated
+    if result.returncode != 0:
+        if allow_not_found and "HTTP 404" in result.stderr:
+            return None
+        raise RuntimeError(result.stderr.strip())
+    return json.loads(result.stdout)
 
 
-def ensure_cargo2port() -> None:
-    if shutil.which("cargo2port"):
-        return
-    run(
-        [
-            "cargo",
-            "install",
-            "--locked",
-            "--git",
-            "https://github.com/l2dy/cargo2port",
-            "cargo2port",
-        ]
+def render_pull_request_body(version: str) -> str:
+    xcode = run(["xcodebuild", "-version"], capture=True).splitlines()
+    if len(xcode) != 2:
+        raise RuntimeError(f"Unexpected xcodebuild output: {xcode}")
+
+    return PULL_REQUEST_BODY_TEMPLATE.format(
+        version=version,
+        macos_version=run(["sw_vers", "-productVersion"], capture=True),
+        macos_build=run(["sw_vers", "-buildVersion"], capture=True),
+        arch=platform.machine(),
+        xcode_version=xcode[0].removeprefix("Xcode "),
+        xcode_build=xcode[1].removeprefix("Build version "),
     )
 
 
-def generated_cargo_crates(cargo_lock: Path) -> str:
-    return run(["cargo2port", str(cargo_lock)], capture=True)
+def create_macports_pull_request(version: str, portfile_text: str) -> str:
+    login = gh_api("user")["login"]
+    fork = f"{login}/macports-ports"
+    branch = f"prek-{version}"
+    body = render_pull_request_body(version)
+
+    query = urlencode({"state": "open", "head": f"{login}:{branch}"})
+    pull_requests = gh_api(f"repos/{MACPORTS_REPO}/pulls?{query}")
+    if pull_requests:
+        pull_request = gh_api(
+            f"repos/{MACPORTS_REPO}/pulls/{pull_requests[0]['number']}",
+            method="PATCH",
+            payload={"body": body},
+        )
+        return pull_request["html_url"]
+
+    fork_info = gh_api(f"repos/{fork}")
+    if fork_info.get("parent", {}).get("full_name") != MACPORTS_REPO:
+        raise RuntimeError(f"{fork} is not a fork of {MACPORTS_REPO}")
+
+    branch_ref = gh_api(
+        f"repos/{fork}/git/ref/heads/{branch}", allow_not_found=True
+    )
+    if branch_ref is not None:
+        raise RuntimeError(f"Branch {fork}:{branch} already exists without an open PR")
+
+    base_ref = gh_api(
+        f"repos/{MACPORTS_REPO}/git/ref/heads/{MACPORTS_BRANCH}"
+    )
+    gh_api(
+        f"repos/{fork}/git/refs",
+        method="POST",
+        payload={"ref": f"refs/heads/{branch}", "sha": base_ref["object"]["sha"]},
+    )
+
+    query = urlencode({"ref": branch})
+    current_portfile = gh_api(
+        f"repos/{fork}/contents/{MACPORTS_PORTFILE}?{query}"
+    )
+    title = f"prek: update to {version}"
+    gh_api(
+        f"repos/{fork}/contents/{MACPORTS_PORTFILE}",
+        method="PUT",
+        payload={
+            "message": title,
+            "content": base64.b64encode(portfile_text.encode()).decode(),
+            "sha": current_portfile["sha"],
+            "branch": branch,
+        },
+    )
+
+    pull_request = gh_api(
+        f"repos/{MACPORTS_REPO}/pulls",
+        method="POST",
+        payload={
+            "title": title,
+            "body": body,
+            "head": f"{login}:{branch}",
+            "base": MACPORTS_BRANCH,
+            "draft": False,
+            "maintainer_can_modify": True,
+        },
+    )
+    return pull_request["html_url"]
 
 
-def replace_cargo_crates_block(portfile_text: str, crates_block: str) -> str:
-    marker = "cargo.crates"
-    idx = portfile_text.find(marker)
-    if idx == -1:
-        raise RuntimeError("Could not locate cargo.crates block in Portfile")
-    prefix = portfile_text[:idx]
-    return prefix + crates_block.rstrip() + "\n"
+def render_portfile(
+    *, version: str, rmd160: str, sha256: str, size: int, cargo_crates: str
+) -> str:
+    return (
+        PORTFILE_TEMPLATE.replace("{version}", version)
+        .replace("{rmd160}", rmd160)
+        .replace("{sha256}", sha256)
+        .replace("{size}", str(size))
+        .replace("{cargo_crates}", cargo_crates.rstrip())
+    )
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--submit", action="store_true", help="Create a pull request in MacPorts"
+    )
+    args = parser.parse_args()
+
     root = repo_root()
-    default_portfile = root / "scripts" / "macports" / "Portfile"
+    default_portfile = Path("/tmp/prek-Portfile")
     portfile = Path(os.environ.get("PORTFILE", str(default_portfile)))
 
-    if not portfile.is_file():
-        raise RuntimeError(f"Portfile not found at {portfile}")
-
-    version = read_version(root / "Cargo.toml")
-
-    text = portfile.read_text(encoding="utf-8")
-    text = replace_github_setup_version(text, version)
+    version = current_tag(root).removeprefix("v")
 
     distfile = download_distfile(version)
     rmd160 = openssl_digest("rmd160", distfile)
     sha256 = openssl_digest("sha256", distfile)
     size = distfile.stat().st_size
 
-    text = update_checksums_block(text, rmd160, sha256, size)
-
-    ensure_cargo2port()
-    crates_block = generated_cargo_crates(root / "Cargo.lock")
-    text = replace_cargo_crates_block(text, crates_block)
+    cargo_crates = generate_cargo_crates(distfile, version)
+    text = render_portfile(
+        version=version,
+        rmd160=rmd160,
+        sha256=sha256,
+        size=size,
+        cargo_crates=cargo_crates,
+    )
 
     portfile.write_text(text, encoding="utf-8")
-    print(f"Updated {portfile} for version {version}")
-    print("To open a PR with the updated Portfile, run:")
-    print(f"  git clone --depth=1 --branch=master https://github.com/macports/macports-ports.git /tmp/macports-ports")
-    print(f"  cp {portfile} /tmp/macports-ports/devel/prek/Portfile")
-    print(f"  cd /tmp/macports-ports")
-    print(f"  git add devel/prek/Portfile")
-    print(f"  git commit -m 'prek: update to {version}'")
-    print(f"  gh pr create --title 'prek: update to {version}'")
+    print(f"Generated {portfile} for version {version}")
+    if args.submit:
+        url = create_macports_pull_request(version, text)
+        print(f"Pull request: {url}")
+    else:
+        print("To create a pull request, rerun with --submit")
 
 
 if __name__ == "__main__":
