@@ -324,7 +324,7 @@ jobs:
           echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
             --profile ci-core \
-            --cargo-profile fast-build \
+            --cargo-profile no-debug \
             --no-report \
             -E 'binary_id(prek::run) and test(run_basic)'
           echo "::endgroup::"
@@ -334,13 +334,13 @@ jobs:
             export PREK_UV_SOURCE=$source
             cargo llvm-cov nextest \
               --profile ci-core \
-              --cargo-profile fast-build \
+              --cargo-profile no-debug \
               --no-report \
               -E 'binary_id(prek::run) and test(run_basic)'
             echo "::endgroup::"
           done
 
-          cargo llvm-cov report --profile fast-build --lcov --output-path lcov.info
+          cargo llvm-cov report --profile no-debug --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -403,7 +403,7 @@ jobs:
             --lcov \
             --output-path lcov.info \
             --workspace \
-            --cargo-profile fast-build \
+            --cargo-profile no-debug \
             --profile ci-core \
             --features schemars \
             -E "${CI_CORE_FILTER}"
@@ -475,7 +475,7 @@ jobs:
             --lcov `
             --output-path lcov.info `
             --workspace `
-            --cargo-profile fast-build `
+            --cargo-profile no-debug `
             --features schemars `
             --profile ci-core `
             -E $env:CI_CORE_FILTER
@@ -672,7 +672,7 @@ jobs:
             --lcov \
             --output-path lcov.info \
             --workspace \
-            --cargo-profile fast-build \
+            --cargo-profile no-debug \
             --features schemars \
             --profile ci-language \
             -E "$NEXTEST_FILTER"
@@ -692,7 +692,7 @@ jobs:
             --lcov `
             --output-path lcov.info `
             --workspace `
-            --cargo-profile fast-build `
+            --cargo-profile no-debug `
             --features schemars `
             --profile ci-language `
             -E $env:NEXTEST_FILTER

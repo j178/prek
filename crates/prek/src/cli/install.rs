@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use bstr::ByteSlice;
 use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
@@ -525,7 +524,7 @@ pub(crate) async fn init_template_dir(
         .check(false)
         .output()
         .await?;
-    let template_dir = String::from_utf8_lossy(output.stdout.trim()).to_string();
+    let template_dir = String::from_utf8_lossy(output.stdout.trim_ascii()).to_string();
 
     if template_dir.is_empty() || !is_same_file(&directory, &template_dir)? {
         warn_user!(
