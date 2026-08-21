@@ -257,6 +257,8 @@ fn parse_boolish(val: &str) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::{EnvVars, EnvVarsRead, parse_boolish};
 
     #[test]
@@ -283,10 +285,10 @@ mod tests {
         assert!(env_vars.is_set(EnvVars::PREK_COLOR));
 
         let env_vars = EnvVars::from_map(&[]);
-        assert!(matches!(
+        assert_matches!(
             env_vars.var(EnvVars::PREK_COLOR),
             Err(std::env::VarError::NotPresent)
-        ));
+        );
         assert!(!env_vars.is_set(EnvVars::PREK_COLOR));
 
         let env_vars = EnvVars::from_map(&[(EnvVars::PRE_COMMIT_NO_CONCURRENCY, "1")]);

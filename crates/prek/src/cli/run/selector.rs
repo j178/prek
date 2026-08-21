@@ -804,6 +804,8 @@ fn parse_comma_separated(input: &str) -> impl Iterator<Item = &str> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use tempfile::TempDir;
 
@@ -845,14 +847,14 @@ mod tests {
 
         // Test explicit hook ID with colon prefix
         let selector = parse_single_selector(":black", fs.root(), SelectorSource::CliArg, &fs)?;
-        assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black"));
+        assert_matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black");
 
         let selector = parse_single_selector(":lint:ruff", fs.root(), SelectorSource::CliArg, &fs)?;
-        assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "lint:ruff"));
+        assert_matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "lint:ruff");
 
         // Test bare hook ID (backward compatibility)
         let selector = parse_single_selector("black", fs.root(), SelectorSource::CliArg, &fs)?;
-        assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black"));
+        assert_matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black");
 
         Ok(())
     }
@@ -863,18 +865,21 @@ mod tests {
 
         // Test project path with slash
         let selector = parse_single_selector("src/", fs.root(), SelectorSource::CliArg, &fs)?;
-        assert!(
-            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("src"))
+        assert_matches!(
+            selector.expr,
+            SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("src")
         );
 
         // Test current directory
         let selector = parse_single_selector(".", fs.root(), SelectorSource::CliArg, &fs)?;
-        assert!(
-            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
+        assert_matches!(
+            selector.expr,
+            SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("")
         );
         let selector = parse_single_selector("./", fs.root(), SelectorSource::CliArg, &fs)?;
-        assert!(
-            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
+        assert_matches!(
+            selector.expr,
+            SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("")
         );
 
         Ok(())
