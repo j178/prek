@@ -235,6 +235,8 @@ impl TryFrom<FilePatternWire> for FilePattern {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -251,8 +253,9 @@ mod tests {
         "};
         let parsed: Wrapper =
             serde_saphyr::from_str(regex_yaml).expect("regex patterns should parse");
-        assert!(
-            matches!(parsed.files, FilePattern::Regex(_)),
+        assert_matches!(
+            parsed.files,
+            FilePattern::Regex(_),
             "expected regex pattern"
         );
         assert!(parsed.files.is_match(Path::new("src/main.rs")));
@@ -267,10 +270,7 @@ mod tests {
         "};
         let parsed: Wrapper =
             serde_saphyr::from_str(glob_yaml).expect("glob patterns should parse");
-        assert!(
-            matches!(parsed.files, FilePattern::Glob(_)),
-            "expected glob pattern"
-        );
+        assert_matches!(parsed.files, FilePattern::Glob(_), "expected glob pattern");
         assert!(parsed.files.is_match(Path::new("src/lib/main.rs")));
         assert!(!parsed.files.is_match(Path::new("src/lib/main.py")));
         assert!(parsed.exclude.is_match(Path::new("target/debug/app")));

@@ -55,6 +55,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
+use std::debug_assert_matches;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -198,7 +199,7 @@ impl CompletedBars {
         // Hooks can finish in a different order than their progress rows were inserted;
         // collapse completed rows by their original visual order.
         let replaced = self.visible.insert(completed.line_order, completed);
-        debug_assert!(replaced.is_none());
+        debug_assert_matches!(replaced, None);
     }
 
     fn collapse_one_line(&mut self) -> Option<CollapsedCompletedBars> {

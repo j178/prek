@@ -116,9 +116,11 @@ impl RubyRequest {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+    use std::path::PathBuf;
+
     use super::*;
     use crate::config::Language;
-    use std::path::PathBuf;
 
     #[test]
     fn test_parse_ruby_request() {
@@ -153,10 +155,10 @@ mod tests {
         );
 
         // Semver range
-        assert!(matches!(
+        assert_matches!(
             RubyRequest::from_str(">=3.2, <4.0").unwrap(),
             RubyRequest::Range(_, _)
-        ));
+        );
         assert!(RubyRequest::from_str("ruby>=3.2, <4.0").is_err());
     }
 

@@ -1,3 +1,4 @@
+use std::debug_assert_matches;
 use std::ffi::{OsStr, OsString};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -303,7 +304,7 @@ impl<'a> ProjectPathNode<'a> {
             node = node.children.entry(component.as_os_str()).or_default();
         }
         let previous = node.project_idx.replace(project_idx);
-        debug_assert!(previous.is_none());
+        debug_assert_matches!(previous, None);
     }
 
     fn matching_projects(&self, path: &Path, matches: &mut Vec<usize>) {

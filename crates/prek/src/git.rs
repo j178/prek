@@ -1024,6 +1024,10 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
     #[cfg(unix)]
     use super::lfs_files;
     use super::zsplit;
@@ -1032,8 +1036,6 @@ mod tests {
         list_submodules, should_update_submodules, update_submodules,
     };
     use assert_cmd::assert::OutputAssertExt;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
 
     fn run_git(path: &Path, args: &[&str]) {
         let mut command = Command::new(GIT.as_ref().unwrap());
@@ -1108,7 +1110,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(matches!(err, Error::Command(_)));
+        assert_matches!(err, Error::Command(_));
         let message = err.to_string();
         assert!(message.contains("submodule update --init --recursive"));
         assert!(message.contains("--depth=1"));
@@ -1117,7 +1119,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(matches!(err, Error::Command(_)));
+        assert_matches!(err, Error::Command(_));
         let message = err.to_string();
         assert!(message.contains("submodule update --init --recursive"));
         assert!(!message.contains("--depth=1"));

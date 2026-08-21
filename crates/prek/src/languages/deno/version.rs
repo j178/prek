@@ -122,6 +122,8 @@ impl DenoRequest {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -174,10 +176,10 @@ mod tests {
     #[test]
     fn test_deno_request_range() {
         let req = DenoRequest::from_str(">=2.0").unwrap();
-        assert!(matches!(req, DenoRequest::Range(_)));
+        assert_matches!(req, DenoRequest::Range(_));
 
         let req = DenoRequest::from_str(">=2.0, <3.0").unwrap();
-        assert!(matches!(req, DenoRequest::Range(_)));
+        assert_matches!(req, DenoRequest::Range(_));
     }
 
     #[test]

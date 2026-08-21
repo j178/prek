@@ -118,6 +118,8 @@ impl BunRequest {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -164,10 +166,10 @@ mod tests {
     #[test]
     fn test_bun_request_range() {
         let req = BunRequest::from_str(">=1.0").unwrap();
-        assert!(matches!(req, BunRequest::Range(_)));
+        assert_matches!(req, BunRequest::Range(_));
 
         let req = BunRequest::from_str(">=1.0, <2.0").unwrap();
-        assert!(matches!(req, BunRequest::Range(_)));
+        assert_matches!(req, BunRequest::Range(_));
     }
 
     #[test]
