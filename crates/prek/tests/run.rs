@@ -3244,18 +3244,18 @@ fn color() -> Result<()> {
     ");
 
     // Force color output
-    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    color[32m....................................................................[39m[42mPassed[49m
+    color[32m....................................................................[39m[38;5;231;48;5;35mPassed[0m
     [2m- hook id: color[0m
     [2m- duration: [TIME][0m
 
       [1;32mHello, world![0m
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -3297,11 +3297,11 @@ fn tty_output_preserves_color_without_replaying_terminal_controls() -> Result<()
     cmd_snapshot!(
         context.filters(),
         context.run().arg("--color=always"),
-        @r#"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
-    terminal-output[32m..........................................................[39m[42mPassed[49m
+    terminal-output[32m..........................................................[39m[38;5;231;48;5;35mPassed[0m
     [2m- hook id: terminal-output[0m
     [2m- duration: [TIME][0m
 
@@ -3309,7 +3309,7 @@ fn tty_output_preserves_color_without_replaying_terminal_controls() -> Result<()
       plain
 
     ----- stderr -----
-    "#
+    "
     );
 
     Ok(())
@@ -4482,18 +4482,18 @@ fn run_with_stdin_closed() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--color").arg("always"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--color").arg("always"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-stdin[32m..............................................................[39m[42mPassed[49m
+    check-stdin[32m..............................................................[39m[38;5;231;48;5;35mPassed[0m
     [2m- hook id: check-stdin[0m
     [2m- duration: [TIME][0m
 
       STDIN closed
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Test `prek --version` outputs version info.

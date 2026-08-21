@@ -62,7 +62,7 @@ use std::time::{Duration, Instant};
 use anstyle_parse::{DefaultCharAccumulator, Parser, Perform};
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, XtermColors};
 use rustc_hash::FxHashMap;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -676,9 +676,21 @@ impl HookRunReporter {
 
         let label = progress.message();
         let (status, status_width) = if passed {
-            ("Passed".on_green().to_string(), "Passed".width())
+            (
+                "Passed"
+                    .on_color(XtermColors::Jade)
+                    .color(XtermColors::White)
+                    .to_string(),
+                "Passed".width(),
+            )
         } else {
-            ("Failed".on_red().to_string(), "Failed".width())
+            (
+                "Failed"
+                    .on_color(XtermColors::Red)
+                    .color(XtermColors::White)
+                    .to_string(),
+                "Failed".width(),
+            )
         };
         let dots = self
             .dots
