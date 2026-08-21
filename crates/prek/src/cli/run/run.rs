@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use asyncband::semaphore::Semaphore;
 use futures_util::TryStreamExt;
 use futures_util::stream::FuturesUnordered;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, XtermColors};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use prek_identify::{TagSet, tags_from_path};
@@ -1260,20 +1260,36 @@ impl StatusPrinter {
         let (suffix, status_line, status_width) = match status {
             RunStatus::NoFiles => (
                 Self::NO_FILES,
-                Self::SKIPPED.black().on_cyan().to_string(),
+                Self::SKIPPED
+                    .on_color(XtermColors::FlushOrange)
+                    .color(XtermColors::White)
+                    .to_string(),
                 Self::SKIPPED.width(),
             ),
             RunStatus::DryRun => (
                 "",
-                Self::DRY_RUN.on_yellow().to_string(),
+                Self::DRY_RUN
+                    .on_color(XtermColors::FlushOrange)
+                    .color(XtermColors::White)
+                    .to_string(),
                 Self::DRY_RUN.width(),
             ),
             RunStatus::Success => (
                 "",
-                Self::PASSED.on_green().to_string(),
+                Self::PASSED
+                    .on_color(XtermColors::Jade)
+                    .color(XtermColors::White)
+                    .to_string(),
                 Self::PASSED.width(),
             ),
-            RunStatus::Failed => ("", Self::FAILED.on_red().to_string(), Self::FAILED.width()),
+            RunStatus::Failed => (
+                "",
+                Self::FAILED
+                    .on_color(XtermColors::Red)
+                    .color(XtermColors::White)
+                    .to_string(),
+                Self::FAILED.width(),
+            ),
         };
         let (prefix, prefix_width) = if prefix.is_empty() {
             (String::new(), 0)

@@ -3244,18 +3244,18 @@ fn color() -> Result<()> {
     ");
 
     // Force color output
-    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    color[32m....................................................................[39m[42mPassed[49m
+    color[32m....................................................................[39m[38;5;231;48;5;35mPassed[0m
     [2m- hook id: color[0m
     [2m- duration: [TIME][0m
 
       [1;32mHello, world![0m
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
