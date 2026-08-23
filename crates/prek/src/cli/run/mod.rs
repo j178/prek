@@ -1,3 +1,5 @@
+use owo_colors::{Style, Styled};
+
 pub(crate) use filter::{
     CollectOptions, FileSelection, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles,
     RunFileIndex, RunInput, collect_run_input,
@@ -15,3 +17,8 @@ mod reporter;
 #[allow(clippy::module_inception)]
 mod run;
 mod selector;
+
+const PASSED: Styled<&str> = Style::new().green().reversed().style("Passed");
+const FAILED: Styled<&str> = Style::new().red().reversed().style("Failed");
+const SKIPPED: Styled<&str> = Style::new().cyan().reversed().style("Skipped");
+const DRY_RUN: Styled<&str> = Style::new().yellow().reversed().style("Dry Run");

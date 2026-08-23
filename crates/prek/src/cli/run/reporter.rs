@@ -62,7 +62,7 @@ use std::time::{Duration, Instant};
 use anstyle_parse::{DefaultCharAccumulator, Parser, Perform};
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
-use owo_colors::{OwoColorize, XtermColors};
+use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -71,6 +71,8 @@ use crate::hook::Hook;
 use crate::printer::Printer;
 use crate::process::OutputSink;
 use crate::workspace;
+
+use super::{FAILED, PASSED};
 
 /// UI state for one hook run.
 ///
@@ -675,27 +677,11 @@ impl HookRunReporter {
         };
 
         let label = progress.message();
-        let (status, status_width) = if passed {
-            (
-                "Passed"
-                    .on_color(XtermColors::Jade)
-                    .color(XtermColors::White)
-                    .to_string(),
-                "Passed".width(),
-            )
-        } else {
-            (
-                "Failed"
-                    .on_color(XtermColors::Red)
-                    .color(XtermColors::White)
-                    .to_string(),
-                "Failed".width(),
-            )
-        };
+        let status = if passed { PASSED } else { FAILED };
         let dots = self
             .dots
             .saturating_add("Passed".width())
-            .saturating_sub(label.width() + status_width);
+            .saturating_sub(label.width() + status.inner().width());
         let dots = ".".repeat(dots).green().to_string();
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
