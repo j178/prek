@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import platform
@@ -140,11 +141,9 @@ def download_distfile(version: str) -> Path:
     return distfile
 
 
-def openssl_digest(algorithm: str, file_path: Path) -> str:
-    out = run(["openssl", "dgst", f"-{algorithm}", str(file_path)], capture=True)
-    if "= " not in out:
-        raise RuntimeError(f"Unexpected openssl output: {out}")
-    return out.split("= ", 1)[1].strip()
+def file_digest(algorithm: str, file_path: Path) -> str:
+    with file_path.open("rb") as file:
+        return hashlib.file_digest(file, algorithm).hexdigest()
 
 
 def generate_cargo_crates(distfile: Path, version: str) -> str:
@@ -308,8 +307,8 @@ def main() -> None:
     version = current_tag(root).removeprefix("v")
 
     distfile = download_distfile(version)
-    rmd160 = openssl_digest("rmd160", distfile)
-    sha256 = openssl_digest("sha256", distfile)
+    rmd160 = file_digest("ripemd160", distfile)
+    sha256 = file_digest("sha256", distfile)
     size = distfile.stat().st_size
 
     cargo_crates = generate_cargo_crates(distfile, version)
