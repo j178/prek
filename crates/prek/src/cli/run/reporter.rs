@@ -72,6 +72,8 @@ use crate::printer::Printer;
 use crate::process::OutputSink;
 use crate::workspace;
 
+use super::{FAILED, PASSED};
+
 /// UI state for one hook run.
 ///
 /// A hook occupies one main progress line and, once it emits output, zero to
@@ -675,15 +677,11 @@ impl HookRunReporter {
         };
 
         let label = progress.message();
-        let (status, status_width) = if passed {
-            ("Passed".on_green().to_string(), "Passed".width())
-        } else {
-            ("Failed".on_red().to_string(), "Failed".width())
-        };
+        let status = if passed { PASSED } else { FAILED };
         let dots = self
             .dots
             .saturating_add("Passed".width())
-            .saturating_sub(label.width() + status_width);
+            .saturating_sub(label.width() + status.inner().width());
         let dots = ".".repeat(dots).green().to_string();
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());

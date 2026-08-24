@@ -38,6 +38,8 @@ use crate::terminal::{USE_COLOR, sanitize_output};
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 
+use super::{DRY_RUN, FAILED, PASSED, SKIPPED};
+
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     store: &Store,
@@ -1220,10 +1222,6 @@ struct StatusPrinter {
 }
 
 impl StatusPrinter {
-    const PASSED: &'static str = "Passed";
-    const FAILED: &'static str = "Failed";
-    const SKIPPED: &'static str = "Skipped";
-    const DRY_RUN: &'static str = "Dry Run";
     const NO_FILES: &'static str = "(no files to check)";
 
     fn for_hooks<T>(hooks: &[T], printer: Printer) -> Self
@@ -1238,7 +1236,7 @@ impl StatusPrinter {
         let columns = std::cmp::max(
             79,
             // Hook name...(no files to check)Skipped
-            name_len + 3 + Self::NO_FILES.len() + Self::SKIPPED.len(),
+            name_len + 3 + Self::NO_FILES.len() + SKIPPED.inner().width(),
         );
         Self { printer, columns }
     }
@@ -1248,7 +1246,7 @@ impl StatusPrinter {
     }
 
     fn bar_len(&self) -> usize {
-        self.columns - Self::PASSED.len()
+        self.columns - PASSED.inner().width()
     }
 
     fn write(
@@ -1257,30 +1255,19 @@ impl StatusPrinter {
         prefix: &str,
         status: RunStatus,
     ) -> Result<(), std::fmt::Error> {
-        let (suffix, status_line, status_width) = match status {
-            RunStatus::NoFiles => (
-                Self::NO_FILES,
-                Self::SKIPPED.black().on_cyan().to_string(),
-                Self::SKIPPED.width(),
-            ),
-            RunStatus::DryRun => (
-                "",
-                Self::DRY_RUN.on_yellow().to_string(),
-                Self::DRY_RUN.width(),
-            ),
-            RunStatus::Success => (
-                "",
-                Self::PASSED.on_green().to_string(),
-                Self::PASSED.width(),
-            ),
-            RunStatus::Failed => ("", Self::FAILED.on_red().to_string(), Self::FAILED.width()),
+        let (suffix, status_line) = match status {
+            RunStatus::NoFiles => (Self::NO_FILES, SKIPPED),
+            RunStatus::DryRun => ("", DRY_RUN),
+            RunStatus::Success => ("", PASSED),
+            RunStatus::Failed => ("", FAILED),
         };
         let (prefix, prefix_width) = if prefix.is_empty() {
             (String::new(), 0)
         } else {
             (prefix.dimmed().to_string(), prefix.width())
         };
-        let used_width = prefix_width + hook_name.width() + suffix.width() + status_width;
+        let used_width =
+            prefix_width + hook_name.width() + suffix.width() + status_line.inner().width();
         let dots = self.columns.saturating_sub(used_width);
         let dots = ".".repeat(dots).green().to_string();
         let line = format!("{prefix}{hook_name}{dots}{suffix}{status_line}");

@@ -3248,7 +3248,7 @@ fn color() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    color[32m....................................................................[39m[42mPassed[49m
+    color[32m....................................................................[39m[32;7mPassed[0m
     [2m- hook id: color[0m
     [2m- duration: [TIME][0m
 
@@ -3301,7 +3301,7 @@ fn tty_output_preserves_color_without_replaying_terminal_controls() -> Result<()
     success: true
     exit_code: 0
     ----- stdout -----
-    terminal-output[32m..........................................................[39m[42mPassed[49m
+    terminal-output[32m..........................................................[39m[32;7mPassed[0m
     [2m- hook id: terminal-output[0m
     [2m- duration: [TIME][0m
 
@@ -4486,7 +4486,7 @@ fn run_with_stdin_closed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    check-stdin[32m..............................................................[39m[42mPassed[49m
+    check-stdin[32m..............................................................[39m[32;7mPassed[0m
     [2m- hook id: check-stdin[0m
     [2m- duration: [TIME][0m
 
