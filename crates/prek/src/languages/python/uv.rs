@@ -1,4 +1,5 @@
 use std::env::consts::EXE_EXTENSION;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
@@ -6,7 +7,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result, bail};
 use http::header::ACCEPT;
 use semver::{Version, VersionReq};
-use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem};
+use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
@@ -15,7 +16,7 @@ use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
 use crate::http::{
-    DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact, download_artifact_with,
+    DownloadChecksumPolicy, REQWEST_CLIENT, TempDownload, download_artifact, download_artifact_with,
 };
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
@@ -34,6 +35,24 @@ const GITHUB_UV_RELEASE_BASE: &str = "https://github.com/astral-sh/uv/releases/d
 
 fn release_archive_url(base: &str, version: &str, archive_name: &str) -> String {
     format!("{base}/{version}/{archive_name}")
+}
+
+fn static_musl_release_target_for_host(
+    operating_system: OperatingSystem,
+    architecture: Architecture,
+    environment: Environment,
+) -> Option<&'static str> {
+    match (operating_system, architecture, environment) {
+        (OperatingSystem::Linux, Architecture::X86_64, Environment::Gnu) => {
+            Some("x86_64-unknown-linux-musl")
+        }
+        (
+            OperatingSystem::Linux,
+            Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            Environment::Gnu,
+        ) => Some("aarch64-unknown-linux-musl"),
+        _ => None,
+    }
 }
 
 fn wheel_platform_tag_for_host(
@@ -127,6 +146,42 @@ fn validate_uv_binary(uv_path: &Path) -> Result<Version> {
     Ok(version)
 }
 
+fn should_use_static_musl_fallback(error: &anyhow::Error, uv_path: &Path) -> bool {
+    // Linux reports ENOENT for both a missing executable and a missing ELF interpreter. Checking
+    // the downloaded file distinguishes NixOS's nonstandard loader path from a missing archive entry.
+    if !uv_path.is_file() {
+        return false;
+    }
+
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<io::Error>()
+            .is_some_and(|error| error.kind() == io::ErrorKind::NotFound)
+    })
+}
+
+fn invalid_uv_binary_error(uv_path: &Path, error: anyhow::Error) -> anyhow::Error {
+    error.context(format!(
+        "uv binary at `{}` failed validation. This usually means the downloaded uv binary is \
+         incompatible with the current runtime environment, for example due to a libc mismatch \
+         or a missing dynamic loader path. If this keeps happening, please report it with details \
+         about your environment and the full error output",
+        uv_path.display()
+    ))
+}
+
+/// Keeps the temporary download directory alive while its extracted binary is inspected.
+struct DownloadedUv {
+    path: PathBuf,
+    _download: TempDownload,
+}
+
+impl DownloadedUv {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
 async fn replace_uv_binary(source: &Path, target_path: &Path) -> Result<()> {
     if let Some(parent) = target_path.parent() {
         fs_err::tokio::create_dir_all(parent).await?;
@@ -194,11 +249,11 @@ impl InstallSource {
     async fn install(&self, store: &Store, target: &Path) -> Result<Uv> {
         match self {
             Self::Astral => {
-                self.install_from_release_archive(store, target, ASTRAL_UV_RELEASE_BASE)
+                self.install_from_release_archive(store, target, ASTRAL_UV_RELEASE_BASE, &HOST)
                     .await?;
             }
             Self::GitHub => {
-                self.install_from_release_archive(store, target, GITHUB_UV_RELEASE_BASE)
+                self.install_from_release_archive(store, target, GITHUB_UV_RELEASE_BASE, &HOST)
                     .await?;
             }
             Self::PyPi(source) => self.install_from_pypi(store, target, source).await?,
@@ -206,17 +261,9 @@ impl InstallSource {
         }
 
         let uv_path = target.join("uv").with_extension(EXE_EXTENSION);
-        match validate_uv_binary(&uv_path) {
-            Ok(version) => trace!(version = %version, "Successfully installed uv"),
-            Err(err) => bail!(
-                "Installed uv at `{}` failed validation: {err}. \
-                This usually means the downloaded uv binary is incompatible with the \
-                current runtime environment, for example due to a libc mismatch or a \
-                missing dynamic loader path. If this keeps happening, please report it \
-                with details about your environment and the full error output.",
-                uv_path.display()
-            ),
-        }
+        let version = validate_uv_binary(&uv_path)
+            .map_err(|error| invalid_uv_binary_error(&uv_path, error))?;
+        trace!(version = %version, "Successfully installed uv");
 
         Ok(Uv::new(uv_path))
     }
@@ -248,9 +295,65 @@ impl InstallSource {
         store: &Store,
         target: &Path,
         base_url: &str,
+        host: &Triple,
     ) -> Result<()> {
+        let host_target = host.to_string();
+        let downloaded = self
+            .download_release_archive(store, base_url, &host_target)
+            .await?;
+
+        let downloaded = match validate_uv_binary(downloaded.path()) {
+            Ok(_) => downloaded,
+            Err(error) => {
+                let Some(static_target) = static_musl_release_target_for_host(
+                    host.operating_system,
+                    host.architecture,
+                    host.environment,
+                ) else {
+                    return Err(invalid_uv_binary_error(downloaded.path(), error));
+                };
+
+                if !should_use_static_musl_fallback(&error, downloaded.path()) {
+                    return Err(invalid_uv_binary_error(downloaded.path(), error));
+                }
+
+                warn!(
+                    target = %host_target,
+                    fallback_target = static_target,
+                    %error,
+                    "uv release binary cannot start; retrying with the static musl binary"
+                );
+                drop(downloaded);
+
+                let fallback = self
+                    .download_release_archive(store, base_url, static_target)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to download static uv fallback `{static_target}`")
+                    })?;
+                validate_uv_binary(fallback.path())
+                    .map_err(|error| invalid_uv_binary_error(fallback.path(), error))?;
+                fallback
+            }
+        };
+
+        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+
+        debug!(source = ?downloaded.path(), target = %target_path.display(), "Moving uv to target");
+        // TODO: retry on Windows
+        replace_uv_binary(downloaded.path(), &target_path).await?;
+
+        Ok(())
+    }
+
+    async fn download_release_archive(
+        &self,
+        store: &Store,
+        base_url: &str,
+        release_target: &str,
+    ) -> Result<DownloadedUv> {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
-        let archive_name = format!("uv-{HOST}.{ext}");
+        let archive_name = format!("uv-{release_target}.{ext}");
         let download_url = release_archive_url(base_url, CUR_UV_VERSION, &archive_name);
         let checksum_url = format!("{download_url}.sha256");
 
@@ -262,14 +365,12 @@ impl InstallSource {
         let extracted = archive::extract_archive(download.path())
             .await
             .context("Failed to extract uv")?;
-        let source = extracted.join("uv").with_extension(EXE_EXTENSION);
-        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+        let path = extracted.join("uv").with_extension(EXE_EXTENSION);
 
-        debug!(?source, target = %target_path.display(), "Moving uv to target");
-        // TODO: retry on Windows
-        replace_uv_binary(&source, &target_path).await?;
-
-        Ok(())
+        Ok(DownloadedUv {
+            path,
+            _download: download,
+        })
     }
 
     async fn install_from_pypi(
@@ -749,6 +850,146 @@ mod tests {
             tag,
             "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
         );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    mod install_from_release_archive {
+        use std::collections::HashMap;
+
+        use anyhow::{Context, Result};
+        use async_compression::tokio::write::GzipEncoder;
+        use aws_lc_rs::digest::{SHA256, digest};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        use tokio::task::JoinHandle;
+        use tokio_tar::{Builder, Header};
+
+        use super::*;
+
+        async fn uv_archive(contents: &[u8]) -> Result<Vec<u8>> {
+            let mut header = Header::new_gnu();
+            header.set_mode(0o755);
+            header.set_size(contents.len().try_into()?);
+
+            let mut archive = Builder::new(Vec::new());
+            archive
+                .append_data(&mut header, "uv-release/uv", contents)
+                .await?;
+            let archive = archive.into_inner().await?;
+
+            let mut encoder = GzipEncoder::new(Vec::new());
+            encoder.write_all(&archive).await?;
+            encoder.shutdown().await?;
+            Ok(encoder.into_inner())
+        }
+
+        fn add_release(
+            files: &mut HashMap<String, Vec<u8>>,
+            release_target: &str,
+            archive: Vec<u8>,
+        ) {
+            let archive_name = format!("uv-{release_target}.tar.gz");
+            let archive_path = format!("/{CUR_UV_VERSION}/{archive_name}");
+            let checksum = hex::encode(digest(&SHA256, &archive).as_ref());
+            files.insert(
+                format!("{archive_path}.sha256"),
+                format!("{checksum}  {archive_name}\n").into_bytes(),
+            );
+            files.insert(archive_path, archive);
+        }
+
+        async fn serve_files(
+            files: HashMap<String, Vec<u8>>,
+        ) -> Result<(String, JoinHandle<Result<()>>)> {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+            let url = format!("http://{}", listener.local_addr()?);
+            let server = tokio::spawn(async move {
+                loop {
+                    let (mut stream, _) = listener.accept().await?;
+                    let mut request = Vec::new();
+                    loop {
+                        let mut buffer = [0_u8; 1024];
+                        let read = stream.read(&mut buffer).await?;
+                        if read == 0 {
+                            break;
+                        }
+                        request.extend_from_slice(&buffer[..read]);
+                        if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+
+                    let request = std::str::from_utf8(&request)?;
+                    let path = request
+                        .split_ascii_whitespace()
+                        .nth(1)
+                        .context("Missing request path")?;
+                    let body = files
+                        .get(path)
+                        .cloned()
+                        .with_context(|| format!("Unexpected request path `{path}`"))?;
+                    stream
+                        .write_all(
+                            format!(
+                                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                body.len()
+                            )
+                            .as_bytes(),
+                        )
+                        .await?;
+                    stream.write_all(&body).await?;
+                }
+            });
+
+            Ok((url, server))
+        }
+
+        #[tokio::test]
+        async fn retries_with_static_musl_when_native_interpreter_is_missing() -> Result<()> {
+            let host: Triple = "x86_64-unknown-linux-gnu"
+                .parse()
+                .map_err(|error| anyhow::anyhow!("Failed to parse test target: {error}"))?;
+            let static_target = static_musl_release_target_for_host(
+                host.operating_system,
+                host.architecture,
+                host.environment,
+            )
+            .context("Missing static musl target")?;
+            let working_uv = format!("#!/bin/sh\nprintf 'uv {CUR_UV_VERSION}\\n'\n").into_bytes();
+
+            let mut files = HashMap::new();
+            add_release(
+                &mut files,
+                &host.to_string(),
+                uv_archive(b"#!/definitely/missing/prek-uv-interpreter\n").await?,
+            );
+            add_release(&mut files, static_target, uv_archive(&working_uv).await?);
+            let (base_url, server) = serve_files(files).await?;
+
+            let temp = tempfile::tempdir()?;
+            let store = Store::from_path(temp.path().join("store"))?.init()?;
+            let target = temp.path().join("target");
+            let source = InstallSource::Astral;
+            let result = source
+                .install_from_release_archive(&store, &target, &base_url, &host)
+                .await;
+            server.abort();
+            result?;
+
+            let installed = target.join("uv").with_extension(EXE_EXTENSION);
+            assert_eq!(fs_err::read(installed)?, working_uv);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn missing_download_does_not_use_static_musl_fallback() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let uv = temp.path().join("missing-uv");
+        let error = validate_uv_binary(&uv).unwrap_err();
+
+        assert!(!should_use_static_musl_fallback(&error, &uv));
         Ok(())
     }
 
