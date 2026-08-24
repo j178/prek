@@ -289,7 +289,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -316,12 +316,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-llvm-cov
 
@@ -385,12 +385,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-llvm-cov
 
@@ -451,12 +451,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-llvm-cov
 
@@ -525,12 +525,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-llvm-cov
 
@@ -571,7 +571,7 @@ jobs:
 
       - name: "Install mise"
         if: ${{ contains(format(' {0} ', matrix.languages), ' mise ') }}
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
         with:
           version: ${{ env.MISE_VERSION }}
           install: false
