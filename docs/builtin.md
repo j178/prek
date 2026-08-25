@@ -65,7 +65,19 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 ### Disabling the fast path
 
-If you need to compare with the original behavior or encounter differences:
+To use the pinned repository implementation for a single hook, explicitly set the language
+declared by that hook:
+
+```yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        language: python  # Use the pinned repository implementation
+```
+
+To disable the fast path for every hook in a prek invocation:
 
 ```bash
 PREK_NO_FAST_PATH=1 prek run
