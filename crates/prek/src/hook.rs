@@ -56,6 +56,7 @@ pub(crate) struct HookSpec {
     name: String,
     entry: String,
     language: Language,
+    language_overridden: bool,
     priority: Option<config::Priority>,
     groups: Option<Vec<String>>,
     options: HookOptions,
@@ -73,6 +74,7 @@ impl HookSpec {
         }
         if let Some(language) = &config.language {
             spec.language.clone_from(language);
+            spec.language_overridden = true;
         }
         if config.priority.is_some() {
             spec.priority.clone_from(&config.priority);
@@ -169,6 +171,7 @@ impl From<ManifestHook> for HookSpec {
             name: hook.name,
             entry: hook.entry,
             language: hook.language,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: hook.options,
@@ -183,6 +186,7 @@ impl From<LocalHook> for HookSpec {
             name: hook.name,
             entry: hook.entry,
             language: hook.language,
+            language_overridden: false,
             priority: hook.priority,
             groups: hook.groups,
             options: hook.options,
@@ -197,6 +201,7 @@ impl From<MetaHook> for HookSpec {
             name: hook.name,
             entry: String::new(),
             language: Language::System,
+            language_overridden: false,
             priority: hook.priority,
             groups: hook.groups,
             options: hook.options,
@@ -211,6 +216,7 @@ impl From<BuiltinHook> for HookSpec {
             name: hook.name,
             entry: hook.entry,
             language: Language::System,
+            language_overridden: false,
             priority: hook.priority,
             groups: hook.groups,
             options: hook.options,
@@ -347,6 +353,7 @@ pub(crate) struct Hook {
     pub name: String,
     pub entry: HookEntry,
     pub language: Language,
+    pub(crate) language_overridden: bool,
     pub alias: String,
     pub files: Option<FilePattern>,
     pub exclude: Option<FilePattern>,
@@ -398,6 +405,7 @@ impl Hook {
             name,
             entry: raw_entry,
             language,
+            language_overridden,
             priority,
             groups,
             options,
@@ -449,6 +457,7 @@ impl Hook {
             name,
             entry,
             language,
+            language_overridden,
             alias: alias.unwrap_or_default(),
             files,
             exclude,
@@ -809,6 +818,7 @@ mod tests {
         Stage, Stages,
     };
     use crate::hook::HookSpec;
+    use crate::hooks::check_fast_path;
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
@@ -933,6 +943,7 @@ mod tests {
                 },
             ),
             language: Python,
+            language_overridden: false,
             alias: "alias-1",
             files: None,
             exclude: None,
@@ -982,6 +993,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn explicit_language_override_uses_pinned_remote_hook() -> Result<()> {
+        let (temp, project) = setup_hook_test()?;
+        let repo = Arc::new(Repo::Remote {
+            path: temp.path().join("remote-repo"),
+            url: "https://github.com/pre-commit/pre-commit-hooks".to_string(),
+            rev: "v6.0.0".to_string(),
+            hooks: vec![],
+        });
+        let manifest_hook = ManifestHook {
+            id: "check-yaml".to_string(),
+            name: "check yaml".to_string(),
+            entry: "check-yaml".to_string(),
+            language: Language::Python,
+            options: HookOptions::default(),
+        };
+        let hook_override = RemoteHook {
+            id: "check-yaml".to_string(),
+            name: None,
+            entry: None,
+            language: Some(Language::Python),
+            priority: None,
+            groups: None,
+            options: HookOptions::default(),
+        };
+
+        let hook_spec = HookSpec::from_remote(manifest_hook, &hook_override);
+        let hook = Hook::from_spec(project, repo, hook_spec, 0).await?;
+
+        assert!(!check_fast_path(&hook));
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn hook_from_spec_empty_hook_stages_inherit_default_stages() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
@@ -998,6 +1042,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions {
@@ -1021,6 +1066,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions::default(),
@@ -1048,6 +1094,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions::default(),
@@ -1076,6 +1123,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions::default(),
@@ -1105,6 +1153,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions {
@@ -1141,6 +1190,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: "./hook.py".to_string(),
             language: Language::Python,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions {
@@ -1275,6 +1325,7 @@ mod tests {
             name: "test-hook".to_string(),
             entry: entry.to_string(),
             language,
+            language_overridden: false,
             priority: None,
             groups: None,
             options: HookOptions {
