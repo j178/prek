@@ -1,41 +1,22 @@
 mod common;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use std::path::PathBuf;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestEnv, cmd_snapshot};
 use assert_fs::fixture::ChildPath;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
-fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
-    let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
-    repo_dir.create_dir_all()?;
+fn with_try_repo_filters(context: TestEnv) -> TestEnv {
+    context.with_filters([(r"[a-f0-9]{40}", "[COMMIT_SHA]"), ("'", "\"")])
+}
 
-    git_cmd(&repo_dir).arg("init").assert().success();
+fn create_hook_repo(context: &TestEnv, repo_name: &str) -> Result<PathBuf> {
+    let repo = context.create_repo(repo_name);
 
-    // Configure the author specifically for this hook repository
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("user.name")
-        .arg("Prek Test")
-        .assert()
-        .success();
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("user.email")
-        .arg("test@prek.dev")
-        .assert()
-        .success();
-    // Disable autocrlf for test consistency
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("core.autocrlf")
-        .arg("false")
-        .assert()
-        .success();
-
-    repo_dir
+    repo.path()
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r#"
         - id: test-hook
@@ -50,49 +31,21 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     "#})?;
 
     // Add a dummy setup.py to make it an installable Python package
-    repo_dir
+    repo.path()
         .child("setup.py")
         .write_str("from setuptools import setup; setup(name='dummy-pkg', version='0.0.1')")?;
 
-    git_cmd(&repo_dir).arg("add").arg(".").assert().success();
+    repo.git_add_all();
+    repo.git_commit("Initial commit");
 
-    git_cmd(&repo_dir)
-        .arg("commit")
-        .arg("-m")
-        .arg("Initial commit")
-        .assert()
-        .success();
-
-    Ok(repo_dir.to_path_buf())
+    Ok(repo.path().to_path_buf())
 }
 
 // Helper for a repo with a hook that is designed to fail
-fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
-    let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
-    repo_dir.create_dir_all()?;
+fn create_failing_hook_repo(context: &TestEnv, repo_name: &str) -> Result<PathBuf> {
+    let repo = context.create_repo(repo_name);
 
-    git_cmd(&repo_dir).arg("init").assert().success();
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("user.name")
-        .arg("Prek Test")
-        .assert()
-        .success();
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("user.email")
-        .arg("test@prek.dev")
-        .assert()
-        .success();
-    // Disable autocrlf for test consistency
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("core.autocrlf")
-        .arg("false")
-        .assert()
-        .success();
-
-    repo_dir
+    repo.path()
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r#"
         - id: failing-hook
@@ -101,32 +54,24 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
           language: system
         "#})?;
 
-    git_cmd(&repo_dir).arg("add").arg(".").assert().success();
+    repo.git_add_all();
+    repo.git_commit("Initial commit");
 
-    git_cmd(&repo_dir)
-        .arg("commit")
-        .arg("-m")
-        .arg("Initial commit")
-        .assert()
-        .success();
-
-    Ok(repo_dir.to_path_buf())
+    Ok(repo.path().to_path_buf())
 }
 
 #[test]
 fn try_repo_basic() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context.work_dir().child("test.txt").write_str("test")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let repo_path = create_hook_repo(&context, "try-repo-basic")?;
 
-    let mut filters = context.filters();
-    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]"), ("'", "\"")]);
+    let context = with_try_repo_filters(context);
 
-    cmd_snapshot!(filters, context.try_repo().arg(&repo_path).arg("--skip").arg("another-hook"), @r#"
+    cmd_snapshot!(context, context.try_repo().arg(&repo_path).arg("--skip").arg("another-hook"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -148,18 +93,16 @@ fn try_repo_basic() -> Result<()> {
 
 #[test]
 fn try_repo_failing_hook() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context.work_dir().child("test.txt").write_str("test")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
 
-    let mut filters = context.filters();
-    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]"), ("'", "\"")]);
+    let context = with_try_repo_filters(context);
 
-    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r#"
+    cmd_snapshot!(context, context.try_repo().arg(&repo_path), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -183,18 +126,16 @@ fn try_repo_failing_hook() -> Result<()> {
 
 #[test]
 fn try_repo_specific_hook() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook")?;
 
     context.work_dir().child("test.txt").write_str("test")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    let mut filters = context.filters();
-    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]"), ("'", "\"")]);
+    let context = with_try_repo_filters(context);
 
-    cmd_snapshot!(filters, context.try_repo().arg(&repo_path).arg("another-hook"), @r#"
+    cmd_snapshot!(context, context.try_repo().arg(&repo_path).arg("another-hook"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -216,15 +157,15 @@ fn try_repo_specific_hook() -> Result<()> {
 
 #[test]
 fn try_repo_specific_rev() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context.work_dir().child("test.txt").write_str("test")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-rev")?;
 
-    let initial_rev = git_cmd(&repo_path)
+    let initial_rev = context
+        .git_at(&repo_path)
         .arg("rev-parse")
         .arg("HEAD")
         .output()?
@@ -240,22 +181,23 @@ fn try_repo_specific_rev() -> Result<()> {
           entry: echo new
           language: system
         "})?;
-    git_cmd(&repo_path).arg("add").arg(".").assert().success();
-    git_cmd(&repo_path)
+    context
+        .git_at(&repo_path)
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    context
+        .git_at(&repo_path)
         .arg("commit")
         .arg("-m")
         .arg("second")
         .assert()
         .success();
 
-    let mut filters = context.filters();
-    filters.extend([
-        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-        (&initial_rev, "[COMMIT_SHA]"),
-        ("'", "\""),
-    ]);
+    let context = with_try_repo_filters(context).with_filter(initial_rev.clone(), "[COMMIT_SHA]");
 
-    cmd_snapshot!(filters, context.try_repo().arg("../home/test-repos/try-repo-specific-rev")
+    cmd_snapshot!(context, context.try_repo().arg("../home/test-repos/try-repo-specific-rev")
         .arg("--ref")
         .arg(&initial_rev), @r#"
     success: true
@@ -281,8 +223,7 @@ fn try_repo_specific_rev() -> Result<()> {
 
 #[test]
 fn try_repo_uncommitted_changes() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 
@@ -298,23 +239,23 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ChildPath::new(&repo_path)
         .child("new-file.txt")
         .write_str("new")?;
-    git_cmd(&repo_path)
+    context
+        .git_at(&repo_path)
         .arg("add")
         .arg("new-file.txt")
         .assert()
         .success();
 
     context.work_dir().child("test.txt").write_str("test")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    let mut filters = context.filters();
-    filters.extend([
+    let context = context.with_filters([
         (r"try-repo-[^/\\]+", "[REPO]"),
         (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
         ("'", "\""),
     ]);
 
-    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r#"
+    cmd_snapshot!(context, context.try_repo().arg(&repo_path), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -337,19 +278,17 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
 #[test]
 fn try_repo_relative_path() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context.work_dir().child("test.txt").write_str("test")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let _repo_path = create_hook_repo(&context, "try-repo-relative")?;
     let relative_path = "../home/test-repos/try-repo-relative".to_string();
 
-    let mut filters = context.filters();
-    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
+    let context = context.with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]");
 
-    cmd_snapshot!(filters, context.try_repo().arg(&relative_path), @r#"
+    cmd_snapshot!(context, context.try_repo().arg(&relative_path), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -373,24 +312,29 @@ fn try_repo_relative_path() -> Result<()> {
 
 #[test]
 fn try_repo_dot_path() -> Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
     let repo_path = create_hook_repo(&context, "try-repo-dot")?;
 
     ChildPath::new(&repo_path)
         .child("test.txt")
         .write_str("test")?;
-    git_cmd(&repo_path).arg("add").arg(".").assert().success();
-    git_cmd(&repo_path)
+    context
+        .git_at(&repo_path)
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    context
+        .git_at(&repo_path)
         .arg("commit")
         .arg("-m")
         .arg("Add test file")
         .assert()
         .success();
 
-    let mut filters = context.filters();
-    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
+    let context = context.with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]");
 
-    cmd_snapshot!(filters, context.try_repo().current_dir(&repo_path).arg(".").arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.try_repo().current_dir(&repo_path).arg(".").arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -414,13 +358,12 @@ fn try_repo_dot_path() -> Result<()> {
 
 #[test]
 fn try_repo_builtin_hook() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context.work_dir().child("test.txt").write_str("test\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.try_repo().arg("builtin").arg("check-merge-conflict").arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.try_repo().arg("builtin").arg("check-merge-conflict").arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -441,13 +384,12 @@ fn try_repo_builtin_hook() -> Result<()> {
 
 #[test]
 fn try_repo_meta_hook() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context.work_dir().child("test.txt").write_str("test\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.try_repo().arg("meta").arg("identity").arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.try_repo().arg("meta").arg("identity").arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

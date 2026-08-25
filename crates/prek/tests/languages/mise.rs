@@ -1,11 +1,10 @@
 use std::env::consts::EXE_EXTENSION;
 
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd, make_executable};
+use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn reuses_managed_mise() {
@@ -13,9 +12,7 @@ fn reuses_managed_mise() {
         return;
     }
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -29,15 +26,14 @@ fn reuses_managed_mise() {
                 verbose: true
                 pass_filenames: false
     "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter(
         r"2026\.7\.18 [^\r\n]+ \(\d{4}-\d{2}-\d{2}\)",
         "2026.7.18 [PLATFORM] ([DATE])",
-    ));
+    );
 
-    cmd_snapshot!(filters.clone(), context.run()
+    cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
     success: true
     exit_code: 0
@@ -53,7 +49,7 @@ fn reuses_managed_mise() {
 
     // A different environment requirement forces another installer call. With downloads disabled
     // and no system binary, this run can only reuse the managed mise installed above.
-    context.write_pre_commit_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -66,9 +62,9 @@ fn reuses_managed_mise() {
                 verbose: true
                 pass_filenames: false
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(filters, context.run()
+    cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
     success: true
     exit_code: 0
@@ -89,13 +85,11 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
-    let hook_repo = context.home_dir().child("mise-system-hook-repo");
-    fs_err::create_dir_all(&hook_repo)?;
+    let hook_repo = context.create_repo("mise-system-hook");
     fs_err::write(
-        hook_repo.join(".pre-commit-hooks.yaml"),
+        hook_repo.path().join(".pre-commit-hooks.yaml"),
         indoc::indoc! {r#"
             - id: mise-system
               name: mise system
@@ -109,15 +103,10 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         "#},
     )?;
     // Provisioning must not read configuration from the hook repository.
-    fs_err::write(hook_repo.join("mise.toml"), "not valid = [")?;
-    git_cmd(&hook_repo).arg("init").assert().success();
-    git_cmd(&hook_repo).args(["add", "."]).assert().success();
-    git_cmd(&hook_repo)
-        .args(["commit", "-m", "Add mise hook"])
-        .assert()
-        .success();
-    let rev_output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
-    let rev = String::from_utf8(rev_output.stdout)?;
+    fs_err::write(hook_repo.path().join("mise.toml"), "not valid = [")?;
+    hook_repo.git_add_all();
+    hook_repo.git_commit("Add mise hook");
+    let rev = hook_repo.git_rev_parse("HEAD")?;
 
     // Keep a conflicting executable beside the real system mise. Activating the private tool must
     // not move this whole directory ahead of the PATH returned by `mise env`.
@@ -135,16 +124,16 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     #[cfg(windows)]
     fs_err::write(system_bin.join("zoxide.cmd"), "@exit /b 1\r\n")?;
 
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: '{}'
             rev: {}
             hooks:
               - id: mise-system
-    ", hook_repo.display(), rev.trim()});
+    ", hook_repo.path().display(), rev});
     // Early miserc discovery must not read configuration from the calling project.
     fs_err::write(context.work_dir().join(".miserc.toml"), "not valid = [")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let ambient_data = context.work_dir().join("ambient-mise-data");
     let path = std::env::join_paths(
@@ -156,7 +145,7 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
                 .flat_map(std::env::split_paths),
         ),
     )?;
-    cmd_snapshot!(context.filters(), context.run()
+    cmd_snapshot!(context, context.run()
         .env(EnvVars::PATH, path)
         .env(EnvVars::MISE_DATA_DIR, &ambient_data)
         .env("MISE_GLOBAL_CONFIG_FILE", "invalid ambient config")

@@ -1,14 +1,12 @@
 #[cfg(unix)]
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(unix)]
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
 #[cfg(unix)]
 #[test]
 fn multiline_entry_without_shell_uses_argv_semantics() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -21,9 +19,9 @@ fn multiline_entry_without_shell_uses_argv_semantics() {
             pass_filenames: false
             verbose: true
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -40,9 +38,7 @@ fn multiline_entry_without_shell_uses_argv_semantics() {
 #[cfg(unix)]
 #[test]
 fn shell_runs_multiline_entry_as_one_script() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -56,9 +52,9 @@ fn shell_runs_multiline_entry_as_one_script() {
             pass_filenames: false
             verbose: true
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -76,9 +72,7 @@ fn shell_runs_multiline_entry_as_one_script() {
 #[cfg(unix)]
 #[test]
 fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -97,9 +91,9 @@ fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
             verbose: true
     "#});
     context.work_dir().child("a.txt").write_str("a")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

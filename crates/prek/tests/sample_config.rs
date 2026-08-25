@@ -1,14 +1,14 @@
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 mod common;
 
 #[test]
 fn sample_config() -> anyhow::Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context.filters(), context.sample_config(), @"
+    cmd_snapshot!(context, context.sample_config(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26,7 +26,7 @@ fn sample_config() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.sample_config().arg("-f"), @r#"
+    cmd_snapshot!(context, context.sample_config().arg("-f"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -48,7 +48,7 @@ fn sample_config() -> anyhow::Result<()> {
           - id: check-added-large-files
     ");
 
-    cmd_snapshot!(context.filters(), context.sample_config().arg("-f").arg("sample.yaml"), @r#"
+    cmd_snapshot!(context, context.sample_config().arg("-f").arg("sample.yaml"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -73,7 +73,7 @@ fn sample_config() -> anyhow::Result<()> {
     let child = context.work_dir().join("child");
     fs_err::create_dir(&child)?;
 
-    cmd_snapshot!(context.filters(), context.sample_config().current_dir(&*child).arg("-f").arg("sample.yaml"), @r#"
+    cmd_snapshot!(context, context.sample_config().current_dir(&*child).arg("-f").arg("sample.yaml"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -99,9 +99,9 @@ fn sample_config() -> anyhow::Result<()> {
 
 #[test]
 fn sample_config_toml() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context.filters(), context.sample_config().arg("-f").arg("prek.toml"), @r#"
+    cmd_snapshot!(context, context.sample_config().arg("-f").arg("prek.toml"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -127,9 +127,9 @@ fn sample_config_toml() {
 
 #[test]
 fn sample_config_format() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context.filters(), context.sample_config().arg("--format").arg("toml"), @r#"
+    cmd_snapshot!(context, context.sample_config().arg("--format").arg("toml"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -148,7 +148,7 @@ fn sample_config_format() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.sample_config().arg("--format").arg("yaml"), @"
+    cmd_snapshot!(context, context.sample_config().arg("--format").arg("yaml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -166,7 +166,7 @@ fn sample_config_format() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.sample_config().arg("--format").arg("json"), @"
+    cmd_snapshot!(context, context.sample_config().arg("--format").arg("json"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -181,10 +181,10 @@ fn sample_config_format() {
 
 #[test]
 fn respect_format() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
     // Write YAML format even with `.toml` extension.
-    cmd_snapshot!(context.filters(), context.sample_config().arg("--format").arg("yaml").arg("-f").arg("prek.toml"), @"
+    cmd_snapshot!(context, context.sample_config().arg("--format").arg("yaml").arg("-f").arg("prek.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -209,10 +209,10 @@ fn respect_format() {
 
 #[test]
 fn respect_format_if_filename_missing() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
     // Create `prek.toml` when TOML format is specified but filename is not given.
-    cmd_snapshot!(context.filters(), context.sample_config().arg("--format").arg("toml").arg("-f"), @"
+    cmd_snapshot!(context, context.sample_config().arg("--format").arg("toml").arg("-f"), @"
     success: true
     exit_code: 0
     ----- stdout -----

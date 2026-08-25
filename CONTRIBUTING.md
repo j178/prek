@@ -41,10 +41,9 @@ In integration tests, you can use `cmd_snapshot!` macro to simplify creating sna
 ```rust
 #[test]
 fn test_run() {
-    let context = TestContext::new();
-    context.init_project();
+    let env = TestEnv::new();
 
-    cmd_snapshot!(context.filters(), context.run(), @"");
+    cmd_snapshot!(env, env.run(), @"");
 }
 ```
 

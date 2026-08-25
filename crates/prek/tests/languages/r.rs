@@ -1,18 +1,17 @@
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
     context
         .work_dir()
         .child(".Rprofile")
         .write_str(r#"stop("project .Rprofile should not be loaded")"#)?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -25,9 +24,9 @@ fn local_hook() -> anyhow::Result<()> {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -41,7 +40,7 @@ fn local_hook() -> anyhow::Result<()> {
     ");
 
     // Run again to verify the `check_health` logic.
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -59,12 +58,11 @@ fn local_hook() -> anyhow::Result<()> {
 
 #[test]
 fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
-    write_local_r_package(&context, "localdep")?;
+    write_local_r_package(context.work_dir(), "localdep")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -78,9 +76,9 @@ fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -98,11 +96,11 @@ fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let hook_repo = TestContext::new();
-    hook_repo.init_project();
+    let context = TestEnv::new();
+    let hook_repo = context.create_repo("r-hook");
 
     hook_repo
-        .work_dir()
+        .path()
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
             - id: r-remote
@@ -111,19 +109,17 @@ fn remote_repo_install() -> anyhow::Result<()> {
               entry: Rscript hello.R
         "})?;
     hook_repo
-        .work_dir()
+        .path()
         .child("hello.R")
         .write_str("localdep::hello()")?;
-    write_local_r_package(&hook_repo, "localdep")?;
-    write_renv_project(&hook_repo)?;
+    write_local_r_package(hook_repo.path(), "localdep")?;
+    write_renv_project(hook_repo.path())?;
 
-    hook_repo.git_add(".");
+    hook_repo.git_add_all();
     hook_repo.git_commit("Add R hook");
     hook_repo.git_tag("v1.0.0");
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -133,11 +129,11 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.work_dir().display()});
+    ", hook_repo.path().display()});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -155,9 +151,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
 #[test]
 fn language_version() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -171,9 +165,9 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -185,8 +179,8 @@ fn language_version() {
     ");
 }
 
-fn write_local_r_package(context: &TestContext, name: &str) -> anyhow::Result<()> {
-    let package_dir = context.work_dir().child(name);
+fn write_local_r_package(work_dir: &ChildPath, name: &str) -> anyhow::Result<()> {
+    let package_dir = work_dir.child(name);
     package_dir.create_dir_all()?;
     package_dir
         .child("DESCRIPTION")
@@ -213,11 +207,8 @@ fn write_local_r_package(context: &TestContext, name: &str) -> anyhow::Result<()
     Ok(())
 }
 
-fn write_renv_project(context: &TestContext) -> anyhow::Result<()> {
-    context
-        .work_dir()
-        .child("renv.lock")
-        .write_str(indoc::indoc! {r#"
+fn write_renv_project(work_dir: &ChildPath) -> anyhow::Result<()> {
+    work_dir.child("renv.lock").write_str(indoc::indoc! {r#"
             {
               "R": {
                 "Version": "4.6.0",
@@ -238,7 +229,7 @@ fn write_renv_project(context: &TestContext) -> anyhow::Result<()> {
               }
             }
         "#})?;
-    let renv_dir = context.work_dir().child("renv");
+    let renv_dir = work_dir.child("renv");
     renv_dir.create_dir_all()?;
     renv_dir.child("activate.R").write_str(indoc::indoc! {r#"
             lib_dir <- file.path(getwd(), "library")

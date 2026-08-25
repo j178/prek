@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::make_executable;
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[cfg(unix)]
 mod unix {
@@ -13,9 +13,7 @@ mod unix {
 
     #[test]
     fn script_run() {
-        let context = TestContext::new();
-        context.init_project();
-        context.write_pre_commit_config(indoc::indoc! {r"
+        let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/script-hooks
             rev: v1.0.0
@@ -30,9 +28,9 @@ mod unix {
                   VAR2: galaxy
                 verbose: true
         "});
-        context.git_add(".");
+        context.git_add_all();
 
-        cmd_snapshot!(context.filters(), context.run(), @r"
+        cmd_snapshot!(context, context.run(), @r"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -53,8 +51,7 @@ mod unix {
 
     #[test]
     fn workspace_script_run() -> Result<()> {
-        let context = TestContext::new();
-        context.init_project();
+        let context = TestEnv::new();
 
         let config = indoc::indoc! {r#"
         repos:
@@ -68,7 +65,7 @@ mod unix {
                   MESSAGE: "Hello, World"
                 verbose: true
         "#};
-        context.write_pre_commit_config(config);
+        let context = context.with_config(config);
         context
             .work_dir()
             .child("script.sh")
@@ -87,9 +84,9 @@ mod unix {
 
         make_executable(context.work_dir().child("script.sh"))?;
         make_executable(child.child("script.sh"))?;
-        context.git_add(".");
+        context.git_add_all();
 
-        cmd_snapshot!(context.filters(), context.run(), @r#"
+        cmd_snapshot!(context, context.run(), @r#"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -109,7 +106,7 @@ mod unix {
         ----- stderr -----
         "#);
 
-        cmd_snapshot!(context.filters(), context.run().current_dir(&child), @r"
+        cmd_snapshot!(context, context.run().current_dir(&child), @r"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -127,9 +124,7 @@ mod unix {
 
     #[test]
     fn local_repo_bash_shebang() -> Result<()> {
-        let context = TestContext::new();
-        context.init_project();
-        context.write_pre_commit_config(indoc::indoc! {r"
+        let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -147,9 +142,9 @@ mod unix {
         "#})?;
         make_executable(&script)?;
 
-        context.git_add(".");
+        context.git_add_all();
 
-        cmd_snapshot!(context.filters(), context.run(), @r"
+        cmd_snapshot!(context, context.run(), @r"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -167,9 +162,7 @@ mod unix {
 
     #[test]
     fn script_shell_runs_entry_as_shell_source() -> Result<()> {
-        let context = TestContext::new();
-        context.init_project();
-        context.write_pre_commit_config(indoc::indoc! {r#"
+        let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -188,9 +181,9 @@ mod unix {
                 verbose: true
         "#});
         context.work_dir().child("a.txt").write_str("a")?;
-        context.git_add(".");
+        context.git_add_all();
 
-        cmd_snapshot!(context.filters(), context.run(), @r"
+        cmd_snapshot!(context, context.run(), @r"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -211,9 +204,7 @@ mod unix {
 /// The interpreter must exist in the PATH, the script is not needed to be executable.
 #[test]
 fn windows_script_run() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -231,9 +222,9 @@ fn windows_script_run() -> Result<()> {
     "#})?;
     make_executable(&script)?;
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

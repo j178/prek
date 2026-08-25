@@ -4,12 +4,11 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
-use crate::common::{TestContext, cmd_snapshot, make_executable};
+use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn docker_image() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     // Test suite from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
@@ -27,7 +26,7 @@ fn docker_image() -> Result<()> {
 
     // Gitleaks writes findings to stdout and its banner/status logs to stderr.
     // Suppress the latter because Docker does not guarantee their relative order.
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -37,9 +36,9 @@ fn docker_image() -> Result<()> {
                 entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose --no-banner --log-level=error
                 pass_filenames: false
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -71,8 +70,7 @@ fn docker_image() -> Result<()> {
 /// Test that `docker_image` does not try to resolve entry in the host system PATH.
 #[test]
 fn docker_image_does_not_resolve_entry() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     let bin_dir = cwd.child("bin");
@@ -88,7 +86,7 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
         .assert()
         .success();
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -100,12 +98,12 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
                 always_run: true
                 verbose: true
     "});
-    context.git_add(".");
+    context.git_add_all();
 
     let mut cmd = context.run();
     cmd.env(EnvVars::PATH, prepend_paths(&[bin_dir.path()])?);
 
-    cmd_snapshot!(context.filters(), cmd, @r"
+    cmd_snapshot!(context, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----

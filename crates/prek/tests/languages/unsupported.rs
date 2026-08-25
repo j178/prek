@@ -2,12 +2,10 @@
 #[cfg(unix)]
 #[test]
 fn unsupported_language() -> anyhow::Result<()> {
-    use crate::common::{TestContext, cmd_snapshot};
+    use crate::common::{TestEnv, cmd_snapshot};
     use assert_fs::fixture::{FileWriteStr, PathChild};
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -29,9 +27,9 @@ fn unsupported_language() -> anyhow::Result<()> {
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#})?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

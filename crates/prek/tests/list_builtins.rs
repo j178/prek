@@ -1,12 +1,12 @@
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 mod common;
 
 #[test]
 fn list_builtins_basic() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins"), @r"
+    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -45,9 +45,9 @@ fn list_builtins_basic() {
 
 #[test]
 fn list_builtins_verbose() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @r#"
+    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins").arg("--verbose"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -181,9 +181,9 @@ fn list_builtins_verbose() {
 
 #[test]
 fn list_builtins_json() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--output-format=json"), @r#"
+    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins").arg("--output-format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

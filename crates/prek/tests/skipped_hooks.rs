@@ -12,11 +12,11 @@ use std::time::{Duration, SystemTime};
 use anyhow::Result;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestEnv, cmd_snapshot};
 
 mod common;
 
-fn hook_env_count(context: &TestContext) -> Result<usize> {
+fn hook_env_count(context: &TestEnv) -> Result<usize> {
     let hooks_dir = context.home_dir().child("hooks");
     if !hooks_dir.exists() {
         return Ok(0);
@@ -24,8 +24,9 @@ fn hook_env_count(context: &TestContext) -> Result<usize> {
     Ok(hooks_dir.read_dir()?.count())
 }
 
-fn remove_loose_blob(cwd: &assert_fs::fixture::ChildPath, filename: &str) -> Result<()> {
-    let output = git_cmd(cwd).arg("hash-object").arg(filename).output()?;
+fn remove_loose_blob(context: &TestEnv, filename: &str) -> Result<()> {
+    let cwd = context.work_dir();
+    let output = context.git().arg("hash-object").arg(filename).output()?;
     assert!(output.status.success(), "git hash-object should succeed");
     let blob = String::from_utf8(output.stdout)?;
     let blob = blob.trim_ascii();
@@ -41,12 +42,7 @@ fn remove_loose_blob(cwd: &assert_fs::fixture::ChildPath, filename: &str) -> Res
 /// All hooks skip when no staged files match their file patterns.
 #[test]
 fn all_hooks_skipped_no_matching_files() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -67,13 +63,15 @@ fn all_hooks_skipped_no_matching_files() -> Result<()> {
                 files: \.go$
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("readme.txt").write_str("Hello")?;
     cwd.child("data.json").write_str("{}")?;
     cwd.child("config.yaml").write_str("key: value")?;
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -90,12 +88,7 @@ fn all_hooks_skipped_no_matching_files() -> Result<()> {
 /// Installable hooks with no matching files should not create environments.
 #[test]
 fn skipped_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -106,10 +99,12 @@ fn skipped_installable_hook_does_not_install_env() -> Result<()> {
                 files: \.py$
     "#});
 
-    cwd.child("README.md").write_str("Hello")?;
-    context.git_add(".");
+    let cwd = context.work_dir();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cwd.child("README.md").write_str("Hello")?;
+    context.git_add_all();
+
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -126,10 +121,7 @@ fn skipped_installable_hook_does_not_install_env() -> Result<()> {
 /// Installable hooks excluded by group selection should not create environments.
 #[test]
 fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -147,9 +139,9 @@ fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
                 groups: [slow]
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--group").arg("ci"), @r#"
+    cmd_snapshot!(context, context.run().arg("--all-files").arg("--group").arg("ci"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -166,12 +158,7 @@ fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
 /// `always_run` installable hooks still install and run without matching files.
 #[test]
 fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -184,10 +171,12 @@ fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {
                 pass_filenames: false
     "#});
 
-    cwd.child("README.md").write_str("Hello")?;
-    context.git_add(".");
+    let cwd = context.work_dir();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cwd.child("README.md").write_str("Hello")?;
+    context.git_add_all();
+
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -204,12 +193,7 @@ fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {
 /// `--dry-run` skips hooks without executing them.
 #[test]
 fn dry_run_skips_all_hooks() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -225,10 +209,12 @@ fn dry_run_skips_all_hooks() -> Result<()> {
                 files: \.txt$
     "#});
 
-    cwd.child("file.txt").write_str("content")?;
-    context.git_add(".");
+    let cwd = context.work_dir();
 
-    cmd_snapshot!(context.filters(), context.run().arg("--dry-run"), @r#"
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add_all();
+
+    cmd_snapshot!(context, context.run().arg("--dry-run"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -246,12 +232,7 @@ fn dry_run_skips_all_hooks() -> Result<()> {
 /// Hooks that match staged files run; others are skipped.
 #[test]
 fn mixed_skipped_and_executed_hooks() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -272,10 +253,12 @@ fn mixed_skipped_and_executed_hooks() -> Result<()> {
                 files: \.rs$
     "#});
 
-    cwd.child("readme.txt").write_str("Hello")?;
-    context.git_add(".");
+    let cwd = context.work_dir();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cwd.child("readme.txt").write_str("Hello")?;
+    context.git_add_all();
+
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -292,8 +275,7 @@ fn mixed_skipped_and_executed_hooks() -> Result<()> {
 /// Skipped hooks in untouched workspace projects should not install environments.
 #[test]
 fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     let proj_a = cwd.child("proj-a");
@@ -301,7 +283,7 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
     proj_a.create_dir_all()?;
     proj_b.create_dir_all()?;
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -337,7 +319,7 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
     "#})?;
 
     proj_a.child("README.txt").write_str("Hello")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().output()?;
     assert!(output.status.success(), "prek should succeed");
@@ -352,14 +334,13 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
 
 #[test]
 fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     let child = cwd.child("child");
     child.create_dir_all()?;
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -385,9 +366,9 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
     "#})?;
 
     child.child("child.py").write_str("print('child')\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -415,12 +396,7 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
 /// contains non-deterministic timestamps and timing data unsuitable for snapshots.
 #[test]
 fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -444,8 +420,10 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
                 priority: 30
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("data.json").write_str("{}")?;
-    context.git_add(".");
+    context.git_add_all();
 
     // Run with trace logging to verify #1335 fix
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
@@ -472,11 +450,7 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
 
 #[test]
 fn external_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -487,8 +461,10 @@ fn external_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
                 pass_filenames: false
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -514,11 +490,7 @@ fn external_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -528,6 +500,8 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
                 entry: python3 rewrite.py
                 files: \.txt$
     "});
+
+    let cwd = context.work_dir();
     cwd.child("rewrite.py").write_str(indoc::indoc! {r"
         from pathlib import Path
         import os
@@ -542,7 +516,7 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
     "})?;
 
     cwd.child("file.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -575,11 +549,7 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
 
 #[test]
 fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -590,8 +560,10 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
                 pass_filenames: false
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -623,9 +595,10 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
 
 #[test]
 fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
     let cwd = context.work_dir();
-    let status = git_cmd(cwd)
+    let status = context
+        .git_at(cwd)
         .args(["init", "--object-format=sha1"])
         .status()?;
     assert!(
@@ -633,7 +606,7 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
         "initializing SHA-1 repository should succeed"
     );
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -651,14 +624,19 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
                 priority: 1
     "#});
 
+    let cwd = context.work_dir();
+
     // The two replacement blobs have distinct SHA-1s whose first seven
     // hexadecimal digits are both `4b8e34c`.
     cwd.child(".gitattributes")
         .write_str("binary.dat -diff\n")?;
     cwd.child("binary.dat").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    let status = git_cmd(cwd).args(["config", "core.abbrev", "7"]).status()?;
+    let status = context
+        .git_at(cwd)
+        .args(["config", "core.abbrev", "7"])
+        .status()?;
     assert!(status.success(), "setting core.abbrev should succeed");
 
     let output = context.run().output()?;
@@ -680,11 +658,7 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
 
 #[test]
 fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -695,9 +669,11 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
                 pass_filenames: false
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("original\n")?;
     cwd.child("hook.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
     cwd.child("file.txt").write_str("unstaged\n")?;
 
     let output = context
@@ -734,11 +710,7 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
 
 #[test]
 fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -749,11 +721,13 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
                 pass_filenames: false
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
     context.git_commit("init");
 
-    remove_loose_blob(cwd, "file.txt")?;
+    remove_loose_blob(&context, "file.txt")?;
 
     // Make the index stat data stale while keeping file content unchanged. A
     // full `git diff` now exits non-zero because the blob is missing, but its
@@ -798,14 +772,13 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
 
 #[test]
 fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     let child = cwd.child("child");
     child.create_dir_all()?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -831,7 +804,7 @@ fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
     "#})?;
 
     child.child("child.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -861,20 +834,18 @@ fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
 
 #[test]
 fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-toml
     "});
 
+    let cwd = context.work_dir();
+
     cwd.child("pyproject.toml")
         .write_str("[project]\nname = \"demo\"\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context
         .run()
@@ -897,11 +868,7 @@ fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
 
 #[test]
 fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -917,8 +884,10 @@ fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
                 files: \.txt$
     "});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("original\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context
         .run()
@@ -952,11 +921,7 @@ fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
 
 #[test]
 fn same_group_known_modification_skips_diff_detection() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: builtin
             hooks:
@@ -972,8 +937,10 @@ fn same_group_known_modification_skips_diff_detection() -> Result<()> {
                 priority: 0
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("missing newline")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -1009,11 +976,7 @@ fn same_group_known_modification_skips_diff_detection() -> Result<()> {
 
 #[test]
 fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: builtin
             hooks:
@@ -1035,8 +998,10 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
                 priority: 1
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("missing newline")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -1072,11 +1037,7 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
 
 #[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: builtin
             hooks:
@@ -1092,8 +1053,10 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
                 priority: 1
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("missing newline")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 
@@ -1128,11 +1091,7 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
 
 #[test]
 fn failed_non_modifying_builtin_skips_diff_detection() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1140,8 +1099,10 @@ fn failed_non_modifying_builtin_skips_diff_detection() -> Result<()> {
                 args: ['--fix=no']
     "});
 
+    let cwd = context.work_dir();
+
     cwd.child("mixed.txt").write_str("first\r\nsecond\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
 

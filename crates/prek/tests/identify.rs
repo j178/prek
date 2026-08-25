@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(unix)]
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
@@ -8,14 +8,13 @@ mod common;
 #[cfg(unix)] // "executable" tag is different on Windows
 #[test]
 fn identify_text_with_missing_paths() -> anyhow::Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
     context
         .work_dir()
         .child("hello.py")
         .write_str("print('hi')\n")?;
 
-    cmd_snapshot!(
-        context.filters(),
+    cmd_snapshot!(context,
         context
             .command()
             .arg("util")
@@ -41,14 +40,13 @@ fn identify_text_with_missing_paths() -> anyhow::Result<()> {
 #[cfg(unix)] // "executable" tag is different on Windows
 #[test]
 fn identify_json_with_missing_paths() -> anyhow::Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
     context
         .work_dir()
         .child("hello.py")
         .write_str("print('hi')\n")?;
 
-    cmd_snapshot!(
-        context.filters(),
+    cmd_snapshot!(context,
         context
             .command()
             .arg("util")

@@ -3,7 +3,7 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test `language_version` parsing and installation for Rust hooks.
 #[test]
@@ -13,9 +13,7 @@ fn language_version() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -41,20 +39,17 @@ fn language_version() -> Result<()> {
                 always_run: true
                 pass_filenames: false
     "});
-    context.git_add(".");
+    context.git_add_all();
 
     let rust_dir = context.home_dir().child("tools/rustup/toolchains");
     rust_dir.assert(predicates::path::missing());
 
-    let filters = [
+    let context = context.with_filters([
         (r"rustc (1\.70)\.\d{1,2} .+", "rustc $1.X"), // Keep 1.70.X format
         (r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X"), // Others become 1.X.X
-    ]
-    .into_iter()
-    .chain(context.filters())
-    .collect::<Vec<_>>();
+    ]);
 
-    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
+    cmd_snapshot!(context, context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -107,9 +102,7 @@ fn language_version() -> Result<()> {
 /// Test `rustup` installer.
 #[test]
 fn rustup_installer() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -118,13 +111,10 @@ fn rustup_installer() {
                 language: rust
                 entry: rustc --version
    "});
-    context.git_add(".");
-    let filters = [(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X")]
-        .into_iter()
-        .chain(context.filters())
-        .collect::<Vec<_>>();
+    context.git_add_all();
+    let context = context.with_filter(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X");
 
-    cmd_snapshot!(filters, context.run().arg("-v").env(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME, "non-exist-rustup"), @r#"
+    cmd_snapshot!(context, context.run().arg("-v").env(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME, "non-exist-rustup"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -141,10 +131,7 @@ fn rustup_installer() {
 /// Test that `additional_dependencies` with cli: prefix are installed correctly.
 #[test]
 fn additional_dependencies_cli() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -158,9 +145,9 @@ fn additional_dependencies_cli() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -177,10 +164,7 @@ fn additional_dependencies_cli() {
 /// Test that remote Rust hooks are installed and run correctly.
 #[test]
 fn remote_hooks() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/rust-hooks
             rev: v1.0.0
@@ -191,9 +175,9 @@ fn remote_hooks() {
                 always_run: true
                 args: ["Hello World"]
     "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -211,10 +195,7 @@ fn remote_hooks() {
 /// Test that remote Rust hooks from non-workspace repos are installed and run correctly.
 #[test]
 fn remote_hook_non_workspace() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/rust-hooks-non-workspace
             rev: v1.0.0
@@ -224,9 +205,9 @@ fn remote_hook_non_workspace() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -245,10 +226,7 @@ fn remote_hook_non_workspace() {
 /// This verifies that the shared repo is not modified when adding dependencies.
 #[test]
 fn remote_hooks_with_lib_deps() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/rust-hooks
             rev: v1.0.0
@@ -259,9 +237,9 @@ fn remote_hooks_with_lib_deps() {
                 pass_filenames: false
                 always_run: true
     "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

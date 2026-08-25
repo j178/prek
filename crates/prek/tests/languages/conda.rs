@@ -1,13 +1,11 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn language_version() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -21,9 +19,9 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -37,10 +35,7 @@ fn language_version() {
 
 #[test]
 fn local_hook_with_additional_dependencies() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -54,12 +49,11 @@ fn local_hook_with_additional_dependencies() {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    let mut filters = context.filters();
-    filters.push((r"OpenSSL [^\n]+", "OpenSSL [VERSION]"));
+    let context = context.with_filter(r"OpenSSL [^\n]+", "OpenSSL [VERSION]");
 
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -75,11 +69,11 @@ fn local_hook_with_additional_dependencies() {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let hook_repo = TestContext::new();
-    hook_repo.init_project();
+    let context = TestEnv::new();
+    let hook_repo = context.create_repo("conda-hook");
 
     hook_repo
-        .work_dir()
+        .path()
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
             - id: conda-remote
@@ -89,7 +83,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
         "})?;
 
     hook_repo
-        .work_dir()
+        .path()
         .child("environment.yml")
         .write_str(indoc::indoc! {r"
             channels:
@@ -98,13 +92,11 @@ fn remote_repo_install() -> anyhow::Result<()> {
               - openssl
         "})?;
 
-    hook_repo.git_add(".");
+    hook_repo.git_add_all();
     hook_repo.git_commit("Add conda hook");
     hook_repo.git_tag("v1.0.0");
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -113,14 +105,13 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.work_dir().display()});
+    ", hook_repo.path().display()});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    let mut filters = context.filters();
-    filters.push((r"OpenSSL [^\n]+", "OpenSSL [VERSION]"));
+    let context = context.with_filter(r"OpenSSL [^\n]+", "OpenSSL [VERSION]");
 
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

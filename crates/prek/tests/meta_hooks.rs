@@ -1,14 +1,13 @@
 mod common;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 #[test]
 fn meta_hooks() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!\n")?;
@@ -16,7 +15,7 @@ fn meta_hooks() -> anyhow::Result<()> {
     cwd.child("invalid.json").write_str("{}")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -36,9 +35,9 @@ fn meta_hooks() -> anyhow::Result<()> {
                 entry: python3 -c 'import sys; sys.exit(0)'
                 exclude: $nonexistent^
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -72,18 +71,15 @@ fn meta_hooks() -> anyhow::Result<()> {
 
 #[test]
 fn meta_hooks_unknown_hook() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
               - id: this-hook-does-not-exist
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -102,8 +98,7 @@ fn meta_hooks_unknown_hook() {
 
 #[test]
 fn check_useless_excludes_remote() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     // When checking useless excludes, remote hooks are not actually cloned,
     // so hook options defined from HookManifest are not used.
@@ -134,9 +129,9 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
         .child("file1.html")
         .write_str("<!DOCTYPE html>")?;
 
-    context.write_pre_commit_config(&pre_commit_config);
-    context.git_add(".");
-    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r"
+    let context = context.with_config(&pre_commit_config);
+    context.git_add_all();
+    cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -154,8 +149,7 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
 
 #[test]
 fn meta_hooks_workspace() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
@@ -186,10 +180,10 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     app.child("invalid.json").write_str("{x}")?;
     app.child("main.py").write_str(r#"print "abc"  "#)?;
 
-    context.write_pre_commit_config("repos: []");
-    context.git_add(".");
+    let context = context.with_config("repos: []");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -224,8 +218,7 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
 
 #[test]
 fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     // Workspace layout:
     // - Root project has no hooks.
@@ -256,10 +249,10 @@ fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Resu
     app.child("global_excluded").write_str("ignored\n")?;
     app.child("hook_excluded").write_str("ignored\n")?;
 
-    context.write_pre_commit_config("repos: []");
-    context.git_add(".");
+    let context = context.with_config("repos: []");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r#"
+    cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
