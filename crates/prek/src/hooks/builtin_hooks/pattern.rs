@@ -9,6 +9,7 @@ use regex_automata::{MatchKind, meta::Regex, util::syntax};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
+use crate::hooks::pre_commit_hooks::parse_hook_args;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 
@@ -119,8 +120,7 @@ fn run_filename_pattern(
     filenames: &[&Path],
     policy: MatchPolicy,
 ) -> Result<HookOutput> {
-    let args =
-        FilenameArgs::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args = parse_hook_args::<FilenameArgs>(hook)?;
     let regex = build_regex(&args.patterns, args.ignore_case, false)?;
     let mut failed = false;
     let mut output = Vec::new();
@@ -143,7 +143,7 @@ fn run_filename_pattern(
 }
 
 async fn run(hook: &Hook, filenames: &[&Path], policy: MatchPolicy) -> Result<HookOutput> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args = parse_hook_args::<Args>(hook)?;
     let matcher = Matcher::new(&args)?;
     let file_base = hook.project().relative_path();
 

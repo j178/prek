@@ -4,6 +4,7 @@ use fancy_regex::Regex;
 use crate::git::git_cmd;
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
+use crate::hooks::pre_commit_hooks::parse_hook_args;
 use anyhow::{Context, Result};
 
 #[derive(Parser)]
@@ -46,7 +47,7 @@ impl Args {
 
 /// Runs the `no-commit-to-branch` hook.
 pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args = parse_hook_args::<Args>(hook)?;
 
     let output = git_cmd()?
         .arg("symbolic-ref")

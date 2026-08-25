@@ -90,6 +90,7 @@ plugins:
           - reference/cli.md
           - reference/configuration.md
           - reference/environment-variables.md
+          - internals.md
         Help:
           - debugging.md
           - faq.md
@@ -117,6 +118,7 @@ nav:
     - CLI Reference: reference/cli.md
     - Configuration Reference: reference/configuration.md
     - Environment Variables: reference/environment-variables.md
+    - Internals: internals.md
   - Help:
     - Debugging: debugging.md
     - FAQ: faq.md

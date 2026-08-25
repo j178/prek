@@ -758,6 +758,10 @@ The command line to execute for the hook.
 - Optional override for remote hooks.
 - Not allowed for `repo: meta` and `repo: builtin`.
 
+The repository type, language, and optional `shell` setting determine how this
+value is interpreted. See [Hook entry resolution](../internals.md#hook-entry-resolution)
+for the command, path, and working-directory rules.
+
 If [`pass_filenames`](#pass_filenames) is `true`, `prek` appends matching filenames to this command when running.
 
 ### `shell`

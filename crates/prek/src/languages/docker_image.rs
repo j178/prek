@@ -46,7 +46,7 @@ impl LanguageBackend for DockerImage {
             .flat_map(|(key, value)| ["-e".to_owned(), format!("{key}={value}")])
             .collect();
 
-        let entry = hook.entry.expect_direct().split()?;
+        let entry = hook.entry.expect_argv_entry().split()?;
         let run = async |batch: &[&Path]| {
             let mut cmd = Docker::docker_run_cmd(hook.work_dir());
             let output = cmd

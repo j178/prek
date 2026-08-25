@@ -197,6 +197,7 @@ impl LanguageBackend for Pygrep {
             .context("Failed to write Python script")?;
 
         let args = Args::parse(&hook.args).context("Failed to parse `args`")?;
+        let entry = hook.entry.expect_argv_entry();
         let mut cmd = Cmd::new(&info.toolchain)
             .current_dir(hook.work_dir())
             .envs(&hook.env)
@@ -205,7 +206,7 @@ impl LanguageBackend for Pygrep {
             .arg(py_script.path())
             .args(args.to_args())
             .arg(INTERNAL_CONCURRENCY.to_string())
-            .arg(hook.entry.expect_direct().raw())
+            .arg(entry.raw())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
