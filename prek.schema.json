@@ -38,79 +38,79 @@
       "type": "object",
       "properties": {
         "bun": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "conda": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "coursier": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "dart": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "deno": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "docker": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "docker_image": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "dotnet": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "fail": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "golang": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "haskell": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "julia": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "lua": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "mise": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "node": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "perl": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "php": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "pygrep": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "python": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "r": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "ruby": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "rust": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "script": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "swift": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         },
         "system": {
-          "type": "string"
+          "$ref": "#/definitions/LanguageVersion"
         }
       },
       "additionalProperties": false
@@ -370,8 +370,8 @@
           "type": "string"
         },
         "language_version": {
-          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
-          "type": "string"
+          "description": "Select a language version and optionally configure the toolchain source preference.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "$ref": "#/definitions/LanguageVersion"
         },
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
@@ -493,6 +493,36 @@
           "type": "integer",
           "exclusiveMinimum": 0
         }
+      ]
+    },
+    "LanguageVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request": {
+              "description": "A language-specific version request. Defaults to `default`.",
+              "type": "string"
+            },
+            "preference": {
+              "description": "Which toolchain sources to prefer or require. Defaults to `managed`.",
+              "$ref": "#/definitions/ToolchainPreference"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolchainPreference": {
+      "type": "string",
+      "enum": [
+        "only-managed",
+        "managed",
+        "system",
+        "only-system"
       ]
     },
     "Shell": {
@@ -650,8 +680,8 @@
           "type": "string"
         },
         "language_version": {
-          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
-          "type": "string"
+          "description": "Select a language version and optionally configure the toolchain source preference.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "$ref": "#/definitions/LanguageVersion"
         },
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
@@ -819,8 +849,8 @@
           "type": "string"
         },
         "language_version": {
-          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
-          "type": "string"
+          "description": "Select a language version and optionally configure the toolchain source preference.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "$ref": "#/definitions/LanguageVersion"
         },
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
@@ -993,8 +1023,8 @@
           "type": "string"
         },
         "language_version": {
-          "description": "Run the hook on a specific version of the language.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
-          "type": "string"
+          "description": "Select a language version and optionally configure the toolchain source preference.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "$ref": "#/definitions/LanguageVersion"
         },
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",

@@ -83,7 +83,7 @@ impl LanguageBackend for Mise {
         let installer = MiseInstaller::new(store.tools_path(ToolBucket::Mise));
         let request: &SemverRequest = hook.language_request.version();
         let mise = installer
-            .install(store, request, hook.language_request.allows_download())
+            .install(store, request, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install mise")?;
 

@@ -17,6 +17,7 @@ use crate::git;
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
+use crate::languages::version::{ToolchainPolicy, ToolchainSource};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -82,25 +83,25 @@ impl BunInstaller {
         &self,
         store: &Store,
         request: &BunRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<BunResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "bun").await?;
 
-        if let Ok(bun_result) = self.find_installed(request) {
-            trace!(%bun_result, "Found installed bun");
-            return Ok(bun_result);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request).ok(),
+                ToolchainSource::System => self.find_system_bun(request).await?,
+            };
+            if let Some(result) = result {
+                trace!(%result, ?source, "Found bun");
+                return Ok(result);
+            }
         }
 
-        // Find all bun executables in PATH and check their versions
-        if let Some(bun_result) = self.find_system_bun(request).await? {
-            trace!(%bun_result, "Using system bun");
-            return Ok(bun_result);
-        }
-
-        if !allows_download {
-            anyhow::bail!("No suitable system Bun version found and downloads are disabled");
+        if !policy.allows_download() {
+            anyhow::bail!("No suitable Bun version found for toolchain policy: {policy}");
         }
 
         let resolved_version = self.resolve_version(request).await?;

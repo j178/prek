@@ -13,6 +13,7 @@ use super::version::DotnetVersion;
 use crate::fs::LockedFile;
 use crate::http::REQWEST_CLIENT;
 use crate::languages::dotnet::DotnetRequest;
+use crate::languages::version::{ToolchainPolicy, ToolchainSource};
 use crate::process::Cmd;
 
 static DOTNET_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
@@ -92,23 +93,24 @@ impl DotnetInstaller {
     pub(crate) async fn install(
         &self,
         request: &DotnetRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<DotnetResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
         let _lock = LockedFile::acquire(self.root.join(".lock"), "dotnet").await?;
 
-        if let Ok(result) = self.find_installed(request) {
-            debug!(%result, "Using existing managed dotnet");
-            return Ok(result);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request).ok(),
+                ToolchainSource::System => self.find_system_dotnet(request).await?,
+            };
+            if let Some(result) = result {
+                debug!(%result, ?source, "Found dotnet");
+                return Ok(result);
+            }
         }
 
-        if let Some(result) = self.find_system_dotnet(request).await? {
-            debug!(%result, "Using system dotnet");
-            return Ok(result);
-        }
-
-        if !allows_download {
-            bail!("No suitable dotnet version found and downloads are disabled");
+        if !policy.allows_download() {
+            bail!("No suitable dotnet version found for toolchain policy: {policy}");
         }
 
         self.install_managed(request).await

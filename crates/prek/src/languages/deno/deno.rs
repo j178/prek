@@ -67,7 +67,11 @@ impl LanguageBackend for Deno {
 
         let deno_request: &DenoRequest = hook.language_request.version();
         let deno = installer
-            .install(store, deno_request, hook.language_request.allows_download())
+            .install(
+                store,
+                deno_request,
+                hook.language_request.toolchain_policy(),
+            )
             .await
             .context("Failed to install deno")?;
 

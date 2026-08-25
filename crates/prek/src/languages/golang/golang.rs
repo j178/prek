@@ -33,7 +33,7 @@ impl LanguageBackend for Golang {
 
         let version: &GoRequest = hook.language_request.version();
         let go = installer
-            .install(store, version, hook.language_request.allows_download())
+            .install(store, version, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install go")?;
 

@@ -115,9 +115,8 @@ impl NodeVersion {
     }
 }
 
-/// The `language_version` field of node language, can be one of the following:
-/// - `default`: Find the system installed node, or download the latest version.
-/// - `system`: Find the system installed node, or return an error if not found.
+/// A parsed Node.js version request:
+/// - `node`: Accept any version.
 /// - `x.y.z`: Install the specific version of node.
 /// - `x.y`: Install the latest version of node with the same major and minor version.
 /// - `x`: Install the latest version of node with the same major version.

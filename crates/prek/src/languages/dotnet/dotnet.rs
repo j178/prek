@@ -47,7 +47,7 @@ impl LanguageBackend for Dotnet {
         let installer = DotnetInstaller::new(store.tools_path(ToolBucket::Dotnet));
         let request: &DotnetRequest = hook.language_request.version();
         let dotnet = installer
-            .install(request, hook.language_request.allows_download())
+            .install(request, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install dotnet SDK")?;
 

@@ -16,7 +16,7 @@ use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::python::PythonRequest;
 use crate::languages::python::uv::Uv;
-use crate::languages::version::LanguageRequest;
+use crate::languages::version::{LanguageRequest, ToolchainSource};
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process;
 use crate::process::Cmd;
@@ -242,70 +242,64 @@ impl Python {
         info: &InstallInfo,
         python_request: &LanguageRequest,
     ) -> Result<()> {
-        // Prefer Python installations already managed by prek.
-        match Self::create_venv_command(uv, store, info, python_request, VenvAttempt::PrekManaged)
-            .check(true)
-            .output()
-            .await
-        {
-            Ok(_) => {
-                debug!(
-                    "Venv created with prek-managed Python: `{}`",
-                    info.env_path.display()
-                );
-                return Ok(());
-            }
-            Err(process::Error::Status { .. }) => {}
-            Err(e) => {
-                return Err(e.into());
-            }
-        }
+        let policy = python_request.toolchain_policy();
+        let mut last_error = None;
 
-        // Next, use uv's normal discovery outside prek's managed store.
-        match Self::create_venv_command(uv, store, info, python_request, VenvAttempt::External)
-            .check(true)
-            .output()
-            .await
-        {
-            Ok(_) => {
-                debug!(
-                    "Venv created with Python discovered outside prek's managed store: `{}`",
-                    info.env_path.display()
-                );
-                Ok(())
-            }
-            Err(e @ process::Error::Status { .. }) => {
-                if Self::can_retry_with_downloads(&e) {
-                    if !python_request.allows_download() {
-                        anyhow::bail!(
-                            "No suitable system Python version found and downloads are disabled"
-                        );
-                    }
-
+        for &source in policy.search_order() {
+            let attempt = match source {
+                ToolchainSource::Managed => VenvAttempt::PrekManaged,
+                ToolchainSource::System => VenvAttempt::External,
+            };
+            match Self::try_create_venv(uv, store, info, python_request, attempt).await {
+                Ok(()) => return Ok(()),
+                Err(error @ process::Error::Status { .. }) => {
+                    last_error = Some((source, error));
+                }
+                Err(error) => {
                     debug!(
-                        "Downloading Python into prek's managed store: `{}`",
+                        "Failed to create venv `{}`: {error}",
                         info.env_path.display()
                     );
-                    Self::create_venv_command(
-                        uv,
-                        store,
-                        info,
-                        python_request,
-                        VenvAttempt::Download,
-                    )
-                    .check(true)
-                    .output()
-                    .await?;
-                    return Ok(());
+                    return Err(error.into());
                 }
-                // If we can't retry, return the original error
-                Err(e.into())
-            }
-            Err(e) => {
-                debug!("Failed to create venv `{}`: {e}", info.env_path.display());
-                Err(e.into())
             }
         }
+
+        if let Some((ToolchainSource::System, error)) = last_error
+            && !Self::can_retry_with_downloads(&error)
+        {
+            return Err(error.into());
+        }
+
+        if policy.allows_download() {
+            debug!(
+                "Downloading Python into prek's managed store: `{}`",
+                info.env_path.display()
+            );
+            Self::try_create_venv(uv, store, info, python_request, VenvAttempt::Download).await?;
+            return Ok(());
+        }
+
+        anyhow::bail!("No suitable Python version found for toolchain policy: {policy}")
+    }
+
+    async fn try_create_venv(
+        uv: &Uv,
+        store: &Store,
+        info: &InstallInfo,
+        python_request: &LanguageRequest,
+        attempt: VenvAttempt,
+    ) -> std::result::Result<(), process::Error> {
+        Self::create_venv_command(uv, store, info, python_request, attempt)
+            .check(true)
+            .output()
+            .await?;
+        debug!(
+            ?attempt,
+            "Created Python virtual environment: `{}`",
+            info.env_path.display()
+        );
+        Ok(())
     }
 
     fn create_venv_command(

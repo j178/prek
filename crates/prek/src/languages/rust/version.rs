@@ -112,9 +112,7 @@ impl RustVersion {
     }
 }
 
-/// `language_version` field of rust can be one of the following:
-/// `default`
-/// `system`
+/// A parsed Rust version request:
 /// `stable`
 /// `nightly`
 /// `beta`

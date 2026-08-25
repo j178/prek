@@ -4199,7 +4199,7 @@ fn system_language_version() {
     cmd_snapshot!(context,
         context.run()
         .arg("system-node")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4207,13 +4207,13 @@ fn system_language_version() {
     ----- stderr -----
     error: Failed to install hook `system-node`
       caused by: Failed to install node
-      caused by: No suitable system Node version found and downloads are disabled
-    ");
+      caused by: No suitable Node version found for toolchain policy: managed (downloads disabled)
+    "#);
 
     cmd_snapshot!(context,
         context.run()
         .arg("system-go")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4221,13 +4221,13 @@ fn system_language_version() {
     ----- stderr -----
     error: Failed to install hook `system-go`
       caused by: Failed to install go
-      caused by: No suitable system Go version found and downloads are disabled
-    ");
+      caused by: No suitable Go version found for toolchain policy: managed (downloads disabled)
+    "#);
 
     cmd_snapshot!(context,
         context.run()
         .arg("system-bun")
-        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4235,13 +4235,13 @@ fn system_language_version() {
     ----- stderr -----
     error: Failed to install hook `system-bun`
       caused by: Failed to install bun
-      caused by: No suitable system Bun version found and downloads are disabled
-    ");
+      caused by: No suitable Bun version found for toolchain policy: managed (downloads disabled)
+    "#);
 
     cmd_snapshot!(context,
         context.run()
         .arg("system-dotnet")
-        .env(EnvVars::PREK_INTERNAL__DOTNET_BINARY_NAME, "dotnet-never-exist"), @"
+        .env(EnvVars::PREK_INTERNAL__DOTNET_BINARY_NAME, "dotnet-never-exist"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4249,8 +4249,8 @@ fn system_language_version() {
     ----- stderr -----
     error: Failed to install hook `system-dotnet`
       caused by: Failed to install dotnet SDK
-      caused by: No suitable dotnet version found and downloads are disabled
-    ");
+      caused by: No suitable dotnet version found for toolchain policy: managed (downloads disabled)
+    "#);
 }
 
 /// Tests that empty `entry` field.

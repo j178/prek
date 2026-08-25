@@ -33,7 +33,11 @@ Ok(
                                 pass_filenames: None,
                                 description: None,
                                 language_version: Some(
-                                    "default",
+                                    LanguageVersion {
+                                        request: Default,
+                                        preference: None,
+                                        allows_download: true,
+                                    },
                                 ),
                                 log_file: None,
                                 shell: None,
@@ -66,7 +70,11 @@ Ok(
                                 pass_filenames: None,
                                 description: None,
                                 language_version: Some(
-                                    "system",
+                                    LanguageVersion {
+                                        request: Default,
+                                        preference: None,
+                                        allows_download: false,
+                                    },
                                 ),
                                 log_file: None,
                                 shell: None,
@@ -99,7 +107,13 @@ Ok(
                                 pass_filenames: None,
                                 description: None,
                                 language_version: Some(
-                                    "3.8",
+                                    LanguageVersion {
+                                        request: Explicit(
+                                            "3.8",
+                                        ),
+                                        preference: None,
+                                        allows_download: true,
+                                    },
                                 ),
                                 log_file: None,
                                 shell: None,

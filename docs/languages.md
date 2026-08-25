@@ -13,10 +13,39 @@ For `repo: local` hooks, `language` is required. For remote hooks, it is read fr
 
 ## Toolchain management and `language_version`
 
-prek resolves toolchains in two stages:
+`language_version` can be a version request string or an options object with
+`request` and `preference` fields. The string form remains shorthand for a
+request with the default `managed` preference.
 
-1. **Reuse a compatible local toolchain**, including toolchains already managed by prek and system installations.
-2. **Download a toolchain** when the language supports it, downloads are allowed, and the request cannot be satisfied locally.
+The preferences are:
+
+- `only-managed`: use a compatible toolchain already managed by prek, or download one.
+- `managed` (default): prefer an existing prek-managed toolchain, then search outside prek's managed store, then download one.
+- `system`: prefer a toolchain outside prek's managed store, then try an existing prek-managed toolchain, then download one.
+- `only-system`: only use a toolchain outside prek's managed store and never download one.
+
+Here, “system” means any toolchain discovered outside prek's managed store. It
+includes executables installed by the operating system, a package manager, or a
+version manager.
+
+The preference controls toolchain selection when a hook environment must be
+created. It does not affect reuse of an existing compatible hook environment.
+
+For example:
+
+=== "prek.toml"
+
+    ```toml
+    language_version = { request = ">=3.12, <3.13", preference = "only-managed" }
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    language_version:
+      request: ">=3.12, <3.13"
+      preference: only-managed
+    ```
 
 If `language_version` is `system`, prek does not download a new toolchain. It may still reuse a compatible toolchain already managed by prek before searching system installations. Version constraints derived from project metadata, such as Python’s `requires-python` or Go’s `go` directive, still apply without re-enabling downloads.
 
@@ -32,6 +61,7 @@ Languages with managed toolchain downloads in prek today:
 - [Node](#node)
 - [Bun](#bun)
 - [Deno](#deno)
+- [.NET](#dotnet)
 - [Golang](#golang)
 - [mise](#mise)
 - [Rust](#rust)
