@@ -1,13 +1,11 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[cfg(unix)]
 #[test]
 fn bash_shell_adapter_runs_entry() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -23,9 +21,9 @@ fn bash_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "#});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -47,9 +45,7 @@ fn pwsh_shell_adapter_runs_entry() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -64,9 +60,9 @@ fn pwsh_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "#});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -85,9 +81,7 @@ fn pwsh_shell_adapter_runs_entry() -> anyhow::Result<()> {
 #[cfg(windows)]
 #[test]
 fn powershell_shell_adapter_runs_entry() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -102,9 +96,9 @@ fn powershell_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "#});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -123,9 +117,7 @@ fn powershell_shell_adapter_runs_entry() -> anyhow::Result<()> {
 #[cfg(windows)]
 #[test]
 fn cmd_shell_adapter_runs_entry() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -141,9 +133,9 @@ fn cmd_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -161,9 +153,7 @@ fn cmd_shell_adapter_runs_entry() -> anyhow::Result<()> {
 
 #[test]
 fn shell_rejected_for_pygrep() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -175,9 +165,9 @@ fn shell_rejected_for_pygrep() {
                 always_run: true
                 pass_filenames: false
     "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----

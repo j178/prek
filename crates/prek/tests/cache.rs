@@ -6,22 +6,16 @@ use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 use serde_json::json;
 use std::time::{Duration, SystemTime};
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestEnv, cmd_snapshot};
 
 mod common;
 
-fn cache_size_filters(context: &TestContext) -> Vec<(&str, &str)> {
-    let mut filters = vec![(r"(?m)^\d+\n", "[BYTES]\n")];
-    filters.extend(context.filters());
-    filters
-}
-
 #[test]
 fn cache_dir() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git();
     let home = context.work_dir().child("home");
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("dir").env("PREK_HOME", &*home), @r"
+    cmd_snapshot!(context, context.command().arg("cache").arg("dir").env("PREK_HOME", &*home), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -33,9 +27,7 @@ fn cache_dir() {
 
 #[test]
 fn cache_gc_verbose_shows_removed_entries() {
-    let context = TestContext::new();
-
-    context.write_pre_commit_config("repos: []\n");
+    let context = TestEnv::new_without_git().with_config("repos: []\n");
     let home = context.home_dir();
 
     // Seed store entries that will be removed.
@@ -85,7 +77,7 @@ fn cache_gc_verbose_shows_removed_entries() {
     let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()]).expect("write tracking file");
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]),@r"
+    cmd_snapshot!(context, context.command().args(["cache", "gc", "-v"]),@r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -112,8 +104,7 @@ fn cache_gc_verbose_shows_removed_entries() {
 
 #[test]
 fn cache_gc_removes_legacy_hook_env_when_config_matches() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -153,7 +144,7 @@ fn cache_gc_removes_legacy_hook_env_when_config_matches() -> anyhow::Result<()> 
             "extra": {},
         }))?)?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "gc"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -170,7 +161,10 @@ fn cache_gc_removes_legacy_hook_env_when_config_matches() -> anyhow::Result<()> 
 
 #[test]
 fn cache_clean() -> anyhow::Result<()> {
-    let context = TestContext::new().with_filtered_cache_clean_summary();
+    let context = TestEnv::new_without_git().with_filter(
+        r"(?m)^Removed \d+ files? \([^)]+\)\n",
+        "Removed [N] file(s) ([SIZE])\n",
+    );
 
     let home = context.work_dir().child("home");
     home.create_dir_all()?;
@@ -178,7 +172,7 @@ fn cache_clean() -> anyhow::Result<()> {
     home.child("cache/data.bin").write_str("hello")?;
     home.child("cache/nested/data.bin").write_str("world!")?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @"
+    cmd_snapshot!(context, context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -193,7 +187,7 @@ fn cache_clean() -> anyhow::Result<()> {
     home.create_dir_all()?;
     home.child("cache").create_dir_all()?;
     home.child("cache/one.txt").write_str("abc")?;
-    cmd_snapshot!(context.filters(), context.command().arg("clean").env("PREK_HOME", &*home), @"
+    cmd_snapshot!(context, context.command().arg("clean").env("PREK_HOME", &*home), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -209,9 +203,9 @@ fn cache_clean() -> anyhow::Result<()> {
 
 #[test]
 fn cache_size_output_formats() {
-    let context = TestContext::new();
+    let context = TestEnv::new_without_git().with_filter(r"(?m)^\d+\n", "[BYTES]\n");
 
-    cmd_snapshot!(cache_size_filters(&context), context.command().args(["cache", "size", "--no-log-file", "--output-format", "auto"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "size", "--no-log-file", "--output-format", "auto"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -220,7 +214,7 @@ fn cache_size_output_formats() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(cache_size_filters(&context), context.command().args(["cache", "size", "--no-log-file", "--output-format", "human"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "size", "--no-log-file", "--output-format", "human"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -229,7 +223,7 @@ fn cache_size_output_formats() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(cache_size_filters(&context), context.command().args(["cache", "size", "--no-log-file", "--output-format", "machine"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "size", "--no-log-file", "--output-format", "machine"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -241,11 +235,9 @@ fn cache_size_output_formats() {
 
 #[test]
 fn cache_size_with_populated_cache() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_filter(r"(?m)^\d+\n", "[BYTES]\n")
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v5.0.0
@@ -253,12 +245,14 @@ fn cache_size_with_populated_cache() -> anyhow::Result<()> {
               - id: end-of-file-fixer
     "});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("Hello, world!\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     context.run();
 
-    cmd_snapshot!(cache_size_filters(&context), context.command().arg("cache").arg("size"), @r"
+    cmd_snapshot!(context, context.command().arg("cache").arg("size"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -267,7 +261,7 @@ fn cache_size_with_populated_cache() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(cache_size_filters(&context), context.command().arg("cache").arg("size").arg("-H"), @r"
+    cmd_snapshot!(context, context.command().arg("cache").arg("size").arg("-H"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -281,11 +275,7 @@ fn cache_size_with_populated_cache() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v6.0.0
@@ -299,12 +289,14 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
                 language: python
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("valid.yaml").write_str("a: 1\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let home = context.home_dir();
     // Populate store + config tracking.
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -321,15 +313,15 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     home.child("cache/go").create_dir_all()?;
 
     // Reduce hooks
-    context.write_pre_commit_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v6.0.0
             hooks:
               - id: check-yaml
-    "});
+        "});
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
+    cmd_snapshot!(context, context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -350,12 +342,11 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let hook_repo = context.work_dir().child("hook-repo");
     hook_repo.create_dir_all()?;
-    git_cmd(&hook_repo).args(["init"]).assert().success();
+    context.git_at(&hook_repo).args(["init"]).assert().success();
     hook_repo
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
@@ -365,12 +356,20 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
           language: system
           always_run: true
     "})?;
-    git_cmd(&hook_repo).args(["add", "."]).assert().success();
-    git_cmd(&hook_repo)
+    context
+        .git_at(&hook_repo)
+        .args(["add", "."])
+        .assert()
+        .success();
+    context
+        .git_at(&hook_repo)
         .args(["commit", "-m", "Initial commit"])
         .assert()
         .success();
-    let output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let output = context
+        .git_at(&hook_repo)
+        .args(["rev-parse", "HEAD"])
+        .output()?;
     let revision = String::from_utf8(output.stdout)?.trim().to_string();
 
     let subproject = context.work_dir().child("subproject");
@@ -384,9 +383,9 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
                 hooks:
                   - id: test-hook
         "})?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run()
+    cmd_snapshot!(context, context.run()
         .arg("--config")
         .arg("subproject/.pre-commit-config.yaml"), @r"
     success: true
@@ -405,7 +404,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
         .path();
     repos_dir.child("unused-repo").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "gc"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -424,9 +423,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
-    let context = TestContext::new();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -530,7 +527,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         .child(".prek-hook.json")
         .write_str(&serde_json::to_string_pretty(&marker_go)?)?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "--dry-run", "-v"]), @r#"
+    cmd_snapshot!(context, context.command().args(["cache", "gc", "--dry-run", "-v"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -553,7 +550,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]), @r#"
+    cmd_snapshot!(context, context.command().args(["cache", "gc", "-v"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -581,9 +578,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Result<()> {
-    let context = TestContext::new();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -627,8 +622,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     home.child("repos/.temp").create_dir_all()?;
     home.child("tools/.temp").create_dir_all()?;
 
-    cmd_snapshot!(
-        context.filters(),
+    cmd_snapshot!(context,
         context.command().args(["cache", "gc", "--dry-run", "-v"]),
         @r"
     success: true
@@ -646,7 +640,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     "
     );
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "gc"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -665,11 +659,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
 
 #[test]
 fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -679,11 +669,13 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
                 language: python
     "#});
 
+    let cwd = context.work_dir();
+
     cwd.child("file.txt").write_str("Hello\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     // Install + run the local hook so it creates a hook env under PREK_HOME/hooks.
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -716,7 +708,7 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
     // Add an obviously-unused entry to ensure GC does work.
     home.child("hooks/unused-hook-env").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r#"
+    cmd_snapshot!(context, context.command().args(["cache", "gc"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -739,9 +731,7 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
-    let context = TestContext::new();
-
-    context.write_pre_commit_config("repos: []\n");
+    let context = TestEnv::new_without_git().with_config("repos: []\n");
 
     let home = context.home_dir();
     let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
@@ -761,7 +751,7 @@ fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
         SystemTime::now() - Duration::from_hours(24),
     )?;
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v", "--dry-run"]), @"
+    cmd_snapshot!(context, context.command().args(["cache", "gc", "-v", "--dry-run"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -776,7 +766,7 @@ fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
     old_patch.assert(predicates::path::is_file());
     recent_patch.assert(predicates::path::is_file());
 
-    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]), @r"
+    cmd_snapshot!(context, context.command().args(["cache", "gc", "-v"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -858,11 +848,8 @@ fn write_workspace_cache_file(
 
 #[test]
 fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config("repos: []\n");
-    context.git_add(".");
+    let context = TestEnv::new().with_config("repos: []\n");
+    context.git_add_all();
 
     let home = context.home_dir();
     write_workspace_cache_file(home, context.work_dir().path())?;
@@ -871,7 +858,7 @@ fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
     home.child("repos/deadbeef").create_dir_all()?;
     home.child("hooks/hook-env-dead").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
+    cmd_snapshot!(context, context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -890,12 +877,10 @@ fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new().with_config("repos: []\n");
 
     let cwd = context.work_dir();
-    context.write_pre_commit_config("repos: []\n");
-    context.git_add(".");
+    context.git_add_all();
 
     let home = context.home_dir();
     let config_path = cwd.child(PRE_COMMIT_CONFIG_YAML);
@@ -912,7 +897,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     home.child("scratch/some-temp").create_dir_all()?;
     home.child("patches/some-patch").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
+    cmd_snapshot!(context, context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -935,13 +920,12 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     // Intentionally invalid YAML.
     cwd.child(PRE_COMMIT_CONFIG_YAML).write_str("repos: [\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
     let home = context.home_dir();
     let config_path = cwd.child(PRE_COMMIT_CONFIG_YAML);
@@ -953,7 +937,7 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
     home.child("tools/node").create_dir_all()?;
     home.child("cache/go").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r#"
+    cmd_snapshot!(context, context.command().arg("cache").arg("gc"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -972,12 +956,10 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new().with_config("repos: []\n");
 
     let cwd = context.work_dir();
-    context.write_pre_commit_config("repos: []\n");
-    context.git_add(".");
+    context.git_add_all();
 
     let home = context.home_dir();
     // Seed tracking with a missing config to force sweeping everything.
@@ -990,7 +972,7 @@ fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
     home.child("cache/go").create_dir_all()?;
     home.child("scratch/some-temp").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc").arg("--dry-run"), @r#"
+    cmd_snapshot!(context, context.command().arg("cache").arg("gc").arg("--dry-run"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

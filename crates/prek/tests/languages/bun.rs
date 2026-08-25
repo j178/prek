@@ -3,15 +3,12 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test basic Bun hook execution.
 #[test]
 fn basic_bun() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -24,9 +21,9 @@ fn basic_bun() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -43,10 +40,7 @@ fn basic_bun() {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -60,9 +54,9 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -83,7 +77,7 @@ fn additional_dependencies() {
     ");
 
     // Run again to check `health_check` works correctly (cache reuse).
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -113,10 +107,7 @@ fn language_version() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -155,18 +146,14 @@ fn language_version() -> Result<()> {
                 additional_dependencies: ["cowsay"] # different dep to force create separate env
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
     let bun_dir = context.home_dir().child("tools").child("bun");
     bun_dir.assert(predicates::path::missing());
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"Bun (\d+\.\d+)\.\d+", "Bun $1.X")])
-        .collect::<Vec<_>>();
+    let context = context.with_filter(r"Bun (\d+\.\d+)\.\d+", "Bun $1.X");
 
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

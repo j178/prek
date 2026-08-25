@@ -1,14 +1,12 @@
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 mod common;
 
 #[test]
 fn global_config_missing_file_is_optional() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []");
 
-    cmd_snapshot!(context.filters(), context.update(), @"
+    cmd_snapshot!(context, context.update(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19,9 +17,7 @@ fn global_config_missing_file_is_optional() {
 
 #[test]
 fn global_config_ignores_unknown_options() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []");
     context.write_user_config(indoc::indoc! {r#"
         future_option = true
 
@@ -30,7 +26,7 @@ fn global_config_ignores_unknown_options() {
         future_option = "ignored"
     "#});
 
-    cmd_snapshot!(context.filters(), context.update(), @"
+    cmd_snapshot!(context, context.update(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -41,11 +37,9 @@ fn global_config_ignores_unknown_options() {
 
 #[test]
 fn update_command_accepts_legacy_command_alias() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []");
 
-    cmd_snapshot!(context.filters(), context.command().arg("auto-update"), @"
+    cmd_snapshot!(context, context.command().arg("auto-update"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -56,15 +50,13 @@ fn update_command_accepts_legacy_command_alias() {
 
 #[test]
 fn global_config_invalid_file_reports_parse_error() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []");
     context.write_user_config(indoc::indoc! {r#"
         [update]
         cooldown_days = "soon"
     "#});
 
-    cmd_snapshot!(context.filters(), context.update(), @r#"
+    cmd_snapshot!(context, context.update(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----

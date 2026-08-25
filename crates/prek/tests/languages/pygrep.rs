@@ -2,13 +2,12 @@ use anyhow::Result;
 
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test basic pygrep functionality - case-sensitive matching
 #[test]
 fn basic_case_sensitive() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -16,7 +15,7 @@ fn basic_case_sensitive() -> Result<()> {
     cwd.child("other.py")
         .write_str("print('No issues here')\n")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -26,9 +25,9 @@ fn basic_case_sensitive() -> Result<()> {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -42,7 +41,7 @@ fn basic_case_sensitive() -> Result<()> {
     ");
 
     // Run again to ensure `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -61,8 +60,7 @@ fn basic_case_sensitive() -> Result<()> {
 /// Test case-insensitive matching
 #[test]
 fn case_insensitive() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -70,7 +68,7 @@ fn case_insensitive() -> Result<()> {
     cwd.child("other.py")
         .write_str("print('No issues here')\n")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -81,9 +79,9 @@ fn case_insensitive() -> Result<()> {
                 args: ["--ignore-case"]
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -103,15 +101,14 @@ fn case_insensitive() -> Result<()> {
 /// Test multiline mode
 #[test]
 fn multiline_mode() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py").write_str(
         "def function():\n    \"\"\"A function\n    with multiline docstring\n    \"\"\"\n    pass",
     )?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -122,9 +119,9 @@ fn multiline_mode() -> Result<()> {
                 args: ["--multiline"]
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -145,15 +142,14 @@ fn multiline_mode() -> Result<()> {
 /// Test negate mode - passes when pattern is NOT found
 #[test]
 fn negate_mode() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("good.py").write_str("print('Hello World')\n")?;
     cwd.child("bad.py")
         .write_str("TODO: implement this\nprint('Hello World')\n")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -164,9 +160,9 @@ fn negate_mode() -> Result<()> {
                 args: ["--negate"]
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -185,8 +181,7 @@ fn negate_mode() -> Result<()> {
 /// Test negate mode with multiline - should output filename if pattern not found
 #[test]
 fn negate_multiline_mode() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("no_pattern.py")
@@ -195,7 +190,7 @@ fn negate_multiline_mode() -> Result<()> {
         "def function():\n    \"\"\"A function\n    with multiline docstring\n    \"\"\"\n    pass",
     )?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -206,9 +201,9 @@ fn negate_multiline_mode() -> Result<()> {
                 args: ["--multiline", "--negate"]
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -227,15 +222,14 @@ fn negate_multiline_mode() -> Result<()> {
 /// Test invalid regex pattern
 #[test]
 fn invalid_regex() {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
         .write_str("print('Hello World')\n")
         .unwrap();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -245,9 +239,9 @@ fn invalid_regex() {
                 entry: "[unclosed"
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -260,15 +254,14 @@ fn invalid_regex() {
 
 #[test]
 fn python_regex_quirks() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
         .write_str("def function(arg1, arg2):\n    pass\ndef bad_function():\n    pass")?;
 
     // Test lookbehind assertion - function with arguments
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -278,9 +271,9 @@ fn python_regex_quirks() -> Result<()> {
                 entry: "def\\s+\\w+\\([^)]*\\w[^)]*\\):"
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -299,15 +292,14 @@ fn python_regex_quirks() -> Result<()> {
 /// Test complex regex with word boundaries and character classes
 #[test]
 fn complex_regex_patterns() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
         .write_str("import sys\nfrom os import path\nimport json\nfrom typing import Dict")?;
 
     // Match import statements but not 'from' imports
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -317,9 +309,9 @@ fn complex_regex_patterns() -> Result<()> {
                 entry: "^import\\s+[a-zA-Z_][a-zA-Z0-9_]*$"
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -339,14 +331,13 @@ fn complex_regex_patterns() -> Result<()> {
 /// Test combination of case insensitive and multiline
 #[test]
 fn case_insensitive_multiline() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
         .write_str("# TODO: fix this\ndef function():\n    # todo: implement\n    pass")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -357,9 +348,9 @@ fn case_insensitive_multiline() -> Result<()> {
                 args: ["--ignore-case", "--multiline"]
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -380,14 +371,13 @@ fn case_insensitive_multiline() -> Result<()> {
 /// Test successful case where pattern is not found
 #[test]
 fn pattern_not_found() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
         .write_str("print('Hello World')\n# All good here")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -397,9 +387,9 @@ fn pattern_not_found() -> Result<()> {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -413,14 +403,13 @@ fn pattern_not_found() -> Result<()> {
 
 #[test]
 fn invalid_args() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
         .write_str("print('Hello World')\n# All good here")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -431,9 +420,9 @@ fn invalid_args() -> Result<()> {
                 args: ["--hello"]
                 files: "\\.py$"
         "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----

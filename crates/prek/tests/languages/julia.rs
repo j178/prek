@@ -1,11 +1,8 @@
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -18,9 +15,9 @@ fn local_hook() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -34,7 +31,7 @@ fn local_hook() {
     ");
 
     // Run again to check `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -50,10 +47,7 @@ fn local_hook() {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -67,9 +61,9 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -87,8 +81,7 @@ fn additional_dependencies() {
 fn project_toml() -> anyhow::Result<()> {
     use assert_fs::fixture::{FileWriteStr, PathChild};
 
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -98,7 +91,7 @@ fn project_toml() -> anyhow::Result<()> {
             Example = "7876af07-990d-54b4-ab0e-23690620f79a"
         "#})?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -111,9 +104,9 @@ fn project_toml() -> anyhow::Result<()> {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -133,15 +126,14 @@ fn project_toml() -> anyhow::Result<()> {
 fn script_file() -> anyhow::Result<()> {
     use assert_fs::fixture::{FileWriteStr, PathChild};
 
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     context
         .work_dir()
         .child("my_script.jl")
         .write_str(r#"println("Hello from script file!")"#)?;
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -154,9 +146,9 @@ fn script_file() -> anyhow::Result<()> {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -174,11 +166,7 @@ fn script_file() -> anyhow::Result<()> {
 
 #[test]
 fn remote_hook() {
-    let context = TestContext::new();
-
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/julia-hooks
             rev: v1.0.0
@@ -188,11 +176,9 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    let filters = context.filters();
-
-    cmd_snapshot!(filters, context.run(), @"
+    cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
     ----- stdout -----

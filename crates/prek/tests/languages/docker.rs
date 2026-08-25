@@ -1,14 +1,11 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 /// GitHub Action only has docker for linux hosted runners.
 #[test]
 fn docker() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/docker-hooks
             rev: v1.0
@@ -21,9 +18,9 @@ fn docker() {
                 always_run: true
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -39,9 +36,8 @@ fn docker() {
 
 #[test]
 fn workspace_docker() -> anyhow::Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new();
     let cwd = context.work_dir();
-    context.init_project();
 
     let config = indoc::indoc! {r"
         repos:
@@ -57,9 +53,9 @@ fn workspace_docker() -> anyhow::Result<()> {
     cwd.child("project1").child("project1.txt").write_str("")?;
     cwd.child("project2").child("project2.txt").write_str("")?;
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

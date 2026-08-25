@@ -3,7 +3,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test `language_version` parsing and installation for golang hooks.
 /// We use `setup-go` action to install go 1.24 in CI, so go 1.23 will be auto downloaded.
@@ -14,9 +14,7 @@ fn language_version() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -63,20 +61,17 @@ fn language_version() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
     "});
-    context.git_add(".");
+    context.git_add_all();
 
     let go_dir = context.home_dir().child("tools").child("go");
     go_dir.assert(predicates::path::missing());
 
-    let filters = [(
+    let context = context.with_filter(
         r"go version (go1\.\d{1,2})\.\d{1,2} ([\w]+/[\w]+)",
         "go version $1.X [OS]/[ARCH]",
-    )]
-    .into_iter()
-    .chain(context.filters())
-    .collect::<Vec<_>>();
+    );
 
-    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
+    cmd_snapshot!(context, context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -144,11 +139,10 @@ fn language_version() -> anyhow::Result<()> {
 /// Test a remote go hook.
 #[test]
 fn remote_hook() {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     // Run hooks with system found go.
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/golang-hooks
             rev: v1.0
@@ -156,9 +150,9 @@ fn remote_hook() {
               - id: echo
                 verbose: true
         "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -172,7 +166,7 @@ fn remote_hook() {
     ");
 
     // Test that `additional_dependencies` are installed correctly.
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -186,9 +180,9 @@ fn remote_hook() {
                 language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -212,7 +206,7 @@ fn remote_hook() {
     "#);
 
     // Run hooks with newly downloaded go.
-    context.write_pre_commit_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/golang-hooks
             rev: v1.0
@@ -221,9 +215,9 @@ fn remote_hook() {
                 verbose: true
                 language_version: '1.23.11' # will auto download
         "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -240,8 +234,7 @@ fn remote_hook() {
 /// Fix <https://github.com/j178/prek/issues/901>
 #[test]
 fn local_additional_deps() -> anyhow::Result<()> {
-    let go_hook = TestContext::new();
-    go_hook.init_project();
+    let go_hook = TestEnv::new();
 
     // Create a local go hook with additional_dependencies.
     go_hook
@@ -281,14 +274,11 @@ fn local_additional_deps() -> anyhow::Result<()> {
           language: golang
           additional_dependencies: [ ./cmd ]
     "})?;
-    go_hook.git_add(".");
+    go_hook.git_add_all();
     go_hook.git_commit("Initial commit");
-    git_cmd(go_hook.work_dir())
-        .args(["tag", "v1.0", "-m", "v1.0"])
-        .output()?;
+    go_hook.git().args(["tag", "v1.0", "-m", "v1.0"]).output()?;
 
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
     let work_dir = context.work_dir();
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
@@ -302,9 +292,9 @@ fn local_additional_deps() -> anyhow::Result<()> {
               - id: go-hook
                 verbose: true
    ", hook_url = hook_url})?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -325,8 +315,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
 #[test]
 fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
     // Create a remote repo containing a golang hook.
-    let go_hook = TestContext::new();
-    go_hook.init_project();
+    let go_hook = TestEnv::new();
 
     go_hook
         .work_dir()
@@ -348,18 +337,15 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
         verbose: true
       "})?;
 
-    go_hook.git_add(".");
+    go_hook.git_add_all();
     go_hook.git_commit("Initial commit");
-    git_cmd(go_hook.work_dir())
-        .args(["tag", "v1.0", "-m", "v1.0"])
-        .output()?;
+    go_hook.git().args(["tag", "v1.0", "-m", "v1.0"]).output()?;
 
     // Use it as a remote repo in a separate project.
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
       repos:
         - repo: {hook_url}
           rev: v1.0
@@ -367,9 +353,9 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
             - id: echo
               verbose: true
       ", hook_url = hook_url});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----

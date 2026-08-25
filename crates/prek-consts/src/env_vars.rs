@@ -105,8 +105,6 @@ impl EnvVars {
     pub const PREK_INTERNAL__USER_CONFIG_PATH: &'static str = "PREK_INTERNAL__USER_CONFIG_PATH";
     pub const PREK_INTERNAL__SORT_FILENAMES: &'static str = "PREK_INTERNAL__SORT_FILENAMES";
     pub const PREK_INTERNAL__SKIP_POST_CHECKOUT: &'static str = "PREK_INTERNAL__SKIP_POST_CHECKOUT";
-    pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
-        "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
     pub const PREK_INTERNAL__BUN_BINARY_NAME: &'static str = "PREK_INTERNAL__BUN_BINARY_NAME";
     pub const PREK_INTERNAL__DENO_BINARY_NAME: &'static str = "PREK_INTERNAL__DENO_BINARY_NAME";
     pub const PREK_INTERNAL__DOTNET_BINARY_NAME: &'static str = "PREK_INTERNAL_DOTNET_BINARY_NAME";
@@ -213,7 +211,6 @@ impl EnvVars {
 
 impl EnvVars {
     // Pre-commit environment variables that we support for compatibility
-    pub const PRE_COMMIT_HOME: &'static str = "PRE_COMMIT_HOME";
     const PRE_COMMIT_ALLOW_NO_CONFIG: &'static str = "PRE_COMMIT_ALLOW_NO_CONFIG";
     const PRE_COMMIT_NO_CONCURRENCY: &'static str = "PRE_COMMIT_NO_CONCURRENCY";
 }

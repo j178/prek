@@ -5,7 +5,7 @@ use indoc::indoc;
 
 #[cfg(unix)]
 use crate::common::make_executable;
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 fn config() -> &'static str {
     indoc! {r#"
@@ -24,18 +24,15 @@ fn config() -> &'static str {
     "#}
 }
 
-fn context_with_config() -> TestContext {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(config());
-    context
+fn context_with_config() -> TestEnv {
+    TestEnv::new().with_config(config())
 }
 
 #[test]
 fn exec_inherits_stdin_and_stdout() {
     let context = context_with_config();
 
-    cmd_snapshot!(context.filters(), context.exec()
+    cmd_snapshot!(context, context.exec()
         .args(["exec-test", "--", "git", "stripspace"])
         .pass_stdin("hello from prek exec\n"), @r"
     success: true
@@ -51,7 +48,7 @@ fn exec_inherits_stdin_and_stdout() {
 fn exec_applies_hook_environment_without_entry_or_args() {
     let context = context_with_config();
 
-    cmd_snapshot!(context.filters(), context.exec().args([
+    cmd_snapshot!(context, context.exec().args([
             "exec-test",
             "--",
             "git",
@@ -71,7 +68,7 @@ fn exec_applies_hook_environment_without_entry_or_args() {
 fn exec_explicit_selector_ignores_skip_environment() {
     let context = context_with_config();
 
-    cmd_snapshot!(context.filters(), context.exec()
+    cmd_snapshot!(context, context.exec()
         .env("PREK_SKIP", "exec-test")
         .args([
             "exec-test",
@@ -93,7 +90,7 @@ fn exec_explicit_selector_ignores_skip_environment() {
 fn exec_propagates_child_exit_status() {
     let context = context_with_config();
 
-    cmd_snapshot!(context.filters(), context.exec().args([
+    cmd_snapshot!(context, context.exec().args([
             "exec-test",
             "--",
             "git",
@@ -111,11 +108,10 @@ fn exec_propagates_child_exit_status() {
 
 #[test]
 fn exec_rejects_ambiguous_hook_selector() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
     context.setup_workspace(&["frontend"], config())?;
 
-    cmd_snapshot!(context.filters(), context.exec().args([
+    cmd_snapshot!(context, context.exec().args([
         "exec-test",
         "--",
         "git",
@@ -137,11 +133,10 @@ fn exec_rejects_ambiguous_hook_selector() -> Result<()> {
 
 #[test]
 fn exec_keeps_current_working_directory() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
     context.setup_workspace(&["frontend"], config())?;
 
-    cmd_snapshot!(context.filters(), context.exec().args([
+    cmd_snapshot!(context, context.exec().args([
             "frontend:exec-test",
             "--",
             "git",
@@ -161,15 +156,14 @@ fn exec_keeps_current_working_directory() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn exec_resolves_relative_command_from_current_working_directory() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
     context.setup_workspace(&["frontend"], config())?;
 
     let command = context.work_dir().join("exec-tool");
     fs_err::write(&command, "#!/bin/sh\necho relative command ok\n")?;
     make_executable(&command)?;
 
-    cmd_snapshot!(context.filters(), context.exec().args([
+    cmd_snapshot!(context, context.exec().args([
         "frontend:exec-test",
         "--",
         "./exec-tool",
@@ -186,9 +180,7 @@ fn exec_resolves_relative_command_from_current_working_directory() -> Result<()>
 
 #[test]
 fn exec_rejects_unsupported_language_before_install() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -198,7 +190,7 @@ fn exec_rejects_unsupported_language_before_install() {
                 language: julia
     "});
 
-    cmd_snapshot!(context.filters(), context.exec().args([
+    cmd_snapshot!(context, context.exec().args([
         "julia-hook",
         "--",
         "git",

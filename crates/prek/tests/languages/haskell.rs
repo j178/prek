@@ -1,15 +1,11 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() -> anyhow::Result<()> {
-    let context = TestContext::new();
-
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -46,9 +42,9 @@ fn local_hook() -> anyhow::Result<()> {
             main = putStrLn "Hello Haskell!"
         "#})?;
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -62,7 +58,7 @@ fn local_hook() -> anyhow::Result<()> {
     ");
 
     // Run again to check `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -80,11 +76,7 @@ fn local_hook() -> anyhow::Result<()> {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestContext::new();
-
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -98,11 +90,9 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    let filters = context.filters();
-
-    cmd_snapshot!(filters, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -118,11 +108,7 @@ fn additional_dependencies() {
 
 #[test]
 fn remote_hook() {
-    let context = TestContext::new();
-
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/haskell-hooks
             rev: v1.0.0
@@ -132,11 +118,9 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    let filters = context.filters();
-
-    cmd_snapshot!(filters, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----

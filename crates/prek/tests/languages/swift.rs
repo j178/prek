@@ -2,7 +2,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test that a local Swift hook with a system command works.
 #[test]
@@ -11,10 +11,7 @@ fn local_hook_system_command() {
         return;
     }
 
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -27,9 +24,9 @@ fn local_hook_system_command() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -50,9 +47,7 @@ fn language_version_rejected() {
         return;
     }
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -65,9 +60,9 @@ fn language_version_rejected() {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -86,10 +81,7 @@ fn health_check() {
         return;
     }
 
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -102,10 +94,10 @@ fn health_check() {
                 pass_filenames: false
     "#});
 
-    context.git_add(".");
+    context.git_add_all();
 
     // First run - installs
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -119,7 +111,7 @@ fn health_check() {
     ");
 
     // Second run - health check
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -140,8 +132,7 @@ fn local_package_build() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let swift_hook = TestContext::new();
-    swift_hook.init_project();
+    let swift_hook = TestEnv::new();
 
     // Create a minimal Swift package
     swift_hook
@@ -174,17 +165,17 @@ fn local_package_build() -> anyhow::Result<()> {
           entry: prek-swift-test
           language: swift
     "})?;
-    swift_hook.git_add(".");
+    swift_hook.git_add_all();
     swift_hook.git_commit("Initial commit");
-    git_cmd(swift_hook.work_dir())
+    swift_hook
+        .git()
         .args(["tag", "v1.0", "-m", "v1.0"])
         .output()?;
 
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let hook_url = swift_hook.work_dir().to_str().unwrap();
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: {hook_url}
             rev: v1.0
@@ -194,9 +185,9 @@ fn local_package_build() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
     ", hook_url = hook_url});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

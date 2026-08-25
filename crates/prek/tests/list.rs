@@ -1,14 +1,11 @@
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 use indoc::indoc;
 
 mod common;
 
 #[test]
 fn list_basic() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -25,7 +22,7 @@ fn list_basic() {
                 description: Validate JSON files
     "});
 
-    cmd_snapshot!(context.filters(), context.list(), @r"
+    cmd_snapshot!(context, context.list(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -38,10 +35,7 @@ fn list_basic() {
 
 #[test]
 fn list_verbose() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -60,7 +54,7 @@ fn list_verbose() {
                 verbose: true
     "});
 
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r"
+    cmd_snapshot!(context, context.list().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -81,7 +75,7 @@ fn list_verbose() {
     ----- stderr -----
     ");
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -105,7 +99,7 @@ fn list_verbose() {
                 alias: fmt
     "});
 
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r"
+    cmd_snapshot!(context, context.list().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -124,10 +118,7 @@ fn list_verbose() {
 
 #[test]
 fn list_with_hook_ids_filter() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -149,7 +140,7 @@ fn list_with_hook_ids_filter() {
     "});
 
     // Test filtering by specific hook ID
-    cmd_snapshot!(context.filters(), context.list().arg("check-yaml"), @r"
+    cmd_snapshot!(context, context.list().arg("check-yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -159,7 +150,7 @@ fn list_with_hook_ids_filter() {
     ");
 
     // Test filtering by multiple hook IDs
-    cmd_snapshot!(context.filters(), context.list().arg("check-yaml").arg("check-json"), @r"
+    cmd_snapshot!(context, context.list().arg("check-yaml").arg("check-json"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -172,10 +163,7 @@ fn list_with_hook_ids_filter() {
 
 #[test]
 fn list_with_language_filter() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -197,7 +185,7 @@ fn list_with_language_filter() {
     "});
 
     // Test filtering by language
-    cmd_snapshot!(context.filters(), context.list().arg("--language").arg("system"), @r"
+    cmd_snapshot!(context, context.list().arg("--language").arg("system"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -206,7 +194,7 @@ fn list_with_language_filter() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--language").arg("python"), @r"
+    cmd_snapshot!(context, context.list().arg("--language").arg("python"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -218,10 +206,7 @@ fn list_with_language_filter() {
 
 #[test]
 fn list_with_stage_filter() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -245,7 +230,7 @@ fn list_with_stage_filter() {
     "});
 
     // Test filtering by stage
-    cmd_snapshot!(context.filters(), context.list().arg("--hook-stage").arg("pre-commit"), @r"
+    cmd_snapshot!(context, context.list().arg("--hook-stage").arg("pre-commit"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -255,7 +240,7 @@ fn list_with_stage_filter() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--hook-stage").arg("pre-push"), @r"
+    cmd_snapshot!(context, context.list().arg("--hook-stage").arg("pre-push"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -269,10 +254,7 @@ fn list_with_stage_filter() {
 
 #[test]
 fn list_with_group_filter() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -301,7 +283,7 @@ fn list_with_group_filter() {
                 types: [text]
     "});
 
-    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci"), @r"
+    cmd_snapshot!(context, context.list().arg("--group").arg("ci"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -311,7 +293,7 @@ fn list_with_group_filter() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--no-group").arg("format"), @r"
+    cmd_snapshot!(context, context.list().arg("--no-group").arg("format"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -322,7 +304,7 @@ fn list_with_group_filter() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci").arg("--no-group").arg("slow"), @r"
+    cmd_snapshot!(context, context.list().arg("--group").arg("ci").arg("--no-group").arg("slow"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -331,7 +313,7 @@ fn list_with_group_filter() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("missing"), @r"
+    cmd_snapshot!(context, context.list().arg("--group").arg("missing"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -340,7 +322,7 @@ fn list_with_group_filter() {
     warning: group selector `--group=missing` did not match any hooks
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--require-group").arg("ci").arg("--require-group").arg("slow"), @r"
+    cmd_snapshot!(context, context.list().arg("--require-group").arg("ci").arg("--require-group").arg("slow"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -349,7 +331,7 @@ fn list_with_group_filter() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--group").arg("ci slow"), @r"
+    cmd_snapshot!(context, context.list().arg("--group").arg("ci slow"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -362,9 +344,7 @@ fn list_with_group_filter() {
 
 #[test]
 fn list_group_excluded_remote_repo_is_not_cloned() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -377,10 +357,9 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
               - id: ruff-check
                 groups: [local]
         "});
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(
-        context.filters(),
+    cmd_snapshot!(context,
         context.list().arg("--group").arg("ci"),
         @r"
     success: true
@@ -395,10 +374,7 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
 
 #[test]
 fn list_with_aliases() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -416,7 +392,7 @@ fn list_with_aliases() {
     "});
 
     // Test that aliases are recognized
-    cmd_snapshot!(context.filters(), context.list().arg("yaml-check"), @r"
+    cmd_snapshot!(context, context.list().arg("yaml-check"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -426,7 +402,7 @@ fn list_with_aliases() {
     ");
 
     // Test verbose shows alias information
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose").arg("check-yaml"), @r"
+    cmd_snapshot!(context, context.list().arg("--verbose").arg("check-yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -444,12 +420,9 @@ fn list_with_aliases() {
 
 #[test]
 fn list_empty_config() {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new().with_config("repos: []");
 
-    context.write_pre_commit_config("repos: []");
-
-    cmd_snapshot!(context.filters(), context.list(), @r#"
+    cmd_snapshot!(context, context.list(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -457,7 +430,7 @@ fn list_empty_config() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r#"
+    cmd_snapshot!(context, context.list().arg("--verbose"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -468,11 +441,10 @@ fn list_empty_config() {
 
 #[test]
 fn list_no_config_file() {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     // No config file exists
-    cmd_snapshot!(context.filters(), context.list(), @r"
+    cmd_snapshot!(context, context.list(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -486,10 +458,7 @@ fn list_no_config_file() {
 
 #[test]
 fn list_json_output() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -508,7 +477,7 @@ fn list_json_output() {
     "});
 
     // Test JSON output for all hooks
-    cmd_snapshot!(context.filters(), context.list().arg("--output-format=json"), @r#"
+    cmd_snapshot!(context, context.list().arg("--output-format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -561,7 +530,7 @@ fn list_json_output() {
     "#);
 
     // Test filtered JSON output
-    cmd_snapshot!(context.filters(), context.list().arg("check-json").arg("--output-format=json"), @r#"
+    cmd_snapshot!(context, context.list().arg("check-json").arg("--output-format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -595,9 +564,8 @@ fn list_json_output() {
 
 #[test]
 fn workspace_list() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    let cwd = context.work_dir();
-    context.init_project();
+    let context = TestEnv::new();
+    let cwd = context.work_dir().to_path_buf();
 
     let config = indoc! {r"
     repos:
@@ -619,9 +587,9 @@ fn workspace_list() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.list(), @r"
+    cmd_snapshot!(context, context.list(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -634,9 +602,8 @@ fn workspace_list() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    let mut filters = context.filters();
-    filters.push((r"\\/", "/")); // Normalize Windows path separators in JSON output
-    cmd_snapshot!(filters, context.list().arg("--output-format=json"), @r#"
+    let context = context.with_filter(r"\\/", "/");
+    cmd_snapshot!(context, context.list().arg("--output-format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -751,7 +718,7 @@ fn workspace_list() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.list().current_dir(cwd.join("project3")), @r"
+    cmd_snapshot!(context, context.list().current_dir(cwd.join("project3")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -761,7 +728,7 @@ fn workspace_list() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().current_dir(cwd.join("project3")).arg("-v"), @r"
+    cmd_snapshot!(context, context.list().current_dir(cwd.join("project3")).arg("-v"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -786,8 +753,7 @@ fn workspace_list() -> anyhow::Result<()> {
 
 #[test]
 fn list_with_selectors() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let config = indoc! {r"
     repos:
@@ -809,9 +775,9 @@ fn list_with_selectors() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.list().arg("project2/"), @r"
+    cmd_snapshot!(context, context.list().arg("project2/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -820,7 +786,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("project2/"), @r"
+    cmd_snapshot!(context, context.list().arg("--skip").arg("project2/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -832,7 +798,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @r"
+    cmd_snapshot!(context, context.list().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -842,7 +808,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("show-cwd"), @r"
+    cmd_snapshot!(context, context.list().arg("show-cwd"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -855,7 +821,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("project2:show-cwd"), @r"
+    cmd_snapshot!(context, context.list().arg("project2:show-cwd"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -864,7 +830,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg(".:show-cwd"), @r"
+    cmd_snapshot!(context, context.list().arg(".:show-cwd"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -873,7 +839,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("show-cwd"), @r"
+    cmd_snapshot!(context, context.list().arg("--skip").arg("show-cwd"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -881,7 +847,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r"
+    cmd_snapshot!(context, context.list().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -894,7 +860,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     warning: selector `--skip=nested:show-cwd` did not match any hooks
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("non-exist"), @r"
+    cmd_snapshot!(context, context.list().arg("--skip").arg("non-exist"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -908,7 +874,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
     warning: selector `--skip=non-exist` did not match any hooks
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("../"), @r"
+    cmd_snapshot!(context, context.list().arg("--skip").arg("../"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -919,7 +885,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
       caused by: path is outside the workspace root
     ");
 
-    cmd_snapshot!(context.filters(), context.list().current_dir(context.work_dir().join("project2")), @r"
+    cmd_snapshot!(context, context.list().current_dir(context.work_dir().join("project2")), @r"
     success: true
     exit_code: 0
     ----- stdout -----

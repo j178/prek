@@ -3,14 +3,11 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -33,9 +30,9 @@ fn local_hook() -> anyhow::Result<()> {
             print "Hello from Perl!\n";
         "#})?;
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
+    cmd_snapshot!(context, context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -53,11 +50,11 @@ fn local_hook() -> anyhow::Result<()> {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let hook_repo = TestContext::new();
-    hook_repo.init_project();
+    let context = TestEnv::new();
+    let hook_repo = context.create_repo("perl-hook");
 
     hook_repo
-        .work_dir()
+        .path()
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
             - id: hello
@@ -67,7 +64,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
         "})?;
 
     hook_repo
-        .work_dir()
+        .path()
         .child("Makefile.PL")
         .write_str(indoc::indoc! {r"
             use strict;
@@ -81,12 +78,12 @@ fn remote_repo_install() -> anyhow::Result<()> {
         "})?;
 
     hook_repo
-        .work_dir()
+        .path()
         .child("lib")
         .child("Prek")
         .create_dir_all()?;
     hook_repo
-        .work_dir()
+        .path()
         .child("lib")
         .child("Prek")
         .child("Hello.pm")
@@ -105,13 +102,11 @@ fn remote_repo_install() -> anyhow::Result<()> {
             1;
         "#})?;
 
-    hook_repo.git_add(".");
+    hook_repo.git_add_all();
     hook_repo.git_commit("Add perl hook");
     hook_repo.git_tag("v1.0.0");
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -120,11 +115,11 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.work_dir().display()});
+    ", hook_repo.path().display()});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
+    cmd_snapshot!(context, context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -142,10 +137,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -159,7 +151,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
     context
         .run()
@@ -170,9 +162,7 @@ fn additional_dependencies() {
 
 #[test]
 fn language_version() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -186,9 +176,9 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----

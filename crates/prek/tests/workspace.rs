@@ -7,13 +7,12 @@ use indoc::indoc;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn basic_discovery() -> Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new();
     let cwd = context.work_dir();
-    context.init_project();
 
     let config = indoc! {r"
     repos:
@@ -35,10 +34,10 @@ fn basic_discovery() -> Result<()> {
         ],
         config,
     )?;
-    context.git_add(".");
+    context.git_add_all();
 
     // Run from the root directory
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -84,7 +83,7 @@ fn basic_discovery() -> Result<()> {
     "#);
 
     // Run from a subdirectory
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")), @r"
+    cmd_snapshot!(context, context.run().current_dir(cwd.join("project2")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -98,7 +97,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")).arg("--all-files"), @r"
+    cmd_snapshot!(context, context.run().current_dir(cwd.join("project2")).arg("--all-files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -112,7 +111,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project3")), @r#"
+    cmd_snapshot!(context, context.run().current_dir(cwd.join("project3")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -134,7 +133,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(cwd.join("project3")), @r#"
+    cmd_snapshot!(context, context.run().arg("--cd").arg(cwd.join("project3")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -161,9 +160,9 @@ fn basic_discovery() -> Result<()> {
         .work_dir()
         .child("project3/.prekignore")
         .write_str("project5/\n")?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--cd").arg(cwd.join("project3")), @r#"
+    cmd_snapshot!(context, context.run().arg("--refresh").arg("--cd").arg(cwd.join("project3")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -182,8 +181,8 @@ fn basic_discovery() -> Result<()> {
         .work_dir()
         .child("project3/.prekignore")
         .write_str("*\n")?;
-    context.git_add(".");
-    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--cd").arg(cwd.join("project3")), @r#"
+    context.git_add_all();
+    cmd_snapshot!(context, context.run().arg("--refresh").arg("--cd").arg(cwd.join("project3")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -202,10 +201,7 @@ fn basic_discovery() -> Result<()> {
 
 #[test]
 fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []");
     context
         .work_dir()
         .child("concurrent_hook.py")
@@ -250,12 +246,12 @@ fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
             .write_str(config)?;
         project_dir.child("file.txt").write_str("")?;
     }
-    context.git_add(".");
+    context.git_add_all();
 
     let mut run = context.run();
     run.arg("--all-files")
         .env(EnvVars::PREK_CONCURRENT_HOOKS, "2");
-    cmd_snapshot!(context.filters(), run, @r#"
+    cmd_snapshot!(context, run, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -272,10 +268,7 @@ fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
 
 #[test]
 fn fail_fast_stops_after_current_project_level() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -320,12 +313,12 @@ fn fail_fast_stops_after_current_project_level() -> Result<()> {
         .child(".pre-commit-config.yaml")
         .write_str(passing_config)?;
 
-    context.git_add(".");
+    context.git_add_all();
 
     let mut run = context.run();
     run.arg("--all-files")
         .env(EnvVars::PREK_CONCURRENT_HOOKS, "2");
-    cmd_snapshot!(context.filters(), run, @r#"
+    cmd_snapshot!(context, run, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -344,9 +337,8 @@ fn fail_fast_stops_after_current_project_level() -> Result<()> {
 
 #[test]
 fn config_not_staged() -> Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new();
     let cwd = context.work_dir();
-    context.init_project();
 
     let config = indoc! {r"
     repos:
@@ -367,7 +359,7 @@ fn config_not_staged() -> Result<()> {
         ],
         config,
     )?;
-    context.git_add(".");
+    context.git_add_all();
 
     let config = indoc! {r"
     repos:
@@ -391,7 +383,7 @@ fn config_not_staged() -> Result<()> {
     )?;
 
     // Run from the root directory
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -406,7 +398,7 @@ fn config_not_staged() -> Result<()> {
     ");
 
     // Run from a subdirectory
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project3")), @r"
+    cmd_snapshot!(context, context.run().current_dir(cwd.join("project3")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -417,7 +409,7 @@ fn config_not_staged() -> Result<()> {
       - `project5/.pre-commit-config.yaml`
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")), @r"
+    cmd_snapshot!(context, context.run().current_dir(cwd.join("project2")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -431,8 +423,7 @@ fn config_not_staged() -> Result<()> {
 
 #[test]
 fn run_with_selectors() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let config = indoc! {r"
     repos:
@@ -454,9 +445,9 @@ fn run_with_selectors() -> Result<()> {
         ],
         config,
     )?;
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().arg("project2/"), @r#"
+    cmd_snapshot!(context, context.run().arg("project2/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -471,7 +462,7 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project2/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project2/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -509,7 +500,7 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -533,7 +524,7 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg("show-cwd"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -578,7 +569,7 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("project2:show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg("project2:show-cwd"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -593,7 +584,7 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg(".:show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg(".:show-cwd"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -609,7 +600,7 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("show-cwd"), @r"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("show-cwd"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -618,7 +609,7 @@ fn run_with_selectors() -> Result<()> {
     error: No hooks found after filtering with the given selectors
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -657,7 +648,7 @@ fn run_with_selectors() -> Result<()> {
     warning: selector `--skip=nested:show-cwd` did not match any hooks
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("non-exist"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("non-exist"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -703,7 +694,7 @@ fn run_with_selectors() -> Result<()> {
     warning: selector `--skip=non-exist` did not match any hooks
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("../"), @r"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("../"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -714,7 +705,7 @@ fn run_with_selectors() -> Result<()> {
       caused by: path is outside the workspace root
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(context.work_dir().join("project2")), @r"
+    cmd_snapshot!(context, context.run().current_dir(context.work_dir().join("project2")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -733,10 +724,7 @@ fn run_with_selectors() -> Result<()> {
 
 #[test]
 fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -773,9 +761,9 @@ fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
         .child(".pre-commit-config.yaml")
         .write_str("invalid: config\n")?;
 
-    context.git_add(".");
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("sub/").arg(".:root-hook"), @r"
+    cmd_snapshot!(context, context.run().arg("--all-files").arg("sub/").arg(".:root-hook"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -787,7 +775,7 @@ fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("sub/").arg("root-hook"), @r"
+    cmd_snapshot!(context, context.run().arg("--all-files").arg("sub/").arg("root-hook"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -799,7 +787,7 @@ fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("empty/").arg("root-hook"), @r"
+    cmd_snapshot!(context, context.run().arg("--all-files").arg("empty/").arg("root-hook"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -813,8 +801,7 @@ fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
 
 #[test]
 fn skips() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let config = indoc! {r"
     repos:
@@ -828,10 +815,10 @@ fn skips() -> Result<()> {
     "};
 
     context.setup_workspace(&["project2", "project3", "project3/project4"], config)?;
-    context.git_add(".");
+    context.git_add_all();
 
     // Test CLI skip
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project2/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project2/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -861,7 +848,7 @@ fn skips() -> Result<()> {
     "#);
 
     // Test PREK_SKIP environment variable
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_SKIP, "project2/"), @r#"
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_SKIP, "project2/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -891,7 +878,7 @@ fn skips() -> Result<()> {
     "#);
 
     // Test SKIP environment variable
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::SKIP, "project2/"), @r#"
+    cmd_snapshot!(context, context.run().env(EnvVars::SKIP, "project2/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -921,7 +908,7 @@ fn skips() -> Result<()> {
     "#);
 
     // Test precedence: CLI --skip overrides PREK_SKIP
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project2/").env(EnvVars::PREK_SKIP, "project3/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project2/").env(EnvVars::PREK_SKIP, "project3/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -951,7 +938,7 @@ fn skips() -> Result<()> {
     "#);
 
     // Test precedence: PREK_SKIP overrides SKIP
-    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_SKIP, "project2/").env(EnvVars::SKIP, "project3/"), @r#"
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_SKIP, "project2/").env(EnvVars::SKIP, "project3/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -981,7 +968,7 @@ fn skips() -> Result<()> {
     "#);
 
     // Test multiple selectors in environment variable
-    cmd_snapshot!(context.filters(), context.run().env("PREK_SKIP", "project2/,project3/,non-exist-hook"), @r"
+    cmd_snapshot!(context, context.run().env("PREK_SKIP", "project2/,project3/,non-exist-hook"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1001,10 +988,10 @@ fn skips() -> Result<()> {
         .work_dir()
         .child("project3/.pre-commit-config.yaml")
         .write_str("invalid_yaml: [")?;
-    context.git_add(".");
+    context.git_add_all();
 
     // Should error out because of the invalid config
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1019,7 +1006,7 @@ fn skips() -> Result<()> {
     ");
 
     // Should skip the invalid config
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project3/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project3/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1046,13 +1033,10 @@ fn skips() -> Result<()> {
 
 #[test]
 fn workspace_no_projects() {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new().with_config("repos: []");
+    context.git_add_all();
 
-    context.write_pre_commit_config("repos: []");
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("."), @r"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("."), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1066,8 +1050,7 @@ fn workspace_no_projects() {
 
 #[test]
 fn gitignore_respected() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let config = indoc! {r"
     repos:
@@ -1096,10 +1079,10 @@ fn gitignore_respected() -> Result<()> {
         .child(".gitignore")
         .write_str("node_modules/\ntarget/\n")?;
 
-    context.git_add(".");
+    context.git_add_all();
 
     // Run from the root - should not discover projects in node_modules or target
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1126,8 +1109,7 @@ fn gitignore_respected() -> Result<()> {
 
 #[test]
 fn nested_project_exclude_is_relative() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     // Regression test for nested workspaces:
     // `exclude` must be evaluated against paths *relative to each project root*.
@@ -1166,12 +1148,12 @@ fn nested_project_exclude_is_relative() -> Result<()> {
         .child("nested/excluded_by_project")
         .write_str("")?;
 
-    context.git_add(".");
+    context.git_add_all();
 
     // When running from the root with --all-files, the nested project's exclude
     // pattern should see paths relative to `nested/`, so `noinclude` is excluded
     // there but still visible from the root project.
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1200,8 +1182,7 @@ fn nested_project_exclude_is_relative() -> Result<()> {
 /// Tests that `--files` arguments references files in other projects, should be filtered out properly.
 #[test]
 fn reference_files_across_projects() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let config = indoc! {r"
     repos:
@@ -1220,9 +1201,9 @@ fn reference_files_across_projects() -> Result<()> {
     let cwd = context.work_dir();
     cwd.child("backend/app.py")
         .write_str("print('Hello from backend')")?;
-    context.git_add(".");
+    context.git_add_all();
     // Run with --files referencing a file in another project
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.child("frontend")).arg("--files").arg("../backend/app.py").arg("../backend/non-exist.py"), @r"
+    cmd_snapshot!(context, context.run().current_dir(cwd.child("frontend")).arg("--files").arg("../backend/app.py").arg("../backend/non-exist.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1237,9 +1218,8 @@ fn reference_files_across_projects() -> Result<()> {
 
 #[test]
 fn submodule_discovery() -> Result<()> {
-    let context = TestContext::new();
+    let context = TestEnv::new();
     let cwd = context.work_dir();
-    context.init_project();
 
     let config = indoc! {r"
     repos:
@@ -1256,22 +1236,20 @@ fn submodule_discovery() -> Result<()> {
 
     // Create a submodule
     let submodule_path = cwd.child("submodule");
-    let submodule_context = TestContext::new_at(submodule_path.to_path_buf());
-
-    submodule_context.init_project();
-    submodule_context.write_pre_commit_config(config);
-    submodule_context.git_add(".");
+    let submodule_context = TestEnv::new_at(&submodule_path).with_config(config);
+    submodule_context.git_add_all();
     submodule_context.git_commit("Initial commit");
 
     // Add submodule to the main project
-    git_cmd(cwd)
+    context
+        .git_at(cwd)
         .args(["submodule", "add", "./submodule"])
         .assert()
         .success();
-    context.git_add(".");
+    context.git_add_all();
 
     // 1. Test that workspace discovery does not recurse into git submodules
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1294,7 +1272,7 @@ fn submodule_discovery() -> Result<()> {
     "#);
 
     // 2. Test that current directory is in the submodule with a .pre-commit-config
-    cmd_snapshot!(context.filters(), context.run().current_dir(&submodule_path).arg("--all-files"), @r"
+    cmd_snapshot!(context, context.run().current_dir(&submodule_path).arg("--all-files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1311,10 +1289,10 @@ fn submodule_discovery() -> Result<()> {
     // 3. Test that current directory is in the submodule without .pre-commit-config
     // Remove the config file in the submodule
     fs_err::remove_file(submodule_path.join(".pre-commit-config.yaml"))?;
-    submodule_context.git_add(".");
+    submodule_context.git_add_all();
     submodule_context.git_commit("Remove config");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(&submodule_path), @r"
+    cmd_snapshot!(context, context.run().current_dir(&submodule_path), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1330,8 +1308,7 @@ fn submodule_discovery() -> Result<()> {
 
 #[test]
 fn cookiecutter_template_directories_are_skipped() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     let config = indoc! {r"
     repos:
@@ -1351,7 +1328,7 @@ fn cookiecutter_template_directories_are_skipped() -> Result<()> {
     context.git_add("project2/.pre-commit-config.yaml");
 
     // The cookiecutter directory would otherwise be discovered as a project.
-    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.run().arg("--refresh").arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1378,8 +1355,7 @@ fn cookiecutter_template_directories_are_skipped() -> Result<()> {
 
 #[test]
 fn orphan_projects() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
+    let context = TestEnv::new();
 
     // Create a hook that shows which files it processes
     let config = indoc! {r#"
@@ -1416,10 +1392,10 @@ fn orphan_projects() -> Result<()> {
         .write_str("")?;
     context.work_dir().child("src/test.py").write_str("")?;
     context.work_dir().child("test.py").write_str("")?;
-    context.git_add(".");
+    context.git_add_all();
 
     // Without `orphan`: files in subprojects are processed multiple times
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1506,7 +1482,7 @@ fn orphan_projects() -> Result<()> {
     "#})?;
 
     // In orphan project, files are "consumed" and not processed again in parent projects
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1531,7 +1507,7 @@ fn orphan_projects() -> Result<()> {
     "#);
 
     // If hooks in orphan projects are not selected, files should be "consumed" as well
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--skip").arg("src/"), @r"
+    cmd_snapshot!(context, context.run().arg("--all-files").arg("--skip").arg("src/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1548,15 +1524,14 @@ fn orphan_projects() -> Result<()> {
     Ok(())
 }
 
-fn setup_relative_repo_path_project() -> Result<TestContext> {
-    let context = TestContext::new();
-    context.init_project();
+fn setup_relative_repo_path_project() -> Result<TestEnv> {
+    let context = TestEnv::new();
 
     // Create a local hook repository at the root level
     let hook_repo = context.work_dir().child("hook-repo");
     hook_repo.create_dir_all()?;
 
-    git_cmd(&hook_repo).args(["init"]).assert().success();
+    context.git_at(&hook_repo).args(["init"]).assert().success();
 
     hook_repo.child(PRE_COMMIT_HOOKS_YAML).write_str(indoc! {r"
         - id: test-hook
@@ -1566,15 +1541,23 @@ fn setup_relative_repo_path_project() -> Result<TestContext> {
           always_run: true
     "})?;
 
-    git_cmd(&hook_repo).args(["add", "."]).assert().success();
+    context
+        .git_at(&hook_repo)
+        .args(["add", "."])
+        .assert()
+        .success();
 
-    git_cmd(&hook_repo)
+    context
+        .git_at(&hook_repo)
         .args(["commit", "-m", "Initial commit"])
         .assert()
         .success();
 
     // Get the commit SHA
-    let output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let output = context
+        .git_at(&hook_repo)
+        .args(["rev-parse", "HEAD"])
+        .output()?;
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Create a subproject that references the hook repo with a relative path
@@ -1596,7 +1579,7 @@ fn setup_relative_repo_path_project() -> Result<TestContext> {
     subproject.child("test.txt").write_str("test content")?;
 
     // Root config so workspace discovery works
-    context.write_pre_commit_config(indoc! {r"
+    let context = context.with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -1607,7 +1590,7 @@ fn setup_relative_repo_path_project() -> Result<TestContext> {
                 always_run: true
     "});
 
-    context.git_add(".");
+    context.git_add_all();
 
     Ok(context)
 }
@@ -1622,7 +1605,7 @@ fn relative_repo_path_resolution() -> Result<()> {
 
     // Run from the root directory - the relative path ../hook-repo should resolve
     // from subproject/.pre-commit-config.yaml's location, not from CWD
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1641,7 +1624,7 @@ fn relative_repo_path_resolution() -> Result<()> {
 fn relative_repo_path_resolution_with_explicit_relative_config() -> Result<()> {
     let context = setup_relative_repo_path_project()?;
 
-    cmd_snapshot!(context.filters(), context.run()
+    cmd_snapshot!(context, context.run()
         .arg("--config")
         .arg("subproject/.pre-commit-config.yaml"), @r#"
     success: true
