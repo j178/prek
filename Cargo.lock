@@ -2005,6 +2005,7 @@ dependencies = [
  "prek-consts",
  "prek-identify",
  "prek-pty",
+ "prek-serde-saphyr",
  "pretty_assertions",
  "rayon",
  "regex",
@@ -2017,7 +2018,6 @@ dependencies = [
  "seahash",
  "semver",
  "serde",
- "serde-saphyr",
  "serde_json",
  "serde_stacker",
  "shlex",
@@ -2072,6 +2072,23 @@ dependencies = [
  "fs-err",
  "rustix",
  "tokio",
+]
+
+[[package]]
+name = "prek-serde-saphyr"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0962fea725994a4ac8796ca0379e7e2c35682d5f160a233316d96904aac828c8"
+dependencies = [
+ "annotate-snippets",
+ "base64",
+ "encoding_rs_io",
+ "granit-parser",
+ "nohash-hasher",
+ "num-traits",
+ "serde_core",
+ "smallvec",
+ "zmij",
 ]
 
 [[package]]
@@ -2576,23 +2593,6 @@ checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
  "serde_derive",
-]
-
-[[package]]
-name = "serde-saphyr"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1ec1f5cac0eb96063c64b28705255a7ed6e7d77f95c1d25e9f8b8c928006ce1"
-dependencies = [
- "annotate-snippets",
- "base64",
- "encoding_rs_io",
- "granit-parser",
- "nohash-hasher",
- "num-traits",
- "serde_core",
- "smallvec",
- "zmij",
 ]
 
 [[package]]

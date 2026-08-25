@@ -31,6 +31,43 @@ enum CheckMode {
     SyntaxOnly,
 }
 
+fn validate_safe_tag(tag: &serde_saphyr::granit_parser::Tag) -> std::result::Result<(), String> {
+    const YAML_TAG_NAMESPACE: &str = "tag:yaml.org,2002:";
+
+    // ruamel.yaml resolves the non-specific `!` tag by node kind. Its safe loader registers the
+    // remaining constructors below. `merge` and `value` are intentionally excluded: ruamel only
+    // accepts them as mapping keys, while this validator has no node context. Reject them
+    // everywhere rather than accepting invalid value-position uses.
+    let is_non_specific = tag.parts() == ("", "!");
+    let is_safe = tag
+        .suffix_in_namespace(YAML_TAG_NAMESPACE)
+        .is_some_and(|suffix| {
+            matches!(
+                suffix.as_ref(),
+                "null"
+                    | "bool"
+                    | "int"
+                    | "float"
+                    | "binary"
+                    | "timestamp"
+                    | "omap"
+                    | "pairs"
+                    | "set"
+                    | "str"
+                    | "seq"
+                    | "map"
+            )
+        });
+
+    if is_non_specific || is_safe {
+        Ok(())
+    } else {
+        Err(format!(
+            "could not determine a constructor for the tag '{tag}'"
+        ))
+    }
+}
+
 /// Runs the `check-yaml` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
@@ -78,7 +115,8 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
         // The scalar values are discarded, so only validate whether they are
         // legal YAML, not whether an untyped data model can represent them. See #2544.
         reject_non_finite_typeless_float: false,
-    };
+    }
+    .with_tag_validator(validate_safe_tag);
     let result = if allow_multi_docs {
         serde_saphyr::from_slice_multiple_with_options::<IgnoredAny>(content, options).map(|_| ())
     } else {
@@ -329,6 +367,57 @@ response:
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
         Ok(())
+    }
+
+    #[test]
+    fn test_safe_yaml_tag() {
+        let result = check_loaded(Path::new("tagged.yaml"), b"foo: !!str value\n", false);
+        assert_eq!((result.exit_status, result.output), (0, Vec::new()));
+    }
+
+    #[test]
+    fn test_context_dependent_yaml_tags_are_rejected() {
+        let filename = Path::new("tagged.yaml");
+        let mut output = Vec::new();
+
+        for content in [b"x: !!merge foo\n".as_slice(), b"x: !!value foo\n"] {
+            let result = check_loaded(filename, content, false);
+            assert_eq!(result.exit_status, 1);
+            output.extend(result.output);
+        }
+
+        insta::assert_snapshot!(String::from_utf8_lossy(&output), @r#"
+        tagged.yaml: Failed to yaml decode (error: line 1 column 4: could not determine a constructor for the tag 'tag:yaml.org,2002:merge'
+         --> <input>:1:4
+          |
+        1 | x: !!merge foo
+          |    ^ could not determine a constructor for the tag 'tag:yaml.org,2002:merge')
+        tagged.yaml: Failed to yaml decode (error: line 1 column 4: could not determine a constructor for the tag 'tag:yaml.org,2002:value'
+         --> <input>:1:4
+          |
+        1 | x: !!value foo
+          |    ^ could not determine a constructor for the tag 'tag:yaml.org,2002:value')
+        "#);
+    }
+
+    #[test]
+    fn test_unknown_yaml_tag_requires_unsafe() {
+        let filename = Path::new("tagged.yaml");
+        let content = b"foo: !reference [.bar, script]\n";
+
+        let result = check_loaded(filename, content, false);
+        assert_eq!(result.exit_status, 1);
+        insta::assert_snapshot!(String::from_utf8_lossy(&result.output), @r#"
+        tagged.yaml: Failed to yaml decode (error: line 1 column 6: could not determine a constructor for the tag '!reference'
+         --> <input>:1:6
+          |
+        1 | foo: !reference [.bar, script]
+          |      ^ could not determine a constructor for the tag '!reference')
+        "#);
+
+        let result = check_syntax(filename, content);
+        assert_eq!(result.exit_status, 0);
+        assert!(result.output.is_empty());
     }
 
     #[tokio::test]
