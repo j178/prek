@@ -173,9 +173,10 @@ impl LanguageBackend for Dart {
     ) -> Result<PreparedHookEntry> {
         let env_dir = hook.env_path().expect("Dart must have env path");
         let packages_path = package_config_path(env_dir);
-        let mut entry = hook
-            .entry
-            .resolve(environment.path(hook), hook.work_dir(), store)?;
+        let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
+        let mut entry =
+            hook.entry
+                .resolve(repo_path, environment.path(hook), hook.work_dir(), store)?;
         // `dart pub get` writes the hook env's dependency graph here. Dart's
         // VM-level `--packages` flag makes `Platform.packageConfig` and package
         // imports resolve against this env instead of the hook work dir.

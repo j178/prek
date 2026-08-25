@@ -46,7 +46,7 @@ impl Args {
 
 /// Runs the `no-commit-to-branch` hook.
 pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args = Args::try_parse_from(hook.entry.split_with_args(&hook.args)?)?;
 
     let output = git_cmd()?
         .arg("symbolic-ref")

@@ -205,7 +205,7 @@ impl LanguageBackend for Pygrep {
             .arg(py_script.path())
             .args(args.to_args())
             .arg(INTERNAL_CONCURRENCY.to_string())
-            .arg(hook.entry.expect_direct().raw())
+            .arg(hook.entry.raw()?)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

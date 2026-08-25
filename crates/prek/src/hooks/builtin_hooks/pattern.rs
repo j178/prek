@@ -119,8 +119,7 @@ fn run_filename_pattern(
     filenames: &[&Path],
     policy: MatchPolicy,
 ) -> Result<HookOutput> {
-    let args =
-        FilenameArgs::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args = FilenameArgs::try_parse_from(hook.entry.split_with_args(&hook.args)?)?;
     let regex = build_regex(&args.patterns, args.ignore_case, false)?;
     let mut failed = false;
     let mut output = Vec::new();
@@ -143,7 +142,7 @@ fn run_filename_pattern(
 }
 
 async fn run(hook: &Hook, filenames: &[&Path], policy: MatchPolicy) -> Result<HookOutput> {
-    let args = Args::try_parse_from(hook.entry.expect_direct().split_with_args(&hook.args)?)?;
+    let args = Args::try_parse_from(hook.entry.split_with_args(&hook.args)?)?;
     let matcher = Matcher::new(&args)?;
     let file_base = hook.project().relative_path();
 

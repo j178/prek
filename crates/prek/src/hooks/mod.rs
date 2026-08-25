@@ -79,6 +79,7 @@ pub fn check_fast_path(hook: &Hook) -> bool {
 }
 
 fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
+    // TODO: Decide whether fast-path hooks should honor or ignore a configured `shell`.
     if *NO_FAST_PATH {
         return None;
     }

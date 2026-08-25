@@ -85,9 +85,10 @@ trait LanguageBackend: Sync {
         hook: &InstalledHook,
         environment: &ExecutionEnvironment,
     ) -> Result<PreparedHookEntry> {
+        let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
         Ok(hook
             .entry
-            .resolve(environment.path(hook), hook.work_dir(), store)?)
+            .resolve(repo_path, environment.path(hook), hook.work_dir(), store)?)
     }
 
     /// Applies asynchronous or working-directory-dependent changes to `environment`.

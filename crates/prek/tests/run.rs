@@ -566,6 +566,84 @@ fn local() {
     "#);
 }
 
+#[test]
+fn hook_repo_placeholder_expands_to_local_project() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: hook-repo-local
+                name: local
+                language: system
+                entry: git -C "{hook_repo}" cat-file -e HEAD:hook-repo-marker
+                always_run: true
+                pass_filenames: false
+    "#});
+    context.work_dir().child("hook-repo-marker").write_str("")?;
+    context.git_add(".");
+    context.git_commit("Add local hook");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn hook_repo_placeholder_expands_to_remote_checkout() -> Result<()> {
+    let hook_repo = TestContext::new();
+    hook_repo.init_project();
+    hook_repo
+        .work_dir()
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
+            - id: hook-repo-remote
+              name: remote
+              language: system
+              entry: git -C "{hook_repo}" cat-file -e HEAD:hook-repo-marker
+              always_run: true
+              pass_filenames: false
+        "#})?;
+    hook_repo
+        .work_dir()
+        .child("hook-repo-marker")
+        .write_str("")?;
+    hook_repo.git_add(".");
+    hook_repo.git_commit("Add remote hook");
+    hook_repo.git_tag("v1.0.0");
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: '{}'
+            rev: v1.0.0
+            hooks:
+              - id: hook-repo-remote
+    ", hook_repo.work_dir().display()});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    remote...................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
 /// Test multiple hook IDs scenarios.
 #[test]
 fn multiple_hook_ids() {

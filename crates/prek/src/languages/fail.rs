@@ -36,7 +36,7 @@ impl LanguageBackend for Fail {
         _reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let mut out = Vec::new();
-        writeln!(out, "{}\n", hook.entry.expect_direct().raw())?;
+        writeln!(out, "{}\n", hook.entry.raw()?)?;
         for f in filenames {
             out.extend(f.to_string_lossy().as_bytes());
             out.push(b'\n');

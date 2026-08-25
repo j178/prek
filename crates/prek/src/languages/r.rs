@@ -236,7 +236,7 @@ fn additional_dependency_install_code(env_path: &Path) -> String {
 }
 
 fn r_hook_entry(hook: &InstalledHook) -> Result<Vec<OsString>> {
-    let entry = hook.entry.expect_direct().split()?;
+    let entry = hook.entry.split()?;
     validate_r_entry(&entry)?;
 
     let mut cmd = Vec::with_capacity(entry.len() + 4);
