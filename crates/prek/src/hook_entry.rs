@@ -36,7 +36,7 @@ pub(crate) struct PreparedHookEntry {
 }
 
 impl PreparedHookEntry {
-    pub(crate) fn direct(argv: Vec<OsString>) -> Self {
+    pub(crate) fn argv(argv: Vec<OsString>) -> Self {
         Self {
             argv,
             _temp_dir: None,
@@ -48,10 +48,6 @@ impl PreparedHookEntry {
             argv,
             _temp_dir: Some(temp_dir),
         }
-    }
-
-    pub(crate) fn argv(&self) -> &[OsString] {
-        &self.argv
     }
 
     pub(crate) fn argv_mut(&mut self) -> &mut Vec<OsString> {
@@ -69,7 +65,7 @@ impl Deref for PreparedHookEntry {
 
 #[derive(Debug, Clone)]
 pub(crate) enum HookEntry {
-    Direct(DirectHookEntry),
+    Argv(ArgvHookEntry),
     Shell(ShellHookEntry),
 }
 
@@ -77,7 +73,7 @@ impl HookEntry {
     pub(crate) fn new(hook: String, entry: String, shell: Option<Shell>) -> Self {
         match shell {
             Some(shell) => Self::Shell(ShellHookEntry { hook, entry, shell }),
-            None => Self::Direct(DirectHookEntry { hook, entry }),
+            None => Self::Argv(ArgvHookEntry { hook, entry }),
         }
     }
 
@@ -90,7 +86,7 @@ impl HookEntry {
         store: &Store,
     ) -> Result<PreparedHookEntry, Error> {
         match self {
-            Self::Direct(entry) => entry.resolve(repo_path, env_path, cwd),
+            Self::Argv(entry) => entry.resolve(repo_path, env_path, cwd),
             Self::Shell(entry) => entry.resolve(env_path, cwd, store),
         }
     }
@@ -107,89 +103,57 @@ impl HookEntry {
         store: &Store,
     ) -> Result<PreparedHookEntry, Error> {
         match self {
-            Self::Direct(entry) => entry.resolve_script(repo_path, env_path, cwd),
+            Self::Argv(entry) => entry.resolve_script(repo_path, env_path, cwd),
             Self::Shell(entry) => entry.resolve(env_path, cwd, store),
         }
     }
 
-    /// Split a direct entry into an argument vector.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this entry uses `shell` or cannot be parsed.
-    pub(crate) fn split(&self) -> Result<Vec<OsString>, Error> {
-        self.direct()?.split()
-    }
-
-    /// Split a direct entry and expand `{hook_repo}` using `repo_path`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this entry uses `shell` or cannot be parsed.
-    pub(crate) fn split_expanded(&self, repo_path: &Path) -> Result<Vec<OsString>, Error> {
-        self.direct()?.split_expanded(repo_path)
-    }
-
-    /// Split a direct entry into an argument vector and append `args`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this entry uses `shell` or cannot be parsed.
-    pub(crate) fn split_with_args(&self, args: &[String]) -> Result<Vec<OsString>, Error> {
-        self.direct()?.split_with_args(args)
-    }
-
-    /// Return the original string for a direct entry.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this entry uses `shell`.
-    pub(crate) fn raw(&self) -> Result<&str, Error> {
-        Ok(self.direct()?.raw())
-    }
-
-    fn direct(&self) -> Result<&DirectHookEntry, Error> {
+    /// Return the argv-style entry, or `None` when `entry` is shell source.
+    pub(crate) fn as_argv_entry(&self) -> Option<&ArgvHookEntry> {
         match self {
-            Self::Direct(entry) => Ok(entry),
-            Self::Shell(entry) => Err(Error::Hook {
-                hook: entry.hook.clone(),
-                error: anyhow::anyhow!(
-                    "Hook specified `shell`, but this execution path requires an argv-style entry"
-                ),
-            }),
+            Self::Argv(entry) => Some(entry),
+            Self::Shell(_) => None,
         }
     }
 
-    pub(crate) fn shell(&self) -> Option<Shell> {
+    /// Return the argv-style entry after its execution path has rejected `shell`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this entry is shell source.
+    pub(crate) fn expect_argv_entry(&self) -> &ArgvHookEntry {
         match self {
-            Self::Direct(_) => None,
-            Self::Shell(entry) => Some(entry.shell),
+            Self::Argv(entry) => entry,
+            Self::Shell(entry) => panic!(
+                "hook `{}` uses `shell` in an argv-only execution path",
+                entry.hook
+            ),
         }
     }
 }
 
+/// An entry that can be interpreted as an argument vector without shell evaluation.
 #[derive(Debug, Clone)]
-pub(crate) struct DirectHookEntry {
+pub(crate) struct ArgvHookEntry {
     hook: String,
     entry: String,
 }
 
-impl DirectHookEntry {
+impl ArgvHookEntry {
     /// Split the entry and resolve the command by parsing its shebang.
-    fn resolve(
+    pub(crate) fn resolve(
         &self,
         repo_path: &Path,
         env_path: Option<&OsStr>,
         cwd: &Path,
     ) -> Result<PreparedHookEntry, Error> {
         let argv = self.split_expanded(repo_path)?;
+        let argv = resolve_command(argv, env_path, cwd);
 
-        Ok(PreparedHookEntry::direct(resolve_command(
-            argv, env_path, cwd,
-        )))
+        Ok(PreparedHookEntry::argv(argv))
     }
 
-    /// Resolve a direct `language: script` entry.
+    /// Resolve an argv-style `language: script` entry.
     fn resolve_script(
         &self,
         repo_path: &Path,
@@ -198,14 +162,13 @@ impl DirectHookEntry {
     ) -> Result<PreparedHookEntry, Error> {
         let mut argv = self.split_expanded(repo_path)?;
         argv[0] = repo_path.join(&argv[0]).into_os_string();
+        let argv = resolve_command(argv, env_path, cwd);
 
-        Ok(PreparedHookEntry::direct(resolve_command(
-            argv, env_path, cwd,
-        )))
+        Ok(PreparedHookEntry::argv(argv))
     }
 
-    /// Split the entry into a list of commands.
-    fn split(&self) -> Result<Vec<OsString>, Error> {
+    /// Split the entry into an argument vector.
+    pub(crate) fn split(&self) -> Result<Vec<OsString>, Error> {
         let splits = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", self.entry),
@@ -219,20 +182,22 @@ impl DirectHookEntry {
         Ok(splits.into_iter().map(OsString::from).collect())
     }
 
-    fn split_expanded(&self, repo_path: &Path) -> Result<Vec<OsString>, Error> {
+    /// Split the entry and expand `{hook_repo}` using `repo_path`.
+    pub(crate) fn split_expanded(&self, repo_path: &Path) -> Result<Vec<OsString>, Error> {
         let mut argv = self.split()?;
         expand_placeholders(&mut argv, repo_path);
         Ok(argv)
     }
 
-    fn split_with_args(&self, args: &[String]) -> Result<Vec<OsString>, Error> {
+    /// Split the entry and append `args`.
+    pub(crate) fn split_with_args(&self, args: &[String]) -> Result<Vec<OsString>, Error> {
         let mut split = self.split()?;
         split.extend(args.iter().map(OsString::from));
         Ok(split)
     }
 
     /// Get the original entry string.
-    fn raw(&self) -> &str {
+    pub(crate) fn raw(&self) -> &str {
         &self.entry
     }
 }
@@ -333,9 +298,7 @@ mod tests {
     use std::ffi::OsString;
     use std::path::Path;
 
-    use super::{HookEntry, expand_placeholders};
-    use crate::config::Shell;
-    use crate::hook::Error;
+    use super::expand_placeholders;
 
     #[test]
     fn expand_placeholders_replaces_hook_repo() {
@@ -352,20 +315,5 @@ mod tests {
         expand_placeholders(&mut argv, repo_path);
 
         assert_eq!(argv, vec![OsString::from("tool"), config_arg]);
-    }
-
-    #[test]
-    fn shell_entry_rejects_argv_operation() {
-        let entry = HookEntry::new("test".to_string(), "echo test".to_string(), Some(Shell::Sh));
-
-        let Error::Hook { hook, error } = entry.split().unwrap_err() else {
-            panic!("argv operation should return a hook error");
-        };
-
-        assert_eq!(hook, "test");
-        assert_eq!(
-            error.to_string(),
-            "Hook specified `shell`, but this execution path requires an argv-style entry"
-        );
     }
 }

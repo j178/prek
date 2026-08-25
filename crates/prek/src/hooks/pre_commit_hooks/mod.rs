@@ -45,7 +45,9 @@ pub(crate) struct FilenamesArgs {
 }
 
 pub(crate) fn parse_hook_args<T: Parser>(hook: &Hook) -> Result<T> {
-    Ok(T::try_parse_from(hook.entry.split_with_args(&hook.args)?)?)
+    Ok(T::try_parse_from(
+        hook.entry.expect_argv_entry().split_with_args(&hook.args)?,
+    )?)
 }
 
 pub(crate) fn hook_filenames<'a>(

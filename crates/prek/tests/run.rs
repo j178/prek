@@ -568,10 +568,7 @@ fn local() {
 
 #[test]
 fn hook_repo_placeholder_expands_to_local_project() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -583,10 +580,10 @@ fn hook_repo_placeholder_expands_to_local_project() -> Result<()> {
                 pass_filenames: false
     "#});
     context.work_dir().child("hook-repo-marker").write_str("")?;
-    context.git_add(".");
+    context.git_add_all();
     context.git_commit("Add local hook");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -600,10 +597,10 @@ fn hook_repo_placeholder_expands_to_local_project() -> Result<()> {
 
 #[test]
 fn hook_repo_placeholder_expands_to_remote_checkout() -> Result<()> {
-    let hook_repo = TestContext::new();
-    hook_repo.init_project();
+    let context = TestEnv::new();
+    let hook_repo = context.create_repo("hook-repo-placeholder");
     hook_repo
-        .work_dir()
+        .path()
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r#"
             - id: hook-repo-remote
@@ -612,27 +609,22 @@ fn hook_repo_placeholder_expands_to_remote_checkout() -> Result<()> {
               entry: git -C "{hook_repo}" cat-file -e HEAD:hook-repo-marker
               always_run: true
               pass_filenames: false
-        "#})?;
-    hook_repo
-        .work_dir()
-        .child("hook-repo-marker")
-        .write_str("")?;
-    hook_repo.git_add(".");
+    "#})?;
+    hook_repo.path().child("hook-repo-marker").write_str("")?;
+    hook_repo.git_add_all();
     hook_repo.git_commit("Add remote hook");
     hook_repo.git_tag("v1.0.0");
 
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(&indoc::formatdoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: '{}'
             rev: v1.0.0
             hooks:
               - id: hook-repo-remote
-    ", hook_repo.work_dir().display()});
-    context.git_add(".");
+    ", hook_repo.path().display()});
+    context.git_add_all();
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

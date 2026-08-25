@@ -494,7 +494,7 @@ impl LanguageBackend for Docker {
         )
         .await
         .context("Failed to build docker image")?;
-        let entry = hook.entry.split()?;
+        let entry = hook.entry.expect_argv_entry().split()?;
 
         let run = async |batch: &[&Path]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]

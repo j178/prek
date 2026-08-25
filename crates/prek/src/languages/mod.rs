@@ -124,7 +124,7 @@ trait LanguageBackend: Sync {
         let entry = self.prepare_hook_entry(store, hook, &environment)?;
         let run = async |batch: &[&Path]| {
             let output = environment
-                .command(hook, hook.work_dir(), entry.argv())?
+                .command(hook, hook.work_dir(), &entry)?
                 .args(&hook.args)
                 .file_args(batch)
                 .stdin(Stdio::null())
@@ -136,7 +136,7 @@ trait LanguageBackend: Sync {
             anyhow::Ok(output)
         };
 
-        let output = run_by_batch(hook, filenames, entry.argv(), run).await?;
+        let output = run_by_batch(hook, filenames, &entry, run).await?;
 
         reporter.on_run_complete(progress);
 
