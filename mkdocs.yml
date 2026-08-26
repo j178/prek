@@ -100,6 +100,12 @@ plugins:
           - benchmark.md
           - changelog.md
 
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
+
 nav:
   - Getting Started:
     - Introduction: index.md

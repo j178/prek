@@ -307,7 +307,7 @@ jobs:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
     permissions:
-      "contents": "read"
+      "contents": "write"
       "id-token": "write"
       "pages": "write"
 
