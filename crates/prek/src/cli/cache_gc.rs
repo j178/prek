@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 use std::ops::AddAssign;
@@ -739,16 +738,15 @@ fn detail_lines_for_entry(
                 info.language_version
             ));
 
-            let (repo_dep, deps) = marker_repo_and_dependencies(info);
-            if let Some(repo_dep) = repo_dep {
+            if let Some(repo) = info.repo() {
                 lines.push(format!(
                     "{}: {}",
                     "repo".dimmed().bold(),
-                    truncate_end(&repo_dep, MAX_VALUE_CHARS)
+                    truncate_end(&repo.to_string(), MAX_VALUE_CHARS)
                 ));
             }
-            if !deps.is_empty() {
-                let deps_str = format_dependency_list(&deps, 6, MAX_VALUE_CHARS);
+            if !info.dependencies.is_empty() {
+                let deps_str = format_dependency_list(&info.dependencies, 6, MAX_VALUE_CHARS);
                 lines.push(format!("{}: {deps_str}", "deps".dimmed().bold()));
             }
             lines
@@ -783,42 +781,6 @@ fn truncate_end(s: &str, max_chars: usize) -> String {
         .collect::<String>();
     out.push('…');
     out
-}
-
-fn split_repo_dependency(deps: &[String]) -> (Option<String>, Vec<String>) {
-    // Legacy markers stored the remote repo identity as a `repo@rev` dependency.
-    // Prefer URL-like values to avoid accidentally treating PEP508 deps as repo identifiers.
-    let mut repo_dep: Option<String> = None;
-    let mut rest = Vec::new();
-
-    for dep in deps {
-        if repo_dep.is_none()
-            && dep.contains('@')
-            && (dep.contains("://")
-                || dep.starts_with('/')
-                || dep.starts_with("..")
-                || dep.starts_with('.'))
-        {
-            repo_dep = Some(dep.clone());
-        } else {
-            rest.push(dep.clone());
-        }
-    }
-
-    rest.sort_unstable();
-    (repo_dep, rest)
-}
-
-fn marker_repo_and_dependencies(info: &InstallInfo) -> (Option<String>, Cow<'_, [String]>) {
-    if info.schema_version() == 0 {
-        let (repo, dependencies) = split_repo_dependency(&info.dependencies);
-        (repo, Cow::Owned(dependencies))
-    } else {
-        (
-            info.repo().map(|repo| repo.to_string()),
-            Cow::Borrowed(&info.dependencies),
-        )
-    }
 }
 
 fn format_dependency_list(deps: &[String], max_items: usize, max_chars: usize) -> String {
@@ -856,58 +818,6 @@ mod tests {
         // 3 unicode scalar values.
         assert_eq!(truncate_end("ééé", 3), "ééé");
         assert_eq!(truncate_end("ééé", 2), "é…");
-    }
-
-    #[test]
-    fn split_repo_dependency_prefers_url_like_repo_at_rev() {
-        let deps = vec![
-            "requests==2.32.0".to_string(),
-            "black==24.1.0".to_string(),
-            "https://github.com/pre-commit/pre-commit-hooks@v1.0.0".to_string(),
-        ];
-
-        let (repo_dep, rest) = split_repo_dependency(&deps);
-
-        assert_eq!(
-            repo_dep.as_deref(),
-            Some("https://github.com/pre-commit/pre-commit-hooks@v1.0.0")
-        );
-        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
-    }
-
-    #[test]
-    fn split_repo_dependency_returns_none_when_no_repo_like_dep() {
-        let deps = vec!["requests==2.32.0".to_string(), "black==24.1.0".to_string()];
-
-        let (repo_dep, rest) = split_repo_dependency(&deps);
-        assert!(repo_dep.is_none());
-        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
-    }
-
-    #[test]
-    fn marker_repo_and_dependencies_uses_structured_repo() {
-        let info: InstallInfo = serde_json::from_value(serde_json::json!({
-            "schema_version": 1,
-            "language": "python",
-            "language_version": "3.12.0",
-            "repo": {
-                "url": "https://example.com/repo",
-                "rev": "v1.0.0",
-            },
-            "dependencies": ["https://example.com/dependency@v2.0.0"],
-            "env_path": "/tmp/hook-env",
-            "toolchain": "/usr/bin/python3",
-            "extra": {},
-        }))
-        .expect("deserialize install info");
-
-        let (repo, dependencies) = marker_repo_and_dependencies(&info);
-
-        assert_eq!(repo.as_deref(), Some("https://example.com/repo@v1.0.0"));
-        assert_eq!(
-            dependencies.as_ref(),
-            &["https://example.com/dependency@v2.0.0".to_string()]
-        );
     }
 
     #[test]
