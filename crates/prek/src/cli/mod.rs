@@ -231,12 +231,6 @@ pub(crate) struct GlobalArgs {
     /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = ArgAction::Version)]
     version: (),
-
-    /// Show the resolved settings for the current command.
-    ///
-    /// This option is used for debugging and development purposes.
-    #[arg(global = true, long, hide = true)]
-    pub show_settings: bool,
 }
 
 #[derive(Debug, Subcommand)]
