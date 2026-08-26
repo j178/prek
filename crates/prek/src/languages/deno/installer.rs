@@ -17,7 +17,7 @@ use crate::fs::LockedFile;
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::version::DenoVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -281,7 +281,7 @@ impl DenoInstaller {
 
     /// Find a suitable system Deno installation that matches the request.
     async fn find_system_deno(&self, deno_request: &DenoRequest) -> Result<Option<DenoResult>> {
-        let deno_paths = match which::which_all(&*DENO_BINARY_NAME) {
+        let deno_paths = match find_system_executables(&*DENO_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No deno executables found in PATH: {}", e);

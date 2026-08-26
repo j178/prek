@@ -16,7 +16,9 @@ use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::{LockedFile, is_executable};
 use crate::git;
 use crate::http::{REQWEST_CLIENT, download_artifact};
-use crate::languages::version::{SemverRequest, ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{
+    SemverRequest, ToolchainPolicy, ToolchainSource, find_system_executables,
+};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -180,7 +182,7 @@ impl MiseInstaller {
     }
 
     async fn find_system_mise(&self, request: &SemverRequest) -> Option<MiseResult> {
-        let paths = match which::which_all(&*MISE_BINARY_NAME) {
+        let paths = match find_system_executables(&*MISE_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(err) => {
                 debug!(%err, "No mise executable found in PATH");

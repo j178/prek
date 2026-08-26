@@ -19,7 +19,7 @@ use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -276,7 +276,7 @@ impl GoInstaller {
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
-        let go_paths = match which::which_all(&*GO_BINARY_NAME) {
+        let go_paths = match find_system_executables(&*GO_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No go executables found in PATH: {}", e);

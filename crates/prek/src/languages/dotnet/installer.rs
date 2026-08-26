@@ -13,7 +13,7 @@ use super::version::DotnetVersion;
 use crate::fs::LockedFile;
 use crate::http::REQWEST_CLIENT;
 use crate::languages::dotnet::DotnetRequest;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 
 static DOTNET_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
@@ -151,7 +151,7 @@ impl DotnetInstaller {
 
     /// Finds the first system `dotnet` executable in `PATH` that satisfies the request.
     async fn find_system_dotnet(&self, request: &DotnetRequest) -> Result<Option<DotnetResult>> {
-        let dotnet_paths = match which::which_all(&*DOTNET_BINARY_NAME) {
+        let dotnet_paths = match find_system_executables(&*DOTNET_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(err) => {
                 debug!("No dotnet executables found in PATH: {err}");

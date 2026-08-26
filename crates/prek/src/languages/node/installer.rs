@@ -19,7 +19,7 @@ use crate::fs::{LockedFile, is_executable};
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -270,7 +270,7 @@ impl NodeInstaller {
 
     /// Find a suitable system Node.js installation that matches the request.
     async fn find_system_node(&self, node_request: &NodeRequest) -> Result<Option<NodeResult>> {
-        let node_paths = match which::which_all(&*NODE_BINARY_NAME) {
+        let node_paths = match find_system_executables(&*NODE_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No node executables found in PATH: {}", e);

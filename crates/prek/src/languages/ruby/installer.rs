@@ -14,7 +14,7 @@ use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
 use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::languages::ruby::RubyRequest;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -401,7 +401,7 @@ impl RubyInstaller {
     /// Find Ruby in the system PATH
     async fn find_system_ruby(&self, request: &RubyRequest) -> Result<Option<RubyResult>> {
         // Try all rubies in PATH first
-        if let Ok(ruby_paths) = which::which_all("ruby") {
+        if let Ok(ruby_paths) = find_system_executables("ruby", &self.root) {
             for ruby_path in ruby_paths {
                 if let Some(result) = try_ruby_path(&ruby_path, request).await {
                     return Ok(Some(result));

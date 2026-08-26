@@ -17,7 +17,7 @@ use crate::git;
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -254,7 +254,7 @@ impl BunInstaller {
 
     /// Find a suitable system Bun installation that matches the request.
     async fn find_system_bun(&self, bun_request: &BunRequest) -> Result<Option<BunResult>> {
-        let bun_paths = match which::which_all(&*BUN_BINARY_NAME) {
+        let bun_paths = match find_system_executables(&*BUN_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No bun executables found in PATH: {}", e);

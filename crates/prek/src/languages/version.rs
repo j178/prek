@@ -1,4 +1,6 @@
+use std::ffi::OsStr;
 use std::fmt::{self, Display};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::config::{Language, LanguageVersion, ToolchainPreference};
@@ -51,6 +53,20 @@ impl ToolchainPolicy {
     pub(crate) fn allows_download(self) -> bool {
         self.allows_download
     }
+}
+
+pub(crate) fn find_system_executables(
+    binary_name: impl AsRef<OsStr>,
+    managed_root: &Path,
+) -> which::Result<Vec<PathBuf>> {
+    let managed_root =
+        dunce::canonicalize(managed_root).unwrap_or_else(|_| managed_root.to_path_buf());
+    Ok(which::which_all(binary_name)?
+        .filter(|path| {
+            let path = dunce::canonicalize(path).unwrap_or_else(|_| path.clone());
+            !path.starts_with(&managed_root)
+        })
+        .collect())
 }
 
 impl Display for ToolchainPolicy {
@@ -266,8 +282,11 @@ pub(crate) fn try_into_u64_slice(version: &str) -> Result<Vec<u64>, std::num::Pa
 
 #[cfg(test)]
 mod tests {
-    use super::{LanguageRequest, SemverRequest, ToolchainSource, VersionRequest};
+    use super::{
+        LanguageRequest, SemverRequest, ToolchainSource, VersionRequest, find_system_executables,
+    };
     use crate::config::{Language, LanguageVersion};
+    use crate::fs::make_executable;
     use crate::languages::python::PythonRequest;
 
     #[test]
@@ -340,5 +359,58 @@ mod tests {
             &[ToolchainSource::Managed, ToolchainSource::System]
         );
         assert!(!policy.allows_download());
+    }
+
+    #[test]
+    fn system_executables_exclude_managed_binaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let managed_root = temp.path().join("managed");
+        let binary = managed_root
+            .join("bin")
+            .join("tool")
+            .with_extension(std::env::consts::EXE_EXTENSION);
+        fs_err::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs_err::write(&binary, "").unwrap();
+        make_executable(&binary).unwrap();
+
+        let executables = find_system_executables(&binary, &managed_root).unwrap();
+
+        assert!(executables.is_empty());
+    }
+
+    #[test]
+    fn system_executables_include_binaries_outside_managed_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let managed_root = temp.path().join("managed");
+        fs_err::create_dir_all(&managed_root).unwrap();
+        let binary = temp
+            .path()
+            .join("system")
+            .join("tool")
+            .with_extension(std::env::consts::EXE_EXTENSION);
+        fs_err::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs_err::write(&binary, "").unwrap();
+        make_executable(&binary).unwrap();
+
+        let executables = find_system_executables(&binary, &managed_root).unwrap();
+
+        assert_eq!(executables, vec![binary]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn system_executables_exclude_symlinks_to_managed_binaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let managed_root = temp.path().join("managed");
+        let binary = managed_root.join("bin/tool");
+        fs_err::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs_err::write(&binary, "").unwrap();
+        make_executable(&binary).unwrap();
+        let link = temp.path().join("tool");
+        std::os::unix::fs::symlink(binary, &link).unwrap();
+
+        let executables = find_system_executables(link, &managed_root).unwrap();
+
+        assert!(executables.is_empty());
     }
 }
