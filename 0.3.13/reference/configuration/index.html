@@ -1,0 +1,3573 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.">
+      
+      
+        <meta name="author" content="j178">
+      
+      
+        <link rel="canonical" href="https://prek.j178.dev/0.3.13/reference/configuration/">
+      
+      
+        <link rel="prev" href="../cli/">
+      
+      
+        <link rel="next" href="../environment-variables/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="zensical-0.0.50">
+    
+    
+      
+        <title>Configuration Reference - prek</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.62c9b9cc.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#configuration-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="prek" class="md-header__button md-logo" aria-label="prek" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="prek">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            prek
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Configuration Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/j178/prek" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    j178/prek
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="prek" class="md-nav__button md-logo" aria-label="prek" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="prek">
+
+    </a>
+    prek
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/j178/prek" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    j178/prek
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Getting Started
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Quickstart
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Usage
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Usage
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Common Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workspace/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Workspace Mode
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Language Support
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../builtin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Built-in Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Integrations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../authoring-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Authoring Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration Reference
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#global-config-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Global config file
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Global config file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#global-auto_updatecooldown_days" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Global <code>auto_update.cooldown_days</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Top-level keys
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#auto_updatecooldown_days" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>auto_update.cooldown_days</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repos-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repos</code> (required)
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>files</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exclude" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>exclude</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail_fast" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>fail_fast</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default_language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>default_language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default_stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>default_stages</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default_install_hook_types" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>default_install_hook_types</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minimum_prek_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>minimum_prek_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orphan" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>orphan</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repo-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Repo entries
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Repo entries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remote-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Remote repository
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Remote repository">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#repo" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rev" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>rev</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>hooks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repo-local" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo: local</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repo-meta" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo: meta</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repo-builtin" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo: builtin</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Hook entries
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook entries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remote-hook-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Remote hook selection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-hook-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Local hook definition
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builtinmeta-hook-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Builtin/meta hook selection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-hook-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Common hook options
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common hook options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#id" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>id</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#name" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>name</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>entry</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>shell</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alias" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>alias</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#args" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>args</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#env" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>env</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#files-exclude" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>files</code> / <code>exclude</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#types-types_or-exclude_types" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>types</code> / <code>types_or</code> / <code>exclude_types</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always_run" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>always_run</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass_filenames" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>pass_filenames</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>stages</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#require_serial" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>require_serial</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>priority</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail_fast_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>fail_fast</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verbose" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>verbose</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log_file" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>log_file</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#description" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>description</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional_dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>additional_dependencies</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minimum_prek_version_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>minimum_prek_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../environment-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Environment Variables
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Help
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Help
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../debugging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Debugging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  FAQ
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  About
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  About
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Compatibility
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diff/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Differences
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Benchmark
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Changelog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#global-config-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Global config file
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Global config file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#global-auto_updatecooldown_days" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Global <code>auto_update.cooldown_days</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#top-level-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Top-level keys
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Top-level keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#auto_updatecooldown_days" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>auto_update.cooldown_days</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repos-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repos</code> (required)
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>files</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exclude" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>exclude</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail_fast" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>fail_fast</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default_language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>default_language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default_stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>default_stages</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default_install_hook_types" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>default_install_hook_types</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minimum_prek_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>minimum_prek_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orphan" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>orphan</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repo-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Repo entries
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Repo entries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remote-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Remote repository
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Remote repository">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#repo" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rev" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>rev</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>hooks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repo-local" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo: local</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repo-meta" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo: meta</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#repo-builtin" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>repo: builtin</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Hook entries
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook entries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remote-hook-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Remote hook selection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-hook-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Local hook definition
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builtinmeta-hook-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Builtin/meta hook selection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-hook-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Common hook options
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common hook options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#id" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>id</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#name" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>name</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>entry</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>shell</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alias" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>alias</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#args" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>args</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#env" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>env</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#files-exclude" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>files</code> / <code>exclude</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#types-types_or-exclude_types" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>types</code> / <code>types_or</code> / <code>exclude_types</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always_run" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>always_run</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass_filenames" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>pass_filenames</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>stages</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#require_serial" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>require_serial</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>priority</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail_fast_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>fail_fast</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verbose" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>verbose</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log_file" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>log_file</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#description" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>description</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional_dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>additional_dependencies</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minimum_prek_version_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>minimum_prek_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="configuration-reference">Configuration Reference<a class="headerlink" href="#configuration-reference" title="Permanent link">&para;</a></h1>
+<p>This page documents the configuration keys that <code>prek</code> understands.</p>
+<h2 id="global-config-file">Global config file<a class="headerlink" href="#global-config-file" title="Permanent link">&para;</a></h2>
+<p><code>prek</code> reads an optional user-level global config from:</p>
+<ul>
+<li>Linux and macOS: <code>~/.config/prek/prek.toml</code> (or <code>$XDG_CONFIG_HOME/prek/prek.toml</code> when <code>XDG_CONFIG_HOME</code> is set)</li>
+<li>Windows: <code>%APPDATA%\prek\prek.toml</code></li>
+</ul>
+<p>This file stores user-level <code>prek</code> settings and does not define project hooks.</p>
+<h3 id="global-auto_updatecooldown_days">Global <code>auto_update.cooldown_days</code><a class="headerlink" href="#global-auto_updatecooldown_days" title="Permanent link">&para;</a></h3>
+<p>Default cooldown for <code>prek auto-update</code>.</p>
+<ul>
+<li>Type: integer days, <code>0</code> to <code>255</code></li>
+<li>Default: <code>0</code></li>
+<li>CLI override: <code>prek auto-update --cooldown-days &lt;DAYS&gt;</code></li>
+</ul>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[auto_update]</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">cooldown_days</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">7</span>
+</span></code></pre></div>
+<p>The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of <code>0</code> disables the cooldown check.</p>
+<p>Project configs can also set <code>auto_update.cooldown_days</code>. The effective precedence is:</p>
+<ol>
+<li><code>prek auto-update --cooldown-days &lt;DAYS&gt;</code></li>
+<li>project config</li>
+<li>user-level global config</li>
+<li>default <code>0</code></li>
+</ol>
+<h2 id="top-level-keys">Top-level keys<a class="headerlink" href="#top-level-keys" title="Permanent link">&para;</a></h2>
+<h3 id="auto_updatecooldown_days"><code>auto_update.cooldown_days</code><a class="headerlink" href="#auto_updatecooldown_days" title="Permanent link">&para;</a></h3>
+<p>Project default cooldown for <code>prek auto-update</code>.</p>
+<ul>
+<li>Type: integer days, <code>0</code> to <code>255</code></li>
+<li>Default: inherited from the user-level global config, or <code>0</code></li>
+<li>CLI override: <code>prek auto-update --cooldown-days &lt;DAYS&gt;</code></li>
+</ul>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="auto_updatecooldown_days-prektoml" name="__tabbed_1" type="radio" /><input id="auto_updatecooldown_days-pre-commit-configyaml" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="auto_updatecooldown_days-prektoml">prek.toml</label><label for="auto_updatecooldown_days-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[auto_update]</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">cooldown_days</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">7</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">auto_update</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">cooldown_days</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own <code>auto_update</code> setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, <code>prek auto-update</code> fetches the repo once but evaluates each project with its own cooldown.</p>
+<h3 id="repos-required"><code>repos</code> (required)<a class="headerlink" href="#repos-required" title="Permanent link">&para;</a></h3>
+<p>A list of hook repositories.</p>
+<p>Each entry is one of:</p>
+<ul>
+<li>a remote repository (typically a git URL)</li>
+<li><code>repo: local</code> for hooks defined directly in your repository</li>
+<li><code>repo: meta</code> for built-in meta hooks</li>
+<li><code>repo: builtin</code> for <code>prek</code>'s built-in fast hooks</li>
+</ul>
+<p>See <a href="#repo-entries">Repo entries</a>.</p>
+<p><a id="top-level-files"></a></p>
+<h3 id="files"><code>files</code><a class="headerlink" href="#files" title="Permanent link">&para;</a></h3>
+<p>Global <em>include</em> regex applied before hook-level filtering.</p>
+<ul>
+<li>Type: regex string (default, pre-commit compatible) <strong>or</strong> a prek-only glob pattern mapping</li>
+<li>Default: no global include filter</li>
+</ul>
+<p>This is usually used to narrow down the universe of files in large repositories.</p>
+<div class="admonition note">
+<p class="admonition-title">What path is matched? (workspace + nested projects)</p>
+<p><code>files</code> (and <code>exclude</code>) are matched against the file path <strong>relative to the project root</strong> — i.e. the directory containing the configuration file.</p>
+<ul>
+<li>For the root project, this is the workspace root.</li>
+<li>For a nested project, this is the nested project directory.</li>
+</ul>
+<p>Example (workspace mode):</p>
+<ul>
+<li>Root project config: <code>./.pre-commit-config.yaml</code></li>
+<li>Nested project config: <code>./nested/.pre-commit-config.yaml</code></li>
+</ul>
+<p>For a file at <code>nested/excluded_by_project</code>:</p>
+<ul>
+<li>Root project sees the path as <code>nested/excluded_by_project</code></li>
+<li>Nested project sees the path as <code>excluded_by_project</code></li>
+</ul>
+<p>This matters most for anchored patterns like <code>^...$</code>.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Regex matching</p>
+<p>When <code>files</code> / <code>exclude</code> are regex strings, they are matched with <em>search</em> semantics (the pattern can match anywhere in the path).
+Use <code>^</code> to anchor at the beginning and <code>$</code> at the end.</p>
+<p><code>prek</code> uses the Rust <a href="https://github.com/fancy-regex/fancy-regex"><code>fancy-regex</code></a> engine.
+Most typical patterns are portable to upstream <code>pre-commit</code>, but very advanced regex features may differ from Python’s <code>re</code>.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">prek-only globs</p>
+<p>In addition to regex strings, <code>prek</code> supports glob patterns via:</p>
+<ul>
+<li><code>files: { glob: "..." }</code> (single glob)</li>
+<li><code>files: { glob: ["...", "..."] }</code> (glob list)</li>
+</ul>
+<p>This is a <code>prek</code> extension. Upstream <code>pre-commit</code> expects regex strings here.</p>
+<p>For more information on the glob syntax, refer to the <a href="https://docs.rs/globset/latest/globset/#syntax">globset documentation</a>.</p>
+</div>
+<p>Examples:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="files-prektoml" name="__tabbed_2" type="radio" /><input id="files-pre-commit-configyaml" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="files-prektoml">prek.toml</label><label for="files-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Regex (portable to pre-commit)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">.rs$&quot;</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Glob (prek-only)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">glob</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;src/**/*.rs&quot;</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Glob list (prek-only; matches if any glob matches)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">glob</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;src/**/*.rs&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;crates/**/src/**/*.rs&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Regex (portable to pre-commit)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\.rs$&quot;</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Glob (prek-only)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nt">files</span><span class="p">:</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">glob</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;src/**/*.rs&quot;</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># Glob list (prek-only; matches if any glob matches)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nt">files</span><span class="p">:</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="nt">glob</span><span class="p">:</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;src/**/*.rs&quot;</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;crates/**/src/**/*.rs&quot;</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p><a id="top-level-exclude"></a></p>
+<h3 id="exclude"><code>exclude</code><a class="headerlink" href="#exclude" title="Permanent link">&para;</a></h3>
+<p>Global <em>exclude</em> regex applied before hook-level filtering.</p>
+<ul>
+<li>Type: regex string (default, pre-commit compatible) <strong>or</strong> a prek-only glob pattern mapping</li>
+<li>Default: no global exclude filter</li>
+</ul>
+<p><code>exclude</code> is useful for generated folders, vendored code, or build outputs.</p>
+<div class="admonition note">
+<p class="admonition-title">What path is matched?</p>
+<p>Same as <a href="#top-level-files"><code>files</code></a>: the pattern is evaluated against the file path <strong>relative to the project root</strong> (the directory containing the config).</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">prek-only globs</p>
+<p>Like <code>files</code>, <code>exclude</code> supports <code>glob</code> (single glob or glob list) as a <code>prek</code> extension.
+For glob syntax details, see the <a href="https://docs.rs/globset/latest/globset/#syntax">globset documentation</a>.</p>
+</div>
+<p>Examples:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="exclude-prektoml" name="__tabbed_3" type="radio" /><input id="exclude-pre-commit-configyaml" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="exclude-prektoml">prek.toml</label><label for="exclude-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Regex (portable to pre-commit)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;^target/&quot;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Glob (prek-only)</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">glob</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;target/**&quot;</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># Glob list (prek-only)</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">glob</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;target/**&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;dist/**&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Regex (portable to pre-commit)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^target/&quot;</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Glob (prek-only)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="nt">exclude</span><span class="p">:</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">glob</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;target/**&quot;</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Glob list (prek-only)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="nt">exclude</span><span class="p">:</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="nt">glob</span><span class="p">:</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;target/**&quot;</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;dist/**&quot;</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>Verbose regex example (useful for long allow/deny lists):</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="exclude-prektoml_1" name="__tabbed_4" type="radio" /><input id="exclude-pre-commit-configyaml_1" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="exclude-prektoml_1">prek.toml</label><label for="exclude-pre-commit-configyaml_1">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># `(?x)` enables &quot;verbose&quot; regex mode (whitespace and newlines are ignored).</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&quot;&quot;(?x)^(</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="s2">  docs/|</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s2">  vendor/|</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="s2">  target/</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="s2">)&quot;&quot;&quot;</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># `(?x)` enables &quot;verbose&quot; regex mode (whitespace and newlines are ignored).</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="no">(?x)^(</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="no">docs/|</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="no">vendor/|</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="no">target/</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="no">)</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="fail_fast"><code>fail_fast</code><a class="headerlink" href="#fail_fast" title="Permanent link">&para;</a></h3>
+<p>Stop the run after the first failing hook.</p>
+<ul>
+<li>Type: boolean</li>
+<li>Default: <code>false</code></li>
+</ul>
+<p>This is a global default; individual hooks can also set <code>fail_fast</code>.</p>
+<h3 id="default_language_version"><code>default_language_version</code><a class="headerlink" href="#default_language_version" title="Permanent link">&para;</a></h3>
+<p>Map a language name to the default <code>language_version</code> used by hooks of that language.</p>
+<ul>
+<li>Type: map</li>
+<li>Default: none (hooks fall back to <code>language_version: default</code>)</li>
+</ul>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="default_language_version-prektoml" name="__tabbed_5" type="radio" /><input id="default_language_version-pre-commit-configyaml" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="default_language_version-prektoml">prek.toml</label><label for="default_language_version-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">default_language_version</span><span class="p">.</span><span class="n">python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;3.12&quot;</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">default_language_version</span><span class="p">.</span><span class="n">node</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;20&quot;</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">default_language_version</span><span class="p">:</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.12&quot;</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span><span class="nt">node</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;20&quot;</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p><code>prek</code> treats <code>language_version</code> as a version request (often a semver-like selector) and may install toolchains automatically. See <a href="../../diff/">Difference from pre-commit</a>.</p>
+<h3 id="default_stages"><code>default_stages</code><a class="headerlink" href="#default_stages" title="Permanent link">&para;</a></h3>
+<p>Default <code>stages</code> used when a hook does not specify its own.</p>
+<ul>
+<li>Type: list of stage names</li>
+<li>Default: all stages</li>
+</ul>
+<p>Allowed values:</p>
+<ul>
+<li><code>manual</code></li>
+<li><code>commit-msg</code></li>
+<li><code>post-checkout</code></li>
+<li><code>post-commit</code></li>
+<li><code>post-merge</code></li>
+<li><code>post-rewrite</code></li>
+<li><code>pre-commit</code></li>
+<li><code>pre-merge-commit</code></li>
+<li><code>pre-push</code></li>
+<li><code>pre-rebase</code></li>
+<li><code>prepare-commit-msg</code></li>
+</ul>
+<h3 id="default_install_hook_types"><code>default_install_hook_types</code><a class="headerlink" href="#default_install_hook_types" title="Permanent link">&para;</a></h3>
+<p>Default Git shim name(s) installed by <code>prek install</code> when you don’t pass <code>--hook-type</code>.</p>
+<ul>
+<li>Type: list of <code>--hook-type</code> values</li>
+<li>Default: <code>[pre-commit]</code></li>
+</ul>
+<p>This controls which Git shims are installed (for example <code>pre-commit</code> vs <code>pre-push</code>).
+It is separate from a hook’s <code>stages</code>, which controls when a particular hook is eligible to run.</p>
+<p>Allowed values:</p>
+<ul>
+<li><code>pre-commit</code></li>
+<li><code>pre-push</code></li>
+<li><code>commit-msg</code></li>
+<li><code>prepare-commit-msg</code></li>
+<li><code>post-checkout</code></li>
+<li><code>post-commit</code></li>
+<li><code>post-merge</code></li>
+<li><code>post-rewrite</code></li>
+<li><code>pre-merge-commit</code></li>
+<li><code>pre-rebase</code></li>
+</ul>
+<h3 id="minimum_prek_version"><code>minimum_prek_version</code><a class="headerlink" href="#minimum_prek_version" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-minimum-prek-version-config"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>This key is a <code>prek</code> extension. Upstream <code>pre-commit</code> uses <code>minimum_pre_commit_version</code>, which <code>prek</code> intentionally ignores.</p>
+</div>
+<p>Require a minimum <code>prek</code> version for this config.</p>
+<ul>
+<li>Type: string (version)</li>
+<li>Default: unset</li>
+</ul>
+<p>If the installed <code>prek</code> is older than the configured minimum, <code>prek</code> exits with an error.</p>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="minimum_prek_version-prektoml" name="__tabbed_6" type="radio" /><input id="minimum_prek_version-pre-commit-configyaml" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="minimum_prek_version-prektoml">prek.toml</label><label for="minimum_prek_version-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">minimum_prek_version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.2.0&quot;</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">minimum_prek_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.2.0&quot;</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="orphan"><code>orphan</code><a class="headerlink" href="#orphan" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-orphan"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>orphan</code> is a <code>prek</code> workspace-mode feature and is not recognized by upstream <code>pre-commit</code>.</p>
+</div>
+<p>Workspace-mode setting to isolate a nested project from parent configs.</p>
+<ul>
+<li>Type: boolean</li>
+<li>Default: <code>false</code></li>
+</ul>
+<p>When <code>orphan: true</code>, files under this project directory are handled only by this project’s config and are not “seen” by parent projects.</p>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="orphan-prektoml" name="__tabbed_7" type="radio" /><input id="orphan-pre-commit-configyaml" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="orphan-prektoml">prek.toml</label><label for="orphan-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">orphan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">[[repos]]</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/astral-sh/ruff-pre-commit&quot;</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="n">rev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;v0.8.4&quot;</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span><span class="w"> </span><span class="p">}]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nt">orphan</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/astral-sh/ruff-pre-commit</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.8.4</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>See <a href="../../workspace/#file-processing-behavior">Workspace Mode - File Processing Behavior</a> for details.</p>
+<h2 id="repo-entries">Repo entries<a class="headerlink" href="#repo-entries" title="Permanent link">&para;</a></h2>
+<p>Each item under <code>repos:</code> is a mapping that always contains a <code>repo:</code> key.</p>
+<h3 id="remote-repository">Remote repository<a class="headerlink" href="#remote-repository" title="Permanent link">&para;</a></h3>
+<p>Use this for hooks distributed in a separate repository.</p>
+<p>Required keys:</p>
+<ul>
+<li><code>repo</code>: repository location (commonly an https git URL)</li>
+<li><code>rev</code>: version to use (tag, branch, or commit SHA)</li>
+<li><code>hooks</code>: list of hook selections</li>
+</ul>
+<p>Remote hook definitions live inside the hook repository itself in the
+<code>.pre-commit-hooks.yaml</code> manifest (at the repo root). Your config only selects
+hooks by <code>id</code> and optionally overrides options. See <a href="../../authoring-hooks/">Authoring Hooks</a>
+if you maintain a hook repository.</p>
+<h4 id="repo"><code>repo</code><a class="headerlink" href="#repo" title="Permanent link">&para;</a></h4>
+<p>Where to fetch hooks from.</p>
+<p>In most configs this is a git URL.
+<code>prek</code> also recognizes special values documented separately: <code>local</code>, <code>meta</code>, and <code>builtin</code>.</p>
+<h4 id="rev"><code>rev</code><a class="headerlink" href="#rev" title="Permanent link">&para;</a></h4>
+<p>The revision to use for the remote repository.</p>
+<p>Use a tag or commit SHA for repeatable results.
+If you use a moving target (like a branch name), runs may change over time.</p>
+<h4 id="hooks"><code>hooks</code><a class="headerlink" href="#hooks" title="Permanent link">&para;</a></h4>
+<p>The list of hooks to enable from that repository.</p>
+<p>Each item must at least specify <code>id</code>.
+You can also add hook-level options (filters, args, stages, etc.) to customize behavior.</p>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="hooks-prektoml" name="__tabbed_8" type="radio" /><input id="hooks-pre-commit-configyaml" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="hooks-prektoml">prek.toml</label><label for="hooks-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/astral-sh/ruff-pre-commit&quot;</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="n">rev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;v0.8.4&quot;</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">args</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;--fix&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/astral-sh/ruff-pre-commit</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v0.8.4</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--fix</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>Notes:</p>
+<ul>
+<li>For reproducibility, prefer immutable pins (tags or commit SHAs).</li>
+<li><code>prek auto-update</code> can help update <code>rev</code> values.</li>
+</ul>
+<h3 id="repo-local"><code>repo: local</code><a class="headerlink" href="#repo-local" title="Permanent link">&para;</a></h3>
+<p>Define hooks inline inside your repository.</p>
+<p>Keys:</p>
+<ul>
+<li><code>repo</code>: must be <code>local</code></li>
+<li><code>hooks</code>: list of <strong>local hook definitions</strong> (see <a href="#local-hook-definition">Local hook definition</a>)</li>
+</ul>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="9:2"><input checked="checked" id="repo-local-prektoml" name="__tabbed_9" type="radio" /><input id="repo-local-pre-commit-configyaml" name="__tabbed_9" type="radio" /><div class="tabbed-labels"><label for="repo-local-prektoml">prek.toml</label><label for="repo-local-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo-fmt&quot;</span><span class="p">,</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo fmt&quot;</span><span class="p">,</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo fmt&quot;</span><span class="p">,</span>
+</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="w">    </span><span class="n">files</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">.rs$&quot;</span><span class="p">,</span>
+</span><span id="__span-17-10"><a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-17-11"><a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo-fmt</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo fmt</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo fmt</span>
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\.rs$&quot;</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="repo-meta"><code>repo: meta</code><a class="headerlink" href="#repo-meta" title="Permanent link">&para;</a></h3>
+<p>Use <code>pre-commit</code>-style meta hooks that validate and debug your configuration.</p>
+<p><code>prek</code> supports the following meta hook ids:</p>
+<ul>
+<li><code>check-hooks-apply</code></li>
+<li><code>check-useless-excludes</code></li>
+<li><code>identity</code></li>
+</ul>
+<p>Restrictions:</p>
+<ul>
+<li><code>id</code> is required.</li>
+<li><code>entry</code> is not allowed.</li>
+<li><code>language</code> (if set) must be <code>system</code>.</li>
+</ul>
+<p>You may still configure normal hook options such as <code>files</code>, <code>exclude</code>, <code>stages</code>, etc.</p>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="10:2"><input checked="checked" id="repo-meta-prektoml" name="__tabbed_10" type="radio" /><input id="repo-meta-pre-commit-configyaml" name="__tabbed_10" type="radio" /><div class="tabbed-labels"><label for="repo-meta-prektoml">prek.toml</label><label for="repo-meta-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;meta&quot;</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;check-useless-excludes&quot;</span><span class="w"> </span><span class="p">}]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">meta</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-useless-excludes</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="repo-builtin"><code>repo: builtin</code><a class="headerlink" href="#repo-builtin" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-repo-builtin"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>repo: builtin</code> is specific to <code>prek</code> and is not compatible with upstream <code>pre-commit</code>.</p>
+</div>
+<p>Use <code>prek</code>’s built-in fast hooks (offline, zero setup).</p>
+<p>Restrictions:</p>
+<ul>
+<li><code>id</code> is required.</li>
+<li><code>entry</code> is not allowed.</li>
+<li><code>language</code> (if set) must be <code>system</code>.</li>
+</ul>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="11:2"><input checked="checked" id="repo-builtin-prektoml" name="__tabbed_11" type="radio" /><input id="repo-builtin-pre-commit-configyaml" name="__tabbed_11" type="radio" /><div class="tabbed-labels"><label for="repo-builtin-prektoml">prek.toml</label><label for="repo-builtin-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;builtin&quot;</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;trailing-whitespace&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;check-yaml&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builtin</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trailing-whitespace</span>
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-yaml</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>For the list of available built-in hooks and the “automatic fast path” behavior, see <a href="../../builtin/">Built-in Fast Hooks</a>.</p>
+<h2 id="hook-entries">Hook entries<a class="headerlink" href="#hook-entries" title="Permanent link">&para;</a></h2>
+<p>Hook items under <code>repos[*].hooks</code> have slightly different shapes depending on the repo type.</p>
+<h3 id="remote-hook-selection">Remote hook selection<a class="headerlink" href="#remote-hook-selection" title="Permanent link">&para;</a></h3>
+<p>For a remote repo, the hook entry must include:</p>
+<ul>
+<li><code>id</code> (required): selects the hook from the repository</li>
+</ul>
+<p>All other hook keys are optional overrides (for example <code>args</code>, <code>files</code>, <code>exclude</code>, <code>stages</code>, …).</p>
+<div class="admonition note">
+<p class="admonition-title">Advanced overrides</p>
+<p><code>prek</code> also supports overriding <code>name</code>, <code>entry</code>, and <code>language</code> for remote hooks.
+This can be useful for experimentation, but it may reduce portability to the original <code>pre-commit</code>.</p>
+</div>
+<h3 id="local-hook-definition">Local hook definition<a class="headerlink" href="#local-hook-definition" title="Permanent link">&para;</a></h3>
+<p>For <code>repo: local</code>, the hook entry is a full definition and must include:</p>
+<ul>
+<li><code>id</code> (required): stable identifier used by <code>prek run &lt;id&gt;</code> and selectors</li>
+<li><code>name</code> (required): label shown in output</li>
+<li><code>entry</code> (required): command to execute</li>
+<li><code>language</code> (required): how <code>prek</code> sets up and runs the hook</li>
+</ul>
+<h3 id="builtinmeta-hook-selection">Builtin/meta hook selection<a class="headerlink" href="#builtinmeta-hook-selection" title="Permanent link">&para;</a></h3>
+<p>For <code>repo: builtin</code> and <code>repo: meta</code>, the hook entry must include <code>id</code>.
+You can optionally provide <code>name</code> and normal hook options (filters, stages, etc), but not <code>entry</code>.</p>
+<h2 id="common-hook-options">Common hook options<a class="headerlink" href="#common-hook-options" title="Permanent link">&para;</a></h2>
+<p>These keys can appear on hooks (remote/local/builtin/meta), subject to the restrictions above.</p>
+<h3 id="id"><code>id</code><a class="headerlink" href="#id" title="Permanent link">&para;</a></h3>
+<p>The stable identifier of the hook.</p>
+<ul>
+<li>For remote hooks, this must match a hook id defined by the remote repository.</li>
+<li>For local hooks, you choose it.</li>
+</ul>
+<p><code>id</code> is also used for CLI selection (for example <code>prek run &lt;id&gt;</code> and <code>PREK_SKIP</code>).</p>
+<div class="admonition note">
+<p class="admonition-title">Hook ids containing <code>:</code></p>
+<p>If your hook id contains <code>:</code> (for example <code>id: lint:ruff</code>), <code>prek run lint:ruff</code>
+will not select that hook. <code>prek</code> interprets <code>lint:ruff</code> as the selector
+<code>&lt;project-path&gt;:&lt;hook-id&gt;</code>, with project <code>lint</code> and hook <code>ruff</code>.
+To select the hook id <code>lint:ruff</code>, add a leading <code>:</code> and run
+<code>prek run :lint:ruff</code>.</p>
+</div>
+<h3 id="name"><code>name</code><a class="headerlink" href="#name" title="Permanent link">&para;</a></h3>
+<p>Human-friendly label shown in output.</p>
+<ul>
+<li>Required for <code>repo: local</code> hooks.</li>
+<li>Optional as an override for remote/meta/builtin hooks.</li>
+</ul>
+<h3 id="entry"><code>entry</code><a class="headerlink" href="#entry" title="Permanent link">&para;</a></h3>
+<p>The command line to execute for the hook.</p>
+<ul>
+<li>Required for <code>repo: local</code> hooks.</li>
+<li>Optional override for remote hooks.</li>
+<li>Not allowed for <code>repo: meta</code> and <code>repo: builtin</code>.</li>
+</ul>
+<p>If <code>pass_filenames: true</code>, <code>prek</code> appends matching filenames to this command when running.</p>
+<h3 id="shell"><code>shell</code><a class="headerlink" href="#shell" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-shell"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>shell</code> is a <code>prek</code> extension and may not be recognized by upstream <code>pre-commit</code>.</p>
+</div>
+<p>Run <code>entry</code> through a predefined shell adapter.</p>
+<ul>
+<li>Type: one of <code>sh</code>, <code>bash</code>, <code>pwsh</code>, <code>powershell</code>, <code>cmd</code></li>
+<li>Default: <code>null</code> (run <code>entry</code> directly without a shell)</li>
+</ul>
+<p>When <code>shell</code> is omitted, <code>prek</code> preserves the default no-shell behavior: it parses <code>entry</code> into argv, invokes the command directly, and appends <code>args</code> and matching filenames as process arguments.</p>
+<p>When <code>shell</code> is set, <code>entry</code> is treated as source for that shell. <code>prek</code> writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook <code>args</code> followed by matching filenames as script arguments.</p>
+<table>
+<thead>
+<tr>
+<th><code>shell</code></th>
+<th>Adapter command</th>
+<th>Script arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bash</code></td>
+<td><code>bash --noprofile --norc -eo pipefail &lt;script&gt;</code></td>
+<td><code>"$@"</code></td>
+</tr>
+<tr>
+<td><code>sh</code></td>
+<td><code>sh -e &lt;script&gt;</code></td>
+<td><code>"$@"</code></td>
+</tr>
+<tr>
+<td><code>pwsh</code></td>
+<td><code>pwsh -NoProfile -NonInteractive -File &lt;script&gt;</code></td>
+<td><code>$args</code></td>
+</tr>
+<tr>
+<td><code>powershell</code></td>
+<td><code>powershell -NoProfile -NonInteractive -File &lt;script&gt;</code></td>
+<td><code>$args</code></td>
+</tr>
+<tr>
+<td><code>cmd</code></td>
+<td><code>cmd /D /E:ON /V:OFF /S /C CALL &lt;script&gt;</code></td>
+<td><code>%*</code></td>
+</tr>
+</tbody>
+</table>
+<div class="tabbed-set tabbed-alternate" data-tabs="12:2"><input checked="checked" id="shell-prektoml" name="__tabbed_12" type="radio" /><input id="shell-pre-commit-configyaml" name="__tabbed_12" type="radio" /><div class="tabbed-labels"><label for="shell-prektoml">prek.toml</label><label for="shell-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;test-all&quot;</span><span class="p">,</span>
+</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;test-all&quot;</span><span class="p">,</span>
+</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-23-8"><a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-23-9"><a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="s2">    uv run --python=3.10 --isolated pytest</span>
+</span><span id="__span-23-10"><a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a><span class="s2">    uv run --python=3.11 --isolated pytest</span>
+</span><span id="__span-23-11"><a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="s2">    &quot;&quot;&quot;</span><span class="p">,</span>
+</span><span id="__span-23-12"><a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="w">    </span><span class="n">shell</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;bash&quot;</span><span class="p">,</span>
+</span><span id="__span-23-13"><a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="w">    </span><span class="n">pass_filenames</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+</span><span id="__span-23-14"><a id="__codelineno-23-14" name="__codelineno-23-14" href="#__codelineno-23-14"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-23-15"><a id="__codelineno-23-15" name="__codelineno-23-15" href="#__codelineno-23-15"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test-all</span>
+</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test-all</span>
+</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+</span><span id="__span-24-8"><a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="w">          </span><span class="no">uv run --python=3.10 --isolated pytest</span>
+</span><span id="__span-24-9"><a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="w">          </span><span class="no">uv run --python=3.11 --isolated pytest</span>
+</span><span id="__span-24-10"><a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="w">        </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bash</span>
+</span><span id="__span-24-11"><a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="w">        </span><span class="nt">pass_filenames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<details class="note">
+<summary>Unsupported languages</summary>
+<p><code>shell</code> is rejected for language backends that do not run <code>entry</code> through
+the shell-aware entry resolver, and for <code>repo: meta</code> and <code>repo: builtin</code>
+hooks.</p>
+<table>
+<thead>
+<tr>
+<th>Language</th>
+<th>Why <code>shell</code> is unsupported</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docker</code>, <code>docker_image</code></td>
+<td><code>entry</code> participates in container image or entrypoint selection instead of direct host process execution.</td>
+</tr>
+<tr>
+<td><code>dart</code></td>
+<td>Dart package config injection requires <code>entry</code> to resolve to a direct <code>dart</code> command.</td>
+</tr>
+<tr>
+<td><code>fail</code></td>
+<td><code>entry</code> is the failure message body.</td>
+</tr>
+<tr>
+<td><code>julia</code>, <code>rust</code></td>
+<td><code>entry</code> participates in install/runtime package resolution and is split before execution.</td>
+</tr>
+<tr>
+<td><code>pygrep</code></td>
+<td><code>entry</code> is the regex pattern.</td>
+</tr>
+<tr>
+<td><code>conda</code>, <code>coursier</code>, <code>perl</code>, <code>r</code></td>
+<td>The language backend is not implemented yet.</td>
+</tr>
+</tbody>
+</table>
+</details>
+<h3 id="language"><code>language</code><a class="headerlink" href="#language" title="Permanent link">&para;</a></h3>
+<p>How <code>prek</code> should run the hook (and whether it should create a managed environment).</p>
+<ul>
+<li>Required for <code>repo: local</code> hooks.</li>
+<li>Optional override for remote hooks.</li>
+<li>Not allowed (except as <code>system</code>) for <code>repo: meta</code> and <code>repo: builtin</code>.</li>
+</ul>
+<p>Common values include <code>system</code>, <code>python</code>, <code>node</code>, <code>rust</code>, <code>golang</code>, <code>ruby</code>, and <code>docker</code>.</p>
+<p>See <a href="../../languages/">Language Support</a> for per-language behavior, supported values, and <code>language_version</code> details.</p>
+<div class="admonition note">
+<p class="admonition-title">Language name aliases</p>
+<p>For compatibility with upstream <code>pre-commit</code>, the following legacy language names are also accepted:</p>
+<ul>
+<li><code>unsupported</code> is treated as <code>system</code></li>
+<li><code>unsupported_script</code> is treated as <code>script</code></li>
+</ul>
+</div>
+<h3 id="alias"><code>alias</code><a class="headerlink" href="#alias" title="Permanent link">&para;</a></h3>
+<p>An alternate identifier for selecting the hook from the CLI.</p>
+<p>If set, you can run the hook via either <code>prek run &lt;id&gt;</code> or <code>prek run &lt;alias&gt;</code>.</p>
+<h3 id="args"><code>args</code><a class="headerlink" href="#args" title="Permanent link">&para;</a></h3>
+<p>Extra arguments appended to the hook’s <code>entry</code>.</p>
+<ul>
+<li>Type: list of strings</li>
+</ul>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="13:2"><input checked="checked" id="args-prektoml" name="__tabbed_13" type="radio" /><input id="args-pre-commit-configyaml" name="__tabbed_13" type="radio" /><div class="tabbed-labels"><label for="args-prektoml">prek.toml</label><label for="args-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">args</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;--fix&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
+</span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">    </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--fix</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="env"><code>env</code><a class="headerlink" href="#env" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-env"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>env</code> is a <code>prek</code> extension and may not be recognized by upstream <code>pre-commit</code>.</p>
+</div>
+<p>Extra runtime environment variables for the hook process.</p>
+<ul>
+<li>Type: map of string to string</li>
+</ul>
+<p>Values override the existing process environment (including variables such as <code>PATH</code>).
+They are applied when the hook runs, not when <code>prek</code> installs or prepares the hook environment.</p>
+<p>For remote hooks, <code>env</code> may also be set by the hook author in
+<code>.pre-commit-hooks.yaml</code>. Values from the project configuration are merged with
+manifest values and override duplicate keys.</p>
+<p>For <code>docker</code> / <code>docker_image</code> hooks, these variables are passed into the container rather than being applied to the container runtime command.</p>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="14:2"><input checked="checked" id="env-prektoml" name="__tabbed_14" type="radio" /><input id="env-pre-commit-configyaml" name="__tabbed_14" type="radio" /><div class="tabbed-labels"><label for="env-prektoml">prek.toml</label><label for="env-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-27-5"><a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo-doc&quot;</span><span class="p">,</span>
+</span><span id="__span-27-6"><a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo doc&quot;</span><span class="p">,</span>
+</span><span id="__span-27-7"><a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-27-8"><a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo doc --all-features --workspace --no-deps&quot;</span><span class="p">,</span>
+</span><span id="__span-27-9"><a id="__codelineno-27-9" name="__codelineno-27-9" href="#__codelineno-27-9"></a><span class="w">    </span><span class="n">env</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">RUSTDOCFLAGS</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;-Dwarnings&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-27-10"><a id="__codelineno-27-10" name="__codelineno-27-10" href="#__codelineno-27-10"></a><span class="w">    </span><span class="n">pass_filenames</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+</span><span id="__span-27-11"><a id="__codelineno-27-11" name="__codelineno-27-11" href="#__codelineno-27-11"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-27-12"><a id="__codelineno-27-12" name="__codelineno-27-12" href="#__codelineno-27-12"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-28-3"><a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo-doc</span>
+</span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo doc</span>
+</span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo doc --all-features --workspace --no-deps</span>
+</span><span id="__span-28-8"><a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a><span class="w">        </span><span class="nt">env</span><span class="p">:</span>
+</span><span id="__span-28-9"><a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a><span class="w">          </span><span class="nt">RUSTDOCFLAGS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-Dwarnings</span>
+</span><span id="__span-28-10"><a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a><span class="w">        </span><span class="nt">pass_filenames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="files-exclude"><code>files</code> / <code>exclude</code><a class="headerlink" href="#files-exclude" title="Permanent link">&para;</a></h3>
+<p>Filters applied to candidate filenames.</p>
+<ul>
+<li><code>files</code> selects which files are eligible for the hook.</li>
+<li><code>exclude</code> removes files matched by <code>files</code>.</li>
+</ul>
+<p>If you use both global and hook-level filters, the effective behavior is “global filter first, then hook filter”.</p>
+<p>By default (and for compatibility with upstream <code>pre-commit</code>), these are regex strings.
+As a <code>prek</code> extension, you can also specify globs using <code>glob</code> or a glob list.</p>
+<p>See <a href="#top-level-files">Top-level <code>files</code></a> and <a href="#top-level-exclude">Top-level <code>exclude</code></a> for syntax notes and examples.</p>
+<h3 id="types-types_or-exclude_types"><code>types</code> / <code>types_or</code> / <code>exclude_types</code><a class="headerlink" href="#types-types_or-exclude_types" title="Permanent link">&para;</a></h3>
+<p>File-type filters based on <a href="https://pre-commit.com/#filtering-files-with-types"><code>identify</code></a> tags.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Use <a href="../cli/#prek-util-identify"><code>prek util identify &lt;path&gt;</code></a> to see how prek tags a file when you’re troubleshooting <code>types</code> filters.</p>
+</div>
+<p>Compared to regex-only filtering (<code>files</code> / <code>exclude</code>), tag-based filtering is often easier and more robust:</p>
+<ul>
+<li>tags can match by <strong>file extension</strong> <em>and</em> by <strong>shebang</strong> (for extensionless scripts)</li>
+<li>you can easily exclude things like <strong>symlinks</strong> or <strong>binary files</strong></li>
+</ul>
+<p>Common tags include:</p>
+<ul>
+<li>
+<p><code>file</code>, <code>text</code>, <code>binary</code>, <code>symlink</code>, <code>executable</code></p>
+</li>
+<li>
+<p>language-ish tags such as <code>python</code>, <code>rust</code>, <code>javascript</code>, <code>yaml</code>, <code>toml</code>, ...</p>
+</li>
+<li>
+<p><code>types</code>: all listed tags must match (logical AND)</p>
+</li>
+<li>
+<p><code>types_or</code>: at least one listed tag must match (logical OR)</p>
+</li>
+<li>
+<p><code>exclude_types</code>: tags that disqualify a file</p>
+</li>
+</ul>
+<p>How these combine:</p>
+<ul>
+<li><code>files</code> / <code>exclude</code>, <code>types</code>, and <code>types_or</code> are combined with <strong>AND</strong>.</li>
+<li>Tags within <code>types</code> are combined with <strong>AND</strong>.</li>
+<li>Tags within <code>types_or</code> are combined with <strong>OR</strong>.</li>
+</ul>
+<p>Defaults:</p>
+<ul>
+<li><code>types</code>: <code>[file]</code> (matches all files)</li>
+<li><code>types_or</code>: <code>[]</code></li>
+<li><code>exclude_types</code>: <code>[]</code></li>
+</ul>
+<p>These filters are applied in addition to regex filtering.</p>
+<p>Examples:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="15:2"><input checked="checked" id="types-types_or-exclude_types-prektoml" name="__tabbed_15" type="radio" /><input id="types-types_or-exclude_types-pre-commit-configyaml" name="__tabbed_15" type="radio" /><div class="tabbed-labels"><label for="types-types_or-exclude_types-prektoml">prek.toml</label><label for="types-types_or-exclude_types-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-29-4"><a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="w">  </span><span class="c1"># AND: must be under `src/` AND have the `python` tag</span>
+</span><span id="__span-29-5"><a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;lint-py&quot;</span><span class="p">,</span>
+</span><span id="__span-29-7"><a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Lint (py)&quot;</span><span class="p">,</span>
+</span><span id="__span-29-8"><a id="__codelineno-29-8" name="__codelineno-29-8" href="#__codelineno-29-8"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-29-9"><a id="__codelineno-29-9" name="__codelineno-29-9" href="#__codelineno-29-9"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;python -m ruff check&quot;</span><span class="p">,</span>
+</span><span id="__span-29-10"><a id="__codelineno-29-10" name="__codelineno-29-10" href="#__codelineno-29-10"></a><span class="w">    </span><span class="n">files</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;^src/&quot;</span><span class="p">,</span>
+</span><span id="__span-29-11"><a id="__codelineno-29-11" name="__codelineno-29-11" href="#__codelineno-29-11"></a><span class="w">    </span><span class="n">types</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;python&quot;</span><span class="p">],</span>
+</span><span id="__span-29-12"><a id="__codelineno-29-12" name="__codelineno-29-12" href="#__codelineno-29-12"></a><span class="w">    </span><span class="n">exclude_types</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;symlink&quot;</span><span class="p">]</span>
+</span><span id="__span-29-13"><a id="__codelineno-29-13" name="__codelineno-29-13" href="#__codelineno-29-13"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-29-14"><a id="__codelineno-29-14" name="__codelineno-29-14" href="#__codelineno-29-14"></a>
+</span><span id="__span-29-15"><a id="__codelineno-29-15" name="__codelineno-29-15" href="#__codelineno-29-15"></a><span class="w">  </span><span class="c1"># OR: match any of the listed tags under `web/`</span>
+</span><span id="__span-29-16"><a id="__codelineno-29-16" name="__codelineno-29-16" href="#__codelineno-29-16"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-29-17"><a id="__codelineno-29-17" name="__codelineno-29-17" href="#__codelineno-29-17"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;lint-web&quot;</span><span class="p">,</span>
+</span><span id="__span-29-18"><a id="__codelineno-29-18" name="__codelineno-29-18" href="#__codelineno-29-18"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Lint (web)&quot;</span><span class="p">,</span>
+</span><span id="__span-29-19"><a id="__codelineno-29-19" name="__codelineno-29-19" href="#__codelineno-29-19"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-29-20"><a id="__codelineno-29-20" name="__codelineno-29-20" href="#__codelineno-29-20"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;npm run lint&quot;</span><span class="p">,</span>
+</span><span id="__span-29-21"><a id="__codelineno-29-21" name="__codelineno-29-21" href="#__codelineno-29-21"></a><span class="w">    </span><span class="n">files</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;^web/&quot;</span><span class="p">,</span>
+</span><span id="__span-29-22"><a id="__codelineno-29-22" name="__codelineno-29-22" href="#__codelineno-29-22"></a><span class="w">    </span><span class="n">types_or</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;javascript&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;jsx&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ts&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;tsx&quot;</span><span class="p">]</span>
+</span><span id="__span-29-23"><a id="__codelineno-29-23" name="__codelineno-29-23" href="#__codelineno-29-23"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-29-24"><a id="__codelineno-29-24" name="__codelineno-29-24" href="#__codelineno-29-24"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint-py</span>
+</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Lint (py)</span>
+</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python -m ruff check</span>
+</span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a><span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^src/</span>
+</span><span id="__span-30-9"><a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
+</span><span id="__span-30-10"><a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a><span class="w">        </span><span class="nt">exclude_types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">symlink</span><span class="p p-Indicator">]</span>
+</span><span id="__span-30-11"><a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>
+</span><span id="__span-30-12"><a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint-web</span>
+</span><span id="__span-30-13"><a id="__codelineno-30-13" name="__codelineno-30-13" href="#__codelineno-30-13"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Lint (web)</span>
+</span><span id="__span-30-14"><a id="__codelineno-30-14" name="__codelineno-30-14" href="#__codelineno-30-14"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-30-15"><a id="__codelineno-30-15" name="__codelineno-30-15" href="#__codelineno-30-15"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">npm run lint</span>
+</span><span id="__span-30-16"><a id="__codelineno-30-16" name="__codelineno-30-16" href="#__codelineno-30-16"></a><span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^web/</span>
+</span><span id="__span-30-17"><a id="__codelineno-30-17" name="__codelineno-30-17" href="#__codelineno-30-17"></a><span class="w">        </span><span class="nt">types_or</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">javascript</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ts</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tsx</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>If you need to match a path pattern that doesn’t align with a hook’s default <code>types</code> (common when reusing an existing hook in a nonstandard way), override it back to “all files” and use <code>files</code>:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="16:2"><input checked="checked" id="types-types_or-exclude_types-prektoml_1" name="__tabbed_16" type="radio" /><input id="types-types_or-exclude_types-pre-commit-configyaml_1" name="__tabbed_16" type="radio" /><div class="tabbed-labels"><label for="types-types_or-exclude_types-prektoml_1">prek.toml</label><label for="types-types_or-exclude_types-pre-commit-configyaml_1">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;meta&quot;</span>
+</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;check-hooks-apply&quot;</span><span class="p">,</span>
+</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="w">    </span><span class="n">types</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;file&quot;</span><span class="p">],</span>
+</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="w">    </span><span class="n">files</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">.(yaml|yml|myext)$&quot;</span>
+</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">meta</span>
+</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-hooks-apply</span>
+</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">file</span><span class="p p-Indicator">]</span>
+</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a><span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">\.(yaml|yml|myext)$</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="always_run"><code>always_run</code><a class="headerlink" href="#always_run" title="Permanent link">&para;</a></h3>
+<p>Run the hook even when no files match.</p>
+<ul>
+<li>Type: boolean</li>
+<li>Default: <code>false</code></li>
+</ul>
+<p>This is commonly used for hooks that check repository-wide state (for example, running a test suite) rather than operating on specific files.</p>
+<h3 id="pass_filenames"><code>pass_filenames</code><a class="headerlink" href="#pass_filenames" title="Permanent link">&para;</a></h3>
+<p>Controls whether <code>prek</code> appends the matching filenames to the command line.</p>
+<ul>
+<li>Type: boolean or positive integer</li>
+<li>Default: <code>true</code> which passes all matching filenames</li>
+</ul>
+<p>Set <code>pass_filenames: false</code> for hooks that don’t accept file arguments (or that discover files themselves).</p>
+<p>Set <code>pass_filenames: n</code> (a positive integer) to limit each invocation to at most <code>n</code> filenames. When there are more matching files than <code>n</code>, <code>prek</code> splits them across multiple invocations. Those invocations may run concurrently unless <code>require_serial: true</code> is set. This is useful for tools that can only process a limited number of files at once.</p>
+<p>Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when <code>pass_filenames: true</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>pass_filenames: n</code> with a positive integer is a <code>prek</code> extension. Upstream <code>pre-commit</code> only accepts a boolean value.</p>
+</div>
+<h3 id="stages"><code>stages</code><a class="headerlink" href="#stages" title="Permanent link">&para;</a></h3>
+<p>Declare which stages a hook is eligible to run in.</p>
+<ul>
+<li>Type: list of stage names</li>
+<li>Default: all stages</li>
+</ul>
+<p>Allowed values:</p>
+<ul>
+<li><code>manual</code></li>
+<li><code>commit-msg</code></li>
+<li><code>post-checkout</code></li>
+<li><code>post-commit</code></li>
+<li><code>post-merge</code></li>
+<li><code>post-rewrite</code></li>
+<li><code>pre-commit</code></li>
+<li><code>pre-merge-commit</code></li>
+<li><code>pre-push</code></li>
+<li><code>pre-rebase</code></li>
+<li><code>prepare-commit-msg</code></li>
+</ul>
+<p>When you run <code>prek run --hook-stage &lt;stage&gt;</code>, only hooks configured for that stage are considered.</p>
+<h3 id="require_serial"><code>require_serial</code><a class="headerlink" href="#require_serial" title="Permanent link">&para;</a></h3>
+<p>Force a hook to run without parallel invocations (one in-flight process for that hook at a time).</p>
+<ul>
+<li>Type: boolean</li>
+<li>Default: <code>false</code></li>
+</ul>
+<p>This is useful for tools that use global caches/locks or otherwise can’t handle concurrent execution.</p>
+<h3 id="priority"><code>priority</code><a class="headerlink" href="#priority" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-priority"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>priority</code> controls <code>prek</code>'s scheduler and does not exist in upstream <code>pre-commit</code>.</p>
+</div>
+<p>Each hook can set an explicit <code>priority</code> (a non-negative integer) that controls when it runs and with which hooks it may execute in parallel.</p>
+<p>Scope:</p>
+<ul>
+<li><code>priority</code> is evaluated <strong>within a single configuration file</strong> and is compared across <strong>all hooks in that file</strong>, even if they appear under different <code>repos:</code> entries.</li>
+<li><code>priority</code> does <strong>not</strong> coordinate across different config files. In workspace mode, each project’s config file is scheduled independently.</li>
+</ul>
+<p>Hooks run in ascending priority order: <strong>lower <code>priority</code> values run earlier</strong>. Hooks that share the same <code>priority</code> value run concurrently, subject to the global concurrency limit.</p>
+<p>When <code>priority</code> is omitted, <code>prek</code> assigns an implicit value based on hook order to preserve sequential behavior.</p>
+<p>Example:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="17:2"><input checked="checked" id="priority-prektoml" name="__tabbed_17" type="radio" /><input id="priority-pre-commit-configyaml" name="__tabbed_17" type="radio" /><div class="tabbed-labels"><label for="priority-prektoml">prek.toml</label><label for="priority-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-33-4"><a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-33-5"><a id="__codelineno-33-5" name="__codelineno-33-5" href="#__codelineno-33-5"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;format&quot;</span><span class="p">,</span>
+</span><span id="__span-33-6"><a id="__codelineno-33-6" name="__codelineno-33-6" href="#__codelineno-33-6"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Format&quot;</span><span class="p">,</span>
+</span><span id="__span-33-7"><a id="__codelineno-33-7" name="__codelineno-33-7" href="#__codelineno-33-7"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-33-8"><a id="__codelineno-33-8" name="__codelineno-33-8" href="#__codelineno-33-8"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;python3 -m ruff format&quot;</span><span class="p">,</span>
+</span><span id="__span-33-9"><a id="__codelineno-33-9" name="__codelineno-33-9" href="#__codelineno-33-9"></a><span class="w">    </span><span class="n">always_run</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-33-10"><a id="__codelineno-33-10" name="__codelineno-33-10" href="#__codelineno-33-10"></a><span class="w">    </span><span class="n">priority</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+</span><span id="__span-33-11"><a id="__codelineno-33-11" name="__codelineno-33-11" href="#__codelineno-33-11"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-33-12"><a id="__codelineno-33-12" name="__codelineno-33-12" href="#__codelineno-33-12"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-33-13"><a id="__codelineno-33-13" name="__codelineno-33-13" href="#__codelineno-33-13"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;lint&quot;</span><span class="p">,</span>
+</span><span id="__span-33-14"><a id="__codelineno-33-14" name="__codelineno-33-14" href="#__codelineno-33-14"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Lint&quot;</span><span class="p">,</span>
+</span><span id="__span-33-15"><a id="__codelineno-33-15" name="__codelineno-33-15" href="#__codelineno-33-15"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-33-16"><a id="__codelineno-33-16" name="__codelineno-33-16" href="#__codelineno-33-16"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;python3 -m ruff check&quot;</span><span class="p">,</span>
+</span><span id="__span-33-17"><a id="__codelineno-33-17" name="__codelineno-33-17" href="#__codelineno-33-17"></a><span class="w">    </span><span class="n">always_run</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-33-18"><a id="__codelineno-33-18" name="__codelineno-33-18" href="#__codelineno-33-18"></a><span class="w">    </span><span class="n">priority</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+</span><span id="__span-33-19"><a id="__codelineno-33-19" name="__codelineno-33-19" href="#__codelineno-33-19"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-33-20"><a id="__codelineno-33-20" name="__codelineno-33-20" href="#__codelineno-33-20"></a><span class="w">  </span><span class="p">{</span>
+</span><span id="__span-33-21"><a id="__codelineno-33-21" name="__codelineno-33-21" href="#__codelineno-33-21"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;tests&quot;</span><span class="p">,</span>
+</span><span id="__span-33-22"><a id="__codelineno-33-22" name="__codelineno-33-22" href="#__codelineno-33-22"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Tests&quot;</span><span class="p">,</span>
+</span><span id="__span-33-23"><a id="__codelineno-33-23" name="__codelineno-33-23" href="#__codelineno-33-23"></a><span class="w">    </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-33-24"><a id="__codelineno-33-24" name="__codelineno-33-24" href="#__codelineno-33-24"></a><span class="w">    </span><span class="n">entry</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;just test&quot;</span><span class="p">,</span>
+</span><span id="__span-33-25"><a id="__codelineno-33-25" name="__codelineno-33-25" href="#__codelineno-33-25"></a><span class="w">    </span><span class="n">always_run</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-33-26"><a id="__codelineno-33-26" name="__codelineno-33-26" href="#__codelineno-33-26"></a><span class="w">    </span><span class="n">priority</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span>
+</span><span id="__span-33-27"><a id="__codelineno-33-27" name="__codelineno-33-27" href="#__codelineno-33-27"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-33-28"><a id="__codelineno-33-28" name="__codelineno-33-28" href="#__codelineno-33-28"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">format</span>
+</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Format</span>
+</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python3 -m ruff format</span>
+</span><span id="__span-34-8"><a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a><span class="w">        </span><span class="nt">always_run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-34-9"><a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a><span class="w">        </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+</span><span id="__span-34-10"><a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>
+</span><span id="__span-34-11"><a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint</span>
+</span><span id="__span-34-12"><a id="__codelineno-34-12" name="__codelineno-34-12" href="#__codelineno-34-12"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Lint</span>
+</span><span id="__span-34-13"><a id="__codelineno-34-13" name="__codelineno-34-13" href="#__codelineno-34-13"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-34-14"><a id="__codelineno-34-14" name="__codelineno-34-14" href="#__codelineno-34-14"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python3 -m ruff check</span>
+</span><span id="__span-34-15"><a id="__codelineno-34-15" name="__codelineno-34-15" href="#__codelineno-34-15"></a><span class="w">        </span><span class="nt">always_run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-34-16"><a id="__codelineno-34-16" name="__codelineno-34-16" href="#__codelineno-34-16"></a><span class="w">        </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</span><span id="__span-34-17"><a id="__codelineno-34-17" name="__codelineno-34-17" href="#__codelineno-34-17"></a>
+</span><span id="__span-34-18"><a id="__codelineno-34-18" name="__codelineno-34-18" href="#__codelineno-34-18"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tests</span>
+</span><span id="__span-34-19"><a id="__codelineno-34-19" name="__codelineno-34-19" href="#__codelineno-34-19"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Tests</span>
+</span><span id="__span-34-20"><a id="__codelineno-34-20" name="__codelineno-34-20" href="#__codelineno-34-20"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-34-21"><a id="__codelineno-34-21" name="__codelineno-34-21" href="#__codelineno-34-21"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">just test</span>
+</span><span id="__span-34-22"><a id="__codelineno-34-22" name="__codelineno-34-22" href="#__codelineno-34-22"></a><span class="w">        </span><span class="nt">always_run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-34-23"><a id="__codelineno-34-23" name="__codelineno-34-23" href="#__codelineno-34-23"></a><span class="w">        </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<div class="admonition danger">
+<p class="admonition-title">Parallel hooks modifying files</p>
+<p>If two hooks run in the same priority group and both mutate the same files (or depend on shared state), results are undefined.
+Use separate priorities to avoid overlap.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Hooks modifying files without a non-zero exit code</p>
+<p>If a hook modifies files without emitting a non-zero exit code (e.g. <code>ruff format</code>), the priority group as a whole will fail.
+It is not possible for prek to attribute the failure to a specific hook in the group which modified files.
+Use separate priorities for clearer failure attribution.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title"><code>require_serial</code> is different</p>
+<p><code>require_serial: true</code> prevents concurrent invocations of the <em>same hook</em>.
+It does not prevent other hooks from running alongside it; use a unique <code>priority</code> if you need exclusivity.</p>
+</div>
+<h3 id="fail_fast_1"><code>fail_fast</code><a class="headerlink" href="#fail_fast_1" title="Permanent link">&para;</a></h3>
+<p>Hook-level fail-fast behavior.</p>
+<ul>
+<li>Type: boolean</li>
+<li>Default: <code>false</code></li>
+</ul>
+<p>If <code>true</code>, a failure in this hook stops the run immediately.</p>
+<h3 id="verbose"><code>verbose</code><a class="headerlink" href="#verbose" title="Permanent link">&para;</a></h3>
+<p>Print hook output even when the hook succeeds.</p>
+<ul>
+<li>Type: boolean</li>
+<li>Default: <code>false</code></li>
+</ul>
+<h3 id="log_file"><code>log_file</code><a class="headerlink" href="#log_file" title="Permanent link">&para;</a></h3>
+<p>Write hook output to a file when the hook fails (and also when <code>verbose: true</code>).</p>
+<ul>
+<li>Type: string path</li>
+</ul>
+<h3 id="description"><code>description</code><a class="headerlink" href="#description" title="Permanent link">&para;</a></h3>
+<p>Free-form description shown in listings / metadata.</p>
+<ul>
+<li>Type: string</li>
+</ul>
+<h3 id="language_version"><code>language_version</code><a class="headerlink" href="#language_version" title="Permanent link">&para;</a></h3>
+<p>Choose the language/toolchain version request for this hook.</p>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>default</code></li>
+</ul>
+<p>If not set, <code>prek</code> may use <code>default_language_version</code> for the hook’s language.</p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>language_version</code> is treated as a <strong>version request</strong>, not a single pinned value. For languages that use semver requests, you can specify ranges (for example <code>^1.2</code>, <code>&gt;=1.5, &lt;2.0</code>).</p>
+<p>Special values:</p>
+<ul>
+<li><code>default</code>: use the language’s default resolution logic.</li>
+<li><code>system</code>: require a system-installed toolchain (no downloads).</li>
+</ul>
+<p>Language-specific behavior:</p>
+<ul>
+<li>Python: passed to the Python resolver (for example <code>python3</code>, <code>python3.12</code>, or a specific interpreter name). May trigger toolchain download.</li>
+<li>Node: passed to the Node resolver (for example <code>20</code>, <code>18.19.0</code>). May trigger toolchain download.</li>
+<li>Go: uses Go version strings such as <code>1.22.1</code> (downloaded if missing).</li>
+<li>Rust: supports rustup toolchains such as <code>stable</code>, <code>beta</code>, <code>nightly</code>, or versioned toolchains.</li>
+<li>Other languages: parsed as a semver request and matched against the installed toolchain version.</li>
+</ul>
+<p>Examples:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="18:2"><input checked="checked" id="language_version-prektoml" name="__tabbed_18" type="radio" /><input id="language_version-pre-commit-configyaml" name="__tabbed_18" type="radio" /><div class="tabbed-labels"><label for="language_version-prektoml">prek.toml</label><label for="language_version-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-35-2"><a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;python&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language_version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;3.12&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-35-3"><a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;eslint&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;node&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language_version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;20&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-35-4"><a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;cargo-fmt&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;rust&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language_version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;stable&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-35-5"><a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;my-tool&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">language_version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-35-6"><a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a><span class="p">]</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-36-1"><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-36-2"><a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
+</span><span id="__span-36-3"><a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a><span class="w">    </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+</span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="w">    </span><span class="nt">language_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.12&quot;</span>
+</span><span id="__span-36-5"><a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>
+</span><span id="__span-36-6"><a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eslint</span>
+</span><span id="__span-36-7"><a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="w">    </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">node</span>
+</span><span id="__span-36-8"><a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a><span class="w">    </span><span class="nt">language_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;20&quot;</span>
+</span><span id="__span-36-9"><a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a>
+</span><span id="__span-36-10"><a id="__codelineno-36-10" name="__codelineno-36-10" href="#__codelineno-36-10"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cargo-fmt</span>
+</span><span id="__span-36-11"><a id="__codelineno-36-11" name="__codelineno-36-11" href="#__codelineno-36-11"></a><span class="w">    </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rust</span>
+</span><span id="__span-36-12"><a id="__codelineno-36-12" name="__codelineno-36-12" href="#__codelineno-36-12"></a><span class="w">    </span><span class="nt">language_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stable</span>
+</span><span id="__span-36-13"><a id="__codelineno-36-13" name="__codelineno-36-13" href="#__codelineno-36-13"></a>
+</span><span id="__span-36-14"><a id="__codelineno-36-14" name="__codelineno-36-14" href="#__codelineno-36-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-tool</span>
+</span><span id="__span-36-15"><a id="__codelineno-36-15" name="__codelineno-36-15" href="#__codelineno-36-15"></a><span class="w">    </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-36-16"><a id="__codelineno-36-16" name="__codelineno-36-16" href="#__codelineno-36-16"></a><span class="w">    </span><span class="nt">language_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<h3 id="additional_dependencies"><code>additional_dependencies</code><a class="headerlink" href="#additional_dependencies" title="Permanent link">&para;</a></h3>
+<p>Extra dependencies for hooks that run inside a managed environment (for example Python or Node hooks).</p>
+<ul>
+<li>Type: list of strings</li>
+</ul>
+<p>If you set this for a language that doesn’t support dependency installation, <code>prek</code> fails with a configuration error.</p>
+<h3 id="minimum_prek_version_1"><code>minimum_prek_version</code><a class="headerlink" href="#minimum_prek_version_1" title="Permanent link">&para;</a></h3>
+<p><a id="prek-only-minimum-prek-version-hook"></a></p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>This is a <code>prek</code>-specific requirement gate. Upstream <code>pre-commit</code> does not have a hook-level minimum version key.</p>
+</div>
+<p>Require a minimum <code>prek</code> version for this specific hook.</p>
+<ul>
+<li>Type: string (version)</li>
+<li>Default: unset</li>
+</ul>
+<p>For process environment controls, see the <a href="../environment-variables/">Environment Variable Reference</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../cli/" class="md-footer__link md-footer__link--prev" aria-label="Previous: CLI Reference">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                CLI Reference
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../environment-variables/" class="md-footer__link md-footer__link--next" aria-label="Next: Environment Variables">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Environment Variables
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 j178
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.side","navigation.sections","navigation.expand","navigation.path","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.instant.progress","navigation.tracking","navigation.footer","navigation.top","content.code.copy","content.code.annotate","content.tabs.link","search.suggest","search.highlight","search.share"],"search":"../../assets/javascripts/workers/search.b6b7e04f.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"provider":"mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7f30b55.min.js"></script>
+      
+    
+  </body>
+</html>
