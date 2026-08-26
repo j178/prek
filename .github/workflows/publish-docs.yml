@@ -1,9 +1,6 @@
 name: Deploy Documentation
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       ref:
@@ -36,6 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
           ref: ${{ inputs.ref || github.sha }}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -52,7 +50,7 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Publish versioned documentation
+      - name: Build versioned documentation
         env:
           VERSION: ${{ steps.docs.outputs.version }}
         run: |
@@ -66,8 +64,16 @@ jobs:
             uv run --group docs mike deploy --update-aliases --alias-type redirect "$VERSION" latest
             uv run --group docs mike set-default latest
           fi
+
+      - name: Push versioned documentation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
           git push origin gh-pages
 
+      - name: Prepare Pages artifact
+        run: |
           git worktree add published gh-pages
           # Keep existing unversioned URLs serving the latest release, or dev
           # before the first release is published.
