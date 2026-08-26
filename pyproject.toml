@@ -29,11 +29,16 @@ Homepage = "https://prek.j178.dev/"
 
 [dependency-groups]
 dev = ["rooster"]
-docs = ["llmstxt-standalone>=0.2.0", "zensical>=0.0.24"]
+docs = [
+  "llmstxt-standalone>=0.2.0",
+  "mike",
+  "zensical>=0.0.24",
+]
 docker = ["cargo-zigbuild>=0.19.8"]
 
 [tool.uv.sources]
 rooster = { git = "https://github.com/j178/rooster", rev = "c1901e113611dbe4c2c30917a4d4d392e6d0c679" }
+mike = { git = "https://github.com/squidfunk/mike.git", rev = "2d4ad799442f4592db8ad53b179bfb33db8c69ac" }
 
 [tool.uv.dependency-groups]
 dev = { requires-python = ">=3.12" }
