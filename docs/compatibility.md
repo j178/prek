@@ -20,7 +20,6 @@
 | `prek gc` | `prek cache gc` |
 | `prek clean` | `prek cache clean` |
 | `prek init-templatedir` | `prek util init-template-dir` |
-| `prek init-template-dir` | `prek util init-template-dir` |
 | `pre-commit migrate-config` | Not provided directly; use `prek util yaml-to-toml` to migrate YAML to `prek.toml` |
 
 ## Why the CLI is reorganized

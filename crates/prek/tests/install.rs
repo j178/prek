@@ -1210,7 +1210,7 @@ fn uninstall_remove_legacy_hook() -> anyhow::Result<()> {
 }
 
 #[test]
-fn init_template_dir() -> anyhow::Result<()> {
+fn init_templatedir() -> anyhow::Result<()> {
     let context = TestEnv::new();
 
     cmd_snapshot!(context, context.command().arg("init-templatedir").arg(".git"), @r#"
@@ -1302,7 +1302,7 @@ fn init_template_dir() -> anyhow::Result<()> {
 fn util_init_template_dir() {
     let context = TestEnv::new();
 
-    cmd_snapshot!(context, context.command().arg("util").arg("init-templatedir").arg(".git"), @r#"
+    cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg(".git"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1329,12 +1329,12 @@ fn util_init_template_dir() {
             "#);
 }
 
-/// Tests `prek init-template-dir` in a non-git repository.
+/// Tests `prek util init-template-dir` in a non-git repository.
 #[test]
 fn init_template_dir_non_git_repo() {
     let context = TestEnv::new_without_git();
 
-    cmd_snapshot!(context, context.command().arg("init-template-dir").arg(".git"), @r#"
+    cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg(".git"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1353,7 +1353,7 @@ fn init_template_dir_non_git_repo() {
         repos:
     ",
     );
-    cmd_snapshot!(context, context.command().arg("init-template-dir").arg("-c").arg(context.work_dir().join(PRE_COMMIT_CONFIG_YAML)).arg(".git"), @r"
+    cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg("-c").arg(context.work_dir().join(PRE_COMMIT_CONFIG_YAML)).arg(".git"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1693,7 +1693,7 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
     let template_dir = context.work_dir().child("template");
     template_dir.create_dir_all()?;
 
-    cmd_snapshot!(context, context.command().arg("init-template-dir").arg(&*template_dir), @r"
+    cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg(&*template_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
