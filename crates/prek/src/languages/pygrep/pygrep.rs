@@ -94,6 +94,7 @@ impl LanguageBackend for Pygrep {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -113,6 +114,7 @@ impl LanguageBackend for Pygrep {
             debug!("No managed Python interpreter found, trying to find a system installed one");
             let mut output = uv
                 .cmd(store)
+                .current_dir(install_cwd)
                 .arg("python")
                 .arg("find")
                 .arg("--python-preference")
@@ -135,6 +137,7 @@ impl LanguageBackend for Pygrep {
                 debug!("No Python interpreter found, trying to install one");
                 output = uv
                     .cmd(store)
+                    .current_dir(install_cwd)
                     .arg("python")
                     .arg("install")
                     .arg(INSTALL_PYTHON_VERSION)

@@ -11,6 +11,10 @@ Each hook has a `language` that tells prek how to install and run it. The langua
 
 For `repo: local` hooks, `language` is required. For remote hooks, it is read from `.pre-commit-hooks.yaml`, but you can override it in your config.
 
+For `repo: local` hooks, relative paths in `additional_dependencies` and other installer arguments
+do not resolve from the work tree. Use an absolute path when an installer needs a local file. Hook
+commands still run from the work tree.
+
 ## Toolchain management and `language_version`
 
 `language_version` can be a version request string or an options object with
@@ -678,7 +682,7 @@ By default, missing checksums produce a warning and the download continues witho
 #### Rules
 
 - `additional_dependencies` are treated as executable installs. Each item should be something `deno install --global` can install, such as an `npm:` or `jsr:` specifier.
-- `additional_dependencies` may also point at a local file to install as an executable, using `./path/to/tool.ts:name`. Relative paths resolve from the hook repository for remote hooks and from the work repository for local hooks.
+- For remote hooks, `additional_dependencies` may point at a file in the hook repository using `./path/to/tool.ts:name`. Relative install targets are not supported for `repo: local` hooks.
 - To override the executable name for an additional dependency, append `:name` to the dependency string. For example: `npm:semver@7:semver-tool`.
 
 For remote hooks, if the repo wants to provide its own executable, declare it explicitly in the hook's `additional_dependencies`, for example `./cli.ts:repo-tool`, and then use `repo-tool` in `entry`.
@@ -734,21 +738,6 @@ repos:
         entry: semver-tool 1.2.3
         additional_dependencies:
           - npm:semver@7:semver-tool
-        pass_filenames: false
-```
-
-You can also install a local file as an executable additional dependency:
-
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: local-tool
-        name: local tool
-        language: deno
-        entry: echo-tool
-        additional_dependencies:
-          - ./tool.ts:echo-tool
         pass_filenames: false
 ```
 

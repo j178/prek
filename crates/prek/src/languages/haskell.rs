@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
@@ -29,6 +30,7 @@ impl LanguageBackend for Haskell {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -40,9 +42,10 @@ impl LanguageBackend for Haskell {
         let bin_dir = info.env_path.join("bin");
         fs_err::tokio::create_dir_all(&bin_dir).await?;
 
-        // Identify packages: *.cabal files in repo + additional_dependencies
-        let search_path = hook.repo_path().unwrap_or_else(|| hook.project().path());
-        let pkgs = fs_err::read_dir(search_path)?
+        let project_dir = hook.repo_path().unwrap_or(hook.work_dir());
+        // A Cabal package file is named `<package>.cabal`, so its stem is a cwd-independent package
+        // target. `--project-dir` below locates the source without making it the process cwd.
+        let project_targets = fs_err::read_dir(project_dir)?
             .flatten()
             .filter_map(|entry| {
                 let path = entry.path();
@@ -51,16 +54,15 @@ impl LanguageBackend for Haskell {
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("cabal"))
                 {
-                    path.file_name()
+                    path.file_stem()
                         .map(|name| name.to_string_lossy().into_owned())
                 } else {
                     None
                 }
             })
-            .chain(hook.additional_dependencies.iter().cloned())
             .collect::<Vec<_>>();
 
-        if pkgs.is_empty() {
+        if project_targets.is_empty() && hook.additional_dependencies.is_empty() {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
         }
 
@@ -70,6 +72,7 @@ impl LanguageBackend for Haskell {
             CABAL_UPDATE_ONCE
                 .get_or_try_init(async || {
                     Cmd::new("cabal")
+                        .current_dir(install_cwd)
                         .arg("update")
                         .check(true)
                         .output()
@@ -80,18 +83,17 @@ impl LanguageBackend for Haskell {
                 .await?;
         }
 
-        // cabal v2-install --installdir <bindir> <pkgs> (default install-method is copy)
-        Cmd::new("cabal")
-            .current_dir(search_path)
-            .arg("v2-install")
-            .arg("--installdir")
-            .arg(&bin_dir)
-            .args(pkgs)
-            .sanitize_git_repo_env()
-            .check(true)
-            .output()
-            .await
-            .context("Failed to install haskell dependencies")?;
+        if !project_targets.is_empty() {
+            cabal_install(install_cwd, &bin_dir, &project_targets, Some(project_dir))
+                .await
+                .context("Failed to install Haskell hook project")?;
+        }
+
+        if !hook.additional_dependencies.is_empty() {
+            cabal_install(install_cwd, &bin_dir, &hook.additional_dependencies, None)
+                .await
+                .context("Failed to install Haskell additional dependencies")?;
+        }
 
         info.persist_env_path();
 
@@ -119,4 +121,28 @@ impl LanguageBackend for Haskell {
         environment.set_path(&new_path);
         Ok(environment)
     }
+}
+
+// Project targets need an explicit source directory because local installs run elsewhere.
+// Additional dependencies omit it so relative targets resolve from `install_cwd`.
+async fn cabal_install(
+    install_cwd: &Path,
+    bin_dir: &Path,
+    targets: &[String],
+    project_dir: Option<&Path>,
+) -> Result<()> {
+    let mut command = Cmd::new("cabal");
+    command.current_dir(install_cwd).arg("v2-install");
+    if let Some(project_dir) = project_dir {
+        command.arg("--project-dir").arg(project_dir);
+    }
+    command
+        .arg("--installdir")
+        .arg(bin_dir)
+        .args(targets)
+        .sanitize_git_repo_env()
+        .check(true)
+        .output()
+        .await?;
+    Ok(())
 }

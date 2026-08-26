@@ -139,6 +139,7 @@ impl LanguageBackend for Php {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -190,6 +191,7 @@ impl LanguageBackend for Php {
                 .context("Failed to join PATH")?;
 
             composer_command(&composer, &info.env_path, &path_env)
+                .current_dir(install_cwd)
                 .arg("require")
                 .arg("--no-progress")
                 .arg("--")
@@ -201,6 +203,7 @@ impl LanguageBackend for Php {
                 .context("Failed to install PHP dependencies with Composer")?;
 
             composer_command(&composer, &info.env_path, &path_env)
+                .current_dir(install_cwd)
                 .arg("check-platform-reqs")
                 .check(true)
                 .output()

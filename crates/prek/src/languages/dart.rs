@@ -94,6 +94,7 @@ impl LanguageBackend for Dart {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -111,6 +112,7 @@ impl LanguageBackend for Dart {
                 &info.env_path,
                 source_path,
                 &hook.additional_dependencies,
+                install_cwd,
             )
             .await?;
         } else if !hook.additional_dependencies.is_empty() {
@@ -251,6 +253,7 @@ fn packages_arg_insert_position(entry: &[OsString], hook_args: &[String]) -> Opt
 /// Compile declared package executables into the hook env's `bin` directory.
 async fn compile_executables(
     dart: &Path,
+    install_cwd: &Path,
     source_path: &Path,
     bin_dir: &Path,
     packages_path: &Path,
@@ -283,6 +286,7 @@ async fn compile_executables(
         );
 
         Cmd::new(dart)
+            .current_dir(install_cwd)
             .arg("compile")
             .arg("exe")
             .arg(format!("--packages={}", packages_path.display()))
@@ -366,6 +370,7 @@ async fn install_from_pubspec(
     env_path: &Path,
     source_path: &Path,
     dependencies: &[String],
+    install_cwd: &Path,
 ) -> Result<()> {
     let pubspec_path = source_path.join(PUBSPEC_YAML);
     let pubspec_content = fs_err::read_to_string(&pubspec_path)?;
@@ -383,6 +388,7 @@ async fn install_from_pubspec(
 
     compile_executables(
         dart,
+        install_cwd,
         source_path,
         &bin_path(env_path),
         &package_config_path(env_path),

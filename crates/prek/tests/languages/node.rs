@@ -29,7 +29,8 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
     "#})?;
     make_executable(cli.path())?;
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let dependency = serde_json::to_string(package.path())?;
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -37,8 +38,8 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
                 name: node
                 language: node
                 entry: command-that-must-not-run
-                additional_dependencies: ["./node-env-tool"]
-    "#});
+                additional_dependencies: [{dependency}]
+    "});
 
     cmd_snapshot!(context, context.exec().args([
         "node",
@@ -442,7 +443,8 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
     "#})?;
     make_executable(cli.path())?;
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let dependency = serde_json::to_string(package_dir.path())?;
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -450,11 +452,11 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
                 name: node
                 language: node
                 entry: prek-prefix-fixture
-                additional_dependencies: ["./prefix-fixture"]
+                additional_dependencies: [{dependency}]
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
+    "});
 
     context.git_add_all();
 

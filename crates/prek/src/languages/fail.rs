@@ -19,6 +19,7 @@ impl LanguageBackend for Fail {
         &self,
         _store: &Store,
         hook: Arc<Hook>,
+        _install_cwd: &Path,
         _reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))

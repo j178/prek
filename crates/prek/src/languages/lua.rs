@@ -53,6 +53,7 @@ impl LanguageBackend for Lua {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -67,13 +68,13 @@ impl LanguageBackend for Lua {
         // Install dependencies for the remote repository.
         if let Some(repo_path) = hook.repo_path() {
             if let Some(rockspec) = Self::get_rockspec_file(repo_path) {
-                Self::install_rockspec(&info.env_path, repo_path, &rockspec).await?;
+                Self::install_rockspec(&info.env_path, install_cwd, &rockspec).await?;
             }
         }
 
         // Install additional dependencies.
         for dep in &hook.additional_dependencies {
-            Self::install_dependency(&info.env_path, dep).await?;
+            Self::install_dependency(&info.env_path, install_cwd, dep).await?;
         }
 
         info.with_toolchain(lua_info.executable)
@@ -136,9 +137,9 @@ impl LanguageBackend for Lua {
 }
 
 impl Lua {
-    async fn install_rockspec(env_path: &Path, root_path: &Path, rockspec: &Path) -> Result<()> {
+    async fn install_rockspec(env_path: &Path, install_cwd: &Path, rockspec: &Path) -> Result<()> {
         Cmd::new("luarocks")
-            .current_dir(root_path)
+            .current_dir(install_cwd)
             .arg("--tree")
             .arg(env_path)
             .arg("make")
@@ -150,8 +151,13 @@ impl Lua {
         Ok(())
     }
 
-    async fn install_dependency(env_path: &Path, dependency: &str) -> Result<()> {
+    async fn install_dependency(
+        env_path: &Path,
+        install_cwd: &Path,
+        dependency: &str,
+    ) -> Result<()> {
         Cmd::new("luarocks")
+            .current_dir(install_cwd)
             .arg("--tree")
             .arg(env_path)
             .arg("install")

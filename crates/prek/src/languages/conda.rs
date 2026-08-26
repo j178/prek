@@ -21,6 +21,7 @@ impl LanguageBackend for Conda {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -30,9 +31,9 @@ impl LanguageBackend for Conda {
         debug!(%hook, target = %info.env_path.display(), "Installing Conda environment");
         let conda = conda_executable();
 
-        if let Some(repo_path) = hook.repo_path() {
+        if hook.repo_path().is_some() {
             Cmd::new(conda)
-                .current_dir(repo_path)
+                .current_dir(install_cwd)
                 .arg("create")
                 .arg("-p")
                 .arg(&info.env_path)
@@ -44,6 +45,7 @@ impl LanguageBackend for Conda {
                 .context("Failed to create Conda environment")?;
         } else {
             Cmd::new(conda)
+                .current_dir(install_cwd)
                 .arg("create")
                 .arg("-p")
                 .arg(&info.env_path)
@@ -56,13 +58,11 @@ impl LanguageBackend for Conda {
         if !hook.additional_dependencies.is_empty() {
             let mut install_cmd = Cmd::new(conda);
             install_cmd
+                .current_dir(install_cwd)
                 .arg("install")
                 .arg("-p")
                 .arg(&info.env_path)
                 .args(&hook.additional_dependencies);
-            if let Some(repo_path) = hook.repo_path() {
-                install_cmd.current_dir(repo_path);
-            }
             install_cmd
                 .check(true)
                 .output()

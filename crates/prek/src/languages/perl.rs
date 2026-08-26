@@ -22,6 +22,7 @@ impl LanguageBackend for Perl {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -34,9 +35,9 @@ impl LanguageBackend for Perl {
             "Failed to locate cpan executable. Is cpan installed and available in PATH?",
         )?;
 
-        if let Some(repo_path) = hook.repo_path() {
+        if hook.repo_path().is_some() {
             Cmd::new(&cpan)
-                .current_dir(repo_path)
+                .current_dir(install_cwd)
                 .arg("-T")
                 .arg(".")
                 .args(&hook.additional_dependencies)
@@ -47,6 +48,7 @@ impl LanguageBackend for Perl {
                 .context("Failed to install Perl dependencies")?;
         } else if !hook.additional_dependencies.is_empty() {
             Cmd::new(&cpan)
+                .current_dir(install_cwd)
                 .arg("-T")
                 .args(&hook.additional_dependencies)
                 .envs(perl_env(&info.env_path)?)

@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::config::Language;
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::run::INTERNAL_CONCURRENCY;
 use crate::store::Store;
 
@@ -93,9 +93,22 @@ async fn install_partition(
         } else {
             let _permit = semaphore.acquire(1).await;
 
+            let local_install_dir;
+            let install_cwd = match hook.repo() {
+                Repo::Remote { path, .. } => path.as_path(),
+                Repo::Local => {
+                    local_install_dir = tempfile::tempdir()
+                        .context("Failed to create isolated install directory")?;
+                    local_install_dir.path()
+                }
+                Repo::Meta | Repo::Builtin => {
+                    anyhow::bail!("Hook `{hook}` does not support environment installation");
+                }
+            };
+
             let installed_hook = hook
                 .language
-                .install(store, hook.clone(), reporter)
+                .install(store, hook.clone(), install_cwd, reporter)
                 .await
                 .with_context(|| format!("Failed to install hook `{hook}`"))?;
 

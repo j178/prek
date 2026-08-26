@@ -447,6 +447,7 @@ impl LanguageBackend for Docker {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        _install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);

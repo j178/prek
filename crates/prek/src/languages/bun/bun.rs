@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -25,6 +26,7 @@ impl LanguageBackend for Bun {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -79,6 +81,7 @@ impl LanguageBackend for Bun {
             // Use BUN_INSTALL to set where global packages are installed
             // This makes `bun install -g` install to our hook environment
             Cmd::new(bun.bun())
+                .current_dir(install_cwd)
                 .arg("install")
                 .arg("-g")
                 .args(deps)

@@ -88,6 +88,7 @@ impl LanguageBackend for Swift {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -107,6 +108,7 @@ impl LanguageBackend for Swift {
                 debug!(%hook, "Building Swift package");
                 let build_path = build_dir(&info.env_path);
                 Cmd::new("swift")
+                    .current_dir(install_cwd)
                     .arg("build")
                     .arg("-c")
                     .arg("release")
@@ -122,6 +124,7 @@ impl LanguageBackend for Swift {
 
                 // Get the actual bin path (includes target triple, e.g., .build/arm64-apple-macosx/release)
                 let bin_path_output = Cmd::new("swift")
+                    .current_dir(install_cwd)
                     .arg("build")
                     .arg("-c")
                     .arg("release")

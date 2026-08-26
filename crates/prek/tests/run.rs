@@ -3553,7 +3553,8 @@ fn reuse_env() -> Result<()> {
         .child("local_pkg.py")
         .write_str("def hello():\n     print('hello')\n")?;
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let dependency = serde_json::to_string(&std::path::absolute(pkg_dir.path())?)?;
+    let context = context.with_config(indoc::formatdoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -3562,7 +3563,7 @@ fn reuse_env() -> Result<()> {
             language: python
             entry: python -c "import local_pkg; local_pkg.hello()"
             pass_filenames: false
-            additional_dependencies: ["./local_pkg"]
+            additional_dependencies: [{dependency}]
             verbose: true
     "#});
     context.git_add_all();
