@@ -1,0 +1,3036 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.">
+      
+      
+        <meta name="author" content="j178">
+      
+      
+        <link rel="canonical" href="https://prek.j178.dev/0.4.3/languages/">
+      
+      
+        <link rel="prev" href="../workspace/">
+      
+      
+        <link rel="next" href="../builtin/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.ico">
+      <meta name="generator" content="zensical-0.0.50">
+    
+    
+      
+        <title>Language support - prek</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.62c9b9cc.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#language-support" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="prek" class="md-header__button md-logo" aria-label="prek" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="prek">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            prek
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Language support
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/j178/prek" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    j178/prek
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="prek" class="md-nav__button md-logo" aria-label="prek" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="prek">
+
+    </a>
+    prek
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/j178/prek" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    j178/prek
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="./.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Getting Started
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Quickstart
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Usage
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Usage
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Common Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workspace/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Workspace Mode
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Language Support
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Language Support
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-language-means-in-prek" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What “language” means in prek
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#toolchain-management-and-language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Toolchain management and <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#language-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Language details
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Language details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bun" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        bun
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="bun">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conda" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        conda
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#coursier" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        coursier
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dart" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        dart
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dart">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pubspecyaml-executables" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>pubspec.yaml</code> executables
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional_dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>additional_dependencies</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language_version_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        docker
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker_image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        docker_image
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dotnet" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        dotnet
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dotnet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional_dependencies_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>additional_dependencies</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        fail
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#golang" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        golang
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="golang">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#haskell" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        haskell
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="haskell">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#julia" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        julia
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="julia">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lua" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        lua
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="lua">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        node
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="node">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#perl" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        perl
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        python
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="python">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-management-with-uv" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dependency management with <code>uv</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pep-723-inline-script-metadata-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        PEP 723 inline script metadata support
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#r" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        r
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ruby" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ruby
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ruby">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        rust
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="rust">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#toolchain-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Toolchain profile
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#swift" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        swift
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="swift">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pygrep" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        pygrep
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        system
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#script" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        script
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deno" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        deno
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deno">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Rules
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language_version_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-npm-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using npm packages
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Built-in commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../builtin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Built-in Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Integrations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cookbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Cookbook
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authoring-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Authoring Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/environment-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Environment Variables
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Help
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Help
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../debugging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Debugging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  FAQ
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  About
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  About
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Compatibility
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diff/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Differences
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Benchmark
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Changelog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-language-means-in-prek" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What “language” means in prek
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#toolchain-management-and-language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Toolchain management and <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#language-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Language details
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Language details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bun" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        bun
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="bun">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conda" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        conda
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#coursier" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        coursier
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dart" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        dart
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dart">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pubspecyaml-executables" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>pubspec.yaml</code> executables
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional_dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>additional_dependencies</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language_version_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        docker
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker_image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        docker_image
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dotnet" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        dotnet
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dotnet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional_dependencies_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>additional_dependencies</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        fail
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#golang" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        golang
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="golang">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#haskell" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        haskell
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="haskell">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#julia" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        julia
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="julia">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lua" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        lua
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="lua">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        node
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="node">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#perl" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        perl
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        python
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="python">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-management-with-uv" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dependency management with <code>uv</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pep-723-inline-script-metadata-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        PEP 723 inline script metadata support
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#r" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        r
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ruby" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ruby
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ruby">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        rust
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="rust">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#toolchain-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Toolchain profile
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#swift" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        swift
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="swift">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language_version_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pygrep" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        pygrep
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        system
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#script" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        script
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deno" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        deno
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deno">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Rules
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language_version_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>language_version</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-npm-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using npm packages
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Built-in commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="language-support">Language support<a class="headerlink" href="#language-support" title="Permanent link">&para;</a></h1>
+<h2 id="what-language-means-in-prek">What “language” means in prek<a class="headerlink" href="#what-language-means-in-prek" title="Permanent link">&para;</a></h2>
+<p>Each hook has a <code>language</code> that tells prek how to install and run it. The language determines:</p>
+<ul>
+<li>Whether prek creates a managed environment for the hook</li>
+<li>How dependencies are installed (<code>additional_dependencies</code>)</li>
+<li>How toolchain versions are selected (<code>language_version</code>)</li>
+<li>How <code>entry</code> is executed</li>
+</ul>
+<p>For <code>repo: local</code> hooks, <code>language</code> is required. For remote hooks, it is read from <code>.pre-commit-hooks.yaml</code>, but you can override it in your config.</p>
+<h2 id="toolchain-management-and-language_version">Toolchain management and <code>language_version</code><a class="headerlink" href="#toolchain-management-and-language_version" title="Permanent link">&para;</a></h2>
+<p>prek resolves toolchains in two steps:</p>
+<ol>
+<li><strong>Discover system toolchains</strong> (PATH and common version manager locations).</li>
+<li><strong>Download a toolchain</strong> when the language supports it and the request cannot be satisfied locally.</li>
+</ol>
+<p>If <code>language_version</code> is <code>system</code>, prek skips downloads and requires a system-installed toolchain. If <code>language_version</code> is <code>default</code>, prek uses the language’s default resolution logic (often preferring system installs, then downloading if supported).</p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p><code>language_version</code> is parsed as a version request. For languages that use semver requests, you can specify ranges (for example <code>^1.2</code>, <code>&gt;=1.5, &lt;2.0</code>). See <a href="../reference/configuration/#language_version">Configuration Reference</a> for details.</p>
+</div>
+<p>Languages with managed toolchain downloads in prek today:</p>
+<ul>
+<li><a href="#python">Python</a></li>
+<li><a href="#node">Node</a></li>
+<li><a href="#bun">Bun</a></li>
+<li><a href="#deno">Deno</a></li>
+<li><a href="#golang">Golang</a></li>
+<li><a href="#rust">Rust</a></li>
+<li><a href="#ruby">Ruby</a></li>
+</ul>
+<p>Other supported languages rely on system installations and will fail if a matching toolchain is not available.</p>
+<h2 id="language-details">Language details<a class="headerlink" href="#language-details" title="Permanent link">&para;</a></h2>
+<p>Below is how prek handles each language (with notes when it differs from pre-commit).</p>
+<h3 id="bun">bun<a class="headerlink" href="#bun" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs Bun hooks via <code>bun install</code> and runs the configured entry. The repository should contain a <code>package.json</code>. <code>entry</code> should match a provided bin name or be a Bun command. <code>additional_dependencies</code> are supported.</p>
+<p>Bun hooks run without needing a pre-installed Bun runtime when toolchain download is available.</p>
+<h4 id="language_version"><code>language_version</code><a class="headerlink" href="#language_version" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>bun</code>, <code>bun@latest</code></li>
+<li><code>bun@1</code>, <code>1</code></li>
+<li><code>bun@1.1</code>, <code>1.1</code></li>
+<li><code>bun@1.1.0</code>, <code>1.1.0</code></li>
+<li>Semver ranges like <code>&gt;=1.0, &lt;2.0</code></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>Bun language support is a prek extension. pre-commit does not have native <code>bun</code> support.</p>
+</div>
+<h3 id="conda">conda<a class="headerlink" href="#conda" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> Not supported yet.</p>
+<p>Tracking: <a href="https://github.com/j178/prek/issues/52">#52</a></p>
+<h3 id="coursier">coursier<a class="headerlink" href="#coursier" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> Not supported yet.</p>
+<p>Tracking: <a href="https://github.com/j178/prek/issues/53">#53</a></p>
+<h3 id="dart">dart<a class="headerlink" href="#dart" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek runs Dart hooks with a system-installed <code>dart</code> executable.</p>
+<p>Dart hooks can run plain Dart commands, repository scripts, or package
+executables:</p>
+<ul>
+<li><code>entry: dart --version</code></li>
+<li><code>entry: dart ./tool/hook.dart</code></li>
+<li><code>entry: dart run bin/hook.dart</code></li>
+<li><code>entry: my-package-executable</code></li>
+</ul>
+<p>If the hook repository contains <code>pubspec.yaml</code>, prek uses it to resolve package
+dependencies and declared executables. <code>additional_dependencies</code> are supported
+for both package hooks and standalone Dart scripts.</p>
+<h4 id="pubspecyaml-executables"><code>pubspec.yaml</code> executables<a class="headerlink" href="#pubspecyaml-executables" title="Permanent link">&para;</a></h4>
+<p>For package hooks, executables declared in <code>pubspec.yaml</code> can be used as hook
+entries. The executable key is the command name:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_dart_hooks</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">executables</span><span class="p">:</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">my-hook</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">aliased-hook</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tool/main</span>
+</span></code></pre></div>
+<p><code>my-hook</code> resolves to <code>bin/my-hook.dart</code>. <code>aliased-hook</code> resolves to
+<code>bin/tool/main.dart</code>. Empty or null executable values use the executable key as
+the entrypoint name, matching Dart's pub behavior.</p>
+<h4 id="additional_dependencies"><code>additional_dependencies</code><a class="headerlink" href="#additional_dependencies" title="Permanent link">&para;</a></h4>
+<p>Use <code>package</code> for the latest compatible version or <code>package:version</code> to pin a
+version:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dart-hook</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Dart hook</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dart</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dart ./bin/hook.dart</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">args:2.7.0</span>
+</span></code></pre></div>
+<h4 id="language_version_1"><code>language_version</code><a class="headerlink" href="#language_version_1" title="Permanent link">&para;</a></h4>
+<p>Dart does not support managed toolchain installation today. It uses the system
+<code>dart</code> executable, and explicit Dart version requests are rejected.</p>
+<h3 id="docker">docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek expects the hook repository to ship a Dockerfile and builds the image from the repo root with <code>docker build .</code>. Hooks run inside the container, and the first token of <code>entry</code> is used as the container entrypoint (arguments are passed after it).</p>
+<p>Runtime behavior:</p>
+<ul>
+<li>Requires a working container engine on the host (Docker, Podman, or Container).</li>
+<li>The repository is bind-mounted into the container at <code>/src</code> and the working directory is set to <code>/src</code>.</li>
+<li>The container is run with <code>--entrypoint</code> set to the hook <code>entry</code>, so the image’s default command is not used when filenames are passed.</li>
+<li>Environment variables configured via <code>env</code> are passed using <code>-e</code>.</li>
+<li>On Linux, prek tries to run as a non-root user and handles rootless Podman with <code>--userns=keep-id</code>.</li>
+</ul>
+<p>Use <code>docker</code> when you need a language runtime that isn’t otherwise supported; the container provides the execution environment.</p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>prek auto-detects the container runtime (Docker, Podman, or <a href="https://github.com/apple/container">Container</a>) and can be overridden with <code>PREK_CONTAINER_RUNTIME</code>.
+See <a href="../reference/environment-variables/">Environment Variable Reference</a> for details.</p>
+</div>
+<h3 id="docker_image">docker_image<a class="headerlink" href="#docker_image" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek runs hooks from an existing image. The <code>entry</code> value is passed to <code>docker run</code> directly, so it should include the image reference and can optionally include <code>--entrypoint</code> overrides.</p>
+<p>Runtime behavior:</p>
+<ul>
+<li>Uses the same bind-mount and <code>/src</code> working directory as <code>docker</code> hooks.</li>
+<li>Environment variables configured via <code>env</code> are passed using <code>-e</code>.</li>
+</ul>
+<p>If the image already defines an <code>ENTRYPOINT</code>, you can omit <code>--entrypoint</code> in <code>entry</code>. Otherwise, specify it explicitly in <code>entry</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>prek uses the same runtime auto-detection as <code>docker</code> hooks.</p>
+</div>
+<h3 id="dotnet">dotnet<a class="headerlink" href="#dotnet" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek supports .NET SDK-based hooks. Hook entries run with a matching <code>dotnet</code> on the PATH, and tools specified in <code>additional_dependencies</code> are installed into an isolated hook environment via <code>dotnet tool install --tool-path</code>.</p>
+<h4 id="language_version_2"><code>language_version</code><a class="headerlink" href="#language_version_2" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>language_version: "8"</code> – the .NET 8.0 SDK channel</li>
+<li><code>language_version: "8.0"</code> – the .NET 8.0 SDK channel</li>
+<li><code>language_version: "8.0.100"</code> – exactly .NET SDK 8.0.100</li>
+<li><code>language_version: "8.0.1xx"</code> – the .NET 8.0 SDK feature-band channel</li>
+<li><code>language_version: "net8.0"</code> – TFM-style alias for the .NET 8.0 SDK channel</li>
+<li><code>language_version: "net8.0.1xx"</code> – TFM-style alias for the .NET 8.0 SDK feature-band channel</li>
+<li><code>language_version: "net10.0"</code> – TFM-style alias for the .NET 10.0 SDK channel</li>
+<li><code>language_version: "lts"</code> – the latest LTS SDK channel</li>
+<li><code>language_version: "sts"</code> – the latest STS SDK channel</li>
+</ul>
+<p>prek first looks for a matching system-installed <code>dotnet</code>, then falls back to downloading the SDK via the official install script when downloads are allowed. Channel-style requests (<code>8</code>, <code>8.0</code>, <code>8.0.1xx</code>, <code>lts</code>, <code>sts</code>, <code>net8.0</code>) are resolved to a concrete SDK version at install time.</p>
+<h4 id="additional_dependencies_1"><code>additional_dependencies</code><a class="headerlink" href="#additional_dependencies_1" title="Permanent link">&para;</a></h4>
+<p>Tools are installed into the hook's isolated <code>tools/</code> directory. Specify them in <code>additional_dependencies</code> as either <code>package:version</code> (to pin a specific version) or just <code>package</code> (to install the latest available version):</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/example/csharpier-hook</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.0.0</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csharpier</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">          </span><span class="c1"># Pin to a specific version</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;csharpier:1.2.6&quot;</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">          </span><span class="c1"># Or install the latest version available</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;dotnet-format&quot;</span>
+</span></code></pre></div>
+<h3 id="fail">fail<a class="headerlink" href="#fail" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p><code>fail</code> is a lightweight “forbid files” hook. The <code>entry</code> text is printed when the hook fails, followed by the list of matching files, and the hook exits non-zero.</p>
+<h3 id="golang">golang<a class="headerlink" href="#golang" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs with <code>go install ./...</code> in an isolated <code>GOPATH</code>. The repository should build at least one binary whose name matches the hook <code>entry</code>. <code>additional_dependencies</code> can be appended and <code>language_version</code> selects the Go toolchain.</p>
+<h4 id="language_version_3"><code>language_version</code><a class="headerlink" href="#language_version_3" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>go1.22</code>, <code>1.22</code></li>
+<li><code>go1.22.1</code>, <code>1.22.1</code></li>
+<li>Semver ranges like <code>&gt;=1.20, &lt;1.23</code></li>
+</ul>
+<p>Pre-release strings (for example <code>go1.22rc1</code>) are not supported yet.</p>
+<h3 id="haskell">haskell<a class="headerlink" href="#haskell" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs Haskell hooks via Cabal and runs the configured entry. Please ensure the repository contains a <code>.cabal</code> file or configured <code>additional_dependencies</code> for proper dependency management.</p>
+<h4 id="language_version_4"><code>language_version</code><a class="headerlink" href="#language_version_4" title="Permanent link">&para;</a></h4>
+<p><code>language_version</code> is not supported for Haskell hooks yet. It uses the system <code>cabal</code> and <code>ghc</code> installations.</p>
+<p>The hook <code>entry</code> should point at an executable installed by <code>cabal</code>.</p>
+<h3 id="julia">julia<a class="headerlink" href="#julia" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs Julia hooks into an isolated environment using Julia's built-in package manager (<code>Pkg</code>).</p>
+<p>The hook repository can include a <code>Project.toml</code> (or <code>JuliaProject.toml</code>) and optionally a <code>Manifest.toml</code> (or <code>JuliaManifest.toml</code>). If these files are present, prek will use them to instantiate the environment. If no project file is found, an empty one is created to ensure the environment is correctly initialized.</p>
+<p><code>additional_dependencies</code> are supported and will be added to the environment via <code>Pkg.add</code>.</p>
+<h4 id="language_version_5"><code>language_version</code><a class="headerlink" href="#language_version_5" title="Permanent link">&para;</a></h4>
+<p><code>language_version</code> is not supported for Julia hooks yet. It uses the system <code>julia</code> installation.</p>
+<p>The hook <code>entry</code> should be a path to a julia source file relative to the hook repository (optionally with arguments). It is executed using <code>julia --project=&lt;env_path&gt; --startup-file=no</code>.</p>
+<h3 id="lua">lua<a class="headerlink" href="#lua" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs Lua hooks via LuaRocks and runs the configured entry. If the repository includes a rockspec, it is installed into the hook environment before running.</p>
+<h4 id="language_version_6"><code>language_version</code><a class="headerlink" href="#language_version_6" title="Permanent link">&para;</a></h4>
+<p>Lua does not support <code>language_version</code> today. It uses the system <code>lua</code> / <code>luarocks</code> installation.</p>
+<p>The hook entry should point at an executable installed by LuaRocks.</p>
+<h3 id="node">node<a class="headerlink" href="#node" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek expects a <code>package.json</code> and installs via <code>npm install .</code>, exposing executables from the package <code>bin</code>. <code>entry</code> should match a provided bin name. <code>additional_dependencies</code> are supported.</p>
+<p>Node hooks run without needing a pre-installed Node runtime when toolchain download is available.</p>
+<h4 id="language_version_7"><code>language_version</code><a class="headerlink" href="#language_version_7" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>node18</code>, <code>18</code>, <code>18.19</code>, <code>18.19.1</code></li>
+<li>Semver ranges like <code>^18.12</code> or <code>&gt;=18, &lt;20</code></li>
+<li>LTS selectors: <code>lts</code> or <code>lts/&lt;codename&gt;</code></li>
+</ul>
+<h3 id="perl">perl<a class="headerlink" href="#perl" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> Not supported yet.</p>
+<p>Tracking: <a href="https://github.com/j178/prek/issues/1447">#1447</a></p>
+<h3 id="python">python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs hook repositories with <code>uv pip install</code> and uses the installed console scripts. The repository should be installable via <code>pip</code> (for example via <code>pyproject.toml</code> or <code>setup.py</code>). <code>additional_dependencies</code> are appended to the install step.</p>
+<p>Python hooks run without requiring a system Python when toolchain download is available.</p>
+<h4 id="language_version_8"><code>language_version</code><a class="headerlink" href="#language_version_8" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>python</code>, <code>python3</code>, <code>python3.12</code>, <code>python3.12.1</code></li>
+<li><code>3</code>, <code>3.12</code>, <code>3.12.1</code></li>
+<li>Wheel-style short forms like <code>312</code> or <code>python312</code></li>
+<li>Semver ranges like <code>&gt;=3.9, &lt;3.13</code></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>prek uses <code>uv</code> for virtual environments and dependency installs, and can auto-install Python toolchains based on <code>language_version</code>.</p>
+</div>
+<h4 id="dependency-management-with-uv">Dependency management with <code>uv</code><a class="headerlink" href="#dependency-management-with-uv" title="Permanent link">&para;</a></h4>
+<p>prek uses <code>uv</code> for creating virtual environments and installing dependencies:</p>
+<ul>
+<li>First tries to find <code>uv</code> in the system PATH</li>
+<li>If not found, automatically installs <code>uv</code> from the best available source (GitHub releases, PyPI, or mirrors)</li>
+<li>Automatically installs the required Python version if it's not already available</li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title">Environment variables</p>
+<p>Since prek calls <code>uv</code> under the hood to create Python virtual environments and install dependencies, most <code>uv</code> environment variables will affect prek's behavior. For example, setting <code>UV_RESOLUTION=lowest-direct</code> in your environment will cause hook dependencies to be resolved to their lowest compatible versions, which may lead to installation failures with old packages on modern Python versions.</p>
+<p>If you encounter unexpected behavior when installing Python hooks, check whether you have any <code>UV_*</code> environment variables set that might be affecting dependency resolution or installation.</p>
+</div>
+<h4 id="pep-723-inline-script-metadata-support">PEP 723 inline script metadata support<a class="headerlink" href="#pep-723-inline-script-metadata-support" title="Permanent link">&para;</a></h4>
+<p>For Python hooks <strong>without</strong> <code>additional_dependencies</code>, prek can read PEP 723 inline metadata from the script specified in the <code>entry</code> field.</p>
+<p><strong>Example:</strong></p>
+<p><code>.pre-commit-config.yaml</code>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./echo.py</span>
+</span></code></pre></div>
+<p><code>echo.py</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># /// script</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># requires-python = &quot;&gt;=3.13&quot;</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># dependencies = [</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1">#     &quot;pyecho-cli&quot;,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># ]</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1"># ///</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyecho</span><span class="w"> </span><span class="kn">import</span> <span class="n">main</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">main</span><span class="p">()</span>
+</span></code></pre></div>
+<p><strong>Important notes:</strong></p>
+<ul>
+<li>The first part of the <code>entry</code> field must be a path to a local Python script</li>
+<li>If <code>additional_dependencies</code> is specified in <code>.pre-commit-config.yaml</code>, script metadata will be ignored</li>
+<li>When both <code>language_version</code> (in config) and <code>requires-python</code> (in script) are set, <code>language_version</code> takes precedence</li>
+<li>Only <code>dependencies</code> and <code>requires-python</code> fields are supported; other metadata like <code>tool.uv</code> is ignored</li>
+</ul>
+<h3 id="r">r<a class="headerlink" href="#r" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> Not supported yet.</p>
+<p>Tracking: <a href="https://github.com/j178/prek/issues/42">#42</a></p>
+<h3 id="ruby">ruby<a class="headerlink" href="#ruby" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs gems from a <code>*.gemspec</code> and runs executables declared in the gemspec. <code>additional_dependencies</code> are installed into the same isolated gemset.</p>
+<h4 id="language_version_9"><code>language_version</code><a class="headerlink" href="#language_version_9" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>3</code>, <code>3.3</code>, <code>3.3.6</code></li>
+<li><code>ruby-3</code>, <code>ruby-3.3</code>, <code>ruby-3.3.6</code></li>
+<li>Semver ranges like <code>&gt;=3.2, &lt;4.0</code></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>prek can use system-installed Rubies, including a variety of common version managers. On some platforms, if the system search fails to find a suitable version matching <code>language_version</code>, it can then attempt to download one.</p>
+<p>Ruby interpreters are downloaded from those built by the <code>rv</code> project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.</p>
+<p>The <code>PREK_RUBY_MIRROR</code> environment variable can be used to point to a different source for installers, for example to support mirrors or air-gapped CI environments. Mirrors need to follow the GitHub URL patterns, but note that although the GitHub hostname changes between <code>api.github.com</code> and <code>github.com</code> as needed, any non-GitHub mirror server will not be remapped in this manner. Where Ruby is being downloaded from GitHub (either from the upstream <code>rv</code> or a mirror), this remapping does occur, and any <code>GITHUB_TOKEN</code> will be sent with the requests. This both limits impact of rate limiting, and also allows a private GitHub repository to be used (e.g. for a vetted subset of <code>rv</code> rubies to be mirrored). Note that GitHub tokens will only be sent to mirrors which are hosted on GitHub.</p>
+</div>
+<p>Gems specified in hook gemspec files and <code>additional_dependencies</code> are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.</p>
+<h3 id="rust">rust<a class="headerlink" href="#rust" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs binaries via <code>cargo install --bins --locked</code> and runs the specified executable. The repository should contain a <code>Cargo.toml</code> that produces the binary referenced by <code>entry</code>. <code>additional_dependencies</code> and <code>language_version</code> are supported.</p>
+<div class="admonition note">
+<p class="admonition-title">Using <code>--locked</code> flag</p>
+<p>prek uses the <code>--locked</code> flag when installing Rust packages to ensure exact dependency versions from <code>Cargo.lock</code> are used. This prevents breaking changes from new dependency releases.</p>
+</div>
+<h4 id="language_version_10"><code>language_version</code><a class="headerlink" href="#language_version_10" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li>Channels: <code>stable</code>, <code>beta</code>, <code>nightly</code></li>
+<li><code>1</code>, <code>1.70</code>, <code>1.70.0</code></li>
+<li>Semver ranges like <code>&gt;=1.70, &lt;1.72</code></li>
+</ul>
+<h4 id="toolchain-profile">Toolchain profile<a class="headerlink" href="#toolchain-profile" title="Permanent link">&para;</a></h4>
+<p>When prek installs a managed Rust toolchain it uses <code>rustup</code>'s <code>minimal</code> profile by default (just <code>rustc</code>, <code>rust-std</code>, and <code>cargo</code>). Set the <a href="../reference/environment-variables/#prek_rust_profile"><code>PREK_RUST_PROFILE</code></a> environment variable to <code>default</code> or <code>complete</code> to include extra components such as <code>rustfmt</code> and <code>clippy</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<ul>
+<li>prek supports installing packages from virtual workspaces. See <a href="https://github.com/j178/prek/pull/1180">#1180</a>.</li>
+<li><code>additional_dependencies</code> supports:<ul>
+<li>Library dependencies using <code>name</code> or <code>name:version</code> (applied via <code>cargo add</code>).</li>
+<li>CLI dependencies using <code>cli:</code>.<ul>
+<li>There are two forms:<ul>
+<li>crates.io: <code>cli:&lt;crate&gt;[:&lt;version&gt;]</code></li>
+<li>git: <code>cli:&lt;url&gt;[:&lt;tag&gt;[:&lt;package&gt;]]</code></li>
+</ul>
+</li>
+<li>For git dependencies:<ul>
+<li><code>&lt;url&gt;</code> is the git repository URL.</li>
+<li><code>&lt;tag&gt;</code> is optional and selects a specific git tag.</li>
+<li><code>&lt;package&gt;</code> is optional and selects which Cargo package to install binaries from.</li>
+<li>Use <code>&lt;package&gt;</code> when the git repository is a workspace or multi-crate repository and Cargo needs you to choose one package.</li>
+<li>This matches the package argument in <code>cargo install --git &lt;url&gt; &lt;package&gt;</code>.</li>
+</ul>
+</li>
+<li>Examples:<ul>
+<li>crates.io package: <code>cli:rg</code></li>
+<li>crates.io package with version: <code>cli:rg:13.0.0</code></li>
+<li>git repository default ref: <code>cli:https://github.com/fish-shell/fish-shell</code></li>
+<li>git repository with tag: <code>cli:https://github.com/fish-shell/fish-shell:v4.5.0</code></li>
+<li>git repository with package but no tag: <code>cli:https://github.com/fish-shell/fish-shell::fish</code></li>
+<li>git repository with tag and package: <code>cli:https://github.com/fish-shell/fish-shell:v4.5.0:fish</code></li>
+</ul>
+</li>
+<li>Invalid forms:<ul>
+<li>empty package is invalid, for example <code>...:v4.5.0:</code> or <code>...::</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<h3 id="swift">swift<a class="headerlink" href="#swift" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek detects the system Swift installation and runs hooks using the configured <code>entry</code>. If the hook repository contains a <code>Package.swift</code>, prek builds it in release mode and adds the resulting binaries to PATH.</p>
+<p>Runtime behavior:</p>
+<ul>
+<li>Uses the system Swift installation (no automatic toolchain management)</li>
+<li>Builds Swift packages with <code>swift build -c release</code></li>
+<li>Build artifacts are stored in the hook environment's <code>.build/release/</code> directory</li>
+<li>The <code>entry</code> command runs with built binaries available on PATH</li>
+</ul>
+<h4 id="language_version_11"><code>language_version</code><a class="headerlink" href="#language_version_11" title="Permanent link">&para;</a></h4>
+<p>Swift does not support <code>language_version</code> today. It uses the system <code>swift</code> installation.</p>
+<h3 id="pygrep">pygrep<a class="headerlink" href="#pygrep" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek provides a Python-based grep implementation for file content matching. The <code>entry</code> is a Python regex. Supported args:</p>
+<ul>
+<li><code>-i</code> / <code>--ignore-case</code></li>
+<li><code>--multiline</code></li>
+<li><code>--negate</code> (require all files to match)</li>
+</ul>
+<p>Regex matching uses Python’s <code>re</code> semantics for compatibility with pre-commit.</p>
+<h3 id="system">system<a class="headerlink" href="#system" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p><code>system</code> runs a system executable without a managed environment. The command is taken from <code>entry</code>, and filenames are appended unless <code>pass_filenames: false</code> is set. Dependencies must be installed by the user.</p>
+<p>Use <code>system</code> for tools with special environment requirements that cannot run in isolated environments.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>unsupported</code> is accepted as an alias for <code>system</code>.</p>
+</div>
+<h3 id="script">script<a class="headerlink" href="#script" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p><code>script</code> runs repository-local scripts without a managed environment. For remote hooks, <code>entry</code> is resolved relative to the hook repository root; for local hooks, it is resolved relative to the current working directory.</p>
+<p>Use <code>script</code> for simple repository scripts that only need file paths and no managed environment.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>unsupported_script</code> is accepted as an alias for <code>script</code>.</p>
+</div>
+<h3 id="deno">deno<a class="headerlink" href="#deno" title="Permanent link">&para;</a></h3>
+<p><strong>Status in prek:</strong> ✅ Supported.</p>
+<p>prek installs each <code>additional_dependencies</code> item with <code>deno install --global</code> into the hook environment. The hook runs from the work repository with an isolated <code>DENO_DIR</code> for cache separation.</p>
+<p>Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available.</p>
+<h4 id="rules">Rules<a class="headerlink" href="#rules" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>additional_dependencies</code> are treated as executable installs. Each item should be something <code>deno install --global</code> can install, such as an <code>npm:</code> or <code>jsr:</code> specifier.</li>
+<li><code>additional_dependencies</code> may also point at a local file to install as an executable, using <code>./path/to/tool.ts:name</code>. Relative paths resolve from the hook repository for remote hooks and from the work repository for local hooks.</li>
+<li>To override the executable name for an additional dependency, append <code>:name</code> to the dependency string. For example: <code>npm:semver@7:semver-tool</code>.</li>
+</ul>
+<p>For remote hooks, if the repo wants to provide its own executable, declare it explicitly in the hook's <code>additional_dependencies</code>, for example <code>./cli.ts:repo-tool</code>, and then use <code>repo-tool</code> in <code>entry</code>.</p>
+<h4 id="language_version_12"><code>language_version</code><a class="headerlink" href="#language_version_12" title="Permanent link">&para;</a></h4>
+<p>Supported formats:</p>
+<ul>
+<li><code>default</code> or <code>system</code></li>
+<li><code>deno</code>, <code>deno@latest</code></li>
+<li><code>deno@x</code>, <code>x</code> (major version)</li>
+<li><code>deno@x.y</code>, <code>x.y</code> (major.minor version)</li>
+<li><code>deno@x.y.z</code>, <code>x.y.z</code> (exact version)</li>
+<li>Semver ranges like <code>&gt;=x.y, &lt;x+1.0</code></li>
+</ul>
+<h4 id="using-npm-packages">Using npm packages<a class="headerlink" href="#using-npm-packages" title="Permanent link">&para;</a></h4>
+<p>Deno supports npm packages via the <code>npm:</code> prefix. For hooks that use npm packages, specify the entry using <code>deno run npm:package</code>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eslint</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ESLint</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno run -A npm:eslint</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ts</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tsx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">js</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+<p>For JSR packages, use the <code>jsr:</code> prefix in a <code>deno run</code> entry:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">biome</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Biome</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno run -A jsr:@biomejs/biome</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ts</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tsx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">js</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+<p>For executable-style additional dependencies, use the package specifier directly:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver-version</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver version</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver-tool 1.2.3</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">npm:semver@7:semver-tool</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">        </span><span class="nt">pass_filenames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span></code></pre></div>
+<p>You can also install a local file as an executable additional dependency:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local-tool</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local tool</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo-tool</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="nt">additional_dependencies</span><span class="p">:</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./tool.ts:echo-tool</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">        </span><span class="nt">pass_filenames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span></code></pre></div>
+<h4 id="built-in-commands">Built-in commands<a class="headerlink" href="#built-in-commands" title="Permanent link">&para;</a></h4>
+<p>Deno's built-in commands (<code>deno fmt</code>, <code>deno lint</code>, <code>deno check</code>) work directly:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno-fmt</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deno Format</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno fmt</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ts</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tsx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">js</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">json</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">md</span><span class="p p-Indicator">]</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno-lint</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deno Lint</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deno lint</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ts</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tsx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">js</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">prek-only</p>
+<p>Deno language support is a prek extension. pre-commit does not have native <code>deno</code> support.</p>
+</div>
+<p>If you want to help add support for the missing languages, check open issues or start a discussion in the repo.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../workspace/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Workspace Mode">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Workspace Mode
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../builtin/" class="md-footer__link md-footer__link--next" aria-label="Next: Built-in Hooks">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Built-in Hooks
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 j178
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.side","navigation.sections","navigation.expand","navigation.path","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.instant.progress","navigation.tracking","navigation.footer","navigation.top","content.code.copy","content.code.annotate","content.tabs.link","search.suggest","search.highlight","search.share"],"search":"../assets/javascripts/workers/search.b6b7e04f.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"provider":"mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7f30b55.min.js"></script>
+      
+    
+  </body>
+</html>
