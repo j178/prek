@@ -45,7 +45,7 @@ impl LanguageBackend for Haskell {
 
         // Identify packages: *.cabal files in repo + additional_dependencies
         let search_path = hook.repo_path().unwrap_or_else(|| hook.project().path());
-        let pkgs = fs_err::read_dir(search_path)?
+        let project_packages = fs_err::read_dir(search_path)?
             .flatten()
             .filter_map(|entry| {
                 let path = entry.path();
@@ -54,15 +54,23 @@ impl LanguageBackend for Haskell {
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("cabal"))
                 {
-                    Some(path.into_os_string())
+                    if hook.repo_path().is_some() {
+                        path.file_name().map(OsString::from)
+                    } else {
+                        path.file_stem().map(OsString::from)
+                    }
                 } else {
                     None
                 }
             })
-            .chain(hook.additional_dependencies.iter().map(OsString::from))
+            .collect::<Vec<_>>();
+        let additional_dependencies = hook
+            .additional_dependencies
+            .iter()
+            .map(OsString::from)
             .collect::<Vec<_>>();
 
-        if pkgs.is_empty() {
+        if project_packages.is_empty() && additional_dependencies.is_empty() {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
         }
 
@@ -83,18 +91,25 @@ impl LanguageBackend for Haskell {
                 .await?;
         }
 
-        // cabal v2-install --installdir <bindir> <pkgs> (default install-method is copy)
-        Cmd::new("cabal")
-            .current_dir(install_cwd)
-            .arg("v2-install")
-            .arg("--installdir")
-            .arg(&bin_dir)
-            .args(pkgs)
-            .sanitize_git_repo_env()
-            .check(true)
-            .output()
-            .await
-            .context("Failed to install haskell dependencies")?;
+        if !project_packages.is_empty() {
+            // Cabal does not accept an absolute `.cabal` file as an install target. Point local
+            // hooks at their project explicitly while keeping the process cwd isolated.
+            let project_dir = if hook.repo_path().is_some() {
+                None
+            } else {
+                Some(search_path)
+            };
+            install_packages(install_cwd, &bin_dir, &project_packages, project_dir)
+                .await
+                .context("Failed to install Haskell hook project")?;
+        }
+
+        if !additional_dependencies.is_empty() {
+            // User-supplied targets must continue to resolve from the isolated install cwd.
+            install_packages(install_cwd, &bin_dir, &additional_dependencies, None)
+                .await
+                .context("Failed to install Haskell additional dependencies")?;
+        }
 
         info.persist_env_path();
 
@@ -122,4 +137,26 @@ impl LanguageBackend for Haskell {
         environment.set_path(&new_path);
         Ok(environment)
     }
+}
+
+async fn install_packages(
+    install_cwd: &Path,
+    bin_dir: &Path,
+    packages: &[OsString],
+    project_dir: Option<&Path>,
+) -> Result<()> {
+    let mut command = Cmd::new("cabal");
+    command.current_dir(install_cwd).arg("v2-install");
+    if let Some(project_dir) = project_dir {
+        command.arg("--project-dir").arg(project_dir);
+    }
+    command
+        .arg("--installdir")
+        .arg(bin_dir)
+        .args(packages)
+        .sanitize_git_repo_env()
+        .check(true)
+        .output()
+        .await?;
+    Ok(())
 }
