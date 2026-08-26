@@ -1159,7 +1159,15 @@ Tag a hook with user-defined run groups.
 Groups are arbitrary labels used by [`prek run --group <group>`](cli.md#prek-run--group),
 [`prek run --require-group <group>`](cli.md#prek-run--require-group), and
 [`prek run --no-group <group>`](cli.md#prek-run--no-group).
-Group names cannot be empty or contain whitespace.
+Group names cannot be empty, contain whitespace, or start with `@`. Names that
+start with `@` are reserved for special selectors:
+
+- `@ungrouped` matches hooks whose effective `groups` list is empty.
+- `@builtin` matches hooks from the `builtin` repository, regardless of their
+  configured groups.
+
+These selectors work with `--group`, `--require-group`, and `--no-group`. They
+are virtual memberships and cannot be added to a hook's `groups` list.
 
 `groups` is a project configuration field. If it appears in a remote
 `.pre-commit-hooks.yaml` manifest, `prek` ignores it.
@@ -1212,6 +1220,12 @@ Run only the `ci` group:
 
 ```bash
 prek run --all-files --group ci
+```
+
+Run the `ci` group together with ungrouped and builtin hooks:
+
+```bash
+prek run --all-files --group ci --group @ungrouped --group @builtin
 ```
 
 Run only hooks belonging to both `lint` and `ci`:

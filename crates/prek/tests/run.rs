@@ -938,6 +938,67 @@ fn run_group_without_stage_selects_hooks_across_stages() {
 }
 
 #[test]
+fn run_reserved_groups_select_ungrouped_and_builtin_hooks() {
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                groups: [other]
+
+          - repo: local
+            hooks:
+              - id: ungrouped
+                name: Ungrouped
+                language: system
+                entry: python3 -c "print('ungrouped')"
+                always_run: true
+              - id: ci
+                name: CI
+                language: system
+                entry: python3 -c "print('ci')"
+                always_run: true
+                groups: [ci]
+              - id: other
+                name: Other
+                language: system
+                entry: python3 -c "print('other')"
+                always_run: true
+                groups: [other]
+
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: remote-other
+                groups: [other]
+    "#});
+
+    context.git_add_all();
+
+    cmd_snapshot!(context,
+        context
+            .run()
+            .arg("--all-files")
+            .arg("--group")
+            .arg("ci")
+            .arg("--group")
+            .arg("@ungrouped")
+            .arg("--group")
+            .arg("@builtin"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix end of files.........................................................Passed
+    Ungrouped................................................................Passed
+    CI.......................................................................Passed
+
+    ----- stderr -----
+    "#
+    );
+}
+
+#[test]
 fn run_required_group_without_stage_warns_when_only_message_file_hooks_match() {
     let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
@@ -1183,7 +1244,7 @@ fn run_unknown_group_selectors_warn_and_empty_selection_fails() {
 }
 
 #[test]
-fn run_group_selectors_reject_whitespace() {
+fn run_group_selectors_reject_invalid_names() {
     let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -1216,6 +1277,16 @@ fn run_group_selectors_reject_whitespace() {
     ----- stderr -----
     error: Invalid group selector: `--no-group=ci slow`
       caused by: group name cannot contain whitespace
+    "#);
+
+    cmd_snapshot!(context, context.run().arg("--all-files").arg("--group").arg("@custom"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid group selector: `--group=@custom`
+      caused by: group name uses the reserved `@` prefix
     "#);
 }
 

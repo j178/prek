@@ -304,6 +304,26 @@ fn list_with_group_filter() {
     ----- stderr -----
     ");
 
+    cmd_snapshot!(context, context.list().arg("--group").arg("@ungrouped"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:ungrouped
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.list().arg("--no-group").arg("@ungrouped"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:fast-lint
+    .:slow-lint
+    .:format
+
+    ----- stderr -----
+    ");
+
     cmd_snapshot!(context, context.list().arg("--group").arg("ci").arg("--no-group").arg("slow"), @r"
     success: true
     exit_code: 0

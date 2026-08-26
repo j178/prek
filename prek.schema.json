@@ -289,11 +289,11 @@
           "$ref": "#/definitions/Priority"
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty, contain whitespace, or start with `@`.",
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^\\S+$"
+            "pattern": "^[^@\\s]\\S*$"
           }
         },
         "alias": {
@@ -599,11 +599,11 @@
           "$ref": "#/definitions/Priority"
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty, contain whitespace, or start with `@`.",
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^\\S+$"
+            "pattern": "^[^@\\s]\\S*$"
           }
         },
         "alias": {
@@ -768,11 +768,11 @@
           "$ref": "#/definitions/Priority"
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty, contain whitespace, or start with `@`.",
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^\\S+$"
+            "pattern": "^[^@\\s]\\S*$"
           }
         },
         "alias": {
@@ -942,11 +942,11 @@
           "$ref": "#/definitions/Priority"
         },
         "groups": {
-          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty or contain whitespace.",
+          "description": "User-defined hook groups used by `prek run --group` and `--no-group`.\nGroup names cannot be empty, contain whitespace, or start with `@`.",
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^\\S+$"
+            "pattern": "^[^@\\s]\\S*$"
           }
         },
         "alias": {

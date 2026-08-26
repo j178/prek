@@ -6,11 +6,20 @@ use serde::{Deserialize, Deserializer};
 
 use super::Error;
 
-pub(crate) fn validate_name(name: &str) -> Result<(), &'static str> {
+fn validate_name(name: &str) -> Result<(), &'static str> {
     if name.is_empty() {
         Err("cannot be empty")
     } else if name.chars().any(char::is_whitespace) {
         Err("cannot contain whitespace")
+    } else {
+        Ok(())
+    }
+}
+
+pub(crate) fn validate_group_name(name: &str) -> Result<(), &'static str> {
+    validate_name(name)?;
+    if name.starts_with('@') {
+        Err("uses the reserved `@` prefix")
     } else {
         Ok(())
     }
@@ -122,7 +131,7 @@ where
     let groups = Option::<Vec<String>>::deserialize(deserializer)?;
     if let Some(groups) = &groups {
         for group in groups {
-            if let Err(reason) = validate_name(group) {
+            if let Err(reason) = validate_group_name(group) {
                 return Err(D::Error::custom(format!("group name `{group}` {reason}")));
             }
         }

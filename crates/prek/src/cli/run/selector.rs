@@ -3,8 +3,8 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::config::validate_name;
-use crate::hook::Hook;
+use crate::config::validate_group_name;
+use crate::hook::{Hook, Repo};
 use crate::warn_user;
 
 use anyhow::anyhow;
@@ -424,10 +424,43 @@ impl Selectors {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GroupFilters {
-    include_any: Vec<String>,
-    require_all: Vec<String>,
-    exclude_any: Vec<String>,
+    include_any: Vec<GroupSelector>,
+    require_all: Vec<GroupSelector>,
+    exclude_any: Vec<GroupSelector>,
     usage: Arc<Mutex<FilterUsage>>,
+}
+
+#[derive(Debug, Clone)]
+enum GroupSelector {
+    Named(String),
+    Ungrouped,
+    Builtin,
+}
+
+const UNGROUPED_GROUP: &str = "@ungrouped";
+const BUILTIN_GROUP: &str = "@builtin";
+
+impl GroupSelector {
+    fn parse(group: &str) -> Result<Self, &'static str> {
+        match group {
+            UNGROUPED_GROUP => Ok(Self::Ungrouped),
+            BUILTIN_GROUP => Ok(Self::Builtin),
+            _ => {
+                validate_group_name(group)?;
+                Ok(Self::Named(group.to_owned()))
+            }
+        }
+    }
+}
+
+impl Display for GroupSelector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Named(group) => f.write_str(group),
+            Self::Ungrouped => f.write_str(UNGROUPED_GROUP),
+            Self::Builtin => f.write_str(BUILTIN_GROUP),
+        }
+    }
 }
 
 impl GroupFilters {
@@ -438,21 +471,20 @@ impl GroupFilters {
     ) -> Result<Self, Error> {
         let parse_groups = |flag: &'static str, groups: &[String]| {
             let mut seen = FxHashSet::default();
-            let mut names = Vec::new();
+            let mut selectors = Vec::new();
 
             for group in groups {
-                if let Err(reason) = validate_name(group) {
-                    return Err(Error::GroupSelector {
+                let selector =
+                    GroupSelector::parse(group).map_err(|reason| Error::GroupSelector {
                         selector: format!("{flag}={group}"),
                         source: anyhow!("group name {reason}"),
-                    });
-                }
+                    })?;
                 if seen.insert(group.as_str()) {
-                    names.push(group.clone());
+                    selectors.push(selector);
                 }
             }
 
-            Ok(names)
+            Ok(selectors)
         };
 
         Ok(Self {
@@ -467,7 +499,7 @@ impl GroupFilters {
         !self.include_any.is_empty() || !self.require_all.is_empty() || !self.exclude_any.is_empty()
     }
 
-    fn matches_groups(&self, contains_group: impl Fn(&str) -> bool) -> bool {
+    fn matches_groups(&self, contains_group: impl Fn(&GroupSelector) -> bool) -> bool {
         let mut usage = self.usage.lock().unwrap();
 
         let mut matches_any_excluded = false;
@@ -499,13 +531,20 @@ impl GroupFilters {
     }
 
     pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
-        self.matches_groups(|group| hook.groups.contains(group))
+        self.matches_groups(|group| match group {
+            GroupSelector::Named(group) => hook.groups.contains(group),
+            GroupSelector::Ungrouped => hook.groups.is_empty(),
+            GroupSelector::Builtin => matches!(hook.repo(), Repo::Builtin),
+        })
     }
 
     pub(crate) fn matches_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
-        self.matches_groups(|group| {
-            hook.groups
-                .is_some_and(|groups| groups.iter().any(|hook_group| hook_group == group))
+        self.matches_groups(|group| match group {
+            GroupSelector::Named(group) => hook
+                .groups
+                .is_some_and(|groups| groups.iter().any(|hook_group| hook_group == group)),
+            GroupSelector::Ungrouped => hook.groups.is_none_or(<[String]>::is_empty),
+            GroupSelector::Builtin => false,
         })
     }
 
