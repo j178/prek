@@ -45,7 +45,6 @@ use crate::warn_user_once;
 )]
 pub(crate) struct Config {
     /// Default settings for `prek update` in this project.
-    #[serde(alias = "auto_update")]
     pub update: Option<UpdateOptions>,
     /// Configuration-local aliases for numeric hook priorities.
     #[serde(default)]
@@ -871,21 +870,6 @@ mod tests {
         3 | repos: []
           |
         "#);
-    }
-
-    #[test]
-    fn parse_legacy_update_key_alias() {
-        let yaml = indoc::indoc! {r"
-            auto_update:
-              cooldown_days: 7
-            repos: []
-        "};
-        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
-
-        assert_eq!(
-            result.update.and_then(|options| options.cooldown_days),
-            Some(7)
-        );
     }
 
     #[test]

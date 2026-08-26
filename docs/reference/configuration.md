@@ -43,10 +43,6 @@ The cooldown age is computed from the tag creation timestamp for annotated tags,
 
     If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](cli.md#prek-update) keeps the current `rev` instead of downgrading it.
 
-!!! note "Compatibility alias"
-
-    The legacy `auto_update` key is still accepted as an alias for `update`.
-
 ## Extension keys (`x-`)
 
 Any key starting with `x-` (a lowercase `x` followed by a hyphen) is silently ignored by `prek` at any level of the configuration. This supports custom metadata without triggering unexpected key warnings.
@@ -410,10 +406,6 @@ Each project-level field overrides the corresponding [global `update`](#global-u
 CLI filters have the highest precedence. `--include-tag` and `--exclude-tag` replace the configured effective defaults; `--repo-include-tag` then replaces the include filters for its named repository, while `--repo-exclude-tag` adds excludes for its named repository.
 
 In workspace mode, `update` is scoped to the project config file that defines it and is not inherited by nested projects. Sub-projects use their own `update`, then the user-level global config, then built-in defaults. Repositories shared by multiple projects are fetched once but evaluated with each project's cooldown, freeze, and tag-filter settings.
-
-!!! note "Compatibility alias"
-
-    The legacy `auto_update` key is still accepted as an alias for `update`.
 
 ### `minimum_prek_version`
 

@@ -36,10 +36,10 @@ fn global_config_ignores_unknown_options() {
 }
 
 #[test]
-fn update_command_accepts_legacy_command_alias() {
+fn update_command_accepts_upstream_alias() {
     let context = TestEnv::new().with_config("repos: []");
 
-    cmd_snapshot!(context, context.command().arg("auto-update"), @"
+    cmd_snapshot!(context, context.command().arg("autoupdate"), @"
     success: true
     exit_code: 0
     ----- stdout -----
