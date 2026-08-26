@@ -51,6 +51,7 @@ jobs:
       run-bench: ${{ steps.plan.outputs.run_bench }}
       run-zizmor: ${{ steps.plan.outputs.run_zizmor }}
       check-docs: ${{ steps.plan.outputs.check_docs }}
+      publish-dev-docs: ${{ steps.plan.outputs.publish_dev_docs }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
       build-docker: ${{ steps.plan.outputs.build_docker }}
     steps:
@@ -69,7 +70,7 @@ jobs:
           HAS_BUILD_SKIP_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
           HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
           HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           [[ "$GH_REF" == "refs/heads/master" ]] && on_master_branch=1
           [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
@@ -110,8 +111,9 @@ jobs:
           [[ ! $has_skip_label && ($any_rust_changed || $bench_related_changed || $on_master_branch) ]] && run_bench=1
           [[ ! $has_skip_label && ($workflow_changed || $zizmor_config_changed || $on_master_branch) ]] && run_zizmor=1
           [[ ! $has_skip_label && ($docs_related_changed || $on_master_branch) ]] && check_docs=1
-          [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
-          [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_docker_label && $docker_build_changed ]] && build_docker=1
+          [[ $on_master_branch && $docs_related_changed ]] && publish_dev_docs=1
+          [[ ! $on_master_branch && ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
+          [[ ! $on_master_branch && ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_docker_label && $docker_build_changed ]] && build_docker=1
 
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
           {
@@ -120,6 +122,7 @@ jobs:
             out run_bench              "$run_bench"
             out run_zizmor             "$run_zizmor"
             out check_docs             "$check_docs"
+            out publish_dev_docs       "$publish_dev_docs"
             out build_release_binaries "$build_release_binaries"
             out build_docker           "$build_docker"
           } >> "${GITHUB_OUTPUT}"
@@ -202,6 +205,19 @@ jobs:
         run: |
           uv run --group docs zensical build
           uv run --group docs llmstxt-standalone build
+
+  publish-dev-docs:
+    needs:
+      - plan
+      - check-docs
+    if: ${{ needs.plan.outputs.publish-dev-docs == 'true' }}
+    permissions:
+      contents: write
+      id-token: write
+      pages: write
+    uses: ./.github/workflows/publish-docs.yml
+    with:
+      plan: ""
 
   build-release-binaries:
     needs: plan
@@ -765,6 +781,7 @@ jobs:
       - check-release
       - check-zizmor
       - check-docs
+      - publish-dev-docs
       - cargo-clippy-linux
       - cargo-clippy-windows
       - cargo-shear
