@@ -23,23 +23,16 @@ fn resolve_concurrency(env_vars: &impl EnvVarsRead, primary_env_var: &str) -> us
         return 1;
     }
 
-    let primary = env_vars.var(primary_env_var).ok();
-    let legacy_max = env_vars.var(EnvVars::PREK_MAX_CONCURRENCY).ok();
-    let (name, value) = if let Some(primary) = primary.as_deref() {
-        (primary_env_var, Some(primary))
-    } else {
-        (EnvVars::PREK_MAX_CONCURRENCY, legacy_max.as_deref())
-    };
-
     let cpu = cpu_count();
-    if let Some(value) = value {
-        if let Ok(cap) = value.parse::<usize>() {
-            return cap.max(1);
-        }
-        warn_user!(
-            "Invalid value for {name}: {value:?}. Expected a positive integer; using default ({cpu})"
-        );
+    let Ok(value) = env_vars.var(primary_env_var) else {
+        return cpu;
+    };
+    if let Ok(cap) = value.parse::<usize>() {
+        return cap.max(1);
     }
+    warn_user!(
+        "Invalid value for {primary_env_var}: {value:?}. Expected a positive integer; using default ({cpu})"
+    );
 
     cpu
 }
@@ -474,36 +467,10 @@ mod tests {
                 &[
                     (EnvVars::PREK_NO_CONCURRENCY, "1"),
                     (EnvVars::PREK_CONCURRENT_HOOKS, "8"),
-                    (EnvVars::PREK_MAX_CONCURRENCY, "4"),
                 ],
                 EnvVars::PREK_CONCURRENT_HOOKS,
             ),
             1
-        );
-    }
-
-    #[test]
-    fn test_resolve_concurrency_uses_legacy_max() {
-        assert_eq!(
-            resolve_concurrency_from_map(
-                &[(EnvVars::PREK_MAX_CONCURRENCY, "4")],
-                EnvVars::PREK_CONCURRENT_HOOKS,
-            ),
-            4
-        );
-    }
-
-    #[test]
-    fn test_resolve_concurrency_prefers_new_env_over_legacy_max() {
-        assert_eq!(
-            resolve_concurrency_from_map(
-                &[
-                    (EnvVars::PREK_CONCURRENT_BATCHES, "2"),
-                    (EnvVars::PREK_MAX_CONCURRENCY, "4"),
-                ],
-                EnvVars::PREK_CONCURRENT_BATCHES,
-            ),
-            2
         );
     }
 
