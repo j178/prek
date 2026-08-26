@@ -1,0 +1,2528 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.">
+      
+      
+        <meta name="author" content="j178">
+      
+      
+        <link rel="canonical" href="https://prek.j178.dev/0.4.0/builtin/">
+      
+      
+        <link rel="prev" href="../languages/">
+      
+      
+        <link rel="next" href="../integrations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.ico">
+      <meta name="generator" content="zensical-0.0.50">
+    
+    
+      
+        <title>Built-in Fast Hooks - prek</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.62c9b9cc.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#built-in-fast-hooks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="prek" class="md-header__button md-logo" aria-label="prek" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="prek">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            prek
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Built-in Fast Hooks
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/j178/prek" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    j178/prek
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="prek" class="md-nav__button md-logo" aria-label="prek" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="prek">
+
+    </a>
+    prek
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/j178/prek" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    j178/prek
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="./.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Getting Started
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Quickstart
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Usage
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Usage
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Common Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workspace/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Workspace Mode
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../languages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Language Support
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Built-in Hooks
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Built-in Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-automatic-fast-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        1. Automatic Fast Path
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Automatic Fast Path">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supported Hooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#httpsgithubcompre-commitpre-commit-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        https://github.com/pre-commit/pre-commit-hooks
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="https:&#x2f;&#x2f;github.com&#x2f;pre-commit&#x2f;pre-commit-hooks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Notes
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disabling-the-fast-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Disabling the fast path
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-explicit-builtin-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        2. Explicit Builtin Repository
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Explicit Builtin Repository">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-hooks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supported Hooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hook-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Hook Reference
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Configuration notes
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trailing-whitespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>trailing-whitespace</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-added-large-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-added-large-files</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-case-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-case-conflict</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-illegal-windows-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-illegal-windows-names</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#end-of-file-fixer" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>end-of-file-fixer</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-contents-sorter" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>file-contents-sorter</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fix-byte-order-marker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>fix-byte-order-marker</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-json</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-json5" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-json5</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pretty-format-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>pretty-format-json</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-toml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-toml</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-vcs-permalinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-vcs-permalinks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-yaml</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-xml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-xml</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mixed-line-ending" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>mixed-line-ending</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-symlinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-symlinks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#destroyed-symlinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>destroyed-symlinks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-merge-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-merge-conflict</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#detect-private-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>detect-private-key</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-commit-to-branch" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>no-commit-to-branch</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-executables-have-shebangs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-executables-have-shebangs</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-shebang-scripts-are-executable" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-shebang-scripts-are-executable</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Integrations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cookbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Cookbook
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authoring-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Authoring Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/environment-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Environment Variables
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Help
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Help
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../debugging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Debugging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  FAQ
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  About
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  About
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Compatibility
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diff/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Differences
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Benchmark
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Changelog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-automatic-fast-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        1. Automatic Fast Path
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Automatic Fast Path">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supported Hooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#httpsgithubcompre-commitpre-commit-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        https://github.com/pre-commit/pre-commit-hooks
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="https:&#x2f;&#x2f;github.com&#x2f;pre-commit&#x2f;pre-commit-hooks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Notes
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disabling-the-fast-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Disabling the fast path
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-explicit-builtin-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        2. Explicit Builtin Repository
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Explicit Builtin Repository">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-hooks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supported Hooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hook-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Hook Reference
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Configuration notes
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trailing-whitespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>trailing-whitespace</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-added-large-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-added-large-files</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-case-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-case-conflict</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-illegal-windows-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-illegal-windows-names</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#end-of-file-fixer" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>end-of-file-fixer</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-contents-sorter" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>file-contents-sorter</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fix-byte-order-marker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>fix-byte-order-marker</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-json</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-json5" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-json5</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pretty-format-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>pretty-format-json</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-toml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-toml</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-vcs-permalinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-vcs-permalinks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-yaml</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-xml" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-xml</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mixed-line-ending" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>mixed-line-ending</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-symlinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-symlinks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#destroyed-symlinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>destroyed-symlinks</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-merge-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-merge-conflict</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#detect-private-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>detect-private-key</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-commit-to-branch" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>no-commit-to-branch</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-executables-have-shebangs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-executables-have-shebangs</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#check-shebang-scripts-are-executable" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>check-shebang-scripts-are-executable</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="built-in-fast-hooks">Built-in Fast Hooks<a class="headerlink" href="#built-in-fast-hooks" title="Permanent link">&para;</a></h1>
+<p>prek includes fast, Rust-native implementations of popular hooks for speed and low overhead. These hooks are bundled directly into the <code>prek</code> binary, eliminating the need for external interpreters like Python for these specific checks.</p>
+<p>Built-in hooks come into play in two ways:</p>
+<ol>
+<li><strong>Automatic Fast Path</strong>: Automatically replacing execution for known remote repositories.</li>
+<li><strong>Explicit Builtin Repository</strong>: Using <code>repo: builtin</code> for offline, zero-setup hooks.</li>
+</ol>
+<h2 id="1-automatic-fast-path">1. Automatic Fast Path<a class="headerlink" href="#1-automatic-fast-path" title="Permanent link">&para;</a></h2>
+<p>When you use a standard configuration pointing to a supported repository (like <code>https://github.com/pre-commit/pre-commit-hooks</code>), <code>prek</code> automatically detects this and runs its internal Rust implementation instead of the Python version defined in the repository.</p>
+<p>The fast path is activated when the <code>repo</code> URL matches <code>https://github.com/pre-commit/pre-commit-hooks</code>. No need to change anything in your configuration.
+Note that the <code>rev</code> field is ignored for detection purposes.</p>
+<p>This provides a speed boost while keeping your configuration compatible with the original <code>pre-commit</code> tool.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/pre-commit/pre-commit-hooks</span><span class="w">  </span><span class="c1"># Enables fast path</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v4.5.0</span><span class="w">  </span><span class="c1"># This is ignored for fast path detection</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trailing-whitespace</span>
+</span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In this mode, <code>prek</code> will still clone the repository and create the environment (e.g., a Python venv) to ensure full compatibility and fallback capabilities. However, the actual hook execution bypasses the environment and runs the native Rust code.</p>
+</div>
+<h3 id="supported-hooks">Supported Hooks<a class="headerlink" href="#supported-hooks" title="Permanent link">&para;</a></h3>
+<p>Currently, only part of hooks from <code>https://github.com/pre-commit/pre-commit-hooks</code> is supported. More popular repositories may be added over time.</p>
+<h3 id="httpsgithubcompre-commitpre-commit-hooks"><a href="https://github.com/pre-commit/pre-commit-hooks">https://github.com/pre-commit/pre-commit-hooks</a><a class="headerlink" href="#httpsgithubcompre-commitpre-commit-hooks" title="Permanent link">&para;</a></h3>
+<ul>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#trailing-whitespace"><code>trailing-whitespace</code></a> (Trim trailing whitespace)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-added-large-files"><code>check-added-large-files</code></a> (Prevent committing large files)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-case-conflict"><code>check-case-conflict</code></a> (Check for files that would conflict in case-insensitive filesystems)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer"><code>end-of-file-fixer</code></a> (Ensure newline at EOF)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter"><code>file-contents-sorter</code></a> (Sort lines in explicitly targeted files)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker"><code>fix-byte-order-marker</code></a> (Remove UTF-8 byte order marker)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#forbid-new-submodules"><code>forbid-new-submodules</code></a> (Prevent addition of new git submodules.)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-json"><code>check-json</code></a> (Validate JSON files)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-toml"><code>check-toml</code></a> (Validate TOML files)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-vcs-permalinks"><code>check-vcs-permalinks</code></a> (Check that VCS links are permalinks)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-yaml"><code>check-yaml</code></a> (Validate YAML files)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-xml"><code>check-xml</code></a> (Validate XML files)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#mixed-line-ending"><code>mixed-line-ending</code></a> (Normalize or check line endings)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-symlinks"><code>check-symlinks</code></a> (Check for broken symlinks)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#destroyed-symlinks"><code>destroyed-symlinks</code></a> (Detect destroyed symlinks)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-merge-conflict"><code>check-merge-conflict</code></a> (Check for merge conflicts)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#detect-private-key"><code>detect-private-key</code></a> (Detect private keys)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#no-commit-to-branch"><code>no-commit-to-branch</code></a> (Prevent committing to protected branches)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-shebang-scripts-are-executable"><code>check-shebang-scripts-are-executable</code></a> (Ensures that (non-binary) files with a shebang are executable)</li>
+<li><a href="https://github.com/pre-commit/pre-commit-hooks#check-executables-have-shebangs"><code>check-executables-have-shebangs</code></a> (Ensures that (non-binary) executables have a shebang)</li>
+</ul>
+<h4 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>check-yaml</code> fast path does not yet support the <code>--unsafe</code> flag; for those cases, the automatic fast path is skipped.</li>
+<li><code>pretty-format-json</code> is currently available only via <code>repo: builtin</code> while parity coverage against upstream Python behavior is still being expanded.</li>
+<li>Other hooks from the repository which have no fast path implementation will run via the standard method.</li>
+</ul>
+<h3 id="disabling-the-fast-path">Disabling the fast path<a class="headerlink" href="#disabling-the-fast-path" title="Permanent link">&para;</a></h3>
+<p>If you need to compare with the original behavior or encounter differences:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">PREK_NO_FAST_PATH</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>prek<span class="w"> </span>run
+</span></code></pre></div>
+<p>This forces prek to fall back to the standard execution path.</p>
+<h2 id="2-explicit-builtin-repository">2. Explicit Builtin Repository<a class="headerlink" href="#2-explicit-builtin-repository" title="Permanent link">&para;</a></h2>
+<p>You can explicitly tell <code>prek</code> to use its internal hooks by setting <code>repo: builtin</code>.</p>
+<p>This mode has significant benefits:</p>
+<ul>
+<li><strong>No network required</strong>: Does not clone any repository.</li>
+<li><strong>No environment setup</strong>: Does not create Python environments or install dependencies.</li>
+<li><strong>Maximum speed</strong>: Instant startup and execution.</li>
+</ul>
+<p><strong>Note</strong>: Configurations using <code>repo: builtin</code> are <strong>not compatible</strong> with the standard <code>pre-commit</code> tool.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builtin</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trailing-whitespace</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-added-large-files</span>
+</span></code></pre></div>
+<h3 id="supported-hooks_1">Supported Hooks<a class="headerlink" href="#supported-hooks_1" title="Permanent link">&para;</a></h3>
+<p>For <code>repo: builtin</code>, the following hooks are supported:</p>
+<ul>
+<li><a href="#trailing-whitespace"><code>trailing-whitespace</code></a> (Trim trailing whitespace)</li>
+<li><a href="#check-added-large-files"><code>check-added-large-files</code></a> (Prevent committing large files)</li>
+<li><a href="#check-case-conflict"><code>check-case-conflict</code></a> (Check for files that would conflict in case-insensitive filesystems)</li>
+<li><a href="#check-illegal-windows-names"><code>check-illegal-windows-names</code></a> (Check for filenames invalid on Windows)</li>
+<li><a href="#end-of-file-fixer"><code>end-of-file-fixer</code></a> (Ensure newline at EOF)</li>
+<li><a href="#file-contents-sorter"><code>file-contents-sorter</code></a> (Sort lines in explicitly targeted files)</li>
+<li><a href="#fix-byte-order-marker"><code>fix-byte-order-marker</code></a> (Remove UTF-8 byte order marker)</li>
+<li><a href="#check-json"><code>check-json</code></a> (Validate JSON files)</li>
+<li><a href="#check-json5"><code>check-json5</code></a> (Validate JSON5 files)</li>
+<li><a href="#pretty-format-json"><code>pretty-format-json</code></a> (Pretty format JSON files)</li>
+<li><a href="#check-toml"><code>check-toml</code></a> (Validate TOML files)</li>
+<li><a href="#check-vcs-permalinks"><code>check-vcs-permalinks</code></a> (Check that VCS links are permalinks)</li>
+<li><a href="#check-yaml"><code>check-yaml</code></a> (Validate YAML files)</li>
+<li><a href="#check-xml"><code>check-xml</code></a> (Validate XML files)</li>
+<li><a href="#mixed-line-ending"><code>mixed-line-ending</code></a> (Normalize or check line endings)</li>
+<li><a href="#check-symlinks"><code>check-symlinks</code></a> (Check for broken symlinks)</li>
+<li><a href="#destroyed-symlinks"><code>destroyed-symlinks</code></a> (Detect destroyed symlinks)</li>
+<li><a href="#check-merge-conflict"><code>check-merge-conflict</code></a> (Check for merge conflicts)</li>
+<li><a href="#detect-private-key"><code>detect-private-key</code></a> (Detect private keys)</li>
+<li><a href="#no-commit-to-branch"><code>no-commit-to-branch</code></a> (Prevent committing to protected branches)</li>
+<li><a href="#check-shebang-scripts-are-executable"><code>check-shebang-scripts-are-executable</code></a> (Ensures that (non-binary) files with a shebang are executable)</li>
+<li><a href="#check-executables-have-shebangs"><code>check-executables-have-shebangs</code></a> (Ensures that (non-binary) executables have a shebang)</li>
+</ul>
+<h3 id="hook-reference">Hook Reference<a class="headerlink" href="#hook-reference" title="Permanent link">&para;</a></h3>
+<p>This section documents the built-in (Rust) implementations used by <code>repo: builtin</code>.</p>
+<h4 id="configuration-notes">Configuration notes<a class="headerlink" href="#configuration-notes" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Configure arguments via <code>args: [...]</code> just like <code>pre-commit</code>.</li>
+<li>For <code>repo: builtin</code>, <code>entry</code> is not allowed and <code>language</code> must be <code>system</code> (it is fine to omit <code>language</code>).</li>
+<li>Some hooks are <strong>fixers</strong> (they modify files). Like <code>pre-commit-hooks</code>, they typically exit non-zero after making changes so you can re-run the commit.</li>
+</ul>
+<p>Example:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builtin</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trailing-whitespace</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--markdown-linebreak-ext=md</span><span class="p p-Indicator">]</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check-added-large-files</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--maxkb=1024</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+<hr />
+<h4 id="trailing-whitespace"><code>trailing-whitespace</code><a class="headerlink" href="#trailing-whitespace" title="Permanent link">&para;</a></h4>
+<p>Trims trailing whitespace from each line.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>--markdown-linebreak-ext=&lt;ext&gt;</code> (repeatable / comma-separated)<ul>
+<li>Preserves Markdown hard line breaks (two trailing spaces) for files with the given extension(s).</li>
+<li>Use <code>--markdown-linebreak-ext=*</code> to treat <strong>all</strong> files as Markdown.</li>
+</ul>
+</li>
+<li><code>--chars=&lt;chars&gt;</code><ul>
+<li>Trim only the specified set of characters instead of “all trailing whitespace”.</li>
+<li>Example: <code>args: [--chars, " \t"]</code> (space + tab).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li><code>--markdown-linebreak-ext</code> values must be extensions only (no path separators).</li>
+</ul>
+<hr />
+<h4 id="check-added-large-files"><code>check-added-large-files</code><a class="headerlink" href="#check-added-large-files" title="Permanent link">&para;</a></h4>
+<p>Prevents giant files from being committed.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>--maxkb=&lt;N&gt;</code> (default: <code>500</code>)<ul>
+<li>Maximum allowed file size, in kibibytes.</li>
+</ul>
+</li>
+<li><code>--enforce-all</code><ul>
+<li>Check all matched files, not just those staged for addition.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>By default, only files staged for <strong>addition</strong> are checked.</li>
+<li>Files configured with <code>filter=lfs</code> (via git attributes) are skipped.</li>
+</ul>
+<hr />
+<h4 id="check-case-conflict"><code>check-case-conflict</code><a class="headerlink" href="#check-case-conflict" title="Permanent link">&para;</a></h4>
+<p>Checks for paths that would conflict on a case-insensitive filesystem (for example macOS / Windows).</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>The check includes parent directories as well as file paths, to catch directory-level case conflicts.</li>
+</ul>
+<hr />
+<h4 id="check-illegal-windows-names"><code>check-illegal-windows-names</code><a class="headerlink" href="#check-illegal-windows-names" title="Permanent link">&para;</a></h4>
+<p>Checks for filenames that cannot be created on Windows.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Behavior / caveats</strong></p>
+<ul>
+<li>Reports filenames containing Windows-reserved device names such as <code>CON</code>, <code>PRN</code>, <code>AUX</code>, <code>NUL</code>, <code>COM1</code>, and <code>LPT1</code>.</li>
+<li>Reports filenames containing characters forbidden by Windows, including <code>&lt;</code>, <code>&gt;</code>, <code>:</code>, <code>"</code>, <code>\</code>, <code>|</code>, <code>?</code>, <code>*</code>, and control characters.</li>
+<li>Reports path segments ending with a trailing <code>.</code> or space.</li>
+</ul>
+<hr />
+<h4 id="end-of-file-fixer"><code>end-of-file-fixer</code><a class="headerlink" href="#end-of-file-fixer" title="Permanent link">&para;</a></h4>
+<p>Ensures files end in a newline and only a newline.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Behavior / caveats</strong></p>
+<ul>
+<li>Empty files are left unchanged.</li>
+<li>Files containing only newlines are truncated to empty.</li>
+<li>If a file has no trailing newline, a single <code>\n</code> is appended (even if the file otherwise uses CRLF).</li>
+<li>If a file has trailing newlines, they are reduced to exactly one trailing line ending.</li>
+</ul>
+<hr />
+<h4 id="file-contents-sorter"><code>file-contents-sorter</code><a class="headerlink" href="#file-contents-sorter" title="Permanent link">&para;</a></h4>
+<p>Sorts the non-empty lines in each matched file and rewrites the file when the normalized order changes.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>--ignore-case</code><ul>
+<li>Sort using ASCII case-folded ordering.</li>
+<li>Mutually exclusive with <code>--unique</code>.</li>
+</ul>
+</li>
+<li><code>--unique</code><ul>
+<li>Sort and deduplicate lines.</li>
+<li>Mutually exclusive with <code>--ignore-case</code>.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Behavior / caveats</strong></p>
+<ul>
+<li>Blank lines and whitespace-only lines are removed before sorting.</li>
+<li>Line endings are normalized to <code>\n</code> in the rewritten file.</li>
+<li>Like upstream, the builtin hook defaults to <code>files: '^$'</code>, so you must configure <code>files:</code> explicitly to target specific files.</li>
+</ul>
+<p>Example:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builtin</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file-contents-sorter</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^requirements(-dev)?\.txt$</span>
+</span></code></pre></div>
+<hr />
+<h4 id="fix-byte-order-marker"><code>fix-byte-order-marker</code><a class="headerlink" href="#fix-byte-order-marker" title="Permanent link">&para;</a></h4>
+<p>Removes a UTF-8 byte order marker (BOM) from the beginning of a file.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>Only removes the UTF-8 BOM (<code>EF BB BF</code>).</li>
+</ul>
+<hr />
+<h4 id="check-json"><code>check-json</code><a class="headerlink" href="#check-json" title="Permanent link">&para;</a></h4>
+<p>Attempts to load all JSON files to verify syntax.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats / differences</strong></p>
+<ul>
+<li>This implementation rejects <strong>duplicate object keys</strong> (errors with <code>duplicate key ...</code>).</li>
+<li>The parser disables the default recursion limit and uses a stack-friendly drop strategy for deeply nested JSON.</li>
+</ul>
+<hr />
+<h4 id="check-json5"><code>check-json5</code><a class="headerlink" href="#check-json5" title="Permanent link">&para;</a></h4>
+<p>Attempts to load all JSON5 files to verify syntax.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats / differences</strong></p>
+<ul>
+<li>This implementation rejects <strong>duplicate object keys</strong> (errors with <code>duplicate key ...</code>).</li>
+</ul>
+<hr />
+<h4 id="pretty-format-json"><code>pretty-format-json</code><a class="headerlink" href="#pretty-format-json" title="Permanent link">&para;</a></h4>
+<p>Checks that JSON files are pretty-formatted and can optionally rewrite them in place.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>--autofix</code><ul>
+<li>Rewrite files in place when formatting changes are needed.</li>
+</ul>
+</li>
+<li><code>--indent=&lt;indent&gt;</code> (default: <code>2</code>)<ul>
+<li>Use <code>&lt;indent&gt;</code> for each indentation level.</li>
+<li>Numeric values mean that many spaces.</li>
+<li>Non-numeric values are used literally, so <code>--indent=\t</code> uses tabs.</li>
+</ul>
+</li>
+<li><code>--no-ensure-ascii</code><ul>
+<li>Keep non-ASCII characters as UTF-8 instead of escaping them as <code>\uXXXX</code>.</li>
+</ul>
+</li>
+<li><code>--no-sort-keys</code><ul>
+<li>Preserve the original key order instead of sorting object keys.</li>
+</ul>
+</li>
+<li><code>--top-keys=&lt;k1,k2,...&gt;</code><ul>
+<li>In every JSON object, move matching keys to the front in the given order.</li>
+<li>Duplicate names after the first one are ignored.</li>
+<li>Remaining keys come after that prefix and are sorted unless <code>--no-sort-keys</code> is set.</li>
+<li>This applies recursively to nested objects too, not just the root object.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>This hook is currently available only via <code>repo: builtin</code>; automatic fast-path replacement of the upstream Python hook remains disabled until parity coverage is broader.</li>
+<li>Rewritten files always use LF (<code>\n</code>) line endings and end with exactly one trailing newline.</li>
+</ul>
+<hr />
+<h4 id="check-toml"><code>check-toml</code><a class="headerlink" href="#check-toml" title="Permanent link">&para;</a></h4>
+<p>Attempts to load all TOML files to verify syntax.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>Files must be valid UTF-8; invalid UTF-8 is reported as an error.</li>
+<li>May report multiple parse errors for a single file.</li>
+</ul>
+<hr />
+<h4 id="check-vcs-permalinks"><code>check-vcs-permalinks</code><a class="headerlink" href="#check-vcs-permalinks" title="Permanent link">&para;</a></h4>
+<p>Ensures that links to VCS websites are permalinks.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>--additional-github-domain=&lt;domain&gt;</code> (repeatable)<ul>
+<li>Adds extra GitHub-style domains to check in addition to the default <code>github.com</code>.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Behavior / caveats</strong></p>
+<ul>
+<li>Flags links of the form <code>https://&lt;domain&gt;/&lt;owner&gt;/&lt;repo&gt;/blob/&lt;branch&gt;/...#L...</code>.</li>
+<li>Does not flag commit-hash permalinks where <code>&lt;branch&gt;</code> is already a 4-64 character hexadecimal revision.</li>
+<li>The builtin and fast-path implementations currently follow the upstream hook's GitHub-family matching behavior.</li>
+</ul>
+<hr />
+<h4 id="check-yaml"><code>check-yaml</code><a class="headerlink" href="#check-yaml" title="Permanent link">&para;</a></h4>
+<p>Attempts to load all YAML files to verify syntax.</p>
+<p><strong>Supported arguments</strong> (partially compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>-m</code>, <code>--allow-multiple-documents</code> (alias: <code>--multi</code>)<ul>
+<li>Allow YAML multi-document syntax (<code>---</code>).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats / differences</strong></p>
+<ul>
+<li><code>--unsafe</code> is not supported.<ul>
+<li>With <code>repo: builtin</code>, passing <code>--unsafe</code> is treated as an unknown argument.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h4 id="check-xml"><code>check-xml</code><a class="headerlink" href="#check-xml" title="Permanent link">&para;</a></h4>
+<p>Attempts to load all XML files to verify syntax.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>Empty files are treated as invalid XML.</li>
+<li>Fails if there is “junk after the document element” (multiple top-level roots).</li>
+</ul>
+<hr />
+<h4 id="mixed-line-ending"><code>mixed-line-ending</code><a class="headerlink" href="#mixed-line-ending" title="Permanent link">&para;</a></h4>
+<p>Replaces or checks mixed line endings.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>, plus one extra mode):</p>
+<ul>
+<li><code>--fix=&lt;mode&gt;</code> (default: <code>auto</code>)<ul>
+<li><code>auto</code>: replace with the most frequent line ending in the file.</li>
+<li><code>no</code>: check only (do not modify files).</li>
+<li><code>lf</code>: convert to LF (<code>\n</code>).</li>
+<li><code>crlf</code>: convert to CRLF (<code>\r\n</code>).</li>
+<li><code>cr</code>: convert to CR (<code>\r</code>) (extra mode in <code>prek</code>).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>Empty and binary files (containing NUL) are skipped.</li>
+<li>Upstream note: forcing <code>lf</code> / <code>crlf</code> may not behave as expected with git CRLF conversion settings (for example <code>core.autocrlf</code>).</li>
+</ul>
+<hr />
+<h4 id="check-symlinks"><code>check-symlinks</code><a class="headerlink" href="#check-symlinks" title="Permanent link">&para;</a></h4>
+<p>Checks for symlinks which do not point to anything.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>Relies on filesystem symlink support. On Windows, symlink creation and detection can be permission-dependent.</li>
+</ul>
+<hr />
+<h4 id="destroyed-symlinks"><code>destroyed-symlinks</code><a class="headerlink" href="#destroyed-symlinks" title="Permanent link">&para;</a></h4>
+<p>Detects files staged as regular files whose <code>HEAD</code> version is a symlink, which usually happens when a repository is checked out in an environment without symlink support.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>This matches upstream <code>pre-commit-hooks</code> behavior: it only checks tracked entries reported by <code>git status --porcelain=v2</code>.</li>
+<li>It intentionally ignores differences consisting only of trailing ASCII whitespace (including spaces, tabs, and newline/CRLF conversions) when comparing the staged file against the original symlink target path, because those differences are commonly introduced by formatting hooks.</li>
+</ul>
+<hr />
+<h4 id="check-merge-conflict"><code>check-merge-conflict</code><a class="headerlink" href="#check-merge-conflict" title="Permanent link">&para;</a></h4>
+<p>Checks for merge conflict markers.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>--assume-in-merge</code><ul>
+<li>Allow running the hook even when there is no merge/rebase state detected.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>By default, this hook exits successfully when not in a merge/rebase state.</li>
+<li>Detects conflict markers only when they appear at the start of a line.</li>
+<li>Detects standard conflict blocks (<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>) and diff3 ancestor markers (<code>|||||||</code>).</li>
+<li><code>=======</code> is only reported after a preceding <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, which avoids false positives for content such as reStructuredText headings.</li>
+</ul>
+<hr />
+<h4 id="detect-private-key"><code>detect-private-key</code><a class="headerlink" href="#detect-private-key" title="Permanent link">&para;</a></h4>
+<p>Detects the presence of private keys.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>This is a heuristic substring scan for common PEM/key headers (e.g. <code>BEGIN RSA PRIVATE KEY</code>, <code>BEGIN OPENSSH PRIVATE KEY</code>, <code>BEGIN PGP PRIVATE KEY BLOCK</code>, etc.).
+  It can produce false positives/negatives.</li>
+</ul>
+<hr />
+<h4 id="no-commit-to-branch"><code>no-commit-to-branch</code><a class="headerlink" href="#no-commit-to-branch" title="Permanent link">&para;</a></h4>
+<p>Protects specific branches from direct commits.</p>
+<p><strong>Supported arguments</strong> (compatible with <code>pre-commit-hooks</code>):</p>
+<ul>
+<li><code>-b</code>, <code>--branch &lt;branch&gt;</code> (repeatable, default: <code>main</code>, <code>master</code>)</li>
+<li><code>-p</code>, <code>--pattern &lt;regex&gt;</code> (repeatable)</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>This hook is configured as <code>always_run: true</code> by default, and does not take filenames.
+  As a result, <code>files</code>, <code>exclude</code>, <code>types</code>, etc. are ignored unless you explicitly set <code>always_run: false</code>.</li>
+<li>If HEAD is detached (no current branch), the hook does nothing.</li>
+</ul>
+<hr />
+<h4 id="check-executables-have-shebangs"><code>check-executables-have-shebangs</code><a class="headerlink" href="#check-executables-have-shebangs" title="Permanent link">&para;</a></h4>
+<p>Checks that non-binary executables have a proper shebang.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>The check is intentionally lightweight: it only verifies that the file starts with <code>#!</code>.</li>
+<li>On systems where the executable bit is not tracked by the filesystem, <code>prek</code> consults git’s staged mode bits.</li>
+</ul>
+<hr />
+<h4 id="check-shebang-scripts-are-executable"><code>check-shebang-scripts-are-executable</code><a class="headerlink" href="#check-shebang-scripts-are-executable" title="Permanent link">&para;</a></h4>
+<p>Checks that non-binary files with a shebang are marked executable.</p>
+<p><strong>Supported arguments</strong></p>
+<ul>
+<li>None.</li>
+</ul>
+<p><strong>Caveats</strong></p>
+<ul>
+<li>The check is intentionally lightweight: it only verifies that the file starts with <code>#!</code>.</li>
+<li>To work on filesystems which do not track the executable bit, <code>prek</code> consults git’s staged mode bits.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../languages/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Language Support">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Language Support
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../integrations/" class="md-footer__link md-footer__link--next" aria-label="Next: Integrations">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Integrations
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 j178
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.side","navigation.sections","navigation.expand","navigation.path","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.instant.progress","navigation.tracking","navigation.footer","navigation.top","content.code.copy","content.code.annotate","content.tabs.link","search.suggest","search.highlight","search.share"],"search":"../assets/javascripts/workers/search.b6b7e04f.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"provider":"mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7f30b55.min.js"></script>
+      
+    
+  </body>
+</html>
