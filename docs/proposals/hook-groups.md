@@ -105,13 +105,10 @@ its `groups` contains every required group.
 `--no-group <name>` is an exclude filter. A hook is removed if its `groups`
 contains any excluded group.
 
-Two names are reserved as special selectors:
+`@ungrouped` is reserved as a special selector. It matches hooks whose
+effective `groups` list is empty.
 
-- `@ungrouped` matches hooks whose effective `groups` list is empty.
-- `@builtin` matches hooks from the `builtin` repository, regardless of their
-  configured groups.
-
-They compose with all three options like ordinary group memberships, but cannot
+It composes with all three options like an ordinary group membership, but cannot
 be configured in a hook's `groups` list.
 
 The three options compose independently of argument order, and exclusion wins:
@@ -138,7 +135,7 @@ prek run --all-files --group lint --group typecheck
 prek run --all-files --require-group lint --require-group fast
 prek run --all-files --no-group format
 prek run --all-files --group ci --require-group lint --no-group slow
-prek run --all-files --group ci --group @ungrouped --group @builtin
+prek run --all-files --group ci --group @ungrouped
 prek run --all-files --group ci --stage pre-push
 ```
 
@@ -285,12 +282,6 @@ they do not belong to the excluded group.
 `@ungrouped` also works with the other filters. `--require-group @ungrouped`
 keeps only ungrouped hooks, while `--no-group @ungrouped` removes them.
 
-### Builtin Hooks
-
-Every hook from a `repo: builtin` entry matches `@builtin`, whether or not it
-has configured groups. `@builtin` does not match `local`, `meta`, or remote
-hooks.
-
 ### Multiple Groups
 
 A hook may belong to multiple groups:
@@ -328,7 +319,7 @@ for special CLI selectors.
 Invalid examples:
 
 ```yaml
-groups: ["", "ci slow", " ci", "ci\nslow", "@builtin"]
+groups: ["", "ci slow", " ci", "ci\nslow", "@custom"]
 ```
 
 Apart from the reserved `@` namespace, no fixed vocabulary should be enforced.

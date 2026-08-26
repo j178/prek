@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use crate::config::validate_group_name;
-use crate::hook::{Hook, Repo};
+use crate::hook::Hook;
 use crate::warn_user;
 
 use anyhow::anyhow;
@@ -434,21 +434,17 @@ pub(crate) struct GroupFilters {
 enum GroupSelector {
     Named(String),
     Ungrouped,
-    Builtin,
 }
 
 const UNGROUPED_GROUP: &str = "@ungrouped";
-const BUILTIN_GROUP: &str = "@builtin";
 
 impl GroupSelector {
     fn parse(group: &str) -> Result<Self, &'static str> {
-        match group {
-            UNGROUPED_GROUP => Ok(Self::Ungrouped),
-            BUILTIN_GROUP => Ok(Self::Builtin),
-            _ => {
-                validate_group_name(group)?;
-                Ok(Self::Named(group.to_owned()))
-            }
+        if group == UNGROUPED_GROUP {
+            Ok(Self::Ungrouped)
+        } else {
+            validate_group_name(group)?;
+            Ok(Self::Named(group.to_owned()))
         }
     }
 }
@@ -458,7 +454,6 @@ impl Display for GroupSelector {
         match self {
             Self::Named(group) => f.write_str(group),
             Self::Ungrouped => f.write_str(UNGROUPED_GROUP),
-            Self::Builtin => f.write_str(BUILTIN_GROUP),
         }
     }
 }
@@ -534,7 +529,6 @@ impl GroupFilters {
         self.matches_groups(|group| match group {
             GroupSelector::Named(group) => hook.groups.contains(group),
             GroupSelector::Ungrouped => hook.groups.is_empty(),
-            GroupSelector::Builtin => matches!(hook.repo(), Repo::Builtin),
         })
     }
 
@@ -544,7 +538,6 @@ impl GroupFilters {
                 .groups
                 .is_some_and(|groups| groups.iter().any(|hook_group| hook_group == group)),
             GroupSelector::Ungrouped => hook.groups.is_none_or(<[String]>::is_empty),
-            GroupSelector::Builtin => false,
         })
     }
 

@@ -938,14 +938,9 @@ fn run_group_without_stage_selects_hooks_across_stages() {
 }
 
 #[test]
-fn run_reserved_groups_select_ungrouped_and_builtin_hooks() {
+fn run_ungrouped_group_selects_hooks_without_groups() {
     let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
-          - repo: builtin
-            hooks:
-              - id: end-of-file-fixer
-                groups: [other]
-
           - repo: local
             hooks:
               - id: ungrouped
@@ -982,14 +977,11 @@ fn run_reserved_groups_select_ungrouped_and_builtin_hooks() {
             .arg("--group")
             .arg("ci")
             .arg("--group")
-            .arg("@ungrouped")
-            .arg("--group")
-            .arg("@builtin"),
+            .arg("@ungrouped"),
         @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    fix end of files.........................................................Passed
     Ungrouped................................................................Passed
     CI.......................................................................Passed
 
