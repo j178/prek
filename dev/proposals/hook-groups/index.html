@@ -1297,17 +1297,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#builtin-hooks" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Builtin Hooks
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#multiple-groups" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1599,13 +1588,9 @@ hook is selected if its <code>groups</code> contains at least one requested grou
 its <code>groups</code> contains every required group.</p>
 <p><code>--no-group &lt;name&gt;</code> is an exclude filter. A hook is removed if its <code>groups</code>
 contains any excluded group.</p>
-<p>Two names are reserved as special selectors:</p>
-<ul>
-<li><code>@ungrouped</code> matches hooks whose effective <code>groups</code> list is empty.</li>
-<li><code>@builtin</code> matches hooks from the <code>builtin</code> repository, regardless of their
-  configured groups.</li>
-</ul>
-<p>They compose with all three options like ordinary group memberships, but cannot
+<p><code>@ungrouped</code> is reserved as a special selector. It matches hooks whose
+effective <code>groups</code> list is empty.</p>
+<p>It composes with all three options like an ordinary group membership, but cannot
 be configured in a hook's <code>groups</code> list.</p>
 <p>The three options compose independently of argument order, and exclusion wins:</p>
 <ol>
@@ -1626,7 +1611,7 @@ be configured in a hook's <code>groups</code> list.</p>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--require-group<span class="w"> </span>lint<span class="w"> </span>--require-group<span class="w"> </span>fast
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--no-group<span class="w"> </span>format
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci<span class="w"> </span>--require-group<span class="w"> </span>lint<span class="w"> </span>--no-group<span class="w"> </span>slow
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci<span class="w"> </span>--group<span class="w"> </span>@ungrouped<span class="w"> </span>--group<span class="w"> </span>@builtin
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci<span class="w"> </span>--group<span class="w"> </span>@ungrouped
 </span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci<span class="w"> </span>--stage<span class="w"> </span>pre-push
 </span></code></pre></div>
 <p>For example, consider these hook groups:</p>
@@ -1759,10 +1744,6 @@ excluded from the run.</p>
 they do not belong to the excluded group.</p>
 <p><code>@ungrouped</code> also works with the other filters. <code>--require-group @ungrouped</code>
 keeps only ungrouped hooks, while <code>--no-group @ungrouped</code> removes them.</p>
-<h3 id="builtin-hooks">Builtin Hooks<a class="headerlink" href="#builtin-hooks" title="Permanent link">&para;</a></h3>
-<p>Every hook from a <code>repo: builtin</code> entry matches <code>@builtin</code>, whether or not it
-has configured groups. <code>@builtin</code> does not match <code>local</code>, <code>meta</code>, or remote
-hooks.</p>
 <h3 id="multiple-groups">Multiple Groups<a class="headerlink" href="#multiple-groups" title="Permanent link">&para;</a></h3>
 <p>A hook may belong to multiple groups:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
@@ -1788,7 +1769,7 @@ not start with <code>@</code>. Names are matched exactly, so implementations sho
 trim or normalize group names before validation. The <code>@</code> namespace is reserved
 for special CLI selectors.</p>
 <p>Invalid examples:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">groups</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;ci</span><span class="nv"> </span><span class="s">slow&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;</span><span class="nv"> </span><span class="s">ci&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;ci\nslow&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;@builtin&quot;</span><span class="p p-Indicator">]</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">groups</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;ci</span><span class="nv"> </span><span class="s">slow&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;</span><span class="nv"> </span><span class="s">ci&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;ci\nslow&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;@custom&quot;</span><span class="p p-Indicator">]</span>
 </span></code></pre></div>
 <p>Apart from the reserved <code>@</code> namespace, no fixed vocabulary should be enforced.
 In particular, <code>ci</code>, <code>agent</code>, <code>slow</code>, <code>format</code>, and <code>lint</code> are examples, not

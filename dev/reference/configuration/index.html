@@ -3687,11 +3687,9 @@ Group names cannot be empty, contain whitespace, or start with <code>@</code>. N
 start with <code>@</code> are reserved for special selectors:</p>
 <ul>
 <li><code>@ungrouped</code> matches hooks whose effective <code>groups</code> list is empty.</li>
-<li><code>@builtin</code> matches hooks from the <code>builtin</code> repository, regardless of their
-  configured groups.</li>
 </ul>
-<p>These selectors work with <code>--group</code>, <code>--require-group</code>, and <code>--no-group</code>. They
-are virtual memberships and cannot be added to a hook's <code>groups</code> list.</p>
+<p>This selector works with <code>--group</code>, <code>--require-group</code>, and <code>--no-group</code>. It is a
+virtual membership and cannot be added to a hook's <code>groups</code> list.</p>
 <p><code>groups</code> is a project configuration field. If it appears in a remote
 <code>.pre-commit-hooks.yaml</code> manifest, <code>prek</code> ignores it.</p>
 <p>Examples:</p>
@@ -3740,8 +3738,8 @@ are virtual memberships and cannot be added to a hook's <code>groups</code> list
 <p>Run only the <code>ci</code> group:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-37-1"><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci
 </span></code></pre></div>
-<p>Run the <code>ci</code> group together with ungrouped and builtin hooks:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci<span class="w"> </span>--group<span class="w"> </span>@ungrouped<span class="w"> </span>--group<span class="w"> </span>@builtin
+<p>Run the <code>ci</code> group together with ungrouped hooks:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--group<span class="w"> </span>ci<span class="w"> </span>--group<span class="w"> </span>@ungrouped
 </span></code></pre></div>
 <p>Run only hooks belonging to both <code>lint</code> and <code>ci</code>:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--require-group<span class="w"> </span>lint<span class="w"> </span>--require-group<span class="w"> </span>ci
