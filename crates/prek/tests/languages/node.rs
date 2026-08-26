@@ -29,7 +29,7 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
     "#})?;
     make_executable(cli.path())?;
 
-    let dependency = serde_json::to_string(&package.path().to_string_lossy())?;
+    let dependency = serde_json::to_string(package.path())?;
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: local
@@ -443,7 +443,7 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
     "#})?;
     make_executable(cli.path())?;
 
-    let dependency = serde_json::to_string(&package_dir.path().to_string_lossy())?;
+    let dependency = serde_json::to_string(package_dir.path())?;
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: local

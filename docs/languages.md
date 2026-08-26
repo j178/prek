@@ -11,9 +11,9 @@ Each hook has a `language` that tells prek how to install and run it. The langua
 
 For `repo: local` hooks, `language` is required. For remote hooks, it is read from `.pre-commit-hooks.yaml`, but you can override it in your config.
 
-Hook environments for `repo: local` are installed from an empty temporary directory. Relative
-paths in `additional_dependencies` or other installer arguments therefore do not resolve from the
-work tree. Hook commands still run from the work tree.
+For `repo: local` hooks, relative paths in `additional_dependencies` and other installer arguments
+do not resolve from the work tree. Use an absolute path when an installer needs a local file. Hook
+commands still run from the work tree.
 
 ## Toolchain management and `language_version`
 

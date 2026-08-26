@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
@@ -43,9 +42,10 @@ impl LanguageBackend for Haskell {
         let bin_dir = info.env_path.join("bin");
         fs_err::tokio::create_dir_all(&bin_dir).await?;
 
-        // Identify packages: *.cabal files in repo + additional_dependencies
-        let search_path = hook.repo_path().unwrap_or_else(|| hook.project().path());
-        let project_packages = fs_err::read_dir(search_path)?
+        let project_dir = hook.repo_path().unwrap_or(hook.work_dir());
+        // A Cabal package file is named `<package>.cabal`, so its stem is a cwd-independent package
+        // target. `--project-dir` below locates the source without making it the process cwd.
+        let project_targets = fs_err::read_dir(project_dir)?
             .flatten()
             .filter_map(|entry| {
                 let path = entry.path();
@@ -54,23 +54,15 @@ impl LanguageBackend for Haskell {
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("cabal"))
                 {
-                    if hook.repo_path().is_some() {
-                        path.file_name().map(OsString::from)
-                    } else {
-                        path.file_stem().map(OsString::from)
-                    }
+                    path.file_stem()
+                        .map(|name| name.to_string_lossy().into_owned())
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
-        let additional_dependencies = hook
-            .additional_dependencies
-            .iter()
-            .map(OsString::from)
-            .collect::<Vec<_>>();
 
-        if project_packages.is_empty() && additional_dependencies.is_empty() {
+        if project_targets.is_empty() && hook.additional_dependencies.is_empty() {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
         }
 
@@ -91,22 +83,14 @@ impl LanguageBackend for Haskell {
                 .await?;
         }
 
-        if !project_packages.is_empty() {
-            // Cabal does not accept an absolute `.cabal` file as an install target. Point local
-            // hooks at their project explicitly while keeping the process cwd isolated.
-            let project_dir = if hook.repo_path().is_some() {
-                None
-            } else {
-                Some(search_path)
-            };
-            install_packages(install_cwd, &bin_dir, &project_packages, project_dir)
+        if !project_targets.is_empty() {
+            cabal_install(install_cwd, &bin_dir, &project_targets, Some(project_dir))
                 .await
                 .context("Failed to install Haskell hook project")?;
         }
 
-        if !additional_dependencies.is_empty() {
-            // User-supplied targets must continue to resolve from the isolated install cwd.
-            install_packages(install_cwd, &bin_dir, &additional_dependencies, None)
+        if !hook.additional_dependencies.is_empty() {
+            cabal_install(install_cwd, &bin_dir, &hook.additional_dependencies, None)
                 .await
                 .context("Failed to install Haskell additional dependencies")?;
         }
@@ -139,10 +123,12 @@ impl LanguageBackend for Haskell {
     }
 }
 
-async fn install_packages(
+// Project targets need an explicit source directory because local installs run elsewhere.
+// Additional dependencies omit it so relative targets resolve from `install_cwd`.
+async fn cabal_install(
     install_cwd: &Path,
     bin_dir: &Path,
-    packages: &[OsString],
+    targets: &[String],
     project_dir: Option<&Path>,
 ) -> Result<()> {
     let mut command = Cmd::new("cabal");
@@ -153,7 +139,7 @@ async fn install_packages(
     command
         .arg("--installdir")
         .arg(bin_dir)
-        .args(packages)
+        .args(targets)
         .sanitize_git_repo_env()
         .check(true)
         .output()

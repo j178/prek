@@ -3604,7 +3604,7 @@ fn reuse_env() -> Result<()> {
         .child("local_pkg.py")
         .write_str("def hello():\n     print('hello')\n")?;
 
-    let dependency = serde_json::to_string(&pkg_dir.path().to_string_lossy())?;
+    let dependency = serde_json::to_string(&std::path::absolute(pkg_dir.path())?)?;
     let context = context.with_config(indoc::formatdoc! {r#"
     repos:
       - repo: local

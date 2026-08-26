@@ -61,13 +61,8 @@ fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
     let context = TestEnv::new();
 
     write_local_r_package(context.work_dir(), "localdep")?;
-    let dependency = serde_json::to_string(
-        &context
-            .work_dir()
-            .child("localdep")
-            .path()
-            .to_string_lossy(),
-    )?;
+    let dependency_path = std::path::absolute(context.work_dir().child("localdep").path())?;
+    let dependency = serde_json::to_string(&dependency_path)?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
