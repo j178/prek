@@ -57,12 +57,19 @@ fn local_hook() -> anyhow::Result<()> {
 }
 
 #[test]
-fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
+fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
     let context = TestEnv::new();
 
     write_local_r_package(context.work_dir(), "localdep")?;
+    let dependency = serde_json::to_string(
+        &context
+            .work_dir()
+            .child("localdep")
+            .path()
+            .to_string_lossy(),
+    )?;
 
-    let context = context.with_config(indoc::indoc! {r"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -70,7 +77,7 @@ fn local_hook_with_relative_additional_dependency() -> anyhow::Result<()> {
                 name: r-local-dep
                 language: r
                 entry: Rscript -e 'localdep::hello()'
-                additional_dependencies: [./localdep]
+                additional_dependencies: [{dependency}]
                 always_run: true
                 verbose: true
                 pass_filenames: false

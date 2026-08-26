@@ -23,6 +23,7 @@ impl LanguageBackend for Julia {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -64,7 +65,7 @@ impl LanguageBackend for Julia {
         "};
 
         Cmd::new("julia")
-            .current_dir(search_path)
+            .current_dir(install_cwd)
             .arg("--startup-file=no")
             .arg(format!("--project={}", info.env_path.display()))
             .arg("-e")

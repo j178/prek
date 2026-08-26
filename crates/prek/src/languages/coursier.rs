@@ -54,6 +54,7 @@ impl LanguageBackend for Coursier {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -82,7 +83,7 @@ impl LanguageBackend for Coursier {
                 has_channel_apps = true;
                 for app in channel_apps {
                     Cmd::new(&cs)
-                        .current_dir(repo_path)
+                        .current_dir(install_cwd)
                         .arg("install")
                         .arg("--dir")
                         .arg(&info.env_path)
@@ -103,28 +104,24 @@ impl LanguageBackend for Coursier {
         if !dependencies.is_empty() {
             let mut fetch_cmd = Cmd::new(&cs);
             fetch_cmd
+                .current_dir(install_cwd)
                 .arg("fetch")
                 .args(dependencies)
                 .env(EnvVars::PATH, &path_env)
                 .env(EnvVars::COURSIER_CACHE, &coursier_cache);
-            if let Some(repo_path) = hook.repo_path() {
-                fetch_cmd.current_dir(repo_path);
-            }
             fetch_cmd.check(true).output().await.with_context(|| {
                 format!("Failed to fetch coursier app `{}`", dependencies.join(" "))
             })?;
 
             let mut install_cmd = Cmd::new(&cs);
             install_cmd
+                .current_dir(install_cwd)
                 .arg("install")
                 .arg("--dir")
                 .arg(&info.env_path)
                 .args(dependencies)
                 .env(EnvVars::PATH, path_env)
                 .env(EnvVars::COURSIER_CACHE, &coursier_cache);
-            if let Some(repo_path) = hook.repo_path() {
-                install_cmd.current_dir(repo_path);
-            }
             install_cmd.check(true).output().await.with_context(|| {
                 format!(
                     "Failed to install coursier app `{}`",

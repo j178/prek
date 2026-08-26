@@ -40,6 +40,7 @@ impl LanguageBackend for Dotnet {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -62,7 +63,7 @@ impl LanguageBackend for Dotnet {
         if !hook.additional_dependencies.is_empty() {
             fs_err::tokio::create_dir_all(&tools_dir).await?;
             for dependency in &hook.additional_dependencies {
-                install_tool(dotnet.dotnet(), &tools_dir, dependency).await?;
+                install_tool(dotnet.dotnet(), &tools_dir, dependency, install_cwd).await?;
             }
         }
 
@@ -126,7 +127,12 @@ impl LanguageBackend for Dotnet {
 /// The dependency can be specified as:
 /// - `package` - installs latest version
 /// - `package:version` - installs specific version
-async fn install_tool(dotnet: &Path, tool_dir: &Path, dependency: &str) -> Result<()> {
+async fn install_tool(
+    dotnet: &Path,
+    tool_dir: &Path,
+    dependency: &str,
+    install_cwd: &Path,
+) -> Result<()> {
     let (package, version) = dependency
         .split_once(':')
         .map_or((dependency, None), |(package, version)| {
@@ -135,7 +141,8 @@ async fn install_tool(dotnet: &Path, tool_dir: &Path, dependency: &str) -> Resul
 
     let tool_cmd = |action: &str| {
         let mut cmd = Cmd::new(dotnet);
-        cmd.arg("tool")
+        cmd.current_dir(install_cwd)
+            .arg("tool")
             .arg(action)
             .arg("--tool-path")
             .arg(tool_dir)

@@ -24,6 +24,7 @@ impl LanguageBackend for R {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -79,7 +80,7 @@ impl LanguageBackend for R {
                 &rscript,
                 &additional_dependency_install_code(&info.env_path),
                 &hook.additional_dependencies,
-                hook.work_dir(),
+                install_cwd,
             )
             .await
             .context("Failed to install R additional dependencies")?;

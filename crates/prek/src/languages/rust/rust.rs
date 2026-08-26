@@ -366,11 +366,13 @@ async fn install_cli_dependency(
     cargo: &Path,
     cargo_home: &Path,
     new_path: &OsStr,
+    install_cwd: &Path,
 ) -> anyhow::Result<()> {
     let dep = CargoCliDependency::from_str(cli_dep)?;
 
     let mut cmd = Cmd::new(cargo);
-    cmd.args(["install", "--bins", "--root"])
+    cmd.current_dir(install_cwd)
+        .args(["install", "--bins", "--root"])
         .arg(&info.env_path)
         .args(dep.to_cargo_args())
         .arg("--locked");
@@ -394,6 +396,7 @@ impl LanguageBackend for Rust {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> anyhow::Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -467,7 +470,8 @@ impl LanguageBackend for Rust {
 
         // Install CLI dependencies
         for cli_dep in cli_deps {
-            install_cli_dependency(cli_dep, &info, &cargo, &cargo_home, &new_path).await?;
+            install_cli_dependency(cli_dep, &info, &cargo, &cargo_home, &new_path, install_cwd)
+                .await?;
         }
 
         info.persist_env_path();

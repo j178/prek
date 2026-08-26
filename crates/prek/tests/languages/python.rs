@@ -429,7 +429,11 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
         setup(name="test", version="0.1.0", extras_require={"test": []})
     "#})?;
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let dependency = serde_json::to_string(&format!(
+        "{}[test]",
+        context.work_dir().path().to_string_lossy()
+    ))?;
+    let context = context.with_config(indoc::formatdoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -437,7 +441,7 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
                 name: check-no-git-dir
                 language: python
                 entry: python -c "print('ok')"
-                additional_dependencies: [".[test]"]
+                additional_dependencies: [{dependency}]
                 always_run: true
     "#});
 
@@ -453,6 +457,66 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/j178/prek/issues/1603>.
+#[test]
+fn local_relative_additional_dependency_is_not_resolved_from_worktree() -> anyhow::Result<()> {
+    let context = TestEnv::new();
+    context
+        .work_dir()
+        .child("pyproject.toml")
+        .write_str(indoc::indoc! {r#"
+            [project]
+            name = "local-project"
+            version = "0.1.0"
+        "#})?;
+
+    let context = context
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: local-project
+                    name: local-project
+                    language: python
+                    entry: python -c "print('ok')"
+                    additional_dependencies: ["."]
+                    always_run: true
+        "#})
+        .with_filters([
+            (r"Command `[^`]*uv(?:\.exe)? pip", "Command `[UV] pip"),
+            (r"python-[[:alnum:]]{20}", "python-[HASH]"),
+            (
+                r"error: .*\.tmp[[:alnum:]]+ does not appear",
+                "error: [INSTALL_CWD] does not appear",
+            ),
+            (
+                r"Using Python [^ ]+ environment",
+                "Using Python [VERSION] environment",
+            ),
+        ]);
+
+    context.git_add_all();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `local-project`
+      caused by: Command `[UV] pip install --project / .` exited with an error:
+
+    [status]
+    exit status: 2
+
+    [stderr]
+    Using Python [VERSION] environment at: [HOME]/hooks/python-[HASH]
+    error: [INSTALL_CWD] does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+    "#);
 
     Ok(())
 }

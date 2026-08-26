@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -57,6 +58,7 @@ impl LanguageBackend for Deno {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -83,12 +85,6 @@ impl LanguageBackend for Deno {
         // 2. Create env
         let env_bin_dir = bin_dir(&info.env_path);
         fs_err::tokio::create_dir_all(&env_bin_dir).await?;
-
-        // Relative install targets in `additional_dependencies` are resolved by Deno
-        // against the process working directory. For remote hooks that should be the
-        // cloned hook repository so `./cli.ts:name` refers to files shipped by the hook.
-        // For local hooks we keep resolution in the user's work tree.
-        let install_dir = hook.repo_path().unwrap_or(hook.work_dir());
 
         // We share one Deno cache bucket across install and run. Executable shims live in
         // the per-hook env bin dir, while downloaded modules and npm artifacts are reused
@@ -121,7 +117,7 @@ impl LanguageBackend for Deno {
 
             let mut install_cmd = Cmd::new(deno.deno());
             install_cmd
-                .current_dir(install_dir)
+                .current_dir(install_cwd)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
                 .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
                 .arg("install")

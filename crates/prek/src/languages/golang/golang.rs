@@ -23,6 +23,7 @@ impl LanguageBackend for Golang {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> anyhow::Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -59,13 +60,15 @@ impl LanguageBackend for Golang {
         let go_install_cmd = || {
             if go.is_from_system() {
                 let mut cmd = go.cmd();
-                cmd.arg("install")
+                cmd.current_dir(install_cwd)
+                    .arg("install")
                     .env(EnvVars::GOTOOLCHAIN, "local")
                     .env(EnvVars::GOBIN, bin_dir(&info.env_path));
                 cmd
             } else {
                 let mut cmd = go.cmd();
-                cmd.arg("install")
+                cmd.current_dir(install_cwd)
+                    .arg("install")
                     .env(EnvVars::GOTOOLCHAIN, "local")
                     .env(EnvVars::GOROOT, go_root)
                     .env(EnvVars::GOBIN, bin_dir(&info.env_path))
@@ -76,10 +79,9 @@ impl LanguageBackend for Golang {
         };
 
         // GOPATH used to store downloaded source code (in $GOPATH/pkg/mod)
-        if let Some(repo) = hook.repo_path() {
+        if hook.repo_path().is_some() {
             go_install_cmd()
                 .arg("./...")
-                .current_dir(repo)
                 .sanitize_git_repo_env()
                 .check(true)
                 .output()
@@ -87,9 +89,6 @@ impl LanguageBackend for Golang {
         }
         for dep in &hook.additional_dependencies {
             let mut cmd = go_install_cmd();
-            if let Some(repo) = hook.repo_path() {
-                cmd.current_dir(repo);
-            }
             cmd.arg(dep)
                 .sanitize_git_repo_env()
                 .check(true)

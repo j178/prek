@@ -55,10 +55,15 @@ pub(crate) mod version;
 #[async_trait::async_trait(?Send)]
 trait LanguageBackend: Sync {
     /// Provisions the environment required by `hook` and returns the prepared hook.
+    ///
+    /// `install_cwd` is the cloned repository for remote hooks and an empty temporary directory
+    /// for local hooks. Installer arguments that depend on the process working directory should
+    /// resolve from it rather than the user's work tree.
     async fn install(
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook>;
 
@@ -555,9 +560,10 @@ impl Language {
         &'a self,
         store: &'a Store,
         hook: Arc<Hook>,
+        install_cwd: &'a Path,
         reporter: &'a HookInstallReporter,
     ) -> LanguageFuture<'a, InstalledHook> {
-        self.backend().install(store, hook, reporter)
+        self.backend().install(store, hook, install_cwd, reporter)
     }
 
     pub(crate) fn check_health<'a>(&'a self, info: &'a InstallInfo) -> LanguageFuture<'a, ()> {

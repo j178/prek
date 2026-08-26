@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -16,6 +17,7 @@ impl LanguageBackend for System {
         &self,
         _store: &Store,
         hook: Arc<Hook>,
+        _install_cwd: &Path,
         _reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))

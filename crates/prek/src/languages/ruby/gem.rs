@@ -102,6 +102,7 @@ pub(crate) async fn install_gems(
     gem_home: &Path,
     repo_path: Option<&Path>,
     additional_dependencies: &[String],
+    install_cwd: &Path,
 ) -> Result<()> {
     // Collect gems from repository. Many of these were probably built from gemspecs earlier,
     // but install all .gem files found (matches pre-commit behavior)
@@ -118,7 +119,8 @@ pub(crate) async fn install_gems(
     }
 
     let mut cmd = Cmd::new(ruby.gem_bin());
-    cmd.arg("install")
+    cmd.current_dir(install_cwd)
+        .arg("install")
         .arg("--no-document")
         .arg("--no-format-executable")
         .arg("--no-user-install")

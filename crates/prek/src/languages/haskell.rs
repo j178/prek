@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
@@ -29,6 +31,7 @@ impl LanguageBackend for Haskell {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -51,13 +54,12 @@ impl LanguageBackend for Haskell {
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("cabal"))
                 {
-                    path.file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
+                    Some(path.into_os_string())
                 } else {
                     None
                 }
             })
-            .chain(hook.additional_dependencies.iter().cloned())
+            .chain(hook.additional_dependencies.iter().map(OsString::from))
             .collect::<Vec<_>>();
 
         if pkgs.is_empty() {
@@ -70,6 +72,7 @@ impl LanguageBackend for Haskell {
             CABAL_UPDATE_ONCE
                 .get_or_try_init(async || {
                     Cmd::new("cabal")
+                        .current_dir(install_cwd)
                         .arg("update")
                         .check(true)
                         .output()
@@ -82,7 +85,7 @@ impl LanguageBackend for Haskell {
 
         // cabal v2-install --installdir <bindir> <pkgs> (default install-method is copy)
         Cmd::new("cabal")
-            .current_dir(search_path)
+            .current_dir(install_cwd)
             .arg("v2-install")
             .arg("--installdir")
             .arg(&bin_dir)

@@ -96,6 +96,7 @@ impl LanguageBackend for Python {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -116,6 +117,7 @@ impl LanguageBackend for Python {
 
         // Install dependencies
         let mut pip_install = Self::pip_install_command(&uv, store, &info.env_path);
+        pip_install.current_dir(install_cwd);
 
         if let Some(repo_path) = hook.repo_path() {
             trace!(

@@ -257,20 +257,20 @@ fn additional_dependencies() {
     ");
 }
 
-/// Test that a local file can be installed as an executable additional dependency.
+/// Test that an absolute file can be installed as an executable additional dependency.
 #[test]
-fn additional_dependencies_local_file() {
+fn additional_dependencies_absolute_file() {
     let context = TestEnv::new();
 
-    context
-        .work_dir()
-        .child("tool.ts")
-        .write_str(indoc::indoc! {r#"
+    let tool = context.work_dir().child("tool.ts");
+    tool.write_str(indoc::indoc! {r#"
             console.log("Hello from local additional dependency!");
         "#})
         .expect("Failed to write tool.ts");
+    let dependency = serde_json::to_string(&format!("{}:echo-tool", tool.path().display()))
+        .expect("Failed to serialize Deno dependency");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let context = context.with_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -278,11 +278,11 @@ fn additional_dependencies_local_file() {
                 name: local tool
                 language: deno
                 entry: echo-tool
-                additional_dependencies: ["./tool.ts:echo-tool"]
+                additional_dependencies: [{dependency}]
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
+    "});
 
     context.git_add_all();
 

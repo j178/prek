@@ -77,6 +77,7 @@ impl LanguageBackend for Mise {
         &self,
         store: &Store,
         hook: Arc<Hook>,
+        install_cwd: &Path,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
@@ -96,7 +97,7 @@ impl LanguageBackend for Mise {
         // TODO(#2022): Support provisioning remote hooks from the repository's `mise.toml`.
         if !hook.additional_dependencies.is_empty() {
             debug!(deps = ?hook.additional_dependencies, "Installing mise tools");
-            let mut command = environment.command(mise.mise(), tool_cwd(&hook))?;
+            let mut command = environment.command(mise.mise(), install_cwd)?;
             command
                 .arg("install")
                 .arg("--")
@@ -208,7 +209,6 @@ fn tool_cwd(hook: &Hook) -> &Path {
     if let Some(repo_path) = hook.repo_path() {
         repo_path
     } else {
-        // TODO(#1603): Install local hook dependencies from an isolated synthetic repository.
         hook.work_dir()
     }
 }

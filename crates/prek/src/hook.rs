@@ -642,7 +642,7 @@ impl Display for InstalledHook {
 }
 
 pub(crate) const HOOK_MARKER: &str = ".prek-hook.json";
-pub(crate) const INSTALL_INFO_SCHEMA_VERSION: u8 = 1;
+pub(crate) const INSTALL_INFO_SCHEMA_VERSION: u8 = 2;
 
 impl InstalledHook {
     /// Get the path to the environment where the hook is installed.
