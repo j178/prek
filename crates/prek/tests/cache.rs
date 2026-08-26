@@ -135,7 +135,7 @@ fn cache_gc_removes_legacy_hook_env_when_config_matches() -> anyhow::Result<()> 
     current_env
         .child(".prek-hook.json")
         .write_str(&serde_json::to_string_pretty(&json!({
-            "schema_version": 2,
+            "schema_version": 1,
             "language": "python",
             "language_version": "3.12.0",
             "dependencies": [],
@@ -489,7 +489,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
 
     // Match logic for local hooks: empty deps + language request is `Any` by default.
     let marker_py = json!({
-        "schema_version": 2,
+        "schema_version": 1,
         "language": "python",
         "language_version": "3.12.0",
         "dependencies": [],
@@ -502,7 +502,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         .write_str(&serde_json::to_string_pretty(&marker_py)?)?;
 
     let marker_node = json!({
-        "schema_version": 2,
+        "schema_version": 1,
         "language": "node",
         "language_version": "22.0.0",
         "dependencies": [],
@@ -515,7 +515,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         .write_str(&serde_json::to_string_pretty(&marker_node)?)?;
 
     let marker_go = json!({
-        "schema_version": 2,
+        "schema_version": 1,
         "language": "golang",
         "language_version": "1.24.0",
         "dependencies": [],
@@ -600,7 +600,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     let env_py = home.child("hooks/python-keep");
     env_py.create_dir_all()?;
     let marker_py = json!({
-        "schema_version": 2,
+        "schema_version": 1,
         "language": "python",
         "language_version": "3.12.0",
         "dependencies": [],
