@@ -410,8 +410,8 @@ mod tests {
                 "group name `ci\tslow` cannot contain whitespace",
             ),
             (
-                r#"["@builtin"]"#,
-                "group name `@builtin` uses the reserved `@` prefix",
+                r#"["@custom"]"#,
+                "group name `@custom` uses the reserved `@` prefix",
             ),
         ] {
             let yaml = indoc::formatdoc! {r"
