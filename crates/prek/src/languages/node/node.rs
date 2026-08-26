@@ -66,7 +66,11 @@ impl LanguageBackend for Node {
 
         let node_request: &NodeRequest = hook.language_request.version();
         let node = installer
-            .install(store, node_request, hook.language_request.allows_download())
+            .install(
+                store,
+                node_request,
+                hook.language_request.toolchain_policy(),
+            )
             .await
             .context("Failed to install node")?;
 

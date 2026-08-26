@@ -16,8 +16,8 @@ use serde::{Deserialize, Deserializer};
 
 pub(crate) use hook::Language;
 pub(crate) use hook::{
-    BuiltinHook, HookOptions, HookType, LocalHook, Manifest, ManifestHook, MetaHook, PassFilenames,
-    RemoteHook, Shell, Stage, Stages,
+    BuiltinHook, HookOptions, HookType, LanguageVersion, LocalHook, Manifest, ManifestHook,
+    MetaHook, PassFilenames, RemoteHook, Shell, Stage, Stages, ToolchainPreference,
 };
 pub(crate) use pattern::{FilePattern, GlobPatterns};
 pub(crate) use priority::{Priority, PriorityAlias, validate_name};
@@ -55,7 +55,7 @@ pub(crate) struct Config {
     /// Default is `[pre-commit]`.
     pub default_install_hook_types: Option<Vec<HookType>>,
     /// A mapping from language to the default `language_version`.
-    pub default_language_version: Option<FxHashMap<Language, String>>,
+    pub default_language_version: Option<FxHashMap<Language, LanguageVersion>>,
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
     pub default_stages: Option<Stages>,
@@ -758,6 +758,40 @@ mod tests {
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn language_version_options_toml() -> Result<()> {
+        let config: Config = toml::from_str(indoc::indoc! {r#"
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "hook"
+            name = "hook"
+            entry = "python -m hook"
+            language = "python"
+            language_version = { request = ">=3.12, <3.13", preference = "only-managed" }
+        "#})
+        .expect("config should parse");
+        let Some(Repo::Local(repo)) = config.repos.first() else {
+            anyhow::bail!("expected local repo");
+        };
+        let Some(language_version) = repo
+            .hooks
+            .first()
+            .and_then(|hook| hook.options.language_version.as_ref())
+        else {
+            anyhow::bail!("expected language version");
+        };
+
+        assert_eq!(language_version.request(), Some(">=3.12, <3.13"));
+        assert_eq!(
+            language_version.preference(),
+            ToolchainPreference::OnlyManaged
+        );
+        assert!(language_version.allows_download());
+        Ok(())
     }
 
     #[test]

@@ -19,6 +19,7 @@ use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -119,24 +120,25 @@ impl GoInstaller {
         &self,
         store: &Store,
         request: &GoRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<GoResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "go").await?;
 
-        if let Ok(go) = self.find_installed(request) {
-            trace!(%go, "Found installed go");
-            return Ok(go);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request).ok(),
+                ToolchainSource::System => self.find_system_go(request).await?,
+            };
+            if let Some(result) = result {
+                trace!(%result, ?source, "Found go");
+                return Ok(result);
+            }
         }
 
-        if let Some(go) = self.find_system_go(request).await? {
-            trace!(%go, "Using system go");
-            return Ok(go);
-        }
-
-        if !allows_download {
-            anyhow::bail!("No suitable system Go version found and downloads are disabled");
+        if !policy.allows_download() {
+            anyhow::bail!("No suitable Go version found for toolchain policy: {policy}");
         }
 
         let resolved_version = self
@@ -274,7 +276,7 @@ impl GoInstaller {
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
-        let go_paths = match which::which_all(&*GO_BINARY_NAME) {
+        let go_paths = match find_system_executables(&*GO_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No go executables found in PATH: {}", e);

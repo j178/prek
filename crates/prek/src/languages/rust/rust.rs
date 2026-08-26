@@ -407,7 +407,7 @@ impl LanguageBackend for Rust {
         let version: &RustRequest = hook.language_request.version();
 
         let rust = installer
-            .install(version, hook.language_request.allows_download())
+            .install(version, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install rust")?;
         let rustc_bin = bin_dir(rust.toolchain());

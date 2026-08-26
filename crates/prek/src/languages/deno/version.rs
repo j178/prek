@@ -34,10 +34,8 @@ impl FromStr for DenoVersion {
     }
 }
 
-/// `language_version` field of deno can be one of the following:
-/// - `default`: Find system installed deno, or download the latest version.
-/// - `system`: Find system installed deno, or error if not found.
-/// - `deno` or `deno@latest`: Same as `default`.
+/// A parsed Deno version request:
+/// - `deno` or `deno@latest`: Accept any version.
 /// - `x.y` or `deno@x.y`: Install the latest version with the same major and minor version.
 /// - `x.y.z` or `deno@x.y.z`: Install the specific version.
 /// - `^x.y.z`: Install the latest version that satisfies the semver requirement.

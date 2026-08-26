@@ -306,6 +306,163 @@ pub(crate) enum Shell {
     Cmd,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, strum::Display)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) enum ToolchainPreference {
+    OnlyManaged,
+    #[default]
+    Managed,
+    System,
+    OnlySystem,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename = "LanguageVersion"))]
+enum LanguageVersionWire {
+    Request(String),
+    Options {
+        /// A language-specific version request. Defaults to `default`.
+        request: Option<String>,
+        /// Which toolchain sources to prefer or require. Defaults to `managed`.
+        preference: Option<ToolchainPreference>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConfiguredVersionRequest {
+    Unspecified,
+    Default,
+    Explicit(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(from = "LanguageVersionWire")]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(with = "LanguageVersionWire")
+)]
+pub(crate) struct LanguageVersion {
+    request: ConfiguredVersionRequest,
+    preference: Option<ToolchainPreference>,
+    allows_download: bool,
+}
+
+impl LanguageVersion {
+    pub(crate) fn request(&self) -> Option<&str> {
+        match &self.request {
+            ConfiguredVersionRequest::Explicit(request) => Some(request),
+            ConfiguredVersionRequest::Unspecified | ConfiguredVersionRequest::Default => None,
+        }
+    }
+
+    pub(crate) fn preference(&self) -> ToolchainPreference {
+        self.preference.unwrap_or_default()
+    }
+
+    pub(crate) fn allows_download(&self) -> bool {
+        self.allows_download && self.preference() != ToolchainPreference::OnlySystem
+    }
+
+    pub(crate) fn update(&mut self, other: &Self) {
+        if other.request != ConfiguredVersionRequest::Unspecified {
+            self.request.clone_from(&other.request);
+            self.allows_download = other.allows_download;
+        }
+        if other.preference.is_some() {
+            self.preference = other.preference;
+        }
+    }
+
+    pub(crate) fn apply_defaults(&mut self, defaults: &Self) {
+        if self.request == ConfiguredVersionRequest::Unspecified {
+            self.request.clone_from(&defaults.request);
+            self.allows_download = defaults.allows_download;
+        }
+        if self.preference.is_none() {
+            self.preference = defaults.preference;
+        }
+    }
+
+    pub(crate) fn is_default(&self) -> bool {
+        self.preference.is_none()
+            && matches!(
+                self.request,
+                ConfiguredVersionRequest::Unspecified | ConfiguredVersionRequest::Default
+            )
+            && self.allows_download
+    }
+}
+
+impl From<String> for LanguageVersion {
+    fn from(request: String) -> Self {
+        Self::from(LanguageVersionWire::Request(request))
+    }
+}
+
+impl From<&str> for LanguageVersion {
+    fn from(request: &str) -> Self {
+        Self::from(request.to_string())
+    }
+}
+
+impl From<LanguageVersionWire> for LanguageVersion {
+    fn from(wire: LanguageVersionWire) -> Self {
+        let (request, preference) = match wire {
+            LanguageVersionWire::Request(request) => (Some(request), None),
+            LanguageVersionWire::Options {
+                request,
+                preference,
+            } => (request, preference),
+        };
+        let (request, allows_download) = match request {
+            Some(request) if request == "default" => (ConfiguredVersionRequest::Default, true),
+            Some(request) if request == "system" => (ConfiguredVersionRequest::Default, false),
+            Some(request) => (ConfiguredVersionRequest::Explicit(request), true),
+            None => (ConfiguredVersionRequest::Unspecified, true),
+        };
+
+        Self {
+            request,
+            preference,
+            allows_download,
+        }
+    }
+}
+
+impl Display for LanguageVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let request = match &self.request {
+            ConfiguredVersionRequest::Unspecified => None,
+            ConfiguredVersionRequest::Default if self.allows_download => Some("default"),
+            ConfiguredVersionRequest::Default => Some("system"),
+            ConfiguredVersionRequest::Explicit(request) => Some(request.as_str()),
+        };
+
+        if self.preference.is_none()
+            && let Some(request) = request
+        {
+            return f.write_str(request);
+        }
+
+        f.write_str("{")?;
+        if let Some(request) = request {
+            write!(f, " request: {request}")?;
+        }
+        if let Some(preference) = self.preference {
+            if request.is_some() {
+                f.write_str(",")?;
+            }
+            write!(f, " preference: {preference}")?;
+        }
+        f.write_str(" }")
+    }
+}
+
 /// Common hook options.
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -343,10 +500,10 @@ pub(crate) struct HookOptions {
     pub pass_filenames: Option<PassFilenames>,
     /// A description of the hook.
     pub description: Option<String>,
-    /// Run the hook on a specific version of the language.
+    /// Select a language version and optionally configure the toolchain source preference.
     /// Default is `default`.
     /// See <https://pre-commit.com/#overriding-language-version>.
-    pub language_version: Option<String>,
+    pub language_version: Option<LanguageVersion>,
     /// Write the output of the hook to a file when the hook fails or verbose is enabled.
     pub log_file: Option<String>,
     /// Run the hook entry through a predefined shell adapter.
@@ -393,7 +550,6 @@ impl HookOptions {
             fail_fast,
             pass_filenames,
             description,
-            language_version,
             log_file,
             shell,
             require_serial,
@@ -401,6 +557,14 @@ impl HookOptions {
             verbose,
             minimum_prek_version,
         );
+
+        if let Some(other_language_version) = &other.language_version {
+            if let Some(language_version) = &mut self.language_version {
+                language_version.update(other_language_version);
+            } else {
+                self.language_version.clone_from(&other.language_version);
+            }
+        }
 
         // Merge environment variables.
         if let Some(other_env) = &other.env {
@@ -439,7 +603,7 @@ struct HookWire {
     fail_fast: Option<bool>,
     pass_filenames: Option<PassFilenames>,
     description: Option<String>,
-    language_version: Option<String>,
+    language_version: Option<LanguageVersion>,
     log_file: Option<String>,
     shell: Option<Shell>,
     require_serial: Option<bool>,
@@ -769,6 +933,132 @@ impl TryFrom<RemoteHook> for BuiltinHook {
 mod tests {
     use super::*;
     use clap::ValueEnum;
+
+    fn parse_language_version(yaml: &str) -> LanguageVersion {
+        serde_saphyr::from_str(yaml).expect("language version should parse")
+    }
+
+    #[test]
+    fn language_version_accepts_request_and_options_forms() {
+        let scalar = parse_language_version("'3.12'\n");
+        assert_eq!(scalar.request(), Some("3.12"));
+        assert_eq!(scalar.preference(), ToolchainPreference::Managed);
+
+        let options =
+            parse_language_version("request: '>=3.12, <3.13'\npreference: only-managed\n");
+        assert_eq!(options.request(), Some(">=3.12, <3.13"));
+        assert_eq!(options.preference(), ToolchainPreference::OnlyManaged);
+
+        let options = parse_language_version("request: '3.13'\n");
+        assert_eq!(options.preference(), ToolchainPreference::Managed);
+    }
+
+    #[test]
+    fn language_version_special_requests_clear_request_and_set_download_option() {
+        for (wire, allows_download) in [
+            ("default", true),
+            ("request: default\n", true),
+            ("system", false),
+            ("request: system\n", false),
+        ] {
+            let language_version = parse_language_version(wire);
+            assert_eq!(
+                language_version.request,
+                ConfiguredVersionRequest::Default,
+                "{wire}"
+            );
+            assert_eq!(language_version.request(), None, "{wire}");
+            assert_eq!(
+                language_version.allows_download(),
+                allows_download,
+                "{wire}"
+            );
+            assert_eq!(language_version.is_default(), allows_download, "{wire}");
+        }
+    }
+
+    #[test]
+    fn language_version_update_merges_fields() {
+        let mut manifest = HookOptions {
+            language_version: Some(LanguageVersion::from("system")),
+            ..Default::default()
+        };
+        let override_options = HookOptions {
+            language_version: Some(parse_language_version("preference: only-managed\n")),
+            ..Default::default()
+        };
+
+        manifest.update(&override_options);
+
+        let language_version = manifest.language_version.as_ref().unwrap();
+        assert_eq!(language_version.request(), None);
+        assert_eq!(
+            language_version.preference(),
+            ToolchainPreference::OnlyManaged
+        );
+        assert!(!language_version.allows_download());
+
+        let mut manifest = HookOptions {
+            language_version: Some(parse_language_version("preference: only-managed\n")),
+            ..Default::default()
+        };
+        let override_options = HookOptions {
+            language_version: Some(LanguageVersion::from("3.13")),
+            ..Default::default()
+        };
+
+        manifest.update(&override_options);
+
+        let language_version = manifest.language_version.as_ref().unwrap();
+        assert_eq!(language_version.request(), Some("3.13"));
+        assert_eq!(
+            language_version.preference(),
+            ToolchainPreference::OnlyManaged
+        );
+        assert!(language_version.allows_download());
+    }
+
+    #[test]
+    fn language_version_special_requests_override_explicit_versions() {
+        for (request, allows_download) in [("default", true), ("system", false)] {
+            let mut manifest = HookOptions {
+                language_version: Some(LanguageVersion::from("3.12")),
+                ..Default::default()
+            };
+            let override_options = HookOptions {
+                language_version: Some(LanguageVersion::from(request)),
+                ..Default::default()
+            };
+
+            manifest.update(&override_options);
+
+            let language_version = manifest.language_version.as_ref().unwrap();
+            assert_eq!(language_version.request(), None, "{request}");
+            assert_eq!(
+                language_version.allows_download(),
+                allows_download,
+                "{request}"
+            );
+        }
+    }
+
+    #[test]
+    fn language_version_defaults_fill_missing_fields() {
+        let defaults = parse_language_version("request: system\npreference: only-managed\n");
+        let mut language_version = parse_language_version("preference: system\n");
+
+        language_version.apply_defaults(&defaults);
+
+        assert_eq!(language_version.request(), None);
+        assert_eq!(language_version.preference(), ToolchainPreference::System);
+        assert!(!language_version.allows_download());
+    }
+
+    #[test]
+    fn language_version_rejects_unknown_option_fields() {
+        let result = serde_saphyr::from_str::<LanguageVersion>("toolchain: system\n");
+        assert!(result.is_err());
+    }
 
     #[test]
     fn stages_deserialize_empty_as_empty() {

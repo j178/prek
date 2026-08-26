@@ -17,6 +17,7 @@ use crate::fs::LockedFile;
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::version::DenoVersion;
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -94,25 +95,25 @@ impl DenoInstaller {
         &self,
         store: &Store,
         request: &DenoRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<DenoResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "deno").await?;
 
-        if let Ok(deno_result) = self.find_installed(request) {
-            trace!(%deno_result, "Found installed deno");
-            return Ok(deno_result);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request).ok(),
+                ToolchainSource::System => self.find_system_deno(request).await?,
+            };
+            if let Some(result) = result {
+                trace!(%result, ?source, "Found deno");
+                return Ok(result);
+            }
         }
 
-        // Find all deno executables in PATH and check their versions
-        if let Some(deno_result) = self.find_system_deno(request).await? {
-            trace!(%deno_result, "Using system deno");
-            return Ok(deno_result);
-        }
-
-        if !allows_download {
-            anyhow::bail!("No suitable system Deno version found and downloads are disabled");
+        if !policy.allows_download() {
+            anyhow::bail!("No suitable Deno version found for toolchain policy: {policy}");
         }
 
         let resolved_version = self.resolve_version(request).await?;
@@ -280,7 +281,7 @@ impl DenoInstaller {
 
     /// Find a suitable system Deno installation that matches the request.
     async fn find_system_deno(&self, deno_request: &DenoRequest) -> Result<Option<DenoResult>> {
-        let deno_paths = match which::which_all(&*DENO_BINARY_NAME) {
+        let deno_paths = match find_system_executables(&*DENO_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No deno executables found in PATH: {}", e);

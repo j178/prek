@@ -1,6 +1,9 @@
+use std::ffi::OsStr;
+use std::fmt::{self, Display};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::config::Language;
+use crate::config::{Language, LanguageVersion, ToolchainPreference};
 use crate::hook::InstallInfo;
 use crate::languages::bun::BunRequest;
 use crate::languages::deno::DenoRequest;
@@ -21,7 +24,60 @@ pub(crate) enum Error {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct LanguageRequest {
     version: VersionRequest,
+    preference: ToolchainPreference,
     allows_download: bool,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum ToolchainSource {
+    Managed,
+    System,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) struct ToolchainPolicy {
+    preference: ToolchainPreference,
+    allows_download: bool,
+}
+
+impl ToolchainPolicy {
+    pub(crate) fn search_order(self) -> &'static [ToolchainSource] {
+        match self.preference {
+            ToolchainPreference::OnlyManaged => &[ToolchainSource::Managed],
+            ToolchainPreference::Managed => &[ToolchainSource::Managed, ToolchainSource::System],
+            ToolchainPreference::System => &[ToolchainSource::System, ToolchainSource::Managed],
+            ToolchainPreference::OnlySystem => &[ToolchainSource::System],
+        }
+    }
+
+    pub(crate) fn allows_download(self) -> bool {
+        self.allows_download
+    }
+}
+
+pub(crate) fn find_system_executables(
+    binary_name: impl AsRef<OsStr>,
+    managed_root: &Path,
+) -> which::Result<Vec<PathBuf>> {
+    let managed_root =
+        dunce::canonicalize(managed_root).unwrap_or_else(|_| managed_root.to_path_buf());
+    Ok(which::which_all(binary_name)?
+        .filter(|path| {
+            let path = dunce::canonicalize(path).unwrap_or_else(|_| path.clone());
+            !path.starts_with(&managed_root)
+        })
+        .collect())
+}
+
+impl Display for ToolchainPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let downloads = if self.allows_download {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        write!(f, "{} (downloads {downloads})", self.preference)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -70,9 +126,11 @@ impl LanguageRequest {
         self.version.is_any()
     }
 
-    /// Returns true if this request allows downloading a version.
-    pub(crate) fn allows_download(&self) -> bool {
-        self.allows_download
+    pub(crate) fn toolchain_policy(&self) -> ToolchainPolicy {
+        ToolchainPolicy {
+            preference: self.preference,
+            allows_download: self.allows_download,
+        }
     }
 
     pub(crate) fn version_request(&self) -> &VersionRequest {
@@ -89,19 +147,27 @@ impl LanguageRequest {
     }
 
     pub(crate) fn parse(lang: Language, request: &str) -> Result<Self, Error> {
-        // `pre-commit` support these values in `language_version`:
-        // - `default`: substituted by language `get_default_version` function
-        //   In `get_default_version`, if a system version is available, it will return `system`.
-        //   For Python, it will find from sys.executable, `pythonX.Y`, or versions `py` can find.
-        //   Otherwise, it will still return `default`.
-        // - `system`: use a locally available version without downloading
-        // - Python version passed down to `virtualenv`, e.g. `python`, `python3`, `python3.8`
-        // - Node.js version passed down to `nodeenv`
-        // - Rust version passed down to `rustup`
+        let language_version = LanguageVersion::from(request);
+        Self::from_config(lang, Some(&language_version))
+    }
+
+    pub(crate) fn from_config(
+        lang: Language,
+        language_version: Option<&LanguageVersion>,
+    ) -> Result<Self, Error> {
+        let (request, preference, allows_download) = match language_version {
+            Some(language_version) => (
+                language_version.request().unwrap_or_default(),
+                language_version.preference(),
+                language_version.allows_download(),
+            ),
+            None => ("", ToolchainPreference::default(), true),
+        };
 
         Ok(Self {
             version: VersionRequest::parse(lang, request)?,
-            allows_download: request != "system",
+            preference,
+            allows_download,
         })
     }
 
@@ -112,11 +178,6 @@ impl LanguageRequest {
 
 impl VersionRequest {
     pub(crate) fn parse(lang: Language, request: &str) -> Result<Self, Error> {
-        let request = match request {
-            "default" | "system" => "",
-            request => request,
-        };
-
         Ok(match lang {
             Language::Bun => Self::Bun(request.parse()?),
             Language::Dotnet => Self::Dotnet(request.parse()?),
@@ -221,8 +282,11 @@ pub(crate) fn try_into_u64_slice(version: &str) -> Result<Vec<u64>, std::num::Pa
 
 #[cfg(test)]
 mod tests {
-    use super::{LanguageRequest, SemverRequest, VersionRequest};
-    use crate::config::Language;
+    use super::{
+        LanguageRequest, SemverRequest, ToolchainSource, VersionRequest, find_system_executables,
+    };
+    use crate::config::{Language, LanguageVersion};
+    use crate::fs::make_executable;
     use crate::languages::python::PythonRequest;
 
     #[test]
@@ -253,5 +317,100 @@ mod tests {
 
         assert!(!exact.matches(&newer));
         assert!(compatible.matches(&newer));
+    }
+
+    #[test]
+    fn structured_preferences_produce_expected_policies() {
+        let cases = [
+            ("only-managed", true, &[ToolchainSource::Managed][..]),
+            (
+                "managed",
+                true,
+                &[ToolchainSource::Managed, ToolchainSource::System][..],
+            ),
+            (
+                "system",
+                true,
+                &[ToolchainSource::System, ToolchainSource::Managed][..],
+            ),
+            ("only-system", false, &[ToolchainSource::System][..]),
+        ];
+
+        for (preference, download, search_order) in cases {
+            let language_version: LanguageVersion =
+                serde_saphyr::from_str(&format!("request: '>=3.12'\npreference: {preference}\n"))
+                    .unwrap();
+            let request =
+                LanguageRequest::from_config(Language::Python, Some(&language_version)).unwrap();
+            let policy = request.toolchain_policy();
+
+            assert_eq!(policy.allows_download(), download, "{preference}");
+            assert_eq!(policy.search_order(), search_order, "{preference}");
+        }
+    }
+
+    #[test]
+    fn legacy_system_request_keeps_managed_first_fallback_without_downloads() {
+        let request = LanguageRequest::parse(Language::Python, "system").unwrap();
+        let policy = request.toolchain_policy();
+
+        assert_eq!(
+            policy.search_order(),
+            &[ToolchainSource::Managed, ToolchainSource::System]
+        );
+        assert!(!policy.allows_download());
+    }
+
+    #[test]
+    fn system_executables_exclude_managed_binaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let managed_root = temp.path().join("managed");
+        let binary = managed_root
+            .join("bin")
+            .join("tool")
+            .with_extension(std::env::consts::EXE_EXTENSION);
+        fs_err::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs_err::write(&binary, "").unwrap();
+        make_executable(&binary).unwrap();
+
+        let executables = find_system_executables(&binary, &managed_root).unwrap();
+
+        assert!(executables.is_empty());
+    }
+
+    #[test]
+    fn system_executables_include_binaries_outside_managed_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let managed_root = temp.path().join("managed");
+        fs_err::create_dir_all(&managed_root).unwrap();
+        let binary = temp
+            .path()
+            .join("system")
+            .join("tool")
+            .with_extension(std::env::consts::EXE_EXTENSION);
+        fs_err::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs_err::write(&binary, "").unwrap();
+        make_executable(&binary).unwrap();
+
+        let executables = find_system_executables(&binary, &managed_root).unwrap();
+
+        assert_eq!(executables, vec![binary]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn system_executables_exclude_symlinks_to_managed_binaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let managed_root = temp.path().join("managed");
+        let binary = managed_root.join("bin/tool");
+        fs_err::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs_err::write(&binary, "").unwrap();
+        make_executable(&binary).unwrap();
+        let link = temp.path().join("tool");
+        std::os::unix::fs::symlink(binary, &link).unwrap();
+
+        let executables = find_system_executables(link, &managed_root).unwrap();
+
+        assert!(executables.is_empty());
     }
 }

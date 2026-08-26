@@ -14,6 +14,7 @@ use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
 use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
 use crate::languages::ruby::RubyRequest;
+use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -196,38 +197,31 @@ impl RubyInstaller {
         &self,
         store: &Store,
         request: &RubyRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<RubyResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
         let _lock = LockedFile::acquire(self.root.join(".lock"), "ruby").await?;
 
-        // 1. Check previously downloaded rubies
-        if let Some(ruby) = self.find_installed(request) {
-            trace!(
-                "Using managed Ruby: {} at {}",
-                ruby.version(),
-                ruby.ruby_bin().display()
-            );
-            return Ok(ruby);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request),
+                ToolchainSource::System => self.find_system_ruby(request).await?,
+            };
+            if let Some(result) = result {
+                trace!(
+                    ?source,
+                    version = %result.version(),
+                    path = %result.ruby_bin().display(),
+                    "Found Ruby"
+                );
+                return Ok(result);
+            }
         }
 
-        // 2. Check system Ruby (PATH + version managers)
-        if let Some(ruby) = self.find_system_ruby(request).await? {
-            trace!(
-                "Using system Ruby: {} at {}",
-                ruby.version(),
-                ruby.ruby_bin().display()
-            );
-            return Ok(ruby);
-        }
-
-        // 3. Download if allowed and platform is supported
-        if !allows_download {
+        if !policy.allows_download() {
             anyhow::bail!(ruby_not_found_error(
                 request,
-                // allows_download can only be false if the original request was
-                // for any version of ruby, but system-only.
-                "Automatic installation is disabled (language_version: system)."
+                &format!("No suitable Ruby was found for toolchain policy: {policy}.")
             ));
         }
 
@@ -407,7 +401,7 @@ impl RubyInstaller {
     /// Find Ruby in the system PATH
     async fn find_system_ruby(&self, request: &RubyRequest) -> Result<Option<RubyResult>> {
         // Try all rubies in PATH first
-        if let Ok(ruby_paths) = which::which_all("ruby") {
+        if let Ok(ruby_paths) = find_system_executables("ruby", &self.root) {
             for ruby_path in ruby_paths {
                 if let Some(result) = try_ruby_path(&ruby_path, request).await {
                     return Ok(Some(result));

@@ -35,7 +35,7 @@ each manifest hook:
 | `fail_fast` | No | No | boolean | Stop the run immediately if this hook fails. |
 | `pass_filenames` | No | No | boolean or positive integer | Control whether, or how many, matching filenames are passed. |
 | `description` | No | No | string | Free-form metadata shown in listings; its first line is also shown with run details. |
-| `language_version` | No | No | string | Language/toolchain version request. |
+| `language_version` | No | No | string or map | Language/toolchain version request and source preference. |
 | `log_file` | No | No | string path | Write hook output to a file when the hook fails or is verbose. |
 | `require_serial` | No | No | boolean | Avoid concurrent invocations of this hook. |
 | `stages` | No | No | list of stage names | Git hook stages where this hook is eligible to run. |
@@ -58,6 +58,10 @@ manifest semantics. For the upstream reference, see:
 
     `pass_filenames: n` with a positive integer is also a `prek` extension.
     Upstream `pre-commit` only accepts a boolean value.
+
+    The `language_version` options map with `request` and `preference` fields is
+    a `prek` extension. Use the string form when a manifest must also work with
+    upstream `pre-commit`.
 
     When `shell` is set, `entry` is treated as shell source. Hook `args` and
     filenames are passed as script arguments, so POSIX shell entries should read

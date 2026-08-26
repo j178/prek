@@ -16,7 +16,9 @@ use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::{LockedFile, is_executable};
 use crate::git;
 use crate::http::{REQWEST_CLIENT, download_artifact};
-use crate::languages::version::SemverRequest;
+use crate::languages::version::{
+    SemverRequest, ToolchainPolicy, ToolchainSource, find_system_executables,
+};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -112,23 +114,24 @@ impl MiseInstaller {
         &self,
         store: &Store,
         request: &SemverRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<MiseResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
         let _lock = LockedFile::acquire(self.root.join(".lock"), "mise").await?;
 
-        if let Some(result) = self.find_installed(request).await {
-            trace!(%result, "Found managed mise");
-            return Ok(result);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request).await,
+                ToolchainSource::System => self.find_system_mise(request).await,
+            };
+            if let Some(result) = result {
+                trace!(%result, ?source, "Found mise");
+                return Ok(result);
+            }
         }
 
-        if let Some(result) = self.find_system_mise(request).await {
-            trace!(%result, "Using system mise");
-            return Ok(result);
-        }
-
-        if !allows_download {
-            anyhow::bail!("No compatible mise executable found and downloads are disabled");
+        if !policy.allows_download() {
+            anyhow::bail!("No compatible mise executable found for toolchain policy: {policy}");
         }
 
         let version = self.resolve_version(request).await?;
@@ -179,7 +182,7 @@ impl MiseInstaller {
     }
 
     async fn find_system_mise(&self, request: &SemverRequest) -> Option<MiseResult> {
-        let paths = match which::which_all(&*MISE_BINARY_NAME) {
+        let paths = match find_system_executables(&*MISE_BINARY_NAME, &self.root) {
             Ok(paths) => paths,
             Err(err) => {
                 debug!(%err, "No mise executable found in PATH");

@@ -35,7 +35,7 @@ impl LanguageBackend for Ruby {
         let request: &RubyRequest = hook.language_request.version();
 
         let ruby = installer
-            .install(store, request, hook.language_request.allows_download())
+            .install(store, request, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install Ruby")?;
 

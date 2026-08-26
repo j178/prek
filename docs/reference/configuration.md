@@ -253,7 +253,7 @@ This is a global default; individual hooks can also set `fail_fast`.
 
 ### `default_language_version`
 
-Map a language name to the default [`language_version`](#language_version) used by hooks of that language.
+Map a language name to the default [`language_version`](#language_version) used by hooks of that language. Each value can be a request string or an options map.
 
 - Type: map
 - Default: none (hooks fall back to `language_version: default`)
@@ -264,7 +264,7 @@ Example:
 
     ```toml
     default_language_version.python = "3.12"
-    default_language_version.node = "20"
+    default_language_version.node = { request = "20", preference = "only-managed" }
     ```
 
 === ".pre-commit-config.yaml"
@@ -272,10 +272,15 @@ Example:
     ```yaml
     default_language_version:
       python: "3.12"
-      node: "20"
+      node:
+        request: "20"
+        preference: only-managed
     ```
 
 `prek` treats [`language_version`](#language_version) as a version request (often a semver-like selector) and may install toolchains automatically. See [Difference from pre-commit](../diff.md).
+
+Defaults are applied field by field. For example, a hook can override only the
+`request` while retaining the default `preference` for its language.
 
 ### `default_stages`
 
@@ -1407,9 +1412,9 @@ verbose run details.
 
 ### `language_version`
 
-Choose the language/toolchain version request for this hook.
+Choose the language/toolchain version request and source preference for this hook.
 
-- Type: string
+- Type: string or map
 - Default: `default`
 
 If not set, `prek` may use [`default_language_version`](#default_language_version) for the hook’s language.
@@ -1422,6 +1427,24 @@ If not set, `prek` may use [`default_language_version`](#default_language_versio
 
     - `default`: use the language’s default resolution logic.
     - `system`: do not download a new toolchain. A compatible toolchain already managed by prek may still be reused, and project metadata can further constrain the required version.
+
+    The map form accepts these fields:
+
+    - `request`: the same version request accepted by the string form. It defaults to `default`.
+    - `preference`: controls which toolchain sources prek searches and in what order. It defaults to `managed`.
+
+    `preference` accepts:
+
+    - `only-managed`: use an existing prek-managed toolchain, or download one.
+    - `managed`: prefer an existing prek-managed toolchain, then search outside prek's managed store, then download one.
+    - `system`: prefer a toolchain outside prek's managed store, then try an existing prek-managed toolchain, then download one.
+    - `only-system`: only search outside prek's managed store and never download a toolchain.
+
+    A “system” toolchain is any toolchain discovered outside prek's managed store,
+    including one installed by an operating-system package manager or version manager.
+
+    The preference affects toolchain selection when a hook environment must be
+    created. It does not affect reuse of an existing compatible hook environment.
 
     Language-specific behavior:
 
@@ -1438,7 +1461,7 @@ If not set, `prek` may use [`default_language_version`](#default_language_versio
         ```toml
         hooks = [
           { id = "ruff", language = "python", language_version = "3.12" },
-          { id = "eslint", language = "node", language_version = "20" },
+          { id = "eslint", language = "node", language_version = { request = "20", preference = "only-managed" } },
           { id = "cargo-fmt", language = "rust", language_version = "stable" },
           { id = "my-tool", language = "system", language_version = "system" },
         ]
@@ -1454,7 +1477,9 @@ If not set, `prek` may use [`default_language_version`](#default_language_versio
 
           - id: eslint
             language: node
-            language_version: "20"
+            language_version:
+              request: "20"
+              preference: only-managed
 
           - id: cargo-fmt
             language: rust

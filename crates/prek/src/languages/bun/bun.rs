@@ -42,7 +42,7 @@ impl LanguageBackend for Bun {
 
         let bun_request: &BunRequest = hook.language_request.version();
         let bun = installer
-            .install(store, bun_request, hook.language_request.allows_download())
+            .install(store, bun_request, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install bun")?;
 

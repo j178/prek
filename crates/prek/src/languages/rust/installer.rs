@@ -11,6 +11,7 @@ use crate::fs::LockedFile;
 use crate::languages::rust::RustRequest;
 use crate::languages::rust::rustup::{Rustup, ToolchainInfo};
 use crate::languages::rust::version::{Channel, RustVersion};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource};
 use crate::process::Cmd;
 
 pub(crate) struct RustResult {
@@ -80,26 +81,25 @@ impl RustInstaller {
     pub(crate) async fn install(
         &self,
         request: &RustRequest,
-        allows_download: bool,
+        policy: ToolchainPolicy,
     ) -> Result<RustResult> {
         let rustup_home = self.rustup.rustup_home();
         fs_err::tokio::create_dir_all(rustup_home).await?;
         let _lock = LockedFile::acquire(rustup_home.join(".lock"), "rustup").await?;
 
-        // Check installed
-        if let Ok(rust) = self.find_installed(request).await {
-            trace!(%rust, "Found installed rust");
-            return Ok(rust);
+        for &source in policy.search_order() {
+            let result = match source {
+                ToolchainSource::Managed => self.find_installed(request).await.ok(),
+                ToolchainSource::System => self.find_system_rust(request).await?,
+            };
+            if let Some(result) = result {
+                trace!(%result, ?source, "Found rust");
+                return Ok(result);
+            }
         }
 
-        // Check system rust
-        if let Some(rust) = self.find_system_rust(request).await? {
-            trace!(%rust, "Using system rust");
-            return Ok(rust);
-        }
-
-        if !allows_download {
-            anyhow::bail!("No suitable system Rust version found and downloads are disabled");
+        if !policy.allows_download() {
+            anyhow::bail!("No suitable Rust version found for toolchain policy: {policy}");
         }
 
         // Install new toolchain

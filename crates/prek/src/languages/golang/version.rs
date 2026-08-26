@@ -34,9 +34,7 @@ impl FromStr for GoVersion {
     }
 }
 
-/// `language_version` field of golang can be one of the following:
-/// `default`
-/// `system`
+/// A parsed Go version request:
 /// `go`
 /// `go1.20` or `1.20`
 /// `go1.20.3` or `1.20.3`
