@@ -20,7 +20,7 @@ pub(crate) use hook::{
     MetaHook, PassFilenames, RemoteHook, Shell, Stage, Stages, ToolchainPreference,
 };
 pub(crate) use pattern::{FilePattern, GlobPatterns};
-pub(crate) use priority::{Priority, PriorityAlias, validate_name};
+pub(crate) use priority::{Priority, PriorityAlias, validate_group_name};
 #[cfg(feature = "schemars")]
 pub(crate) use repo::{BuiltinRepo, LocalRepo, MetaRepo};
 pub(crate) use repo::{RemoteRepo, RemoteRepoKey, Repo};
@@ -408,6 +408,10 @@ mod tests {
             (
                 r#"["ci\tslow"]"#,
                 "group name `ci\tslow` cannot contain whitespace",
+            ),
+            (
+                r#"["@builtin"]"#,
+                "group name `@builtin` uses the reserved `@` prefix",
             ),
         ] {
             let yaml = indoc::formatdoc! {r"

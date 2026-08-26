@@ -679,6 +679,8 @@ pub(crate) struct RunArgs {
     ///
     /// Can be specified multiple times; a hook may match any specified group.
     /// When combined with `--require-group`, both filters must match.
+    /// `@ungrouped` matches hooks without groups, while `@builtin` matches
+    /// hooks from the builtin repository.
     #[arg(long = "group", value_name = "GROUP")]
     pub(crate) groups: Vec<String>,
 
@@ -690,12 +692,14 @@ pub(crate) struct RunArgs {
     ///
     /// For example, `--require-group fast --group format --group lint-only`
     /// selects hooks in `fast` and either `format` or `lint-only`.
+    /// The special selectors `@ungrouped` and `@builtin` are also supported.
     #[arg(long = "require-group", value_name = "GROUP")]
     pub(crate) required_groups: Vec<String>,
 
     /// Do not run hooks belonging to the specified group.
     ///
     /// Can be specified multiple times. Exclusion wins over inclusion.
+    /// The special selectors `@ungrouped` and `@builtin` are also supported.
     #[arg(long = "no-group", value_name = "GROUP")]
     pub(crate) no_groups: Vec<String>,
 }
@@ -782,19 +786,22 @@ pub(crate) struct ListArgs {
 
     /// Show hooks belonging to the specified group.
     ///
-    /// Can be specified multiple times.
+    /// Can be specified multiple times. `@ungrouped` matches hooks without
+    /// groups, while `@builtin` matches hooks from the builtin repository.
     #[arg(long = "group", value_name = "GROUP")]
     pub(crate) groups: Vec<String>,
 
     /// Show hooks belonging to every specified group.
     ///
     /// Can be specified multiple times. Composes with `--group` and `--no-group`.
+    /// The special selectors `@ungrouped` and `@builtin` are also supported.
     #[arg(long = "require-group", value_name = "GROUP")]
     pub(crate) required_groups: Vec<String>,
 
     /// Do not show hooks belonging to the specified group.
     ///
     /// Can be specified multiple times. Exclusion wins over inclusion.
+    /// The special selectors `@ungrouped` and `@builtin` are also supported.
     #[arg(long = "no-group", value_name = "GROUP")]
     pub(crate) no_groups: Vec<String>,
 

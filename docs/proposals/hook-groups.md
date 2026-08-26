@@ -105,6 +105,15 @@ its `groups` contains every required group.
 `--no-group <name>` is an exclude filter. A hook is removed if its `groups`
 contains any excluded group.
 
+Two names are reserved as special selectors:
+
+- `@ungrouped` matches hooks whose effective `groups` list is empty.
+- `@builtin` matches hooks from the `builtin` repository, regardless of their
+  configured groups.
+
+They compose with all three options like ordinary group memberships, but cannot
+be configured in a hook's `groups` list.
+
 The three options compose independently of argument order, and exclusion wins:
 
 1. Select hooks matching `--group`, if any `--group` values were provided.
@@ -129,6 +138,7 @@ prek run --all-files --group lint --group typecheck
 prek run --all-files --require-group lint --require-group fast
 prek run --all-files --no-group format
 prek run --all-files --group ci --require-group lint --no-group slow
+prek run --all-files --group ci --group @ungrouped --group @builtin
 prek run --all-files --group ci --stage pre-push
 ```
 
@@ -265,12 +275,21 @@ Hooks with omitted `groups` or `groups: []` are ungrouped.
 If no group options are passed, ungrouped hooks run as they do today.
 
 If `--group <name>` is passed, ungrouped hooks do not match and are not run.
-This proposal does not add a virtual `ungrouped` group.
+`--group @ungrouped` includes them explicitly.
 
 If `--require-group <name>` is passed, ungrouped hooks also do not match.
 
 If only `--no-group <name>` is passed, ungrouped hooks remain selected, because
 they do not belong to the excluded group.
+
+`@ungrouped` also works with the other filters. `--require-group @ungrouped`
+keeps only ungrouped hooks, while `--no-group @ungrouped` removes them.
+
+### Builtin Hooks
+
+Every hook from a `repo: builtin` entry matches `@builtin`, whether or not it
+has configured groups. `@builtin` does not match `local`, `meta`, or remote
+hooks.
 
 ### Multiple Groups
 
@@ -301,18 +320,20 @@ groups: ["ci", "ci"]
 
 ### Invalid Group Names
 
-Group names should be non-empty strings and must not contain whitespace. Names
-are matched exactly, so implementations should not trim or normalize group
-names before validation.
+Group names should be non-empty strings, must not contain whitespace, and must
+not start with `@`. Names are matched exactly, so implementations should not
+trim or normalize group names before validation. The `@` namespace is reserved
+for special CLI selectors.
 
 Invalid examples:
 
 ```yaml
-groups: ["", "ci slow", " ci", "ci\nslow"]
+groups: ["", "ci slow", " ci", "ci\nslow", "@builtin"]
 ```
 
-No fixed vocabulary should be enforced. In particular, `ci`, `agent`, `slow`,
-`format`, and `lint` are examples, not reserved names.
+Apart from the reserved `@` namespace, no fixed vocabulary should be enforced.
+In particular, `ci`, `agent`, `slow`, `format`, and `lint` are examples, not
+reserved names.
 
 ### Case Sensitivity
 
@@ -422,7 +443,6 @@ This proposal does not add:
 - A scheduler or dependency group. `priority` remains the scheduling mechanism.
 - DAG scheduling or `after` dependencies.
 - `--output-format=grouped`.
-- A virtual `ungrouped` selector.
 - Default-disabled hooks.
 - Environment variables for group selection.
 - `prek install --group`.
@@ -438,6 +458,9 @@ is unchanged.
 Existing `stages` behavior is unchanged for normal `prek run` and installed Git
 hook execution. The only new behavior is explicit group selection mode and the
 ability to intersect that mode with an explicitly requested stage.
+
+Group names beginning with `@` are rejected so special selectors cannot collide
+with configured memberships.
 
 Existing configs that contain an unknown `groups` key currently ignore it. Once
 this proposal is implemented, that key becomes meaningful. This is acceptable

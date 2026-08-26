@@ -710,8 +710,8 @@ pub(crate) struct RemoteHook {
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
-    /// Group names cannot be empty or contain whitespace.
-    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
+    /// Group names cannot be empty, contain whitespace, or start with `@`.
+    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^[^@\s]\S*$"))))]
     pub groups: Option<Vec<String>>,
     #[cfg_attr(feature = "schemars", serde(flatten))]
     pub options: HookOptions,
@@ -752,8 +752,8 @@ pub(crate) struct LocalHook {
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
-    /// Group names cannot be empty or contain whitespace.
-    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^\S+$"))))]
+    /// Group names cannot be empty, contain whitespace, or start with `@`.
+    #[cfg_attr(feature = "schemars", schemars(inner(regex(pattern = r"^[^@\s]\S*$"))))]
     pub groups: Option<Vec<String>>,
     #[cfg_attr(feature = "schemars", serde(flatten))]
     pub options: HookOptions,
@@ -795,7 +795,7 @@ pub(crate) struct MetaHook {
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
-    /// Group names cannot be empty or contain whitespace.
+    /// Group names cannot be empty, contain whitespace, or start with `@`.
     pub groups: Option<Vec<String>>,
     pub options: HookOptions,
 }
@@ -884,7 +884,7 @@ pub(crate) struct BuiltinHook {
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<Priority>,
     /// User-defined hook groups used by `prek run --group` and `--no-group`.
-    /// Group names cannot be empty or contain whitespace.
+    /// Group names cannot be empty, contain whitespace, or start with `@`.
     pub groups: Option<Vec<String>>,
     /// Common hook options.
     ///

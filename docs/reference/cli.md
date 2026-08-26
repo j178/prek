@@ -233,12 +233,12 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--glob"><a href="#prek-run--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
 <p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-run--group"><a href="#prek-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to the specified group.</p>
-<p>Can be specified multiple times; a hook may match any specified group. When combined with <code>--require-group</code>, both filters must match.</p>
+<p>Can be specified multiple times; a hook may match any specified group. When combined with <code>--require-group</code>, both filters must match. <code>@ungrouped</code> matches hooks without groups, while <code>@builtin</code> matches hooks from the builtin repository.</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-run--last-commit"><a href="#prek-run--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
 </dd><dt id="prek-run--log-file"><a href="#prek-run--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-run--no-group"><a href="#prek-run--no-group"><code>--no-group</code></a> <i>group</i></dt><dd><p>Do not run hooks belonging to the specified group.</p>
-<p>Can be specified multiple times. Exclusion wins over inclusion.</p>
+<p>Can be specified multiple times. Exclusion wins over inclusion. The special selectors <code>@ungrouped</code> and <code>@builtin</code> are also supported.</p>
 </dd><dt id="prek-run--no-progress"><a href="#prek-run--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
@@ -246,7 +246,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-run--require-group"><a href="#prek-run--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to every specified group.</p>
 <p>Can be specified multiple times; a hook must match every specified group. When combined with <code>--group</code>, it must also match at least one <code>--group</code>. <code>--no-group</code> excludes matching hooks regardless of argument order.</p>
-<p>For example, <code>--require-group fast --group format --group lint-only</code> selects hooks in <code>fast</code> and either <code>format</code> or <code>lint-only</code>.</p>
+<p>For example, <code>--require-group fast --group format --group lint-only</code> selects hooks in <code>fast</code> and either <code>format</code> or <code>lint-only</code>. The special selectors <code>@ungrouped</code> and <code>@builtin</code> are also supported.</p>
 </dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
@@ -359,7 +359,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-list--config"><a href="#prek-list--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-list--group"><a href="#prek-list--group"><code>--group</code></a> <i>group</i></dt><dd><p>Show hooks belonging to the specified group.</p>
-<p>Can be specified multiple times.</p>
+<p>Can be specified multiple times. <code>@ungrouped</code> matches hooks without groups, while <code>@builtin</code> matches hooks from the builtin repository.</p>
 </dd><dt id="prek-list--help"><a href="#prek-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-list--hook-stage"><a href="#prek-list--hook-stage"><code>--hook-stage</code></a> <i>hook-stage</i></dt><dd><p>Show only hooks that has the specified stage</p>
 <p>Possible values:</p>
@@ -405,7 +405,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>system</code></li>
 </ul></dd><dt id="prek-list--log-file"><a href="#prek-list--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-list--no-group"><a href="#prek-list--no-group"><code>--no-group</code></a> <i>group</i></dt><dd><p>Do not show hooks belonging to the specified group.</p>
-<p>Can be specified multiple times. Exclusion wins over inclusion.</p>
+<p>Can be specified multiple times. Exclusion wins over inclusion. The special selectors <code>@ungrouped</code> and <code>@builtin</code> are also supported.</p>
 </dd><dt id="prek-list--no-progress"><a href="#prek-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-list--output-format"><a href="#prek-list--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format</p>
@@ -417,7 +417,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-list--refresh"><a href="#prek-list--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-list--require-group"><a href="#prek-list--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Show hooks belonging to every specified group.</p>
-<p>Can be specified multiple times. Composes with <code>--group</code> and <code>--no-group</code>.</p>
+<p>Can be specified multiple times. Composes with <code>--group</code> and <code>--no-group</code>. The special selectors <code>@ungrouped</code> and <code>@builtin</code> are also supported.</p>
 </dd><dt id="prek-list--skip"><a href="#prek-list--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
