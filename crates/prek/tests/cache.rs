@@ -49,10 +49,14 @@ fn cache_gc_verbose_shows_removed_entries() {
     home.child("hooks/hook-env-dead/.prek-hook.json")
         .write_str(
             &serde_json::to_string_pretty(&json!({
+                "schema_version": 1,
                 "language": "python",
                 "language_version": "3.12.0",
+                "repo": {
+                    "url": "https://example.com/repo",
+                    "rev": "v1.0.0",
+                },
                 "dependencies": [
-                    "https://example.com/repo@v1.0.0",
                     "dep1",
                     "dep2",
                     "dep3",
@@ -100,63 +104,6 @@ fn cache_gc_verbose_shows_removed_entries() {
 
     ----- stderr -----
     ");
-}
-
-#[test]
-fn cache_gc_removes_legacy_hook_env_when_config_matches() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: local-python
-                name: Local Python Hook
-                entry: "python -c \"print(1)\""
-                language: python
-    "#});
-
-    let home = context.home_dir();
-    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
-    write_config_tracking_file(home, &[config_path.path()])?;
-    let legacy_env = home.child("hooks/python-legacy");
-    let current_env = home.child("hooks/python-current");
-    legacy_env.create_dir_all()?;
-    current_env.create_dir_all()?;
-
-    legacy_env
-        .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&json!({
-            "language": "python",
-            "language_version": "3.12.0",
-            "dependencies": [],
-            "env_path": legacy_env.path(),
-            "toolchain": "/usr/bin/python3",
-            "extra": {},
-        }))?)?;
-    current_env
-        .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&json!({
-            "schema_version": 1,
-            "language": "python",
-            "language_version": "3.12.0",
-            "dependencies": [],
-            "env_path": current_env.path(),
-            "toolchain": "/usr/bin/python3",
-            "extra": {},
-        }))?)?;
-
-    cmd_snapshot!(context, context.command().args(["cache", "gc"]), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Removed 1 hook env ([SIZE])
-
-    ----- stderr -----
-    ");
-
-    legacy_env.assert(predicates::path::missing());
-    current_env.assert(predicates::path::is_dir());
-
-    Ok(())
 }
 
 #[test]

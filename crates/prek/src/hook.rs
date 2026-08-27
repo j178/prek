@@ -688,7 +688,6 @@ impl InstalledHook {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct InstallInfo {
-    #[serde(default)]
     schema_version: u8,
     pub(crate) language: Language,
     pub(crate) language_version: semver::Version,
@@ -760,10 +759,6 @@ impl InstallInfo {
 
     pub(crate) fn is_current_schema(&self) -> bool {
         self.schema_version == INSTALL_INFO_SCHEMA_VERSION
-    }
-
-    pub(crate) fn schema_version(&self) -> u8 {
-        self.schema_version
     }
 
     pub(crate) fn repo(&self) -> Option<RepoIdentityRef<'_>> {
@@ -1253,7 +1248,7 @@ mod tests {
         let hooks_dir = temp.path().join("hooks");
         fs_err::create_dir(&hooks_dir)?;
         let install_info = InstallInfo::new(&hook, &hooks_dir)?;
-        assert_eq!(install_info.schema_version(), INSTALL_INFO_SCHEMA_VERSION);
+        assert!(install_info.is_current_schema());
         assert_eq!(install_info.repo(), Some(repo_identity));
         assert_eq!(install_info.dependencies, additional_dependencies);
         assert!(requirement.is_satisfied_by(&install_info));
@@ -1271,27 +1266,18 @@ mod tests {
     }
 
     #[test]
-    fn legacy_install_info_does_not_satisfy_current_requirement() -> Result<()> {
-        let install_info: InstallInfo = serde_json::from_value(json!({
+    fn install_info_requires_schema_version() {
+        let err = serde_json::from_value::<InstallInfo>(json!({
             "language": "python",
             "language_version": "3.12.0",
             "dependencies": ["dep"],
             "env_path": "/tmp/legacy-env",
             "toolchain": "/usr/bin/python3",
             "extra": {},
-        }))?;
-        let dependencies = vec!["dep".to_string()];
-        let language_request = LanguageRequest::parse(Language::Python, "")?;
-        let requirement = HookEnvRequirementRef {
-            language: Language::Python,
-            repo: None,
-            dependencies: &dependencies,
-            language_request: &language_request,
-        };
+        }))
+        .unwrap_err();
 
-        assert_eq!(install_info.schema_version(), 0);
-        assert!(!requirement.is_satisfied_by(&install_info));
-        Ok(())
+        assert_eq!(err.to_string(), "missing field `schema_version`");
     }
 
     #[test]
