@@ -59,7 +59,6 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 #### Notes
 
-- `check-yaml` fast path does not yet support the `--unsafe` flag; for those cases, the automatic fast path is skipped.
 - `pretty-format-json` is currently available only via `repo: builtin` while parity coverage against upstream Python behavior is still being expanded.
 - Other hooks from the repository which have no fast path implementation will run via the standard method.
 
@@ -418,11 +417,8 @@ Attempts to load all YAML files to verify syntax.
 
 - `-m`, `--allow-multiple-documents` (alias: `--multi`)
     - Allow YAML multi-document syntax (`---`).
-
-**Caveats / differences**
-
-- `--unsafe` is not supported.
-    - With `repo: builtin`, passing `--unsafe` is treated as an unknown argument.
+- `--unsafe`
+    - Parse YAML syntax without loading it. Implies `--allow-multiple-documents`.
 
 ---
 
