@@ -1,26 +1,28 @@
 # Compatibility with pre-commit
 
-`prek` aims to be a practical drop-in replacement for `pre-commit` for existing repositories, hook configs, and day-to-day workflows.
+`prek` is a practical drop-in replacement for `pre-commit`, with support for its repositories, configuration files, hooks, and command-line workflows.
 
 ## What works unchanged
 
 - Existing `.pre-commit-config.yaml` and `.pre-commit-config.yml` files work in `prek`. See [Configuration](configuration.md).
-- Most common `pre-commit` workflows keep working, including the usual hook repositories and manifests.
-- Several upstream command spellings are still accepted as compatibility aliases, so existing scripts do not need to be rewritten immediately.
+- Existing hook repositories and `.pre-commit-hooks.yaml` manifests work in `prek`.
+- The main user-facing subcommands keep their upstream names: `install`, `run`, `sample-config`, `try-repo`, `uninstall`, `validate-config`, and `validate-manifest`.
 
-## Preferred command and flag spellings
+## Command compatibility
 
-`prek` keeps compatibility aliases for the commands below, but the preferred spellings use the current CLI layout.
+For a smaller and more consistent command tree, `prek` hides some compatibility spellings from `prek --help` and groups some operations under `cache` or `util`. Hidden commands are still callable; hiding only keeps them out of the help output.
 
-| Compatibility spelling | Preferred `prek` spelling |
-| -- | -- |
-| `prek install-hooks` | `prek prepare-hooks` |
-| `prek install --install-hooks` | `prek install --prepare-hooks` |
-| `prek autoupdate` | `prek update` |
-| `prek gc` | `prek cache gc` |
-| `prek clean` | `prek cache clean` |
-| `prek init-templatedir` | `prek util init-template-dir` |
-| `pre-commit migrate-config` | Not provided directly; use `prek util yaml-to-toml` to migrate YAML to `prek.toml` |
+| `pre-commit` spelling | Preferred `prek` spelling | Availability in `prek` |
+| -- | -- | -- |
+| `pre-commit install-hooks` | `prek prepare-hooks` | `prek install-hooks` remains available as a hidden alias. |
+| `pre-commit install --install-hooks` | `prek install --prepare-hooks` | `--install-hooks` remains available as a hidden alias. |
+| `pre-commit autoupdate` | `prek update` | `prek autoupdate` remains available as a hidden alias. |
+| `pre-commit gc` | `prek cache gc` | `prek gc` remains available but is hidden. |
+| `pre-commit clean` | `prek cache clean` | `prek clean` remains available but is hidden. |
+| `pre-commit init-templatedir` | `prek util init-template-dir` | `prek init-templatedir` remains available but is hidden. |
+| `pre-commit migrate-config` | `prek util yaml-to-toml` | Configuration migration lives under `prek util` and targets the native `prek.toml` format. |
+| `pre-commit help <command>` | `prek <command> --help` | Help uses the standard `--help` flag instead of a separate subcommand. |
+| `pre-commit hook-impl` | `prek hook-impl` | Available but hidden because installed Git hooks invoke it internally. |
 
 ## Why the CLI is reorganized
 
@@ -30,7 +32,7 @@
 - helper and migration commands live under `prek util`
 - `prepare-hooks` describes what the command actually does more clearly than `install-hooks`
 
-That improves discoverability without dropping compatibility, because the older spellings remain available.
+This organization keeps the primary help output focused without removing the underlying functionality or compatibility entry points.
 
 ## Not implemented
 
