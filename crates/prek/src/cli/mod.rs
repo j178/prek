@@ -1264,6 +1264,17 @@ mod _gen {
         let mut parents = Vec::new();
 
         output.push_str("# CLI Reference\n\n");
+        output.push_str(concat!(
+            "Running `prek` without a subcommand is equivalent to running `prek run`.\n\n",
+            "## Exit status\n\n",
+            "| Code | Meaning |\n",
+            "| -- | -- |\n",
+            "| `0` | The command succeeded. |\n",
+            "| `1` | A hook, validation, or other expected user-level check failed. |\n",
+            "| `2` | Command-line input, configuration, or an operational error prevented the command from completing. |\n",
+            "| `130` | The command was interrupted. |\n\n",
+            "`prek exec` propagates the exit code of the external command it runs.\n\n",
+        ));
         generate_command(&mut output, &cmd, &mut parents);
 
         let mut output = output.replace("\r\n", "\n");

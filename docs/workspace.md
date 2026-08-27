@@ -6,27 +6,29 @@
 
 A **workspace** is a directory structure that contains:
 
-- A root `.pre-commit-config.yaml` file
-- Zero or more nested `.pre-commit-config.yaml` files in subdirectories
+- A root config file
+- Zero or more nested config files in subdirectories
 
-Each directory containing a `.pre-commit-config.yaml` file is considered a **project**. Projects can be nested infinitely deep.
+Each directory containing `prek.toml`, `.pre-commit-config.yaml`, or
+`.pre-commit-config.yml` is considered a **project**. Projects can be nested to
+any depth.
 
 ## Discovery
 
 When you run `prek run` without the `--config` option, `prek` automatically discovers the workspace:
 
-1. **Find workspace root**: Starting from the current working directory, `prek` walks up the directory tree until it finds a `.pre-commit-config.yaml` file. This becomes the workspace root.
+1. **Find workspace root**: Starting from the current working directory, `prek` walks up the directory tree until it finds a recognized config file. This becomes the workspace root.
 
-2. **Discover all projects**: From the workspace root, `prek` recursively searches all subdirectories for additional `.pre-commit-config.yaml` files. Each one becomes a separate project.
+2. **Discover all projects**: From the workspace root, `prek` recursively searches all subdirectories for additional recognized config files. Each one becomes a separate project.
 
-3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
+3. **Git repository boundary**: The upward search never goes above the Git repository root, so it cannot include unrelated parent directories.
 
 !!! note
 
     **Workspace root**
 
     - The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
-    - The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
+    - The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first recognized config file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
 
     **Discovery exclusions**
 
@@ -48,23 +50,23 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 ```text
 my-monorepo/
-├── .pre-commit-config.yaml          # Workspace root config
+├── prek.toml                        # Workspace root config
 ├── .git/
 ├── docs/
 │   └── .pre-commit-config.yaml      # Nested project
 ├── src/
-│   ├── .pre-commit-config.yaml      # Nested project
+│   ├── prek.toml                    # Nested project
 │   └── backend/
 │       └── .pre-commit-config.yaml  # Deeply nested project
 └── frontend/
-    └── .pre-commit-config.yaml      # Nested project
+    └── .pre-commit-config.yml       # Nested project
 ```
 
 In this example:
 
 - `my-monorepo/` is the workspace root
 - `docs/`, `src/`, `src/backend/`, and `frontend/` are individual projects
-- Each project has its own `.pre-commit-config.yaml` file
+- Each project has one recognized config file
 
 ## Execution Model
 
@@ -72,15 +74,18 @@ In this example:
 
 When running in workspace mode:
 
-1. **Collect all files**: `prek` collects all files within the workspace root directory
-2. **Apply global filters**: Files are filtered based on include/exclude patterns from the workspace root config
-3. **Distribute to projects**: Each project receives a subset of files based on its location
+1. **Collect candidate files**: `prek` starts with the files selected by the run mode, such as staged files, `--all-files`, or an explicit `--files` list.
+2. **Scope files by project**: Each project receives candidate files under its own directory tree.
+3. **Apply project filters**: Each project applies its own top-level and hook-level `files`, `exclude`, and type filters independently.
 
 #### File Visibility Constraints
 
 **Important**: Each project can only see and process files within its own directory tree. This is a fundamental design principle of workspace mode that ensures proper isolation between projects.
 
-A hook defined in `frontend/.pre-commit-config.yaml` can only match files under the `frontend/` directory—it cannot reference files from sibling directories like `backend/`. If hooks need to reference files across multiple projects, move the hook configuration to a common ancestor directory (e.g., the workspace root).
+A hook defined by the `frontend` project can only match files under the
+`frontend/` directory. It cannot match files from sibling directories such as
+`backend/`. If hooks need to receive files across multiple projects, define
+them in a config at a common ancestor, such as the workspace root.
 
 ### Hook Execution
 
@@ -95,12 +100,12 @@ For each project:
 Projects are executed from **deepest to shallowest**:
 
 1. `src/backend/` (deepest)
-2. `src/`
-3. `docs/`
-4. `frontend/`
-5. `./` (root, last)
+2. `src/`, `docs/`, and `frontend/` (same depth; they may run concurrently)
+3. `./` (root, last)
 
-This ensures that more specific configurations (deeper projects) take precedence over general ones.
+This gives deeper projects a predictable chance to run before their ancestors.
+It does not make a child config override its parent: unless the child is an
+orphan, both projects can process files below the child directory.
 
 Projects at the same depth can run concurrently because the file sets passed to their hooks do not overlap. Concurrency is still bounded by `PREK_CONCURRENT_HOOKS`.
 
@@ -161,9 +166,11 @@ $ prek run
 
 Notice how:
 
-- Files in `src/backend/` are processed by both the `src/backend/` project and the `src/` project
+- Files in `src/backend/` are eligible for hooks from `src/backend/`, `src/`,
+  and the workspace root; each project still applies its own filters
 - Each project runs in its own working directory
-- The workspace root processes all files in the entire workspace
+- The workspace root receives candidate files from the entire workspace, then
+  applies its own config and hook filters
 - Projects are executed from deepest to shallowest as described in the execution order
 
 #### Orphan Projects and Selectors
@@ -295,7 +302,7 @@ prek run --skip black --skip markdownlint
 
 ```bash
 # Skip 'frontend' and 'tests' projects
-PREK_SKIP=frontend/,tests prek run
+PREK_SKIP=frontend/,tests/ prek run
 
 # Skip 'frontend/docs' project and 'src/backend:lint' hook
 SKIP=frontend/docs,src/backend:lint prek run
@@ -306,8 +313,8 @@ Precedence rules for `--skip` command line options and environment variables are
 ### Advanced Examples
 
 ```bash
-# Run 'lint' hooks from all projects except 'tests'
-prek run lint --skip tests
+# Run 'lint' hooks from all projects except the 'tests' project
+prek run lint --skip tests/
 
 # Run all hooks from 'src' and 'docs' but skip 'src/legacy'
 prek run src/ docs/ --skip src/legacy
@@ -324,7 +331,7 @@ In single config mode:
 
 - **No workspace discovery**: Only the explicitly specified configuration file is used
 - **Single execution context**: All hooks run from the git repository root directory
-- **Global file scope**: All files in the git repository are passed to all hooks
+- **Repository candidate scope**: Candidate files come from the Git repository, then normal config and hook filters are applied
 - **No project isolation**: Hooks don't have access to project-specific working directories
 
 ### Usage Examples
@@ -344,10 +351,10 @@ prek run -c docs/.pre-commit-config.yaml
 
 | Feature | Workspace Mode | Single Config Mode |
 | -- | -- | -- |
-| **Discovery** | Auto-discovers all `.pre-commit-config.yaml` files | Uses single specified config file |
-| **Working Directory** | Uses workspace root | Uses git repository root |
-| **File Scope** | All files in workspace | All files in git repo |
-| **Hook Scope** | Project-specific file filtering | All files pass to all hooks |
+| **Discovery** | Auto-discovers all recognized config files | Uses one specified config file |
+| **Working Directory** | Uses each project's directory | Uses the Git repository root |
+| **File Scope** | Candidate files below each project | Candidate files in the Git repository |
+| **Hook Scope** | Each project applies its own filters | The selected config applies its filters |
 | **Execution Context** | Each project runs in its own directory | All hooks run from git root |
 | **Configuration** | Multiple configs | Single config file only |
 
@@ -355,8 +362,8 @@ prek run -c docs/.pre-commit-config.yaml
 
 To migrate an existing single-config setup to workspace mode:
 
-1. **Create workspace root**: Move existing `.pre-commit-config.yaml` to repository root
-2. **Add project configs**: Create `.pre-commit-config.yaml` in subdirectories as needed
+1. **Create workspace root**: Put an existing config file at the repository root
+2. **Add project configs**: Create one recognized config file in each subdirectory that needs its own project
 3. **Update file patterns**: Adjust `files`/`exclude` patterns to be project-relative
 4. **Test execution**: Verify hooks run in correct directories with correct file sets
 
@@ -365,8 +372,8 @@ To migrate an existing single-config setup to workspace mode:
 To improve performance in large monorepos, `prek` introduces a workspace cache mechanism. The workspace cache stores the results of project discovery, so repeated runs are much faster.
 
 - The cache is automatically used by default. You don't need to do anything for it to work.
-- If you make changes to `.pre-commit-config.yaml` files, remove projects, or otherwise change the workspace structure, `prek` will usually detect this and refresh the cache automatically.
-- If you add a new `.pre-commit-config.yaml` to your workspace, `prek` may not detect it immediately, try running with `--refresh` to ensure the cache is up to date.
+- If you change config files, remove projects, or otherwise change the workspace structure, `prek` will usually detect this and refresh the cache automatically.
+- If you add a new config file to your workspace, `prek` may not detect it immediately. Run with `--refresh` to ensure the cache is up to date.
 
 ```bash
 prek run --refresh

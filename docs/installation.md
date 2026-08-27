@@ -2,6 +2,10 @@
 
 prek provides multiple installation methods to suit different needs and environments.
 
+Git is required. Prebuilt releases are available for macOS, Linux, and Windows
+across the architectures listed on the
+[GitHub Releases](https://github.com/j178/prek/releases) page.
+
 ## Standalone Installer
 
 The standalone installer automatically downloads and installs the correct binary for your platform:
@@ -99,9 +103,37 @@ See the guide on [using prek in Docker](integrations.md#docker) for more details
 
 --8<-- "README.md:cargo-install"
 
-## prek skill for agents
+## Verify the installation
 
---8<-- "README.md:gh-skill-install"
+For a global installation, confirm that `prek` is available on your `PATH`:
+
+```bash
+prek --version
+```
+
+If you added prek as a project dependency, run it through that package manager:
+
+=== "uv project dependency"
+
+    ```bash
+    uv run prek --version
+    ```
+
+=== "uvx one-off"
+
+    ```bash
+    uvx prek --version
+    ```
+
+=== "npm project dependency"
+
+    ```bash
+    npm exec -- prek --version
+    ```
+
+The rest of this documentation uses the shorter `prek` form. Substitute
+`uv run prek`, `uvx prek`, or `npm exec -- prek` when you intentionally avoid a
+global installation.
 
 ## Updating
 

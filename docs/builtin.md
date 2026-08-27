@@ -7,19 +7,35 @@ Built-in hooks come into play in two ways:
 1. **Automatic Fast Path**: Automatically replacing execution for known remote repositories.
 2. **Explicit Builtin Repository**: Using `repo: builtin` for offline, zero-setup hooks.
 
+|  | Automatic fast path | `repo: builtin` |
+| -- | -- | -- |
+| Config remains usable by upstream `pre-commit` | Yes | No |
+| Remote repository and manifest | Cloned at the pinned `rev` | Not used |
+| Environment available for fallback | Yes | Not needed |
+| Network needed for first preparation | Yes | No |
+| How to opt out | Set the hook's declared language or `PREK_NO_FAST_PATH=1` | Replace `repo: builtin` with a remote or local hook |
+
+!!! note "Check implementation notes when behavior matters"
+
+    The Rust implementations target the same purpose as their upstream hooks,
+    but a hook can have documented differences in arguments, defaults, or edge
+    cases. Check its entry in the [Hook Reference](#hook-reference). To compare
+    behavior, disable the fast path and run the pinned implementation.
+
 ## 1. Automatic Fast Path
 
 When you use a standard configuration pointing to a supported repository (like `https://github.com/pre-commit/pre-commit-hooks`), `prek` automatically detects this and runs its internal Rust implementation instead of the Python version defined in the repository.
 
 The fast path is activated when the `repo` URL matches `https://github.com/pre-commit/pre-commit-hooks`. No need to change anything in your configuration.
-Note that the `rev` field is ignored for detection purposes.
+The `rev` field does not affect fast-path detection. It still selects the
+manifest that prek reads and the repository implementation used for fallback.
 
 This provides a speed boost while keeping your configuration compatible with the original `pre-commit` tool.
 
 ```yaml
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks  # Enables fast path
-    rev: v4.5.0  # This is ignored for fast path detection
+    rev: v4.5.0  # Used for the manifest and fallback, not fast-path detection
     hooks:
       - id: trailing-whitespace
 ```
@@ -96,12 +112,31 @@ This mode has significant benefits:
 
 **Note**: Configurations using `repo: builtin` are **not compatible** with the standard `pre-commit` tool.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: trailing-whitespace
-      - id: check-added-large-files
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "trailing-whitespace" },
+      { id = "check-added-large-files" },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: trailing-whitespace
+          - id: check-added-large-files
+    ```
+
+List the builtins bundled with your installed prek version using:
+
+```bash
+prek util list-builtins -v
 ```
 
 ### Supported Hooks

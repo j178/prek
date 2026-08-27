@@ -7,6 +7,22 @@ Short recipes for setup patterns that go beyond the default project-local workfl
 Git 2.54 introduced [config-based hooks](https://github.blog/open-source/git/highlights-from-git-2-54/#h-config-based-hooks), which let Git run hooks from config instead of hook scripts.
 This is useful when you want a personal `prek` hook that works across repositories.
 
+!!! warning "Only enable discovery for repositories you trust"
+
+    The discovery form below reads the current repository's config and executes
+    its hooks during Git operations. A repository can therefore cause
+    project-controlled code to run with your user permissions. Use this pattern
+    only for trusted repositories. For broader use, point the hook at a fixed
+    config that you control and review the [Security Guide](security.md).
+
+Confirm that your Git version supports config-based hooks:
+
+```bash
+git --version
+```
+
+The version must be 2.54 or newer.
+
 Choose the Git hook event you want to run on, for example `pre-commit`, then register a global config-based hook:
 
 === "git config command"
@@ -60,3 +76,23 @@ Then point the global Git hook at that config:
 git config --global hook.gitleaks.event pre-commit
 git config --global hook.gitleaks.command 'prek hook-impl --hook-type pre-commit --config ~/.config/prek/global-hooks.toml --'
 ```
+
+### Remove a global config-based hook
+
+Remove both keys for the friendly name you registered. For the first example on
+this page, run:
+
+```bash
+git config --global --unset-all hook.prek-pre-commit.event
+git config --global --unset-all hook.prek-pre-commit.command
+```
+
+For a different friendly name, replace `prek-pre-commit` in both commands. This
+changes the global Git configuration; it does not remove project-local hook
+scripts installed by `prek install`.
+
+## More recipes
+
+- [Run an existing project linter or formatter](local-hooks.md)
+- [Run hooks in continuous integration](ci.md)
+- [Migrate while preserving an existing Git hook](migration.md#keep-the-existing-hook-during-rollout)

@@ -1,7 +1,24 @@
 # Authoring Hooks
 
 This page is for hook authors who publish a repository consumed by end users.
-If you only need to configure hooks in your own project, see [Configuration](configuration.md).
+If you only need to configure hooks in your own project, see
+[Run Existing Project Commands](local-hooks.md).
+
+A minimal hook repository has a manifest at its root plus the source and
+packaging files required by its language. For example, a Python hook might use:
+
+```text
+my-hook/
+├── .pre-commit-hooks.yaml
+├── pyproject.toml
+└── src/
+    └── my_hook/
+        └── __init__.py
+```
+
+The exact packaging files vary by language. The manifest tells consumers which
+installed command to run; the language backend determines how the repository is
+installed.
 
 ## Manifest file: `.pre-commit-hooks.yaml`
 
@@ -90,6 +107,12 @@ Example:
   types: [shell]
 ```
 
+Prefer entries that invoke an executable directly. Do not assume a shell is
+present or that POSIX paths work on Windows unless the hook explicitly declares
+that platform requirement. The [Language Support](languages.md) and
+[Hook Entry Resolution](internals.md#hook-entry-resolution) pages describe the
+runtime and working-directory contracts.
+
 ## Choosing hook stages
 
 Hook authors can declare which Git hook stages they support with `stages` in
@@ -136,6 +159,11 @@ Invocation shape:
 my-hook --max-line-length=120 path/to/file1 path/to/file2
 ```
 
+Hook processes also receive stage-specific `PRE_COMMIT_*` variables. See
+[Variables exposed to hooks](reference/environment-variables.md#variables-exposed-to-hooks)
+for the values available during `pre-push`, commit-message, rebase, checkout,
+and rewrite stages.
+
 ## Versioning for `prek update`
 
 End users pin your repository using the `rev` field in their config. To make
@@ -174,3 +202,7 @@ prek validate-manifest .pre-commit-hooks.yaml
 ```
 
 This ensures the manifest is well-formed before publishing a release tag.
+
+Run that command in CI, then exercise the hook against a small fixture
+repository or with `prek try-repo`. See [Continuous Integration](ci.md) for the
+general CI setup.
