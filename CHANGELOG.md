@@ -1,5 +1,83 @@
 # Changelog
 
+## 0.5.0
+
+Released on 2026-08-27.
+
+### Highlights
+
+#### Choose where hook toolchains come from
+
+`language_version` now accepts a source `preference` alongside the version
+`request`, letting you control where prek looks for a compatible toolchain when
+it creates a hook environment. Use `managed` (the default) or `system` to choose
+which source prek tries first while still allowing fallback and downloads. Use
+`only-managed` or `only-system` to require one source.
+
+For example, this local Ruff hook requires a Python 3.12 toolchain managed by
+prek:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        language: python
+        entry: ruff check
+        additional_dependencies: [ruff]
+        language_version:
+          request: "3.12"
+          preference: only-managed
+```
+
+With `only-managed`, prek reuses a compatible toolchain from its managed store
+or downloads one when needed. It never falls back to Python from `PATH`, an OS
+package manager, or a version manager, so toolchain selection does not depend on
+the developer or CI machine's external environment.
+
+Existing scalar values such as `language_version: "3.12"` continue to work. See
+[toolchain management and `language_version`](https://prek.j178.dev/0.5.0/languages/#toolchain-management-and-language_version)
+for the full source-selection behavior. ([#2613](https://github.com/j178/prek/pull/2613))
+
+### Breaking changes
+
+The breaking changes in this release are mostly small cleanups, and most users should not be affected.
+
+- Group names can no longer start with `@`. This prefix is now reserved for special group selectors such as the new `@ungrouped` selector. ([#2617](https://github.com/j178/prek/pull/2617))
+- `PREK_MAX_CONCURRENCY` has been removed. Use `PREK_CONCURRENT_HOOKS` and `PREK_CONCURRENT_BATCHES` to control hook and per-hook batch concurrency separately. ([#2620](https://github.com/j178/prek/pull/2620))
+- The top-level `prek init-template-dir` command has been removed. Use `prek util init-template-dir`, or `prek init-templatedir` for drop-in compatibility with `pre-commit`. ([#2623](https://github.com/j178/prek/pull/2623))
+- `prek auto-update` has been removed. Use `prek update`, or `prek autoupdate` for drop-in compatibility with `pre-commit`. ([#2619](https://github.com/j178/prek/pull/2619))
+
+### Enhancements
+
+- Add configurable toolchain source preferences ([#2613](https://github.com/j178/prek/pull/2613))
+- Allow explicit `language: python` to opt out of fast-path hooks ([#2608](https://github.com/j178/prek/pull/2608))
+- Group `run` and `update` options in CLI help ([#2629](https://github.com/j178/prek/pull/2629))
+- Preserve terminal theme contrast for status labels ([#2592](https://github.com/j178/prek/pull/2592))
+- Add `@ungrouped` group selector ([#2617](https://github.com/j178/prek/pull/2617))
+- Retry uv installation with static musl binary ([#2600](https://github.com/j178/prek/pull/2600))
+- Support `{hook_repo}` placeholder in hook `entry` ([#2602](https://github.com/j178/prek/pull/2602))
+
+### Bug fixes
+
+- Expose the git work tree to hooks running outside the git root ([#2579](https://github.com/j178/prek/pull/2579))
+- Isolate local hook environment installation ([#2615](https://github.com/j178/prek/pull/2615))
+- Preserve hook config deserialization error locations ([#2573](https://github.com/j178/prek/pull/2573))
+- Resolve hook log files from their config directory ([#2580](https://github.com/j178/prek/pull/2580))
+- Track explicit config paths as absolute paths ([#2574](https://github.com/j178/prek/pull/2574))
+
+### Documentation
+
+- Document prek run architecture ([#2630](https://github.com/j178/prek/pull/2630))
+- Publish versioned documentation ([#2626](https://github.com/j178/prek/pull/2626))
+
+### Contributors
+
+- @jeromeheissler
+- @gurgeous
+- @j178
+
 ## 0.4.14
 
 Released on 2026-08-17.
