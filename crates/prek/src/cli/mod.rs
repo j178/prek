@@ -493,6 +493,7 @@ pub(crate) struct RunExtraArgs {
 }
 
 #[derive(Debug, Clone, Default, Args)]
+#[command(next_help_heading = "File selection")]
 pub(crate) struct FileSelectionArgs {
     /// Run hooks on all tracked files in the repository.
     #[arg(short, long, conflicts_with_all = ["files", "glob", "from_ref", "to_ref"])]
@@ -600,6 +601,7 @@ impl From<FileSelectionArgs> for run::FileSelection {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default, Args)]
+#[command(next_help_heading = "Hook selection")]
 pub(crate) struct RunOptions {
     /// Include the specified hooks or projects.
     ///
@@ -637,11 +639,11 @@ pub(crate) struct RunOptions {
     pub(crate) file_selection: FileSelectionArgs,
 
     /// When hooks fail, run `git diff` directly afterward.
-    #[arg(long)]
+    #[arg(long, help_heading = "Run options")]
     pub(crate) show_diff_on_failure: bool,
 
     /// Stop running hooks after the first failure.
-    #[arg(long)]
+    #[arg(long, help_heading = "Run options")]
     pub(crate) fail_fast: bool,
 
     /// Do not stop running hooks after the first failure.
@@ -649,7 +651,7 @@ pub(crate) struct RunOptions {
     pub(crate) no_fail_fast: bool,
 
     /// Do not run the hooks, but print the hooks that would have been run.
-    #[arg(long)]
+    #[arg(long, help_heading = "Run options")]
     pub(crate) dry_run: bool,
 
     #[command(flatten)]
@@ -672,7 +674,12 @@ pub(crate) struct RunArgs {
     /// the stage lets hooks from any configured stage match, using the default file
     /// input mode; hooks that only run at `commit-msg` or `prepare-commit-msg` are
     /// ignored.
-    #[arg(long, value_enum, alias = "hook-stage")]
+    #[arg(
+        long,
+        value_enum,
+        alias = "hook-stage",
+        help_heading = "Hook selection"
+    )]
     pub(crate) stage: Option<Stage>,
 
     /// Run hooks belonging to the specified group.
@@ -680,7 +687,7 @@ pub(crate) struct RunArgs {
     /// Can be specified multiple times; a hook may match any specified group.
     /// When combined with `--require-group`, both filters must match.
     /// `@ungrouped` matches hooks without groups.
-    #[arg(long = "group", value_name = "GROUP")]
+    #[arg(long = "group", value_name = "GROUP", help_heading = "Hook selection")]
     pub(crate) groups: Vec<String>,
 
     /// Run hooks belonging to every specified group.
@@ -692,14 +699,22 @@ pub(crate) struct RunArgs {
     /// For example, `--require-group fast --group format --group lint-only`
     /// selects hooks in `fast` and either `format` or `lint-only`.
     /// The special selector `@ungrouped` is also supported.
-    #[arg(long = "require-group", value_name = "GROUP")]
+    #[arg(
+        long = "require-group",
+        value_name = "GROUP",
+        help_heading = "Hook selection"
+    )]
     pub(crate) required_groups: Vec<String>,
 
     /// Do not run hooks belonging to the specified group.
     ///
     /// Can be specified multiple times. Exclusion wins over inclusion.
     /// The special selector `@ungrouped` is also supported.
-    #[arg(long = "no-group", value_name = "GROUP")]
+    #[arg(
+        long = "no-group",
+        value_name = "GROUP",
+        help_heading = "Hook selection"
+    )]
     pub(crate) no_groups: Vec<String>,
 }
 
@@ -722,7 +737,12 @@ pub(crate) struct TryRepoArgs {
     /// When not specified, this command starts with hooks eligible for
     /// `pre-commit`. If no hook is selected and the command named hook IDs,
     /// those same IDs are matched again against hooks configured for `manual`.
-    #[arg(long, value_enum, alias = "hook-stage")]
+    #[arg(
+        long,
+        value_enum,
+        alias = "hook-stage",
+        help_heading = "Hook selection"
+    )]
     pub(crate) stage: Option<Stage>,
 }
 
@@ -883,6 +903,7 @@ impl From<Option<Option<PathBuf>>> for SampleConfigTarget {
 
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Args)]
+#[command(next_help_heading = "Revision selection")]
 pub(crate) struct UpdateArgs {
     /// Update to the bleeding edge of the default branch instead of the latest tagged version.
     #[arg(long)]
@@ -892,10 +913,15 @@ pub(crate) struct UpdateArgs {
     #[arg(long)]
     pub(crate) freeze: bool,
     /// Only update this repository. This option may be specified multiple times.
-    #[arg(long, value_name = "REPO", conflicts_with = "exclude_repo")]
+    #[arg(
+        long,
+        value_name = "REPO",
+        conflicts_with = "exclude_repo",
+        help_heading = "Repository selection"
+    )]
     pub(crate) repo: Vec<String>,
     /// Do not update this repository. This option may be specified multiple times.
-    #[arg(long, value_name = "REPO")]
+    #[arg(long, value_name = "REPO", help_heading = "Repository selection")]
     pub(crate) exclude_repo: Vec<String>,
     /// Only consider tags matching this glob pattern. This option may be specified multiple times.
     /// Defaults to `update.include_tags` in the project or global config when unset.
@@ -939,16 +965,16 @@ pub(crate) struct UpdateArgs {
     )]
     pub(crate) repo_exclude_tag: Vec<RepoTagPattern>,
     /// Do not write changes to the config file, only display what would be changed.
-    #[arg(long)]
+    #[arg(long, help_heading = "Update options")]
     pub(crate) dry_run: bool,
     /// Exit with status 1 if updates are available.
-    #[arg(long)]
+    #[arg(long, help_heading = "Update options")]
     pub(crate) exit_code: bool,
     /// Alias of `--dry-run --exit-code`.
-    #[arg(long)]
+    #[arg(long, help_heading = "Update options")]
     pub(crate) check: bool,
     /// Number of threads to use.
-    #[arg(short, long, default_value_t = 0)]
+    #[arg(short, long, default_value_t = 0, help_heading = "Update options")]
     pub(crate) jobs: usize,
     /// Minimum release age (in days) required for a version to be eligible.
     ///

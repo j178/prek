@@ -3446,7 +3446,7 @@ fn selectors_completion() -> Result<()> {
     // Unrelated non-project dir should not appear in subdir suggestions
     cwd.child("scratch").create_dir_all()?;
 
-    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @"
+    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3471,6 +3471,10 @@ fn selectors_completion() -> Result<()> {
     :lint:ruff	Ruff Lint
     root-hook	Root Hook
     --skip	Skip the specified hooks or projects
+    --stage	The stage during which the hook is fired
+    --group	Run hooks belonging to the specified group
+    --require-group	Run hooks belonging to every specified group
+    --no-group	Do not run hooks belonging to the specified group
     --all-files	Run hooks on all tracked files in the repository
     --files	Run hooks on the specified file paths
     --glob	Run hooks on tracked files matching the specified glob pattern
@@ -3481,10 +3485,6 @@ fn selectors_completion() -> Result<()> {
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
-    --stage	The stage during which the hook is fired
-    --group	Run hooks belonging to the specified group
-    --require-group	Run hooks belonging to every specified group
-    --no-group	Do not run hooks belonging to the specified group
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output
@@ -3497,7 +3497,7 @@ fn selectors_completion() -> Result<()> {
     --version	Display the prek version
 
     ----- stderr -----
-    ");
+    "#);
 
     cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("."), @r"
     success: true
