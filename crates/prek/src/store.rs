@@ -16,7 +16,7 @@ use crate::fs::{LockedFile, expand_tilde};
 use crate::git::{self, TerminalPrompt};
 use crate::run::INTERNAL_CONCURRENCY;
 use crate::warn_user;
-use crate::workspace::{HookInitReporter, WorkspaceCache};
+use crate::workspace::HookInitReporter;
 
 struct PendingClone<'a> {
     repo: &'a RemoteRepo,
@@ -347,33 +347,19 @@ impl Store {
     }
 
     /// Get all tracked config files.
-    ///
-    /// Seed `config-tracking.json` from the workspace discovery cache if it doesn't exist.
-    /// This is a one-time upgrade helper: it only does work when the tracking file is absent.
     pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
         let tracking_file = self.config_tracking_file();
         match fs_err::read_to_string(&tracking_file) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.into()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
+            Err(e) => Err(e.into()),
             Ok(content) => {
                 let tracked = serde_json::from_str(&content).unwrap_or_else(|e| {
                     warn!("Failed to parse config tracking file: {e}, resetting");
                     FxHashSet::default()
                 });
-                return Ok(tracked);
+                Ok(tracked)
             }
         }
-
-        let tracked = WorkspaceCache::cached_config_paths(self);
-        if !tracked.is_empty() {
-            debug!(
-                count = tracked.len(),
-                "Bootstrapping config tracking from workspace cache"
-            );
-            self.update_tracked_configs(&tracked)?;
-        }
-
-        Ok(tracked)
     }
 
     /// Track new config files for GC.
