@@ -2557,10 +2557,6 @@
 <p class="admonition-title">Cooldowns never downgrade</p>
 <p>If the current <code>rev</code> is newer than the latest cooldown-eligible tag, <a href="../cli/#prek-update"><code>prek update</code></a> keeps the current <code>rev</code> instead of downgrading it.</p>
 </div>
-<div class="admonition note">
-<p class="admonition-title">Compatibility alias</p>
-<p>The legacy <code>auto_update</code> key is still accepted as an alias for <code>update</code>.</p>
-</div>
 <h2 id="extension-keys-x-">Extension keys (<code>x-</code>)<a class="headerlink" href="#extension-keys-x-" title="Permanent link">&para;</a></h2>
 <p>Any key starting with <code>x-</code> (a lowercase <code>x</code> followed by a hyphen) is silently ignored by <code>prek</code> at any level of the configuration. This supports custom metadata without triggering unexpected key warnings.</p>
 <h2 id="top-level-keys">Top-level keys<a class="headerlink" href="#top-level-keys" title="Permanent link">&para;</a></h2>
@@ -2916,10 +2912,6 @@ It is separate from a hook’s <a href="#stages"><code>stages</code></a>, which 
 <p>Each project-level field overrides the corresponding <a href="#global-update">global <code>update</code></a> field. Within <code>update.repos</code>, <code>include_tags</code> and <code>exclude_tags</code> are resolved independently: an omitted field inherits the project default, a present field replaces it, and <code>[]</code> explicitly clears it. This allows one repository to override only <code>include_tags</code> while still inheriting <code>exclude_tags</code>.</p>
 <p>CLI filters have the highest precedence. <code>--include-tag</code> and <code>--exclude-tag</code> replace the configured effective defaults; <code>--repo-include-tag</code> then replaces the include filters for its named repository, while <code>--repo-exclude-tag</code> adds excludes for its named repository.</p>
 <p>In workspace mode, <code>update</code> is scoped to the project config file that defines it and is not inherited by nested projects. Sub-projects use their own <code>update</code>, then the user-level global config, then built-in defaults. Repositories shared by multiple projects are fetched once but evaluated with each project's cooldown, freeze, and tag-filter settings.</p>
-<div class="admonition note">
-<p class="admonition-title">Compatibility alias</p>
-<p>The legacy <code>auto_update</code> key is still accepted as an alias for <code>update</code>.</p>
-</div>
 <h3 id="minimum_prek_version"><code>minimum_prek_version</code><a class="headerlink" href="#minimum_prek_version" title="Permanent link">&para;</a></h3>
 <p><a id="prek-only-minimum-prek-version-config"></a></p>
 <div class="admonition note">
