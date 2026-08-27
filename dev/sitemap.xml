@@ -10,10 +10,19 @@
         <loc>https://prek.j178.dev/dev/quickstart/</loc>
       </url>
       <url>
+        <loc>https://prek.j178.dev/dev/migration/</loc>
+      </url>
+      <url>
         <loc>https://prek.j178.dev/dev/usage/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/configuration/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/local-hooks/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/ci/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/workspace/</loc>
@@ -56,6 +65,9 @@
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/diff/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/security/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/benchmark/</loc>

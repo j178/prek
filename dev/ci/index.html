@@ -12,13 +12,13 @@
         <meta name="author" content="j178">
       
       
-        <link rel="canonical" href="https://prek.j178.dev/dev/quickstart/">
+        <link rel="canonical" href="https://prek.j178.dev/dev/ci/">
       
       
-        <link rel="prev" href="../installation/">
+        <link rel="prev" href="../local-hooks/">
       
       
-        <link rel="next" href="../migration/">
+        <link rel="next" href="../workspace/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Quickstart - prek</title>
+        <title>Continuous Integration - prek</title>
       
     
     
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quickstart" class="md-skip">
+        <a href="#continuous-integration" class="md-skip">
           Skip to content
         </a>
       
@@ -124,7 +124,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quickstart
+              Continuous Integration
             
           </span>
         </div>
@@ -249,8 +249,6 @@
       
   
   
-    
-  
   
   
     
@@ -275,11 +273,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_1" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -306,7 +306,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -349,36 +349,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Quickstart
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
@@ -393,99 +367,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#already-using-pre-commit" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Already using pre-commit?
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-to-pre-commit-style-workflows" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        New to pre-commit-style workflows?
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="New to pre-commit-style workflows?">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-create-a-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        1. Create a configuration
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-run-hooks-on-demand" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        2. Run hooks on demand
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-wire-hooks-into-git-automatically" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        3. Wire hooks into git automatically
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-go-further" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        4. Go further
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -529,8 +410,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -561,13 +444,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -587,7 +468,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -682,10 +563,36 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../ci/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Continuous Integration
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
@@ -700,6 +607,82 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        GitHub Actions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#other-ci-systems" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Other CI systems
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-only-a-revision-range" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Check only a revision range
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validate-updates-without-changing-the-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Validate updates without changing the config
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cache-and-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Cache and credentials
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1480,10 +1463,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#already-using-pre-commit" class="md-nav__link">
+  <a href="#github-actions" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Already using pre-commit?
+        GitHub Actions
       </span>
     </span>
   </a>
@@ -1491,63 +1474,46 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#new-to-pre-commit-style-workflows" class="md-nav__link">
+  <a href="#other-ci-systems" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        New to pre-commit-style workflows?
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="New to pre-commit-style workflows?">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-create-a-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        1. Create a configuration
+        Other CI systems
       </span>
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#2-run-hooks-on-demand" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#check-only-a-revision-range" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        2. Run hooks on demand
+        Check only a revision range
       </span>
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#3-wire-hooks-into-git-automatically" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#validate-updates-without-changing-the-config" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        3. Wire hooks into git automatically
+        Validate updates without changing the config
       </span>
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#4-go-further" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#cache-and-credentials" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        4. Go further
+        Cache and credentials
       </span>
     </span>
   </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1575,83 +1541,50 @@
   
 
 
-<h1 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h1>
-<p>This page helps you get productive with <strong>prek</strong> in minutes, whether you are migrating from <a href="https://pre-commit.com/">pre-commit</a> or starting from scratch.</p>
-<p>First follow the <a href=".././installation/">installation guide</a> to install prek on your system.</p>
-<p style="display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; margin:1.5rem 0;"><a class="md-button md-button--primary" href="#already-using-pre-commit">I already use pre-commit</a>
-<a class="md-button" href="#new-to-pre-commit-style-workflows">I'm new to pre-commit-style tools</a></p>
-<h2 id="already-using-pre-commit">Already using pre-commit?<a class="headerlink" href="#already-using-pre-commit" title="Permanent link">&para;</a></h2>
-<p>Great news - prek is designed as a drop-in replacement, you only need two tweaks:</p>
-<ol>
-<li>
-<p>Replace every <code>pre-commit</code> command in your scripts or documentation with <code>prek</code>. Your existing <code>.pre-commit-config.yaml</code> continues to work unchanged.</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">$ </span>prek<span class="w"> </span>run
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="go">trim trailing whitespace.................................................Passed</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="go">fix end of files.........................................................Passed</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="go">typos....................................................................Passed</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="go">cargo fmt................................................................Passed</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="go">cargo clippy.............................................................Passed</span>
+<h1 id="continuous-integration">Continuous Integration<a class="headerlink" href="#continuous-integration" title="Permanent link">&para;</a></h1>
+<p>Run the same checked-in configuration locally and in CI. For most repositories,
+the reliable default is:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
 </span></code></pre></div>
-</li>
-<li>
-<p>Reinstall the Git shims once via <code>prek install -f</code> (run this if you previously executed <code>pre-commit install</code>).</p>
-</li>
-</ol>
-<p>From here you can explore what prek adds on top of pre-commit:</p>
-<ul>
-<li><a href=".././diff/">Key differences and new features</a></li>
-<li><a href=".././builtin/">Built-in Rust-native hooks</a></li>
-<li><a href=".././workspace/">Workspace mode for monorepos</a></li>
-</ul>
-<h2 id="new-to-pre-commit-style-workflows">New to pre-commit-style workflows?<a class="headerlink" href="#new-to-pre-commit-style-workflows" title="Permanent link">&para;</a></h2>
-<p>Follow this short example to experience how prek automates linting and formatting tasks.</p>
-<h3 id="1-create-a-configuration">1. Create a configuration<a class="headerlink" href="#1-create-a-configuration" title="Permanent link">&para;</a></h3>
-<p>In the root of your repository, add a <code>prek.toml</code>:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[[repos]]</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/pre-commit/pre-commit-hooks&quot;</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">rev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;v6.0.0&quot;</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;check-yaml&quot;</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;end-of-file-fixer&quot;</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">]</span>
+<p>This checks every tracked file instead of depending on a CI job's staging area.
+The command exits unsuccessfully when a hook fails or modifies files, so no
+extra wrapper is required.</p>
+<h2 id="github-actions">GitHub Actions<a class="headerlink" href="#github-actions" title="Permanent link">&para;</a></h2>
+<p>The official <a href="https://github.com/j178/prek-action"><code>j178/prek-action</code></a> installs
+prek and runs <code>prek run --all-files</code>. See the ready-to-copy workflow in
+<a href="../integrations/#github-actions">Integrations</a>.</p>
+<h2 id="other-ci-systems">Other CI systems<a class="headerlink" href="#other-ci-systems" title="Permanent link">&para;</a></h2>
+<p>Install a pinned prek version using one of the methods in the
+<a href="../installation/">Installation</a> guide, check out the repository, and run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
 </span></code></pre></div>
-<p>This configuration uses the <code>pre-commit-hooks</code> repository and enables two hooks: <code>check-yaml</code> validates YAML files, and <code>end-of-file-fixer</code> ensures every file ends with a newline.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><code>prek.toml</code> is the native configuration file for <strong>prek</strong>. If you already have a <code>.pre-commit-config.yaml</code>, prek can still read it today.</p>
-</div>
-<p>Add a small YAML file so the first run has something to check, then stage both
-files:</p>
-<div class="language-yaml highlight"><span class="filename">example.yaml</span><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prek</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<p>Project-local commands still need their project dependencies. For example, a
+local hook that invokes <code>npm exec</code> requires the Node dependencies to be
+installed before prek runs.</p>
+<h2 id="check-only-a-revision-range">Check only a revision range<a class="headerlink" href="#check-only-a-revision-range" title="Permanent link">&para;</a></h2>
+<p>Large repositories can run hooks only for files changed between two refs:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--from-ref<span class="w"> </span>origin/main<span class="w"> </span>--to-ref<span class="w"> </span>HEAD
 </span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>add<span class="w"> </span>prek.toml<span class="w"> </span>example.yaml
+<p>The checkout must contain both refs and enough history to calculate the diff.
+Shallow CI checkouts often need a larger fetch depth or an explicit fetch of the
+base branch. If that setup is unreliable, use <code>--all-files</code>.</p>
+<h2 id="validate-updates-without-changing-the-config">Validate updates without changing the config<a class="headerlink" href="#validate-updates-without-changing-the-config" title="Permanent link">&para;</a></h2>
+<p>Repository maintainers can check whether pinned hook revisions are outdated:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>update<span class="w"> </span>--check
 </span></code></pre></div>
-<p><code>prek run</code> checks the staged snapshot, so a new or changed config must be staged
-before this default run. You can still review or unstage it after trying the
-workflow.</p>
-<h3 id="2-run-hooks-on-demand">2. Run hooks on demand<a class="headerlink" href="#2-run-hooks-on-demand" title="Permanent link">&para;</a></h3>
-<p>Use <code>prek run</code> to execute all configured hooks on the files in your current git staging area:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="gp">$ </span>prek<span class="w"> </span>run
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="go">check yaml...............................................................Passed</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="go">fix end of files.........................................................Passed</span>
-</span></code></pre></div>
-<p>The first run can take longer because prek downloads the hook repository and
-prepares its environment.</p>
-<p>Need to run a single hook? Pass its ID, for example <code>prek run check-yaml</code>. You can also target specific files with <code>--files</code>, or run against the entire repository with <code>--all-files</code>. Use <code>--all-files</code> after adding or changing a hook to check existing files that are not staged.</p>
-<h3 id="3-wire-hooks-into-git-automatically">3. Wire hooks into git automatically<a class="headerlink" href="#3-wire-hooks-into-git-automatically" title="Permanent link">&para;</a></h3>
-<p>To run the hooks every time you commit, install prek’s Git shim integration:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>prek<span class="w"> </span>install
-</span></code></pre></div>
-<p>Now every <code>git commit</code> will invoke <code>prek run</code> for the files included in the commit. If you ever want to undo this, run <code>prek uninstall</code>.</p>
-<h3 id="4-go-further">4. Go further<a class="headerlink" href="#4-go-further" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Explore richer configuration options in the official <a href="https://pre-commit.com/">pre-commit documentation</a>. Every example there works with prek.</li>
-<li>See <a href=".././usage/">Common Workflows</a> for the commands you will use after setup and how to handle hook failures.</li>
-<li>Check the <a href=".././reference/configuration/">configuration reference</a> for prek-specific settings.</li>
-<li>Browse the <a href=".././builtin/">built-in hooks</a> and the <a href=".././diff/">difference guide</a> to see what else you can leverage.</li>
-</ul>
-<p>That’s it! You now have automated checks running locally with minimal setup. When you’re ready to dive deeper, the rest of the docs cover advanced workflows, language-specific installers, and more.</p>
+<p>Use <a href="../reference/cli/#prek-validate-config"><code>prek validate-config</code></a> after editing
+a config, and use <a href="../reference/cli/#prek-validate-manifest"><code>prek validate-manifest</code></a>
+in repositories that publish hooks.</p>
+<h2 id="cache-and-credentials">Cache and credentials<a class="headerlink" href="#cache-and-credentials" title="Permanent link">&para;</a></h2>
+<p><code>PREK_HOME</code> contains cloned hook repositories, prepared environments, managed
+toolchains, and logs. Caching it can reduce setup time, but cache correctness
+depends on the prek version, platform, config, and hook revisions. Start without
+a cache, then add a narrowly keyed cache only if environment preparation is a
+meaningful part of the job.</p>
+<p>Private hook repositories need non-interactive Git credentials. Configure the
+CI provider's credential helper or token before running prek, and avoid printing
+tokens in verbose logs. See the <a href="../faq/#how-do-i-use-hooks-from-private-repositories">private repository FAQ</a>
+and the <a href="../security/">Security Guide</a>.</p>
 
 
 
@@ -1691,7 +1624,7 @@ prepares its environment.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../installation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Installation">
+          <a href="../local-hooks/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Local Hooks">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
@@ -1701,20 +1634,20 @@ prepares its environment.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Installation
+                Local Hooks
               </div>
             </div>
           </a>
         
         
           
-          <a href="../migration/" class="md-footer__link md-footer__link--next" aria-label="Next: Migrating from Other Tools">
+          <a href="../workspace/" class="md-footer__link md-footer__link--next" aria-label="Next: Workspace Mode">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Migrating from Other Tools
+                Workspace Mode
               </div>
             </div>
             <div class="md-footer__button md-icon">
