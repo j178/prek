@@ -2167,7 +2167,6 @@ Note that the <code>rev</code> field is ignored for detection purposes.</p>
 </ul>
 <h4 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h4>
 <ul>
-<li><code>check-yaml</code> fast path does not yet support the <code>--unsafe</code> flag; for those cases, the automatic fast path is skipped.</li>
 <li><code>pretty-format-json</code> is currently available only via <code>repo: builtin</code> while parity coverage against upstream Python behavior is still being expanded.</li>
 <li>Other hooks from the repository which have no fast path implementation will run via the standard method.</li>
 </ul>
@@ -2485,11 +2484,8 @@ declared by that hook:</p>
 <li>Allow YAML multi-document syntax (<code>---</code>).</li>
 </ul>
 </li>
-</ul>
-<p><strong>Caveats / differences</strong></p>
-<ul>
-<li><code>--unsafe</code> is not supported.<ul>
-<li>With <code>repo: builtin</code>, passing <code>--unsafe</code> is treated as an unknown argument.</li>
+<li><code>--unsafe</code><ul>
+<li>Parse YAML syntax without loading it. Implies <code>--allow-multiple-documents</code>.</li>
 </ul>
 </li>
 </ul>
