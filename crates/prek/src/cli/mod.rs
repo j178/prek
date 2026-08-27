@@ -279,7 +279,7 @@ pub(crate) enum Command {
     #[command(hide = true)]
     Clean,
     /// Install Git shims in a directory intended for use with `git config init.templateDir`.
-    #[command(alias = "init-templatedir", hide = true)]
+    #[command(name = "init-templatedir", hide = true)]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try hooks from a repository.
     TryRepo(Box<TryRepoArgs>),
