@@ -19,10 +19,14 @@
 
 - New to `prek`: start with [Installation](installation.md), then follow the [Quickstart](quickstart.md).
 - Already set up: use [Common Workflows](usage.md) for day-to-day commands and handling hook failures.
+- Replacing another hook tool: follow [Migrating from Other Hook Tools](migration.md).
 - Writing config: read [Configuration](configuration.md), then use the [Configuration Reference](reference/configuration.md) for exact keys.
+- Running a project command: use [Local Hooks](local-hooks.md).
+- Adding repository checks to a pipeline: see [Continuous Integration](ci.md).
 - Looking for setup patterns: browse the [Cookbook](cookbook.md).
 - Working in a monorepo: see [Workspace Mode](workspace.md).
 - Looking for flags or environment variables: use the [CLI Reference](reference/cli.md) and [Environment Variable Reference](reference/environment-variables.md).
+- Reviewing trust and pinning choices: read the [Security Guide](security.md).
 
 --8<-- "README.md:why"
 

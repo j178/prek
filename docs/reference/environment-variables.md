@@ -21,7 +21,10 @@ Set to `1` for quiet mode (equivalent to `-q`, only shows failed hooks), or `2` 
 
 ### `PREK_SKIP`
 
-Comma-separated list of hook IDs to skip (e.g. black,ruff).
+Comma-separated list of selectors to skip. A selector can be a hook ID, a
+project path ending in `/`, or a project-qualified hook such as
+`frontend:eslint`. For example, `PREK_SKIP=ruff,frontend/` skips every `ruff`
+hook and the `frontend` project.
 See [Skipping Projects or Hooks](../workspace.md#skipping-projects-or-hooks) for details.
 
 ### `PREK_ALLOW_NO_CONFIG`
@@ -53,10 +56,10 @@ See [Built-in Fast Hooks](../builtin.md) for details.
 
 ### `PREK_UV_SOURCE`
 
-Control how uv (Python package installer) is installed.
+Choose one source for installing uv, the Python package installer.
 Options:
 
-- `astral` (download from Astral's CDN, the default source)
+- `astral` (download from Astral's CDN)
 - `github` (download from GitHub releases)
 - `pypi` (install from PyPI)
 - `tuna` (use Tsinghua University mirror)
@@ -65,7 +68,8 @@ Options:
 - `pip` (install via pip)
 - a custom PyPI mirror URL
 
-If not set, prek automatically selects the best available source.
+If not set, prek tries Astral's CDN, PyPI and its configured mirrors, then `pip`
+until one succeeds. The `github` source is used only when selected explicitly.
 
 ### `PREK_NATIVE_TLS`
 
@@ -123,3 +127,40 @@ Fallback for `PREK_NO_CONCURRENCY`.
 ### `SKIP`
 
 Fallback for `PREK_SKIP`.
+
+## Variables exposed to hooks
+
+prek exports `PRE_COMMIT=1` to hook processes. It also exports the following
+variables when the selected Git stage supplies the corresponding value:
+
+| Variable | When it is available |
+| -- | -- |
+| `PRE_COMMIT_FROM_REF`, `PRE_COMMIT_ORIGIN` | The starting ref for revision-range and push-style runs |
+| `PRE_COMMIT_TO_REF`, `PRE_COMMIT_SOURCE` | The destination ref for revision-range and push-style runs |
+| `PRE_COMMIT_COMMIT_MSG_SOURCE` | The commit-message source supplied by Git |
+| `PRE_COMMIT_COMMIT_OBJECT_NAME` | The commit object supplied to `prepare-commit-msg` |
+| `PRE_COMMIT_PRE_REBASE_UPSTREAM`, `PRE_COMMIT_PRE_REBASE_BRANCH` | `pre-rebase` arguments |
+| `PRE_COMMIT_LOCAL_BRANCH`, `PRE_COMMIT_REMOTE_BRANCH` | `pre-push` branch values |
+| `PRE_COMMIT_REMOTE_NAME`, `PRE_COMMIT_REMOTE_URL` | `pre-push` remote values |
+| `PRE_COMMIT_CHECKOUT_TYPE` | The checkout flag supplied to `post-checkout` |
+| `PRE_COMMIT_SQUASH_MERGE` | Set to `1` for a squash merge |
+| `PRE_COMMIT_REWRITE_COMMAND` | The command supplied to `post-rewrite` |
+
+These values describe the current hook invocation. Hooks should tolerate a
+variable being absent when they also support stages where Git does not provide
+that value.
+
+## Related external variables
+
+prek also honors variables owned by Git, ecosystem tools, or its HTTP stack:
+
+| Variable | Effect |
+| -- | -- |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | Add certificate locations used by HTTPS requests |
+| `GITHUB_TOKEN` | Authenticate supported GitHub API requests, including self-update and an exact GitHub Ruby mirror |
+| `PRE_COMMIT_USE_MAMBA`, `PRE_COMMIT_USE_MICROMAMBA` | Select a system Conda-compatible executable |
+| `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and lowercase forms | Configure inherited network proxy behavior |
+
+Language installers also inherit relevant ecosystem variables, such as `UV_*`
+for Python hook setup. Review unexpected ambient variables when installation
+behavior differs between a developer machine and CI.

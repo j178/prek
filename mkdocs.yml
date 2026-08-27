@@ -77,14 +77,18 @@ plugins:
           - index.md
           - installation.md
           - quickstart.md
+          - migration.md
         Usage:
           - usage.md
           - configuration.md
+          - local-hooks.md
+          - ci.md
           - workspace.md
           - languages.md
           - builtin.md
           - integrations.md
           - cookbook.md
+        Authoring:
           - authoring-hooks.md
         Reference:
           - reference/cli.md
@@ -97,6 +101,7 @@ plugins:
         About:
           - compatibility.md
           - diff.md
+          - security.md
           - benchmark.md
           - changelog.md
 
@@ -111,15 +116,19 @@ nav:
     - Introduction: index.md
     - Installation: installation.md
     - Quickstart: quickstart.md
+    - Migrating from Other Tools: migration.md
   - Usage:
     - Common Workflows: usage.md
     - Configuration: configuration.md
+    - Local Hooks: local-hooks.md
+    - Continuous Integration: ci.md
     - Workspace Mode: workspace.md
     - Language Support: languages.md
     - Built-in Hooks: builtin.md
     - Integrations: integrations.md
     - Cookbook: cookbook.md
-    - Authoring Hooks: authoring-hooks.md
+  - Authoring:
+    - Hook Repositories: authoring-hooks.md
   - Reference:
     - CLI Reference: reference/cli.md
     - Configuration Reference: reference/configuration.md
@@ -131,6 +140,7 @@ nav:
   - About:
     - Compatibility: compatibility.md
     - Differences: diff.md
+    - Security: security.md
     - Benchmark: benchmark.md
     - Changelog: changelog.md
 

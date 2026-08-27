@@ -100,6 +100,9 @@ final result can include a diff of detected modifications.
 
 ## Hook entry resolution
 
+If you are configuring an existing project command rather than studying the
+execution model, start with [Run Existing Project Commands](local-hooks.md).
+
 `repo` and `language` control different parts of hook execution:
 
 - `repo` determines where the hook source comes from.

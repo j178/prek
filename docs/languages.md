@@ -11,9 +11,29 @@ Each hook has a `language` that tells prek how to install and run it. The langua
 
 For `repo: local` hooks, `language` is required. For remote hooks, it is read from `.pre-commit-hooks.yaml`, but you can override it in your config.
 
+Most users of remote hooks do not need to choose a language. Start with the
+hook author's manifest and override `language` only when you have a specific
+compatibility or toolchain reason.
+
 For `repo: local` hooks, relative paths in `additional_dependencies` and other installer arguments
 do not resolve from the work tree. Use an absolute path when an installer needs a local file. Hook
 commands still run from the work tree.
+
+## Choose a language for a local hook
+
+| What the command needs | Good starting point | Runtime source |
+| -- | -- | -- |
+| A tool already installed by the project or CI image | [`system`](#system) | Your `PATH`; prek does not install it |
+| A checked-in executable script with no isolated dependencies | [`script`](#script) | The hook repository or local project |
+| An isolated ecosystem environment | Python, Node, Bun, Deno, .NET, Go, mise, Ruby, or Rust | prek can select and download a compatible toolchain |
+| An ecosystem currently supplied by the machine | Conda, Coursier, Dart, Haskell, Julia, Lua, Perl, PHP, R, or Swift | A matching system installation |
+| A fully packaged runtime | [`docker`](#docker) or [`docker_image`](#docker_image) | A supported container runtime |
+| A message-only failure or content regex | [`fail`](#fail), [`pygrep`](#pygrep), or a [builtin hook](builtin.md) | No general-purpose hook environment |
+
+For an existing project linter or formatter, begin with
+[`language = "system"`](local-hooks.md). Choose a managed language when the hook
+repository itself needs an isolated installation or when prek should select the
+toolchain version.
 
 ## Toolchain management and `language_version`
 
@@ -40,15 +60,32 @@ For example:
 === "prek.toml"
 
     ```toml
+    [[repos]]
+    repo = "local"
+
+    [[repos.hooks]]
+    id = "python-version"
+    name = "python version"
+    language = "python"
+    entry = "python --version"
+    pass_filenames = false
     language_version = { request = ">=3.12, <3.13", preference = "only-managed" }
     ```
 
 === ".pre-commit-config.yaml"
 
     ```yaml
-    language_version:
-      request: ">=3.12, <3.13"
-      preference: only-managed
+    repos:
+      - repo: local
+        hooks:
+          - id: python-version
+            name: python version
+            language: python
+            entry: python --version
+            pass_filenames: false
+            language_version:
+              request: ">=3.12, <3.13"
+              preference: only-managed
     ```
 
 If `language_version` is `system`, prek does not download a new toolchain. It may still reuse a compatible toolchain already managed by prek before searching system installations. Version constraints derived from project metadata, such as Python’s `requires-python` or Go’s `go` directive, still apply without re-enabling downloads.

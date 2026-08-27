@@ -1,5 +1,18 @@
 # CLI Reference
 
+Running `prek` without a subcommand is equivalent to running `prek run`.
+
+## Exit status
+
+| Code | Meaning |
+| -- | -- |
+| `0` | The command succeeded. |
+| `1` | A hook, validation, or other expected user-level check failed. |
+| `2` | Command-line input, configuration, or an operational error prevented the command from completing. |
+| `130` | The command was interrupted. |
+
+`prek exec` propagates the exit code of the external command it runs.
+
 ## prek
 
 A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.

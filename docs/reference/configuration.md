@@ -507,8 +507,9 @@ In most configs this is a git URL.
 
 The revision to use for the remote repository.
 
-Use a tag or commit SHA for repeatable results.
-If you use a moving target (like a branch name), runs may change over time.
+Use a full commit SHA when an immutable Git pin is required. Version tags are
+readable and conventional for releases, but a repository maintainer can move a
+tag. Branch names are moving targets, so runs may change over time.
 
 #### `hooks`
 
@@ -541,7 +542,7 @@ Example:
 
 Notes:
 
-- For reproducibility, prefer immutable pins (tags or commit SHAs).
+- For reproducibility, prefer a versioned release tag or an immutable commit SHA.
 - [`prek update`](cli.md#prek-update) can help update [`rev`](#rev) values.
 
 ### `repo: local`

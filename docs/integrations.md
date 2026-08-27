@@ -1,6 +1,8 @@
 # Integrations
 
-This page documents common ways to integrate prek into CI and container workflows.
+This page documents packaged integrations for CI and container workflows. For
+CI behavior that applies across providers, including revision ranges, caches,
+and credentials, see [Continuous Integration](ci.md).
 
 ## Docker
 

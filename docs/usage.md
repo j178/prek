@@ -15,13 +15,20 @@ prek install
 
 This installs the Git shims selected by the repository's configuration so that
 prek runs automatically during Git operations. If the repository does not
-select any hook types, prek installs a `pre-commit` shim by default. If the
-repository previously used `pre-commit` and already has its shims installed,
-replace them once:
+select any hook types, prek installs a `pre-commit` shim by default.
+
+If another tool already owns the hook, a normal install moves that hook to a
+`.legacy` file and configures prek to run both implementations. This migration
+mode lets you compare them before removing the old setup. When you are ready to
+replace the legacy hook, run:
 
 ```bash
 prek install -f
 ```
+
+`prek uninstall` restores the legacy hook while migration mode is active. See
+[Migrating from Other Hook Tools](migration.md#keep-the-existing-hook-during-rollout)
+before using `--force` on a hook whose contents you have not reviewed.
 
 Hook environments are normally prepared the first time they are needed. To
 prepare them during setup instead, run:
@@ -168,8 +175,17 @@ these cases.
 
 ## Skip hooks for one commit
 
-When the repository's policy permits it, Git can bypass the `pre-commit` and
-`commit-msg` hooks for one commit:
+When one known hook is not applicable, skip only that hook by ID:
+
+```bash
+PREK_SKIP=ruff git commit -m "Update generated files"
+```
+
+`SKIP=ruff` is accepted for compatibility. In a workspace, the value can also be
+a [project or project-qualified selector](workspace.md#project-and-hook-selection).
+
+When the repository's policy permits it, Git can instead bypass the entire
+`pre-commit` and `commit-msg` hook chain for one commit:
 
 ```bash
 git commit --no-verify
@@ -234,5 +250,9 @@ prek cache clean
 
 - [Configuration](configuration.md) covers config file formats, discovery, and
   validation.
+- [Run Existing Project Commands](local-hooks.md) covers local linters,
+  formatters, and test commands.
+- [Continuous Integration](ci.md) covers full-repository and revision-range
+  checks in CI.
 - [Workspace Mode](workspace.md) covers monorepos and nested project configs.
 - [CLI Reference](reference/cli.md) lists every command and option.

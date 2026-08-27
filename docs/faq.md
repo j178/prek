@@ -1,10 +1,56 @@
 # FAQ
 
-## How is `prek` pronounced?
+## Why did no hook run?
 
-Like "wreck", but with a "p" sound instead of the "w" at the beginning.
-The name comes from saying "pre-commit" and stopping right after the hard "k" sound;
-it can also be read as short for "pre-check".
+`prek run` checks staged files by default. If nothing relevant is staged, or all
+staged files are excluded by the hook's filters, there is nothing to run. Try:
+
+```bash
+prek run --all-files --dry-run
+```
+
+Also check the hook's `stages`, file filters, and any `PREK_SKIP` or `SKIP`
+value. See [Debugging](debugging.md#a-hook-is-skipped-or-receives-no-files) for
+the full checklist.
+
+## Why is the first run slower?
+
+The first run may clone hook repositories, select toolchains, and prepare
+isolated environments. Later runs reuse those results from `PREK_HOME`. CI jobs
+with an empty filesystem pay this setup cost again unless they restore a
+compatible cache.
+
+## Why did a formatter change files but fail the commit?
+
+This prevents Git from committing changes you have not reviewed. Inspect the
+formatter's changes, stage the intended result, then commit again:
+
+```bash
+git diff
+git add path/to/file
+git commit
+```
+
+The next run checks the newly staged content. See
+[When a hook modifies files](usage.md#when-a-hook-modifies-files).
+
+## Why must a changed config be staged?
+
+For a normal staged-file run, prek temporarily hides unstaged changes so hooks
+see the exact content that Git would commit. A staged source file paired with an
+unstaged config would mix two snapshots, so prek asks you to stage new or
+changed config files first.
+
+## How do I skip one hook temporarily?
+
+Set a comma-separated selector list for that command:
+
+```bash
+PREK_SKIP=ruff git commit -m "Update generated files"
+```
+
+Use this only when the repository's policy allows it. Prefer a selective skip
+over `git commit --no-verify`, which bypasses the entire Git hook chain.
 
 ## I updated `.prekignore`, why didn't discovery change?
 
@@ -16,11 +62,11 @@ prek run --refresh
 
 ## What does `prek install --prepare-hooks` do?
 
-In short, it installs the Git shims **and** prepares the environments for the hooks managed by prek. It is inherited from the original Python-based `pre-commit` tool (I'll abbreviate it as **ppc** in this document) to maintain compatibility with existing workflows.
+In short, it installs the Git shims **and** prepares the environments for the hooks managed by prek. It is inherited from the original Python-based `pre-commit` tool to maintain compatibility with existing workflows.
 
 It's a little confusing because it refers to two different kinds of hooks:
 
-1. **Git shims** – Scripts placed in Git's effective hooks directory, usually `.git/hooks/` unless `core.hooksPath` points elsewhere. Both prek and ppc drop a small shim here so Git automatically runs them on `git commit`.
+1. **Git shims** – Scripts placed in Git's effective hooks directory, usually `.git/hooks/` unless `core.hooksPath` points elsewhere. Both prek and upstream `pre-commit` drop a small shim here so Git automatically runs them on `git commit`.
 2. **prek-managed hooks** – The tools listed in `.pre-commit-config.yaml`. When prek runs, it executes these hooks and prepares whatever runtime they need (for example, creating a Python virtual environment and installing the hook's dependencies before execution).
 
 Running `prek install` installs the first type: it writes the Git shim so that Git knows to call prek. Which Git shims get installed is determined by `--hook-type` or `default_install_hook_types` in the config file, and defaults to `pre-commit` if neither is set. This is not affected by a hook's `stages` field in the config: `stages` controls when a configured hook may run, not which Git shims `prek install` writes.
@@ -61,7 +107,7 @@ Other credential helpers that work out of the box:
 
 - **macOS**: Keychain (`credential.helper=osxkeychain`)
 - **Windows**: Git Credential Manager (`credential.helper=manager`)
-- **Linux**: GNOME Keyring, KWallet, or `credential.helper=store`
+- **Linux**: GNOME Keyring, KWallet, or `credential.helper=store` when storing credentials in plaintext is acceptable
 
 You can also use `GIT_ASKPASS` to point to a custom credential program:
 
@@ -100,3 +146,9 @@ export GIT_CONFIG_PARAMETERS="'url.https://oauth2:${GITHUB_TOKEN}@github.com/.in
 
 > **Security note:** Be careful with tokens in environment variables. Ensure your
 > CI system masks secrets in logs.
+
+## How is `prek` pronounced?
+
+Like "wreck", but with a "p" sound instead of the "w" at the beginning.
+The name comes from saying "pre-commit" and stopping right after the hard "k"
+sound; it can also be read as short for "pre-check".
