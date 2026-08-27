@@ -1105,10 +1105,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#preferred-command-and-flag-spellings" class="md-nav__link">
+  <a href="#command-compatibility" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Preferred command and flag spellings
+        Command compatibility
       </span>
     </span>
   </a>
@@ -1297,10 +1297,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#preferred-command-and-flag-spellings" class="md-nav__link">
+  <a href="#command-compatibility" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Preferred command and flag spellings
+        Command compatibility
       </span>
     </span>
   </a>
@@ -1365,50 +1365,68 @@
 
 
 <h1 id="compatibility-with-pre-commit">Compatibility with pre-commit<a class="headerlink" href="#compatibility-with-pre-commit" title="Permanent link">&para;</a></h1>
-<p><code>prek</code> aims to be a practical drop-in replacement for <code>pre-commit</code> for existing repositories, hook configs, and day-to-day workflows.</p>
+<p><code>prek</code> is a practical drop-in replacement for <code>pre-commit</code>, with support for its repositories, configuration files, hooks, and command-line workflows.</p>
 <h2 id="what-works-unchanged">What works unchanged<a class="headerlink" href="#what-works-unchanged" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Existing <code>.pre-commit-config.yaml</code> and <code>.pre-commit-config.yml</code> files work in <code>prek</code>. See <a href="../configuration/">Configuration</a>.</li>
-<li>Most common <code>pre-commit</code> workflows keep working, including the usual hook repositories and manifests.</li>
-<li>Several upstream command spellings are still accepted as compatibility aliases, so existing scripts do not need to be rewritten immediately.</li>
+<li>Existing hook repositories and <code>.pre-commit-hooks.yaml</code> manifests work in <code>prek</code>.</li>
+<li>The main user-facing subcommands keep their upstream names: <code>install</code>, <code>run</code>, <code>sample-config</code>, <code>try-repo</code>, <code>uninstall</code>, <code>validate-config</code>, and <code>validate-manifest</code>.</li>
 </ul>
-<h2 id="preferred-command-and-flag-spellings">Preferred command and flag spellings<a class="headerlink" href="#preferred-command-and-flag-spellings" title="Permanent link">&para;</a></h2>
-<p><code>prek</code> keeps compatibility aliases for the commands below, but the preferred spellings use the current CLI layout.</p>
+<h2 id="command-compatibility">Command compatibility<a class="headerlink" href="#command-compatibility" title="Permanent link">&para;</a></h2>
+<p>For a smaller and more consistent command tree, <code>prek</code> hides some compatibility spellings from <code>prek --help</code> and groups some operations under <code>cache</code> or <code>util</code>. Hidden commands are still callable; hiding only keeps them out of the help output.</p>
 <table>
 <thead>
 <tr>
-<th>Compatibility spelling</th>
+<th><code>pre-commit</code> spelling</th>
 <th>Preferred <code>prek</code> spelling</th>
+<th>Availability in <code>prek</code></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>prek install-hooks</code></td>
+<td><code>pre-commit install-hooks</code></td>
 <td><code>prek prepare-hooks</code></td>
+<td><code>prek install-hooks</code> remains available as a hidden alias.</td>
 </tr>
 <tr>
-<td><code>prek install --install-hooks</code></td>
+<td><code>pre-commit install --install-hooks</code></td>
 <td><code>prek install --prepare-hooks</code></td>
+<td><code>--install-hooks</code> remains available as a hidden alias.</td>
 </tr>
 <tr>
-<td><code>prek autoupdate</code></td>
+<td><code>pre-commit autoupdate</code></td>
 <td><code>prek update</code></td>
+<td><code>prek autoupdate</code> remains available as a hidden alias.</td>
 </tr>
 <tr>
-<td><code>prek gc</code></td>
+<td><code>pre-commit gc</code></td>
 <td><code>prek cache gc</code></td>
+<td><code>prek gc</code> remains available but is hidden.</td>
 </tr>
 <tr>
-<td><code>prek clean</code></td>
+<td><code>pre-commit clean</code></td>
 <td><code>prek cache clean</code></td>
+<td><code>prek clean</code> remains available but is hidden.</td>
 </tr>
 <tr>
-<td><code>prek init-templatedir</code></td>
+<td><code>pre-commit init-templatedir</code></td>
 <td><code>prek util init-template-dir</code></td>
+<td><code>prek init-templatedir</code> remains available but is hidden.</td>
 </tr>
 <tr>
 <td><code>pre-commit migrate-config</code></td>
-<td>Not provided directly; use <code>prek util yaml-to-toml</code> to migrate YAML to <code>prek.toml</code></td>
+<td><code>prek util yaml-to-toml</code></td>
+<td>Configuration migration lives under <code>prek util</code> and targets the native <code>prek.toml</code> format.</td>
+</tr>
+<tr>
+<td><code>pre-commit help &lt;command&gt;</code></td>
+<td><code>prek &lt;command&gt; --help</code></td>
+<td>Help uses the standard <code>--help</code> flag instead of a separate subcommand.</td>
+</tr>
+<tr>
+<td><code>pre-commit hook-impl</code></td>
+<td><code>prek hook-impl</code></td>
+<td>Available but hidden because installed Git hooks invoke it internally.</td>
 </tr>
 </tbody>
 </table>
@@ -1419,7 +1437,7 @@
 <li>helper and migration commands live under <code>prek util</code></li>
 <li><code>prepare-hooks</code> describes what the command actually does more clearly than <code>install-hooks</code></li>
 </ul>
-<p>That improves discoverability without dropping compatibility, because the older spellings remain available.</p>
+<p>This organization keeps the primary help output focused without removing the underlying functionality or compatibility entry points.</p>
 <h2 id="not-implemented">Not implemented<a class="headerlink" href="#not-implemented" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>pre-commit hazmat</code> is not implemented in <code>prek</code>.</li>
