@@ -16,21 +16,12 @@
 | -- | -- |
 | `prek install-hooks` | `prek prepare-hooks` |
 | `prek install --install-hooks` | `prek install --prepare-hooks` |
-| `prek auto-update` | `prek update` |
 | `prek autoupdate` | `prek update` |
 | `prek gc` | `prek cache gc` |
 | `prek clean` | `prek cache clean` |
 | `prek init-templatedir` | `prek util init-template-dir` |
 | `prek init-template-dir` | `prek util init-template-dir` |
 | `pre-commit migrate-config` | Not provided directly; use `prek util yaml-to-toml` to migrate YAML to `prek.toml` |
-
-## Preferred config key spellings
-
-`prek` still accepts legacy config keys below as aliases.
-
-| Compatibility spelling | Preferred `prek` spelling |
-| -- | -- |
-| `auto_update` | `update` |
 
 ## Why the CLI is reorganized
 

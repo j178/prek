@@ -268,7 +268,7 @@ pub(crate) enum Command {
     /// Generate a sample prek configuration file.
     SampleConfig(SampleConfigArgs),
     /// Update configured repositories.
-    #[command(aliases = ["auto-update", "autoupdate"])]
+    #[command(alias = "autoupdate")]
     Update(UpdateArgs),
     /// Manage the prek cache.
     Cache(CacheNamespace),

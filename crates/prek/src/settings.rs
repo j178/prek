@@ -82,7 +82,6 @@ impl Deref for FilesystemOptions {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
 pub(crate) struct Options {
-    #[serde(alias = "auto_update")]
     update: Option<GlobalUpdateOptions>,
 }
 
@@ -258,22 +257,6 @@ mod tests {
           |                            ^^^^^^^^^^^
         error parsing glob '[': unclosed character class; missing ']'
         "#);
-    }
-
-    #[test]
-    fn options_deserializes_legacy_update_key_alias() {
-        let options: Options = toml::from_str(
-            r"
-            [auto_update]
-            cooldown_days = 7
-            ",
-        )
-        .unwrap();
-
-        assert_eq!(
-            options.update.and_then(|options| options.cooldown_days),
-            Some(7)
-        );
     }
 
     #[test]

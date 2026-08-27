@@ -154,7 +154,7 @@ Common install methods:
 - `prek run <hook-id>`: run only one hook
 - `prek list`: list discovered hooks and projects
 - `prek validate-config`: validate `prek.toml` or `.pre-commit-config.yaml`
-- `prek auto-update`: update pinned hook revisions
+- `prek update`: update pinned hook revisions
 - `prek util yaml-to-toml`: convert an existing YAML config to `prek.toml`
 - `prek util identify <path>`: inspect file tags when `types`, `types_or`, or `exclude_types` do not match as expected
 
