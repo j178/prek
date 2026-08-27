@@ -12,13 +12,13 @@
         <meta name="author" content="j178">
       
       
-        <link rel="canonical" href="https://prek.j178.dev/0.5.0/debugging/">
+        <link rel="canonical" href="https://prek.j178.dev/0.5.0/local-hooks/">
       
       
-        <link rel="prev" href="../internals/">
+        <link rel="prev" href="../configuration/">
       
       
-        <link rel="next" href="../faq/">
+        <link rel="next" href="../ci/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Debugging - prek</title>
+        <title>Run Existing Project Commands - prek</title>
       
     
     
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#debugging" class="md-skip">
+        <a href="#run-existing-project-commands" class="md-skip">
           Skip to content
         </a>
       
@@ -124,7 +124,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Debugging
+              Run Existing Project Commands
             
           </span>
         </div>
@@ -410,8 +410,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -442,13 +444,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -468,7 +468,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -536,10 +536,36 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../local-hooks/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Local Hooks
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
@@ -554,6 +580,82 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-minimal-local-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        A minimal local hook
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decide-how-the-command-receives-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Decide how the command receives files
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filter-when-the-hook-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Filter when the hook runs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands-do-not-use-a-shell-by-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Commands do not use a shell by default
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Working directory
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -999,10 +1101,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1019,11 +1119,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
@@ -1043,7 +1145,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1057,36 +1159,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Debugging
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../debugging/" class="md-nav__link">
         
   
   
@@ -1101,93 +1177,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#a-hook-does-not-run-during-git-operations" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        A hook does not run during Git operations
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#a-hook-is-skipped-or-receives-no-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        A hook is skipped or receives no files
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#a-config-or-workspace-change-is-not-detected" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        A config or workspace change is not detected
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#hook-installation-or-downloads-fail" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Hook installation or downloads fail
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cache-problems" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Cache problems
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#logs-and-bug-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Logs and bug reports
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1474,10 +1463,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#a-hook-does-not-run-during-git-operations" class="md-nav__link">
+  <a href="#a-minimal-local-hook" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        A hook does not run during Git operations
+        A minimal local hook
       </span>
     </span>
   </a>
@@ -1485,10 +1474,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-hook-is-skipped-or-receives-no-files" class="md-nav__link">
+  <a href="#decide-how-the-command-receives-files" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        A hook is skipped or receives no files
+        Decide how the command receives files
       </span>
     </span>
   </a>
@@ -1496,10 +1485,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-config-or-workspace-change-is-not-detected" class="md-nav__link">
+  <a href="#filter-when-the-hook-runs" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        A config or workspace change is not detected
+        Filter when the hook runs
       </span>
     </span>
   </a>
@@ -1507,10 +1496,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#hook-installation-or-downloads-fail" class="md-nav__link">
+  <a href="#commands-do-not-use-a-shell-by-default" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Hook installation or downloads fail
+        Commands do not use a shell by default
       </span>
     </span>
   </a>
@@ -1518,21 +1507,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#cache-problems" class="md-nav__link">
+  <a href="#working-directory" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Cache problems
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#logs-and-bug-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Logs and bug reports
+        Working directory
       </span>
     </span>
   </a>
@@ -1563,84 +1541,95 @@
   
 
 
-<h1 id="debugging">Debugging<a class="headerlink" href="#debugging" title="Permanent link">&para;</a></h1>
-<p>Start by recording the versions and checking what prek discovered:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>prek<span class="w"> </span>--version
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>--version
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>prek<span class="w"> </span>list
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>prek<span class="w"> </span>run<span class="w"> </span>--dry-run
+<h1 id="run-existing-project-commands">Run Existing Project Commands<a class="headerlink" href="#run-existing-project-commands" title="Permanent link">&para;</a></h1>
+<p>Use a local hook when the command belongs to the current project rather than a
+separate hook repository. This is the usual choice for a linter, formatter, or
+test command already declared in the project's dependencies.</p>
+<h2 id="a-minimal-local-hook">A minimal local hook<a class="headerlink" href="#a-minimal-local-hook" title="Permanent link">&para;</a></h2>
+<p>The following hook expects <code>uv</code> and the project's dependencies to be available.
+<code>prek</code> appends matching Python filenames to the command.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="a-minimal-local-hook-prektoml" name="__tabbed_1" type="radio" /><input id="a-minimal-local-hook-pre-commit-configyaml" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="a-minimal-local-hook-prektoml">prek.toml</label><label for="a-minimal-local-hook-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">[[repos.hooks]]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">language</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">entry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;uv run ruff check&quot;</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">types</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;python&quot;</span><span class="p">]</span>
 </span></code></pre></div>
-<p>Then rerun the smallest failing command with verbose tracing:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>prek<span class="w"> </span>run<span class="w"> </span>check-yaml<span class="w"> </span>-vvv
+</div>
+<div class="tabbed-block">
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ruff</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">        </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uv run ruff check</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">]</span>
 </span></code></pre></div>
-<p>Replace <code>check-yaml</code> with the ID of the failing hook.</p>
-<h2 id="a-hook-does-not-run-during-git-operations">A hook does not run during Git operations<a class="headerlink" href="#a-hook-does-not-run-during-git-operations" title="Permanent link">&para;</a></h2>
-<p>Confirm that the expected Git shim is installed:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>prek<span class="w"> </span>install
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>config<span class="w"> </span>--show-origin<span class="w"> </span>--get<span class="w"> </span>core.hooksPath
+</div>
+</div>
+</div>
+<p><code>language = "system"</code> means that prek does not install the command. The entry
+and any interpreters or package managers it invokes must already be available
+on <code>PATH</code>.</p>
+<h2 id="decide-how-the-command-receives-files">Decide how the command receives files<a class="headerlink" href="#decide-how-the-command-receives-files" title="Permanent link">&para;</a></h2>
+<p><code>pass_filenames</code> defaults to <code>true</code>. Matching filenames are appended after
+<code>entry</code> and <code>args</code>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv run ruff check path/to/one.py path/to/two.py
 </span></code></pre></div>
-<p><code>prek install</code> defaults to the <code>pre-commit</code> shim. Other stages require either
-<code>default_install_hook_types</code> in the config or an explicit
-<code>prek install --hook-type &lt;stage&gt;</code>. A hook's <code>stages</code> setting controls whether it
-is eligible to run, but does not install the corresponding Git shim.</p>
-<p>If another tool already owned the hook, check the install output for migration
-mode. prek may be running both its own hook and a preserved <code>.legacy</code> hook.</p>
-<h2 id="a-hook-is-skipped-or-receives-no-files">A hook is skipped or receives no files<a class="headerlink" href="#a-hook-is-skipped-or-receives-no-files" title="Permanent link">&para;</a></h2>
-<p><code>prek run</code> without a file-selection option checks the files staged in Git. Try
-the whole repository and inspect the selection without executing hooks:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--dry-run
+<p>Set it to <code>false</code> when the command discovers files itself or always checks a
+whole workspace:</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">[[repos.hooks]]</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;cargo-fmt&quot;</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;cargo fmt&quot;</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">language</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;system&quot;</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">entry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;cargo fmt --all -- --check&quot;</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">types</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;rust&quot;</span><span class="p">]</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">pass_filenames</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
 </span></code></pre></div>
-<p>Check <code>files</code>, <code>exclude</code>, <code>types</code>, <code>types_or</code>, <code>exclude_types</code>, <code>stages</code>, and any
-<code>PREK_SKIP</code> or <code>SKIP</code> value. To see the type tags prek assigns to a path, run:</p>
+<p>A positive integer limits each invocation to that many filenames and lets prek
+split a large match set into batches. See
+<a href="../reference/configuration/#pass_filenames"><code>pass_filenames</code></a> before using this
+prek-specific form.</p>
+<h2 id="filter-when-the-hook-runs">Filter when the hook runs<a class="headerlink" href="#filter-when-the-hook-runs" title="Permanent link">&para;</a></h2>
+<p>Use file filters to avoid starting a command when no relevant file changed:</p>
+<ul>
+<li><code>types</code> and <code>types_or</code> use file type tags detected by prek.</li>
+<li><code>files</code> and <code>exclude</code> match paths with regular expressions, or with prek's
+  explicit glob form.</li>
+<li><code>stages</code> limits the Git hook stages where a hook is eligible.</li>
+</ul>
+<p>Inspect a file's detected tags with:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>prek<span class="w"> </span>util<span class="w"> </span>identify<span class="w"> </span>path/to/file
 </span></code></pre></div>
-<p>In a workspace, use <code>prek list</code> to confirm the project and use a
-<a href="../workspace/#project-and-hook-selection">project-qualified selector</a> when hook
-IDs are repeated.</p>
-<h2 id="a-config-or-workspace-change-is-not-detected">A config or workspace change is not detected<a class="headerlink" href="#a-config-or-workspace-change-is-not-detected" title="Permanent link">&para;</a></h2>
-<p>New and changed config files must be staged for the default staged-file run.
-This keeps config discovery and hook execution on the same snapshot:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>git<span class="w"> </span>add<span class="w"> </span>prek.toml
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>prek<span class="w"> </span>run
-</span></code></pre></div>
-<p>Use the repository's YAML config filename instead when applicable.</p>
-<p>If you added a nested config or changed <code>.prekignore</code>, rebuild workspace
-discovery with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--refresh
-</span></code></pre></div>
-<h2 id="hook-installation-or-downloads-fail">Hook installation or downloads fail<a class="headerlink" href="#hook-installation-or-downloads-fail" title="Permanent link">&para;</a></h2>
-<p>Use <code>-vvv</code> to identify whether the failing step is Git authentication, TLS,
-toolchain download, or the language package manager. Then check:</p>
-<ul>
-<li><a href="../faq/#how-do-i-use-hooks-from-private-repositories">Private repository authentication</a></li>
-<li>Proxy and certificate variables in the
-  <a href="../reference/environment-variables/#related-external-variables">Environment Variable Reference</a></li>
-<li>Language-specific prerequisites in <a href="../languages/">Language Support</a></li>
-<li>The checksum and trust boundary in the <a href="../security/">Security Guide</a></li>
-</ul>
-<p>If a Rust-native fast path behaves differently from the pinned hook, compare it
-with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">PREK_NO_FAST_PATH</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>prek<span class="w"> </span>run<span class="w"> </span>check-yaml<span class="w"> </span>--all-files
-</span></code></pre></div>
-<h2 id="cache-problems">Cache problems<a class="headerlink" href="#cache-problems" title="Permanent link">&para;</a></h2>
-<p>Inspect the cache before removing anything:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>prek<span class="w"> </span>cache<span class="w"> </span>dir
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>prek<span class="w"> </span>cache<span class="w"> </span>size
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>prek<span class="w"> </span>cache<span class="w"> </span>gc
-</span></code></pre></div>
-<p><code>prek cache clean</code> removes cached hook repositories, environments, and managed
-tools, so the next run must download and prepare them again. Use it only after a
-normal retry and garbage collection do not resolve a corrupted environment.</p>
-<h2 id="logs-and-bug-reports">Logs and bug reports<a class="headerlink" href="#logs-and-bug-reports" title="Permanent link">&para;</a></h2>
-<p>prek writes trace logs to <code>$PREK_HOME/prek.log</code>. By default this is
-<code>~/.cache/prek/prek.log</code> on macOS and Linux, and the prek directory under
-<code>%LOCALAPPDATA%</code> on Windows. Choose a separate file for one reproduction with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>prek<span class="w"> </span>--log-file<span class="w"> </span>prek-debug.log<span class="w"> </span>run<span class="w"> </span>check-yaml<span class="w"> </span>-vvv
-</span></code></pre></div>
-<p>When reporting a bug, include the smallest reproducer, command, complete error,
-prek version, operating system, and relevant log section. Remove credentials,
-private repository URLs, user paths, and sensitive hook output before sharing a
-log publicly.</p>
+<p>The <a href="../reference/configuration/#common-hook-options">configuration reference</a>
+documents how the filters combine.</p>
+<h2 id="commands-do-not-use-a-shell-by-default">Commands do not use a shell by default<a class="headerlink" href="#commands-do-not-use-a-shell-by-default" title="Permanent link">&para;</a></h2>
+<p>prek splits <code>entry</code> into arguments and invokes the program directly. Operators
+such as <code>|</code>, <code>&amp;&amp;</code>, redirects, variables, and globs are not interpreted by a
+shell.</p>
+<p>Prefer putting complex logic in a checked-in script and using that script as
+the entry. If shell syntax is truly part of the hook, set the prek-specific
+<a href="../reference/configuration/#shell"><code>shell</code></a> option and write the command for
+that shell. Shell-specific hooks are less portable, especially between Windows
+and Unix systems.</p>
+<h2 id="working-directory">Working directory<a class="headerlink" href="#working-directory" title="Permanent link">&para;</a></h2>
+<p>A local hook runs in the directory of the project whose config defines it. In a
+single-config repository this is normally the Git root. In
+<a href="../workspace/">workspace mode</a>, a nested project's hooks run in that nested
+project directory. Entries should therefore use paths relative to their own
+project rather than the directory from which the user invoked prek.</p>
+<p>For the exact entry resolution model, see
+<a href="../internals/#hook-entry-resolution">Hook Entry Resolution</a>.</p>
 
 
 
@@ -1680,7 +1669,7 @@ log publicly.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../internals/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Internals">
+          <a href="../configuration/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Configuration">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
@@ -1690,20 +1679,20 @@ log publicly.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Internals
+                Configuration
               </div>
             </div>
           </a>
         
         
           
-          <a href="../faq/" class="md-footer__link md-footer__link--next" aria-label="Next: FAQ">
+          <a href="../ci/" class="md-footer__link md-footer__link--next" aria-label="Next: Continuous Integration">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                FAQ
+                Continuous Integration
               </div>
             </div>
             <div class="md-footer__button md-icon">

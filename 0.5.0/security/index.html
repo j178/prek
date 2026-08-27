@@ -12,13 +12,13 @@
         <meta name="author" content="j178">
       
       
-        <link rel="canonical" href="https://prek.j178.dev/0.5.0/debugging/">
+        <link rel="canonical" href="https://prek.j178.dev/0.5.0/security/">
       
       
-        <link rel="prev" href="../internals/">
+        <link rel="prev" href="../diff/">
       
       
-        <link rel="next" href="../faq/">
+        <link rel="next" href="../benchmark/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Debugging - prek</title>
+        <title>Security Guide - prek</title>
       
     
     
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#debugging" class="md-skip">
+        <a href="#security-guide" class="md-skip">
           Skip to content
         </a>
       
@@ -124,7 +124,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Debugging
+              Security Guide
             
           </span>
         </div>
@@ -999,10 +999,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1019,11 +1017,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
@@ -1043,7 +1043,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1057,36 +1057,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Debugging
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../debugging/" class="md-nav__link">
         
   
   
@@ -1101,93 +1075,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#a-hook-does-not-run-during-git-operations" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        A hook does not run during Git operations
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#a-hook-is-skipped-or-receives-no-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        A hook is skipped or receives no files
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#a-config-or-workspace-change-is-not-detected" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        A config or workspace change is not detected
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#hook-installation-or-downloads-fail" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Hook installation or downloads fail
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cache-problems" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Cache problems
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#logs-and-bug-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Logs and bug reports
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1231,8 +1118,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -1255,13 +1144,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
@@ -1281,7 +1168,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1349,10 +1236,36 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../security/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Security
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1367,6 +1280,71 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#review-configurations-before-running-them" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Review configurations before running them
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-remote-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Pin remote hooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloads-and-checksums" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Downloads and checksums
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credentials-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Credentials and logs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1474,10 +1452,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#a-hook-does-not-run-during-git-operations" class="md-nav__link">
+  <a href="#review-configurations-before-running-them" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        A hook does not run during Git operations
+        Review configurations before running them
       </span>
     </span>
   </a>
@@ -1485,10 +1463,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-hook-is-skipped-or-receives-no-files" class="md-nav__link">
+  <a href="#pin-remote-hooks" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        A hook is skipped or receives no files
+        Pin remote hooks
       </span>
     </span>
   </a>
@@ -1496,10 +1474,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-config-or-workspace-change-is-not-detected" class="md-nav__link">
+  <a href="#downloads-and-checksums" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        A config or workspace change is not detected
+        Downloads and checksums
       </span>
     </span>
   </a>
@@ -1507,32 +1485,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#hook-installation-or-downloads-fail" class="md-nav__link">
+  <a href="#credentials-and-logs" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Hook installation or downloads fail
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cache-problems" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Cache problems
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#logs-and-bug-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Logs and bug reports
+        Credentials and logs
       </span>
     </span>
   </a>
@@ -1563,84 +1519,44 @@
   
 
 
-<h1 id="debugging">Debugging<a class="headerlink" href="#debugging" title="Permanent link">&para;</a></h1>
-<p>Start by recording the versions and checking what prek discovered:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>prek<span class="w"> </span>--version
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>--version
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>prek<span class="w"> </span>list
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>prek<span class="w"> </span>run<span class="w"> </span>--dry-run
-</span></code></pre></div>
-<p>Then rerun the smallest failing command with verbose tracing:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>prek<span class="w"> </span>run<span class="w"> </span>check-yaml<span class="w"> </span>-vvv
-</span></code></pre></div>
-<p>Replace <code>check-yaml</code> with the ID of the failing hook.</p>
-<h2 id="a-hook-does-not-run-during-git-operations">A hook does not run during Git operations<a class="headerlink" href="#a-hook-does-not-run-during-git-operations" title="Permanent link">&para;</a></h2>
-<p>Confirm that the expected Git shim is installed:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>prek<span class="w"> </span>install
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>config<span class="w"> </span>--show-origin<span class="w"> </span>--get<span class="w"> </span>core.hooksPath
-</span></code></pre></div>
-<p><code>prek install</code> defaults to the <code>pre-commit</code> shim. Other stages require either
-<code>default_install_hook_types</code> in the config or an explicit
-<code>prek install --hook-type &lt;stage&gt;</code>. A hook's <code>stages</code> setting controls whether it
-is eligible to run, but does not install the corresponding Git shim.</p>
-<p>If another tool already owned the hook, check the install output for migration
-mode. prek may be running both its own hook and a preserved <code>.legacy</code> hook.</p>
-<h2 id="a-hook-is-skipped-or-receives-no-files">A hook is skipped or receives no files<a class="headerlink" href="#a-hook-is-skipped-or-receives-no-files" title="Permanent link">&para;</a></h2>
-<p><code>prek run</code> without a file-selection option checks the files staged in Git. Try
-the whole repository and inspect the selection without executing hooks:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files<span class="w"> </span>--dry-run
-</span></code></pre></div>
-<p>Check <code>files</code>, <code>exclude</code>, <code>types</code>, <code>types_or</code>, <code>exclude_types</code>, <code>stages</code>, and any
-<code>PREK_SKIP</code> or <code>SKIP</code> value. To see the type tags prek assigns to a path, run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>prek<span class="w"> </span>util<span class="w"> </span>identify<span class="w"> </span>path/to/file
-</span></code></pre></div>
-<p>In a workspace, use <code>prek list</code> to confirm the project and use a
-<a href="../workspace/#project-and-hook-selection">project-qualified selector</a> when hook
-IDs are repeated.</p>
-<h2 id="a-config-or-workspace-change-is-not-detected">A config or workspace change is not detected<a class="headerlink" href="#a-config-or-workspace-change-is-not-detected" title="Permanent link">&para;</a></h2>
-<p>New and changed config files must be staged for the default staged-file run.
-This keeps config discovery and hook execution on the same snapshot:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>git<span class="w"> </span>add<span class="w"> </span>prek.toml
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>prek<span class="w"> </span>run
-</span></code></pre></div>
-<p>Use the repository's YAML config filename instead when applicable.</p>
-<p>If you added a nested config or changed <code>.prekignore</code>, rebuild workspace
-discovery with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--refresh
-</span></code></pre></div>
-<h2 id="hook-installation-or-downloads-fail">Hook installation or downloads fail<a class="headerlink" href="#hook-installation-or-downloads-fail" title="Permanent link">&para;</a></h2>
-<p>Use <code>-vvv</code> to identify whether the failing step is Git authentication, TLS,
-toolchain download, or the language package manager. Then check:</p>
+<h1 id="security-guide">Security Guide<a class="headerlink" href="#security-guide" title="Permanent link">&para;</a></h1>
+<p>A hook configuration is executable project code. Installing a Git shim or
+running <code>prek run</code> authorizes the selected hooks, their installation steps, and
+their dependencies to execute with the current user's permissions.</p>
+<h2 id="review-configurations-before-running-them">Review configurations before running them<a class="headerlink" href="#review-configurations-before-running-them" title="Permanent link">&para;</a></h2>
+<p>Treat an unfamiliar <code>prek.toml</code> or <code>.pre-commit-config.yaml</code> like an unfamiliar
+build script:</p>
 <ul>
-<li><a href="../faq/#how-do-i-use-hooks-from-private-repositories">Private repository authentication</a></li>
-<li>Proxy and certificate variables in the
-  <a href="../reference/environment-variables/#related-external-variables">Environment Variable Reference</a></li>
-<li>Language-specific prerequisites in <a href="../languages/">Language Support</a></li>
-<li>The checksum and trust boundary in the <a href="../security/">Security Guide</a></li>
+<li>Review remote repository URLs, revisions, hook entries, and additional
+  dependencies.</li>
+<li>Review local hooks and checked-in scripts, especially entries that explicitly
+  invoke a shell.</li>
+<li>Inspect configuration changes in pull requests before running them locally.</li>
+<li>Use tighter credentials and isolation for untrusted repositories.</li>
 </ul>
-<p>If a Rust-native fast path behaves differently from the pinned hook, compare it
-with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">PREK_NO_FAST_PATH</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>prek<span class="w"> </span>run<span class="w"> </span>check-yaml<span class="w"> </span>--all-files
-</span></code></pre></div>
-<h2 id="cache-problems">Cache problems<a class="headerlink" href="#cache-problems" title="Permanent link">&para;</a></h2>
-<p>Inspect the cache before removing anything:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>prek<span class="w"> </span>cache<span class="w"> </span>dir
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>prek<span class="w"> </span>cache<span class="w"> </span>size
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>prek<span class="w"> </span>cache<span class="w"> </span>gc
-</span></code></pre></div>
-<p><code>prek cache clean</code> removes cached hook repositories, environments, and managed
-tools, so the next run must download and prepare them again. Use it only after a
-normal retry and garbage collection do not resolve a corrupted environment.</p>
-<h2 id="logs-and-bug-reports">Logs and bug reports<a class="headerlink" href="#logs-and-bug-reports" title="Permanent link">&para;</a></h2>
-<p>prek writes trace logs to <code>$PREK_HOME/prek.log</code>. By default this is
-<code>~/.cache/prek/prek.log</code> on macOS and Linux, and the prek directory under
-<code>%LOCALAPPDATA%</code> on Windows. Choose a separate file for one reproduction with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>prek<span class="w"> </span>--log-file<span class="w"> </span>prek-debug.log<span class="w"> </span>run<span class="w"> </span>check-yaml<span class="w"> </span>-vvv
-</span></code></pre></div>
-<p>When reporting a bug, include the smallest reproducer, command, complete error,
-prek version, operating system, and relevant log section. Remove credentials,
-private repository URLs, user paths, and sensitive hook output before sharing a
-log publicly.</p>
+<p>This is especially important for a global Git hook that discovers and runs each
+repository's config automatically. Such a hook can execute project-controlled
+code during an ordinary Git operation.</p>
+<h2 id="pin-remote-hooks">Pin remote hooks<a class="headerlink" href="#pin-remote-hooks" title="Permanent link">&para;</a></h2>
+<p>A full commit SHA is the strongest Git pin because it names immutable content.
+A version tag is easier to read and is commonly used for releases, but Git tags
+can be moved by a repository maintainer. Branch names are mutable and should not
+be treated as repeatable pins.</p>
+<p>Use <code>prek update --freeze</code> to write commit SHAs when immutable pins are required.
+Review the resulting revision changes before committing them.</p>
+<h2 id="downloads-and-checksums">Downloads and checksums<a class="headerlink" href="#downloads-and-checksums" title="Permanent link">&para;</a></h2>
+<p>For managed download paths that support checksum sidecars, prek verifies the
+download when the upstream source provides that metadata. The
+<a href="../reference/environment-variables/#prek_download_checksum_policy">download checksum policy</a>
+controls what happens when metadata is missing; it cannot create authenticity
+information that an upstream source did not publish.</p>
+<p>Release artifacts for prek itself include GitHub attestations. See
+<a href="../installation/#artifact-verification">Artifact Verification</a>.</p>
+<h2 id="credentials-and-logs">Credentials and logs<a class="headerlink" href="#credentials-and-logs" title="Permanent link">&para;</a></h2>
+<p>Use a credential helper or short-lived CI token for private hook repositories.
+Avoid embedding credentials in repository URLs or configuration files. Verbose
+hook output and <code>prek.log</code> can contain repository paths, command arguments, and
+tool output, so review and redact logs before sharing them publicly.</p>
 
 
 
@@ -1680,7 +1596,7 @@ log publicly.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../internals/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Internals">
+          <a href="../diff/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Differences">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
@@ -1690,20 +1606,20 @@ log publicly.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Internals
+                Differences
               </div>
             </div>
           </a>
         
         
           
-          <a href="../faq/" class="md-footer__link md-footer__link--next" aria-label="Next: FAQ">
+          <a href="../benchmark/" class="md-footer__link md-footer__link--next" aria-label="Next: Benchmark">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                FAQ
+                Benchmark
               </div>
             </div>
             <div class="md-footer__button md-icon">
