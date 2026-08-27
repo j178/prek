@@ -245,7 +245,7 @@ impl Project {
         })
     }
 
-    fn find_config(path: &Path) -> Option<PathBuf> {
+    pub(crate) fn find_config(path: &Path) -> Option<PathBuf> {
         for name in CONFIG_FILENAMES {
             let file = path.join(name);
             if file.is_file() {
@@ -609,6 +609,15 @@ pub(crate) struct Workspace {
 }
 
 impl Workspace {
+    pub(crate) fn invalidate_cache(store: &Store, root: &Path) -> Result<()> {
+        let cache_path = WorkspaceCache::cache_path(store, root);
+        match fs_err::remove_file(cache_path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// Find the workspace root.
     /// `dir` must be an absolute path.
     pub(crate) fn find_root(config_file: Option<&Path>, dir: &Path) -> Result<PathBuf, Error> {

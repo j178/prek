@@ -20,6 +20,7 @@ mod completion;
 mod exec;
 mod hook_impl;
 mod identify;
+mod init;
 mod install;
 mod list;
 mod list_builtins;
@@ -40,6 +41,7 @@ use completion::selector_completer;
 pub(crate) use exec::exec;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
+pub(crate) use init::init;
 pub(crate) use install::{init_template_dir, install, prepare_hooks, uninstall};
 pub(crate) use list::list;
 pub(crate) use list_builtins::list_builtins;
@@ -235,6 +237,8 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Create a prek configuration and install Git hook shims.
+    Init(InitArgs),
     /// Install prek Git hook shims.
     ///
     /// The effective hooks directory defaults to `.git/hooks/`, but repo-local
@@ -266,6 +270,7 @@ pub(crate) enum Command {
     /// Validate pre-commit hook manifests (`.pre-commit-hooks.yaml`).
     ValidateManifest(ValidateManifestArgs),
     /// Generate a sample prek configuration file.
+    #[command(hide = true)]
     SampleConfig(SampleConfigArgs),
     /// Update configured repositories.
     #[command(alias = "autoupdate")]
@@ -291,6 +296,29 @@ pub(crate) enum Command {
     /// Manage the prek installation.
     #[command(name = "self")]
     Self_(SelfNamespace),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct InitArgs {
+    /// Existing directory to initialize.
+    ///
+    /// Defaults to the current Git worktree root. Relative paths are resolved
+    /// from the current directory after applying `--cd`, and the resolved path
+    /// must be inside the current Git worktree.
+    #[arg(
+        value_name = "PATH",
+        value_hint = ValueHint::DirPath,
+        value_parser = PathBufValueParser::new().map(expand_tilde),
+    )]
+    pub(crate) path: Option<PathBuf>,
+
+    /// Select the configuration format to create.
+    #[arg(long, value_enum, default_value_t = SampleConfigFormat::Toml)]
+    pub(crate) format: SampleConfigFormat,
+
+    /// Do not install Git hook shims.
+    #[arg(long)]
+    pub(crate) no_install: bool,
 }
 
 #[derive(Debug, Args)]

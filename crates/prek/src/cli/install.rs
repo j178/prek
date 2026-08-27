@@ -25,6 +25,7 @@ use crate::{git, warn_user};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     store: &Store,
+    project_dir: &Path,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -96,7 +97,7 @@ pub(crate) async fn install(
         .await
         .unwrap_or(0o755);
 
-    let project = match Project::discover(config.as_deref(), &CWD) {
+    let project = match Project::discover(config.as_deref(), project_dir) {
         Ok(project) => Some(project),
         Err(err) => {
             if let WorkspaceError::Config(err) = &err {
@@ -293,7 +294,10 @@ fn install_hook_script(
 
     args.push(format!("--hook-type={hook_type}"));
 
-    let mut hint = format!("prek installed at `{}`", hook_path.user_display().cyan());
+    let mut hint = format!(
+        "Installed Git hook at `{}`",
+        hook_path.user_display().cyan()
+    );
 
     // Prefer explicit config path if given (non-workspace mode).
     // Otherwise, use the config path from the discovered project (workspace mode).
@@ -505,6 +509,7 @@ pub(crate) async fn init_template_dir(
 ) -> Result<ExitStatus> {
     install(
         store,
+        &CWD,
         config,
         vec![],
         vec![],
