@@ -29,7 +29,7 @@
     
     
       
-        <title>Run Existing Project Commands - prek</title>
+        <title>Local Hooks - prek</title>
       
     
     
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#run-existing-project-commands" class="md-skip">
+        <a href="#local-hooks" class="md-skip">
           Skip to content
         </a>
       
@@ -124,7 +124,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Run Existing Project Commands
+              Local Hooks
             
           </span>
         </div>
@@ -1541,10 +1541,9 @@
   
 
 
-<h1 id="run-existing-project-commands">Run Existing Project Commands<a class="headerlink" href="#run-existing-project-commands" title="Permanent link">&para;</a></h1>
-<p>Use a local hook when the command belongs to the current project rather than a
-separate hook repository. This is the usual choice for a linter, formatter, or
-test command already declared in the project's dependencies.</p>
+<h1 id="local-hooks">Local Hooks<a class="headerlink" href="#local-hooks" title="Permanent link">&para;</a></h1>
+<p><code>repo: local</code> defines hooks directly in the current project's configuration
+instead of loading them from a separate hook repository.</p>
 <h2 id="a-minimal-local-hook">A minimal local hook<a class="headerlink" href="#a-minimal-local-hook" title="Permanent link">&para;</a></h2>
 <p>The following hook expects <code>uv</code> and the project's dependencies to be available.
 <code>prek</code> appends matching Python filenames to the command.</p>
