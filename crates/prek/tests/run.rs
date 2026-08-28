@@ -1367,6 +1367,65 @@ fn priority_fail_fast_stops_later_groups() {
 }
 
 #[test]
+fn explicitly_skipped_hook_does_not_affect_priority_group_outcome() -> Result<()> {
+    let context = TestEnv::new_git();
+    context.work_dir().child("file.txt").write_str("hello\n")?;
+
+    let context = context.with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: skipped
+                name: Skipped Check
+                language: system
+                entry: python3 -c "raise SystemExit(1)"
+                always_run: true
+                fail_fast: true
+                priority: 0
+              - id: modify
+                name: Modifies File
+                language: system
+                entry: python3 -c "from pathlib import Path; p = Path('file.txt'); p.write_text(p.read_text() + 'x')"
+                always_run: true
+                priority: 0
+              - id: later
+                name: Later Hook
+                language: system
+                entry: python3 -c "print('later ran')"
+                always_run: true
+                priority: 10
+    "#});
+
+    context.git().add_all();
+
+    cmd_snapshot!(context, context.run().arg("--skip").arg("skipped"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Skipped Check...........................................................Skipped
+    Modifies File............................................................Failed
+    - hook id: modify
+    - files were modified by this hook
+    Later Hook...............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    context.work_dir().child("file.txt").write_str("hello\n")?;
+    cmd_snapshot!(context, context.run().arg("--skip").arg("skipped").arg("--hide-status").arg("failed"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Skipped Check...........................................................Skipped
+    Later Hook...............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Result<()> {
     let context = TestEnv::new_git();
 
@@ -1377,6 +1436,12 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
         repos:
           - repo: local
             hooks:
+              - id: skipped
+                name: Skipped Check
+                language: system
+                entry: python3 -c "raise SystemExit(1)"
+                always_run: true
+                priority: 0
               - id: modify
                 name: Modifies File
                 language: system
@@ -1408,7 +1473,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
 
     context.git().add_all();
 
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("skipped"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1422,6 +1487,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
       │
       │ hello from loud
       └ No Output............................................................Passed
+    Skipped Check...........................................................Skipped
     Later Hook...............................................................Passed
     - hook id: later
     - duration: [TIME]
@@ -1432,11 +1498,12 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
     ");
 
     context.work_dir().child("file.txt").write_str("hello\n")?;
-    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("skipped").arg("--hide-status").arg("passed"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
     Files were modified by following hooks...................................Failed
+    Skipped Check...........................................................Skipped
 
     ----- stderr -----
     "#);
@@ -1562,30 +1629,33 @@ fn skips() {
     "#});
     context.git().add_all();
 
-    cmd_snapshot!(context, context.run().env("SKIP", "end-of-file-fixer"), @r"
+    cmd_snapshot!(context, context.run().env("SKIP", "end-of-file-fixer"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+    fix end of files........................................................Skipped
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
 
     ----- stderr -----
-    ");
+    "#);
 
-    cmd_snapshot!(context, context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @r"
+    cmd_snapshot!(context, context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
+    trailing-whitespace.....................................................Skipped
+    fix end of files........................................................Skipped
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]
@@ -1613,7 +1683,7 @@ fn hide_status_filters_hook_reports() {
     "#});
     context.git().add_all();
 
-    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed,skipped"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("pass").arg("--hide-status").arg("passed,skipped"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1811,6 +1881,17 @@ fn fallback_to_manual_stage() {
 
     ----- stderr -----
     ");
+
+    // A skipped pre-commit hook should not prevent a runnable manual hook from falling back.
+    cmd_snapshot!(context, context.run().arg("--skip").arg("default-stage").arg("manual-only").arg("default-stage"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    manual-only..............................................................Passed
+    default-stage...........................................................Skipped
+
+    ----- stderr -----
+    "#);
 
     // Selecting only manual hooks should still succeed via fallback.
     cmd_snapshot!(context, context.run().arg("manual-only").arg("another-manual"), @r"
