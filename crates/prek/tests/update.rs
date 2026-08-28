@@ -14,7 +14,7 @@ const INCREMENTING_STEP_SECS: u64 = 100;
 const FIXED_STEP_SECS: u64 = 0;
 
 fn context_with_commit_sha_filter() -> TestEnv {
-    TestEnv::new().with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]")
+    TestEnv::new_git().with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]")
 }
 
 /// Helper function to create a local git repository with hooks and incrementing timestamps.
@@ -93,9 +93,10 @@ fn create_local_git_repo_with_tag_timestamps(
           language: python
     "#})?;
 
-    repo.git().arg("add").arg(".").assert().success();
+    repo.git().add(".");
 
     repo.git()
+        .command()
         .arg("commit")
         .arg("-m")
         .arg("Initial commit")
@@ -107,6 +108,7 @@ fn create_local_git_repo_with_tag_timestamps(
     // Create tags
     for (tag, timestamp) in tags {
         repo.git()
+            .command()
             .arg("commit")
             .arg("-m")
             .arg(format!("Release {tag}"))
@@ -116,6 +118,7 @@ fn create_local_git_repo_with_tag_timestamps(
             .assert()
             .success();
         repo.git()
+            .command()
             .arg("tag")
             .arg(tag)
             .arg("-m")
@@ -128,6 +131,7 @@ fn create_local_git_repo_with_tag_timestamps(
 
     // Add an extra commit to the tip
     repo.git()
+        .command()
         .arg("commit")
         .arg("-m")
         .arg("tip")
@@ -142,7 +146,7 @@ fn create_local_git_repo_with_tag_timestamps(
 
 #[test]
 fn update_basic() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
 
@@ -153,7 +157,7 @@ fn update_basic() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -178,7 +182,7 @@ fn update_basic() -> Result<()> {
 
 #[test]
 fn update_already_up_to_date() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "up-to-date-repo", &["v1.0.0"])?;
 
@@ -190,7 +194,7 @@ fn update_already_up_to_date() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -213,7 +217,7 @@ fn update_already_up_to_date() -> Result<()> {
 
 #[test]
 fn update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo_with_tag_ages(
         &context,
@@ -229,7 +233,7 @@ fn update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("7"), @"
     success: true
@@ -270,7 +274,7 @@ fn update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--freeze").arg("--cooldown-days").arg("7"), @"
     success: true
@@ -295,7 +299,7 @@ fn update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
 
 #[test]
 fn update_already_up_to_date_verbose() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "up-to-date-repo-verbose", &["v1.0.0"])?;
 
@@ -307,7 +311,7 @@ fn update_already_up_to_date_verbose() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("-v").arg("--cooldown-days").arg("0"), @"
     success: true
@@ -327,7 +331,7 @@ fn update_already_up_to_date_verbose() -> Result<()> {
 fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
     use std::time::UNIX_EPOCH;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "up-to-date-repo-mtime", &["v1.0.0"])?;
 
@@ -338,7 +342,7 @@ fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
 
@@ -367,7 +371,7 @@ fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
 
 #[test]
 fn update_multiple_repos_mixed() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
     let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0"])?;
@@ -388,7 +392,7 @@ fn update_multiple_repos_mixed() -> Result<()> {
               - id: another-hook
     ", repo1_path, repo1_path, repo2_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: false
@@ -424,7 +428,7 @@ fn update_multiple_repos_mixed() -> Result<()> {
 /// Test that `prek update` ignores the `GIT_DIR` environment variable.
 #[test]
 fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "target-repo", &["v0.1.0", "v0.2.0"])?;
     let external_repo_path = create_local_git_repo(&context, "external-repo", &["v9.9.9"])?;
@@ -436,7 +440,7 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     let mut cmd = context.update();
     cmd.arg("--cooldown-days")
@@ -466,7 +470,7 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
 
 #[test]
 fn update_specific_repos() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
     let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
@@ -483,7 +487,7 @@ fn update_specific_repos() -> Result<()> {
               - id: another-hook
     ", repo1_path, repo2_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Update only repo1
     cmd_snapshot!(context, context.update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @"
@@ -536,7 +540,7 @@ fn update_specific_repos() -> Result<()> {
 
 #[test]
 fn update_warns_for_missing_repos() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "configured-repo", &["v1.0.0", "v1.1.0"])?;
 
@@ -547,7 +551,7 @@ fn update_warns_for_missing_repos() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update()
         .arg("--repo").arg(&repo_path)
@@ -575,7 +579,7 @@ fn update_warns_for_missing_repos() -> Result<()> {
 
 #[test]
 fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(&context, "project-repo-1", &["v1.0.0", "v1.1.0"])?;
     let repo2_path = create_local_git_repo(&context, "project-repo-2", &["v1.0.0", "v1.1.0"])?;
@@ -609,7 +613,7 @@ fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
             hooks:
               - id: test-hook
     "#, repo1_path, repo2_path})?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--jobs").arg("1"), @"
     success: true
@@ -636,7 +640,7 @@ fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
 
 #[test]
 fn update_repo_options_match_relative_config_value() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let selected_path = create_local_git_repo(
         &context,
@@ -656,7 +660,7 @@ fn update_repo_options_match_relative_config_value() -> Result<()> {
             hooks:
               - id: test-hook
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let include_filter = format!("{selected_repo}=v1.*");
     let exclude_filter = format!("{selected_repo}=v1.2.0");
@@ -691,7 +695,7 @@ fn update_repo_options_match_relative_config_value() -> Result<()> {
 
 #[test]
 fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "included-repo", &["v1.0.0", "v1.1.0"])?;
     let missing_repo_path = context
@@ -712,7 +716,7 @@ fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
               - id: another-hook
     ", repo_path, missing_repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--exclude-repo").arg(&missing_repo_path).arg("--cooldown-days").arg("0"), @"
     success: true
@@ -741,7 +745,7 @@ fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
 
 #[test]
 fn update_exclude_repo_matches_relative_config_value() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     create_local_git_repo(&context, "relative-excluded", &["v1.0.0", "v2.0.0"])?;
     create_local_git_repo(&context, "relative-included", &["v1.0.0", "v2.0.0"])?;
@@ -759,7 +763,7 @@ fn update_exclude_repo_matches_relative_config_value() -> Result<()> {
             hooks:
               - id: test-hook
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update()
         .arg("--exclude-repo").arg(excluded_repo)
@@ -790,7 +794,7 @@ fn update_exclude_repo_matches_relative_config_value() -> Result<()> {
 
 #[test]
 fn update_tag_filters_include_then_exclude() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -806,7 +810,7 @@ fn update_tag_filters_include_then_exclude() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update()
         .arg("--include-tag").arg("v1.*")
@@ -835,7 +839,7 @@ fn update_tag_filters_include_then_exclude() -> Result<()> {
 
 #[test]
 fn update_uses_project_tag_filter_config() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(
         &context,
@@ -867,7 +871,7 @@ fn update_uses_project_tag_filter_config() -> Result<()> {
               - id: test-hook
     "#, repo1_path, repo1_path, repo2_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--jobs").arg("1"), @"
     success: true
@@ -906,7 +910,7 @@ fn update_uses_project_tag_filter_config() -> Result<()> {
 
 #[test]
 fn update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -922,7 +926,7 @@ fn update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update()
         .arg("--include-tag").arg("v1.*")
@@ -949,7 +953,7 @@ fn update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
 
 #[test]
 fn update_repo_include_tag_is_repo_specific() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(
         &context,
@@ -974,7 +978,7 @@ fn update_repo_include_tag_is_repo_specific() -> Result<()> {
               - id: test-hook
     ", repo1_path, repo2_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let repo1_filter = format!("{repo1_path}=v1.*");
 
@@ -1011,7 +1015,7 @@ fn update_repo_include_tag_is_repo_specific() -> Result<()> {
 
 #[test]
 fn update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -1027,7 +1031,7 @@ fn update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let repo_filter = format!("{repo_path}=v*.1.0");
 
@@ -1057,7 +1061,7 @@ fn update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
 
 #[test]
 fn update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(&context, "repo-exclude-tag-1", &["v1.0.0", "v2.0.0"])?;
     let repo2_path = create_local_git_repo(&context, "repo-exclude-tag-2", &["v1.0.0", "v2.0.0"])?;
@@ -1074,7 +1078,7 @@ fn update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
               - id: test-hook
     ", repo1_path, repo2_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let repo1_filter = format!("{repo1_path}=v2.*");
 
@@ -1121,7 +1125,7 @@ fn update_bleeding_edge() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--bleeding-edge"), @"
     success: true
@@ -1152,6 +1156,7 @@ fn update_freeze() -> Result<()> {
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
     context
         .git_at(&repo_path)
+        .command()
         .arg("tag")
         .arg("v1")
         .arg("-m")
@@ -1170,7 +1175,7 @@ fn update_freeze() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -1198,24 +1203,14 @@ fn update_freeze() -> Result<()> {
 
 #[test]
 fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "freeze-annotated-repo", &["v1.0.0", "v1.1.0"])?;
 
-    let tag_object_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0"])
-        .output()?
-        .stdout;
-    let tag_object_sha = str::from_utf8(&tag_object_sha)?.trim();
-
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0^{}"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim();
+    let git = context.git_at(&repo_path);
+    let tag_object_sha = git.rev_parse("v1.1.0")?;
+    let commit_sha = git.rev_parse("v1.1.0^{}")?;
 
     assert_ne!(
         tag_object_sha, commit_sha,
@@ -1229,7 +1224,7 @@ fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     context
         .update()
@@ -1249,7 +1244,7 @@ fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
         "expected config to preserve the original tag in the frozen comment"
     );
     assert!(
-        !config.contains(tag_object_sha),
+        !config.contains(&tag_object_sha),
         "expected config to not contain the annotated tag object SHA"
     );
 
@@ -1258,7 +1253,7 @@ fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
 
 #[test]
 fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -1268,18 +1263,14 @@ fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<
 
     context
         .git_at(&repo_path)
+        .command()
         .arg("tag")
         .arg("v1")
         .arg("v1.0.0^{}")
         .assert()
         .success();
 
-    let old_commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.0.0^{}"])
-        .output()?
-        .stdout;
-    let old_commit_sha = str::from_utf8(&old_commit_sha)?.trim().to_string();
+    let old_commit_sha = context.git_at(&repo_path).rev_parse("v1.0.0^{}")?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1293,7 +1284,7 @@ fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<
               - id: test-hook
     ", repo_path, old_commit_sha, repo_path, old_commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(old_commit_sha.clone(), "[OLD_COMMIT_SHA]");
 
@@ -1325,7 +1316,7 @@ fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<
 
 #[test]
 fn update_preserve_quote_style() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
     let repo2_path = create_local_git_repo(&context, "repo2", &["v1.0.0", "v1.1.0"])?;
@@ -1354,7 +1345,7 @@ fn update_preserve_quote_style() -> Result<()> {
                 name: Test Hook
     "#, repo1_path, repo1_path, repo2_path });
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -1398,7 +1389,7 @@ fn update_preserve_quote_style() -> Result<()> {
 
 #[test]
 fn update_with_existing_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "frozen-repo", &["v1.0.0", "v1.1.0", "v1.2.0"])?;
@@ -1413,7 +1404,7 @@ fn update_with_existing_frozen_comment() -> Result<()> {
               - id: test-hook
     ", repo_path, commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha, "[COMMIT_SHA]");
 
@@ -1447,16 +1438,11 @@ fn update_with_existing_frozen_comment() -> Result<()> {
 
 #[test]
 fn update_updates_mismatched_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "check-frozen-repo", &["v1.0.0", "v1.1.0"])?;
 
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0^{}"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+    let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1466,7 +1452,7 @@ fn update_updates_mismatched_frozen_comment() -> Result<()> {
               - id: test-hook
     ", repo_path, commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha.clone(), "[COMMIT_SHA]");
 
@@ -1500,7 +1486,7 @@ fn update_updates_mismatched_frozen_comment() -> Result<()> {
 
 #[test]
 fn update_updates_unresolvable_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -1508,12 +1494,7 @@ fn update_updates_unresolvable_frozen_comment() -> Result<()> {
         &["v1.0.0", "v1.1.0"],
     )?;
 
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0^{}"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+    let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1523,7 +1504,7 @@ fn update_updates_unresolvable_frozen_comment() -> Result<()> {
               - id: test-hook
     ", repo_path, commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha.clone(), "[COMMIT_SHA]");
 
@@ -1557,7 +1538,7 @@ fn update_updates_unresolvable_frozen_comment() -> Result<()> {
 
 #[test]
 fn update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -1565,12 +1546,7 @@ fn update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
         &["v1.0.0", "v1.1.0"],
     )?;
 
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "HEAD"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+    let commit_sha = context.git_at(&repo_path).rev_parse("HEAD")?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1580,7 +1556,7 @@ fn update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
               - id: test-hook
     ", repo_path, commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha.clone(), "[COMMIT_SHA]");
 
@@ -1614,7 +1590,7 @@ fn update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
 
 #[test]
 fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -1624,6 +1600,7 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
 
     context
         .git_at(&repo_path)
+        .command()
         .arg("checkout")
         .arg("-b")
         .arg("side")
@@ -1632,24 +1609,15 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
         .success();
     context
         .git_at(&repo_path)
+        .command()
         .arg("commit")
         .arg("-m")
         .arg("side")
         .arg("--allow-empty")
         .assert()
         .success();
-    let branch_commit = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "HEAD"])
-        .output()?
-        .stdout;
-    let branch_commit = str::from_utf8(&branch_commit)?.trim().to_string();
-    context
-        .git_at(&repo_path)
-        .arg("checkout")
-        .arg("master")
-        .assert()
-        .success();
+    let branch_commit = context.git_at(&repo_path).rev_parse("HEAD")?;
+    context.git_at(&repo_path).checkout("master");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1659,7 +1627,7 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
               - id: test-hook
     ", repo_path, branch_commit});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(branch_commit.clone(), "[BRANCH_ONLY_COMMIT]");
     let context = context.with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]");
@@ -1694,7 +1662,7 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
 
 #[test]
 fn update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -1712,7 +1680,7 @@ fn update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
               - id: test-hook
     ", repo_path, invalid_commit});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filters([
         (invalid_commit, "[INVALID_COMMIT]"),
@@ -1749,17 +1717,12 @@ fn update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
 
 #[test]
 fn update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "check-frozen-dry-run-repo", &["v1.0.0", "v1.1.0"])?;
 
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0^{}"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+    let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1769,7 +1732,7 @@ fn update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
               - id: test-hook
     ", repo_path, commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha.clone(), "[COMMIT_SHA]");
 
@@ -1803,17 +1766,12 @@ fn update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
 
 #[test]
 fn update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "check-frozen-check-repo", &["v1.0.0", "v1.1.0"])?;
 
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0^{}"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+    let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -1823,7 +1781,7 @@ fn update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
               - id: test-hook
     ", repo_path, commit_sha});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha.clone(), "[COMMIT_SHA]");
 
@@ -1857,17 +1815,12 @@ fn update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
 
 #[test]
 fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "check-frozen-repo-toml", &["v1.0.0", "v1.1.0"])?;
 
-    let commit_sha = context
-        .git_at(&repo_path)
-        .args(["rev-parse", "v1.1.0^{}"])
-        .output()?
-        .stdout;
-    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+    let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
     context
         .work_dir()
@@ -1881,7 +1834,7 @@ fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
         ]
         "#, repo_path, commit_sha})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(commit_sha.clone(), "[COMMIT_SHA]");
 
@@ -1916,7 +1869,7 @@ fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
 
 #[test]
 fn update_local_repo_ignored() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
 
@@ -1934,7 +1887,7 @@ fn update_local_repo_ignored() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -1965,7 +1918,7 @@ fn update_local_repo_ignored() -> Result<()> {
 
 #[test]
 fn missing_hook_ids() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "missing-hook-repo", &["v1.0.0"])?;
 
@@ -1981,25 +1934,9 @@ fn missing_hook_ids() -> Result<()> {
 
     context
         .git_at(&repo_path)
-        .arg("add")
-        .arg(".")
-        .assert()
-        .success();
-    context
-        .git_at(&repo_path)
-        .arg("commit")
-        .arg("-m")
-        .arg("Remove test-hook")
-        .assert()
-        .success();
-    context
-        .git_at(&repo_path)
-        .arg("tag")
-        .arg("v2.0.0")
-        .arg("-m")
-        .arg("v2.0.0")
-        .assert()
-        .success();
+        .add(".")
+        .commit("Remove test-hook")
+        .tag("v2.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -2008,7 +1945,7 @@ fn missing_hook_ids() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: false
@@ -2025,7 +1962,7 @@ fn missing_hook_ids() -> Result<()> {
 
 #[test]
 fn update_workspace() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo1_path =
         create_local_git_repo(&context, "workspace-repo1", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
@@ -2067,7 +2004,7 @@ fn update_workspace() -> Result<()> {
               - id: test-hook
     ", repo2_path, repo3_path})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2116,7 +2053,7 @@ fn update_workspace() -> Result<()> {
 
 #[test]
 fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context.write_user_config(indoc::indoc! {r"
         [update]
         cooldown_days = 1
@@ -2126,20 +2063,14 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
         create_local_git_repo(&context, "workspace-cooldown-repo", &["v1.0.0", "v1.1.0"])?;
     context
         .git_at(&repo_path)
+        .command()
         .arg("commit")
         .arg("-m")
         .arg("Release v2.0.0")
         .arg("--allow-empty")
         .assert()
         .success();
-    context
-        .git_at(&repo_path)
-        .arg("tag")
-        .arg("v2.0.0")
-        .arg("-m")
-        .arg("v2.0.0")
-        .assert()
-        .success();
+    context.git_at(&repo_path).tag("v2.0.0");
 
     context.setup_workspace(
         &["project-a", "project-b"],
@@ -2170,7 +2101,7 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
               - id: test-hook
     ", repo_path})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update(), @"
     success: true
@@ -2213,7 +2144,7 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
 // - is most similar to the current revision, as measured by Levenshtein distance.
 #[test]
 fn prefer_similar_tags() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
     // Add a second tag (`foo-v1.1.0`) pointing at the same commit as `v1.1.0`.
@@ -2224,6 +2155,7 @@ fn prefer_similar_tags() -> Result<()> {
     // But if the newest SemVer-like tag (e.g v1.1.111111) were less similar than `foo-v1.1.0`, we would select `foo-v1.1.0` instead.
     context
         .git_at(&repo_path)
+        .command()
         .arg("tag")
         .arg("foo-v1.1.0")
         .arg("-m")
@@ -2234,6 +2166,7 @@ fn prefer_similar_tags() -> Result<()> {
     // Add tag v1 pointing to the same commit as v1.1.0
     context
         .git_at(&repo_path)
+        .command()
         .arg("tag")
         .arg("v1")
         .arg("-m")
@@ -2256,7 +2189,7 @@ fn prefer_similar_tags() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2287,7 +2220,7 @@ fn prefer_similar_tags() -> Result<()> {
 
 #[test]
 fn update_dry_run() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
 
@@ -2298,7 +2231,7 @@ fn update_dry_run() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--dry-run").arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2323,7 +2256,7 @@ fn update_dry_run() -> Result<()> {
 
 #[test]
 fn update_check() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "check-test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
@@ -2335,7 +2268,7 @@ fn update_check() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--check").arg("--cooldown-days").arg("0"), @"
     success: false
@@ -2360,7 +2293,7 @@ fn update_check() -> Result<()> {
 
 #[test]
 fn update_dry_run_exit_code() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -2375,7 +2308,7 @@ fn update_dry_run_exit_code() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--dry-run").arg("--exit-code").arg("--cooldown-days").arg("0"), @"
     success: false
@@ -2400,7 +2333,7 @@ fn update_dry_run_exit_code() -> Result<()> {
 
 #[test]
 fn update_exit_code_updates_config() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -2415,7 +2348,7 @@ fn update_exit_code_updates_config() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
     success: false
@@ -2440,7 +2373,7 @@ fn update_exit_code_updates_config() -> Result<()> {
 
 #[test]
 fn update_exit_code_succeeds_when_up_to_date() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
@@ -2455,7 +2388,7 @@ fn update_exit_code_succeeds_when_up_to_date() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2478,7 +2411,7 @@ fn update_exit_code_succeeds_when_up_to_date() -> Result<()> {
 
 #[test]
 fn quoting_float_like_version_number() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "test-repo", &["0.49", "0.50"])?;
 
@@ -2491,7 +2424,7 @@ fn quoting_float_like_version_number() -> Result<()> {
             hooks:
               - id: test-hook
     "#, repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2516,7 +2449,7 @@ fn quoting_float_like_version_number() -> Result<()> {
 
 #[test]
 fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(&context, "test-repo", &["v0.19", "0.51"])?;
 
@@ -2527,7 +2460,7 @@ fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
             hooks:
               - id: test-hook
     ", repo_path});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2552,7 +2485,7 @@ fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
 
 #[test]
 fn update_with_invalid_config_file() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Write an invalid config file
     context
@@ -2579,7 +2512,7 @@ fn update_with_invalid_config_file() -> Result<()> {
 
 #[test]
 fn update_toml() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
@@ -2595,7 +2528,7 @@ fn update_toml() -> Result<()> {
           {{ id = "test-hook" }},
         ]
       "#, repo_path})?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2621,7 +2554,7 @@ fn update_toml() -> Result<()> {
 
 #[test]
 fn update_toml_with_comment() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path =
         create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
@@ -2638,7 +2571,7 @@ fn update_toml_with_comment() -> Result<()> {
         ]
       "#, repo_path})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2672,7 +2605,7 @@ fn update_toml_with_comment() -> Result<()> {
         ]
       "#, repo_path})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2708,6 +2641,7 @@ fn update_freeze_toml() -> Result<()> {
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
     context
         .git_at(&repo_path)
+        .command()
         .arg("tag")
         .arg("v1")
         .arg("-m")
@@ -2728,7 +2662,7 @@ fn update_freeze_toml() -> Result<()> {
         ]
     "#, repo_path})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2755,7 +2689,7 @@ fn update_freeze_toml() -> Result<()> {
 
 #[test]
 fn update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo_fixed_ts(
         &context,
@@ -2771,7 +2705,7 @@ fn update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2798,7 +2732,7 @@ fn update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
 // semver tags should be preferred and sorted highest-first.
 #[test]
 fn update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo_fixed_ts(
         &context,
@@ -2814,7 +2748,7 @@ fn update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2841,7 +2775,7 @@ fn update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
 // Within an equal-timestamp group, semver tiebreaker picks the highest version.
 #[test]
 fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create base repo with v1.0.x tags at incrementing timestamps.
     let repo_path = create_local_git_repo(&context, "mixed-ts-repo", &["v1.0.0", "v1.0.1"])?;
@@ -2852,6 +2786,7 @@ fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
     for tag in &["v2.0.1", "v2.0.0"] {
         context
             .git_at(&repo_path)
+            .command()
             .arg("commit")
             .arg("-m")
             .arg(format!("Release {tag}"))
@@ -2862,6 +2797,7 @@ fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
             .success();
         context
             .git_at(&repo_path)
+            .command()
             .arg("tag")
             .arg(tag)
             .arg("-m")
@@ -2880,7 +2816,7 @@ fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
               - id: test-hook
     ", repo_path});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
     success: true
@@ -2911,6 +2847,7 @@ fn update_freeze_toml_with_comment() -> Result<()> {
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
     context
         .git_at(&repo_path)
+        .command()
         .arg("tag")
         .arg("v1")
         .arg("-m")
@@ -2933,7 +2870,7 @@ fn update_freeze_toml_with_comment() -> Result<()> {
         ]
     "#, repo_path})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true

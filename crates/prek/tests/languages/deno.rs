@@ -7,7 +7,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// Test basic Deno hook execution with an inline script.
 #[test]
 fn basic_deno() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -20,7 +20,7 @@ fn basic_deno() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -39,7 +39,7 @@ fn basic_deno() {
 /// Test running a TypeScript script file with an explicit `deno run` entry.
 #[test]
 fn script_file() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a TypeScript script
     context
@@ -63,7 +63,7 @@ fn script_file() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -82,7 +82,7 @@ fn script_file() {
 /// Test running Deno built-in subcommands with an explicit `deno` prefix.
 #[test]
 fn builtin_commands() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a TypeScript file for formatting check
     context
@@ -106,7 +106,7 @@ fn builtin_commands() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -125,7 +125,7 @@ fn builtin_commands() {
 /// Test a remote Deno hook whose manifest installs its own executable.
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/deno-hooks
             rev: v3.1.0
@@ -135,7 +135,7 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -154,7 +154,7 @@ fn remote_hook() {
 /// Test a remote Deno hook whose configured additional dependency installs the executable it runs.
 #[test]
 fn remote_hook_with_additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/deno-hooks
             rev: v3.1.0
@@ -165,7 +165,7 @@ fn remote_hook_with_additional_dependencies() {
                 verbose: true
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -184,7 +184,7 @@ fn remote_hook_with_additional_dependencies() {
 /// Test a remote Deno hook whose manifest installs a local file as an executable dependency.
 #[test]
 fn remote_hook_with_local_file_additional_dependency() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/deno-hooks
             rev: v3.1.0
@@ -194,7 +194,7 @@ fn remote_hook_with_local_file_additional_dependency() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -213,7 +213,7 @@ fn remote_hook_with_local_file_additional_dependency() {
 /// Test that `additional_dependencies` are installed as CLI executables.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -227,7 +227,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -260,7 +260,7 @@ fn additional_dependencies() {
 /// Test that an absolute file can be installed as an executable additional dependency.
 #[test]
 fn additional_dependencies_absolute_file() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let tool = context.work_dir().child("tool.ts");
     tool.write_str(indoc::indoc! {r#"
@@ -284,7 +284,7 @@ fn additional_dependencies_absolute_file() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -309,7 +309,7 @@ fn language_version() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -347,7 +347,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let deno_dir = context.home_dir().child("tools").child("deno");
     deno_dir.assert(predicates::path::missing());
@@ -414,7 +414,7 @@ fn language_version() {
 /// Test checksum policy behavior for a Deno release without checksum sidecars.
 #[test]
 fn checksum_policy() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -427,7 +427,7 @@ fn checksum_policy() {
                 verbose: true
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"deno-[A-Za-z0-9_-]+\.zip", "deno-[TARGET].zip");
 
@@ -467,7 +467,7 @@ fn version_range() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -481,7 +481,7 @@ fn version_range() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"Deno \d+\.\d+\.\d+", "Deno [VERSION]");
 
@@ -502,7 +502,7 @@ fn version_range() {
 /// Test that hook failure is properly reported.
 #[test]
 fn hook_failure() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a TypeScript file with a lint error
     context
@@ -527,7 +527,7 @@ fn hook_failure() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     // The lint should fail due to no-explicit-any
     let output = context.run().output().expect("Failed to run hook");
@@ -538,7 +538,7 @@ fn hook_failure() {
 /// Note: Permissions must come before the script in the entry, so use explicit `deno run`.
 #[test]
 fn script_with_permissions() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a script that reads an environment variable
     context
@@ -563,7 +563,7 @@ fn script_with_permissions() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().env("TEST_VAR", "hello"), @r"
     success: true

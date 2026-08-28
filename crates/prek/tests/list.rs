@@ -5,7 +5,7 @@ mod common;
 
 #[test]
 fn list_basic() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -35,7 +35,7 @@ fn list_basic() {
 
 #[test]
 fn list_verbose() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -118,7 +118,7 @@ fn list_verbose() {
 
 #[test]
 fn list_with_hook_ids_filter() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -163,7 +163,7 @@ fn list_with_hook_ids_filter() {
 
 #[test]
 fn list_with_language_filter() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -206,7 +206,7 @@ fn list_with_language_filter() {
 
 #[test]
 fn list_with_stage_filter() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -254,7 +254,7 @@ fn list_with_stage_filter() {
 
 #[test]
 fn list_with_group_filter() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -364,7 +364,7 @@ fn list_with_group_filter() {
 
 #[test]
 fn list_group_excluded_remote_repo_is_not_cloned() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -377,7 +377,7 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
               - id: ruff-check
                 groups: [local]
         "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context,
         context.list().arg("--group").arg("ci"),
@@ -394,7 +394,7 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
 
 #[test]
 fn list_with_aliases() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -440,7 +440,7 @@ fn list_with_aliases() {
 
 #[test]
 fn list_empty_config() {
-    let context = TestEnv::new().with_config("repos: []");
+    let context = TestEnv::new_git().with_config("repos: []");
 
     cmd_snapshot!(context, context.list(), @r#"
     success: true
@@ -461,7 +461,7 @@ fn list_empty_config() {
 
 #[test]
 fn list_no_config_file() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // No config file exists
     cmd_snapshot!(context, context.list(), @r"
@@ -478,7 +478,7 @@ fn list_no_config_file() {
 
 #[test]
 fn list_json_output() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -584,7 +584,7 @@ fn list_json_output() {
 
 #[test]
 fn workspace_list() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let cwd = context.work_dir().to_path_buf();
 
     let config = indoc! {r"
@@ -607,7 +607,7 @@ fn workspace_list() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.list(), @r"
     success: true
@@ -773,7 +773,7 @@ fn workspace_list() -> anyhow::Result<()> {
 
 #[test]
 fn list_with_selectors() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r"
     repos:
@@ -795,7 +795,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.list().arg("project2/"), @r"
     success: true

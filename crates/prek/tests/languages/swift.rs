@@ -11,7 +11,7 @@ fn local_hook_system_command() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -24,7 +24,7 @@ fn local_hook_system_command() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -47,7 +47,7 @@ fn language_version_rejected() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -60,7 +60,7 @@ fn language_version_rejected() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -81,7 +81,7 @@ fn health_check() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -94,7 +94,7 @@ fn health_check() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run - installs
     cmd_snapshot!(context, context.run(), @r"
@@ -132,7 +132,7 @@ fn local_package_build() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let swift_hook = TestEnv::new();
+    let swift_hook = TestEnv::new_git();
 
     // Create a minimal Swift package
     swift_hook
@@ -165,14 +165,13 @@ fn local_package_build() -> anyhow::Result<()> {
           entry: prek-swift-test
           language: swift
     "})?;
-    swift_hook.git_add_all();
-    swift_hook.git_commit("Initial commit");
     swift_hook
         .git()
-        .args(["tag", "v1.0", "-m", "v1.0"])
-        .output()?;
+        .add_all()
+        .commit("Initial commit")
+        .tag("v1.0");
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let hook_url = swift_hook.work_dir().to_str().unwrap();
     let context = context.with_config(indoc::formatdoc! {r"
@@ -185,7 +184,7 @@ fn local_package_build() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
     ", hook_url = hook_url});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

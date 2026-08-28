@@ -16,13 +16,13 @@ mod common;
 /// Tests that `repo: builtin` hooks doesn't create hook env.
 #[test]
 fn builtin_hooks_not_create_env() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: end-of-file-fixer
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -46,13 +46,13 @@ fn builtin_hooks_not_create_env() {
 
 #[test]
 fn builtin_hooks_unknown_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: this-hook-does-not-exist
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false
@@ -73,7 +73,7 @@ fn builtin_hooks_unknown_hook() {
 
 #[test]
 fn deny_filename_pattern_hook_matches_only_basename() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -88,7 +88,7 @@ fn deny_filename_pattern_hook_matches_only_basename() -> Result<()> {
     cwd.child("docs/README.md").touch()?;
     cwd.child("README/guide.md").touch()?;
     cwd.child("docs/guide.md").touch()?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -109,7 +109,7 @@ fn deny_filename_pattern_hook_matches_only_basename() -> Result<()> {
 
 #[test]
 fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -130,7 +130,7 @@ fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
     "})?;
     cwd.child("ignored.txt")
         .write_str("TODO: ignored by files filter\n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -152,7 +152,7 @@ fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
 
 #[test]
 fn deny_pattern_hook_rejects_invalid_regex() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -164,7 +164,7 @@ fn deny_pattern_hook_rejects_invalid_regex() -> Result<()> {
         .work_dir()
         .child("file.txt")
         .write_str("content\n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -186,7 +186,7 @@ fn deny_pattern_hook_rejects_invalid_regex() -> Result<()> {
 
 #[test]
 fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // `END` is listed first, but `BEGIN.*END` starts earlier in the file.
     // Multiline matching should report the earliest match, not the first pattern.
@@ -209,7 +209,7 @@ fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
         END
         after
     "})?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -232,7 +232,7 @@ fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
 
 #[test]
 fn require_filename_pattern_hook_accepts_any_pattern_for_basename() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -252,7 +252,7 @@ fn require_filename_pattern_hook_accepts_any_pattern_for_basename() -> Result<()
     cwd.child("tests/unit/__init__.py").touch()?;
     cwd.child("tests/unit/conftest.py").touch()?;
     cwd.child("tests/test_unit/parser.py").touch()?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -274,7 +274,7 @@ fn require_filename_pattern_hook_accepts_any_pattern_for_basename() -> Result<()
 
 #[test]
 fn require_pattern_hook_reports_files_without_any_match() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -287,7 +287,7 @@ fn require_pattern_hook_reports_files_without_any_match() -> Result<()> {
     cwd.child("block.txt").write_str("BEGIN\nmiddle\nEND\n")?;
     cwd.child("copyright.txt").write_str("Copyright 2026\n")?;
     cwd.child("missing.txt").write_str("No required marker\n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -308,7 +308,7 @@ fn require_pattern_hook_reports_files_without_any_match() -> Result<()> {
 
 #[test]
 fn end_of_file_fixer_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -330,7 +330,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
     cwd.child("only_newlines.txt").write_str("\n\n")?;
     cwd.child("only_win_newlines.txt").write_str("\r\n\r\n")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail and fix the files
     cmd_snapshot!(context, context.run(), @r#"
@@ -362,7 +362,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
     assert_snapshot!(context.read("only_newlines.txt"), @"");
     assert_snapshot!(context.read("only_win_newlines.txt"), @"");
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass. The output will be stable.
     cmd_snapshot!(context, context.run(), @r"
@@ -379,7 +379,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
 
 #[test]
 fn file_contents_sorter_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -393,7 +393,7 @@ fn file_contents_sorter_hook() -> Result<()> {
         .write_str("Banana\n\napple\nApricot\n")?;
     cwd.child("ignored.txt").write_str("zebra\nant\n")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -420,7 +420,7 @@ fn file_contents_sorter_hook() -> Result<()> {
     ant
     ");
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -436,7 +436,7 @@ fn file_contents_sorter_hook() -> Result<()> {
 
 #[test]
 fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -448,7 +448,7 @@ fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
     let cwd = context.work_dir();
     cwd.child("configured.txt").write_str("beta\nAlpha\n")?;
     cwd.child("selected.txt").write_str("Beta\nalpha\n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -474,7 +474,7 @@ fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
 
 #[test]
 fn requirements_txt_fixer_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -491,7 +491,7 @@ fn requirements_txt_fixer_hook() -> Result<()> {
     "})?;
     cwd.child("requirements.in")
         .write_str("z-project\na-project\n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -518,7 +518,7 @@ fn requirements_txt_fixer_hook() -> Result<()> {
     );
     assert_eq!(context.read("requirements.in"), "z-project\na-project\n");
 
-    context.git_add_all();
+    context.git().add_all();
     cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
@@ -539,7 +539,7 @@ fn requirements_txt_fixer_hook() -> Result<()> {
     cwd.child("requirements.txt")
         .write_str("flask\n  requests==2\n")?;
     cwd.child("valid.json").write_str("{}\n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -563,7 +563,7 @@ fn requirements_txt_fixer_hook() -> Result<()> {
 
 #[test]
 fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     let cwd = context.work_dir();
     cwd.child("project2").create_dir_all()?;
@@ -576,33 +576,20 @@ fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
                   - id: forbid-new-submodules
         "})?;
 
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     let submodule_path = cwd.child("project2/sub module");
     submodule_path.create_dir_all()?;
-    context
-        .git_at(&submodule_path)
-        .arg("-c")
-        .arg("init.defaultBranch=master")
-        .arg("init")
-        .assert()
-        .success();
     submodule_path.child("README.md").write_str("submodule\n")?;
     context
         .git_at(&submodule_path)
-        .arg("add")
-        .arg("README.md")
-        .assert()
-        .success();
-    context
-        .git_at(&submodule_path)
-        .args(["commit", "-m", "Initial commit"])
-        .assert()
-        .success();
+        .init()
+        .add("README.md")
+        .commit("Initial commit");
 
     context
         .git_at(cwd)
+        .command()
         .args([
             "submodule",
             "add",
@@ -637,7 +624,7 @@ fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
 
 #[test]
 fn check_yaml_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -652,7 +639,7 @@ fn check_yaml_hook() -> Result<()> {
     cwd.child("duplicate.yaml").write_str("a: 1\na: 2")?;
     cwd.child("empty.yaml").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail
     cmd_snapshot!(context, context.run(), @"
@@ -683,7 +670,7 @@ fn check_yaml_hook() -> Result<()> {
     cwd.child("invalid.yaml").write_str("a:\n  b: c")?;
     cwd.child("duplicate.yaml").write_str("a: 1\nb: 2")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -700,7 +687,7 @@ fn check_yaml_hook() -> Result<()> {
 
 #[test]
 fn check_yaml_multiple_document() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -722,7 +709,7 @@ fn check_yaml_multiple_document() -> Result<()> {
         "
         })?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false
@@ -750,7 +737,7 @@ fn check_yaml_multiple_document() -> Result<()> {
 
 #[test]
 fn check_vcs_permalinks_builtin() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -766,7 +753,7 @@ fn check_vcs_permalinks_builtin() -> Result<()> {
         https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/file.py#L10
     "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -788,7 +775,7 @@ fn check_vcs_permalinks_builtin() -> Result<()> {
 
 #[test]
 fn check_json_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -804,7 +791,7 @@ fn check_json_hook() -> Result<()> {
         .write_str(r#"{"a": 1, "a": 2}"#)?;
     cwd.child("empty.json").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail
     cmd_snapshot!(context, context.run(), @r"
@@ -827,7 +814,7 @@ fn check_json_hook() -> Result<()> {
     cwd.child("duplicate.json")
         .write_str(r#"{"a": 1, "b": 2}"#)?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -844,7 +831,7 @@ fn check_json_hook() -> Result<()> {
 
 #[test]
 fn mixed_line_ending_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -861,7 +848,7 @@ fn mixed_line_ending_hook() -> Result<()> {
     cwd.child("no_endings.txt").write_str("hello world")?;
     cwd.child("empty.txt").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail and fix the files
     cmd_snapshot!(context, context.run(), @r"
@@ -894,7 +881,7 @@ fn mixed_line_ending_hook() -> Result<()> {
     line2
     ");
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass.
     cmd_snapshot!(context, context.run(), @r"
@@ -918,7 +905,7 @@ fn mixed_line_ending_hook() -> Result<()> {
         .work_dir()
         .child("mixed.txt")
         .write_str("line1\nline2\r\n")?;
-    context.git_add_all();
+    context.git().add_all();
     cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 1
@@ -949,7 +936,7 @@ fn mixed_line_ending_hook() -> Result<()> {
         .work_dir()
         .child("mixed.txt")
         .write_str("line1\nline2\r\n")?;
-    context.git_add_all();
+    context.git().add_all();
     cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
@@ -983,7 +970,7 @@ fn mixed_line_ending_hook() -> Result<()> {
         .work_dir()
         .child("mixed.txt")
         .write_str("line1\nline2\r\nline3\n")?;
-    context.git_add_all();
+    context.git().add_all();
     cmd_snapshot!(context, context.run(), @r"
     success: false
     exit_code: 2
@@ -999,31 +986,23 @@ fn mixed_line_ending_hook() -> Result<()> {
 }
 
 #[test]
-fn check_added_large_files_hook() -> Result<()> {
-    let context = TestEnv::new();
-
+fn check_added_large_files_hook() {
     // Create an initial commit
-    let cwd = context.work_dir();
-    cwd.child("README.md").write_str("Initial commit")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    let context = TestEnv::new_git().with_file("README.md", "Initial commit");
+    context.git().add_all().commit("Initial commit");
 
-    let context = context.with_config(indoc::indoc! {r"
-        repos:
-          - repo: builtin
-            hooks:
-              - id: check-added-large-files
-                args: ['--maxkb', '1']
-    "});
+    let context = context
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: builtin
+                hooks:
+                  - id: check-added-large-files
+                    args: ['--maxkb', '1']
+        "})
+        .with_file("small_file.txt", "Hello World\n")
+        .with_file("large_file.txt", [0_u8; 2048]);
 
-    let cwd = context.work_dir();
-
-    // Create test files
-    cwd.child("small_file.txt").write_str("Hello World\n")?;
-    let large_file = cwd.child("large_file.txt");
-    large_file.write_binary(&[0; 2048])?; // 2KB file
-
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hook should fail because of the large file
     cmd_snapshot!(context, context.run(), @r"
@@ -1041,13 +1020,11 @@ fn check_added_large_files_hook() -> Result<()> {
     ");
 
     // Commit the files
-    context.git_add_all();
-    context.git_commit("Add large file");
+    context.git().add_all().commit("Add large file");
 
     // Create a new unstaged large file
-    let unstaged_large_file = cwd.child("unstaged_large_file.txt");
-    unstaged_large_file.write_binary(&[0; 2048])?; // 2KB file
-    context.git_add("unstaged_large_file.txt");
+    context.write_file("unstaged_large_file.txt", [0_u8; 2048]);
+    context.git().add("unstaged_large_file.txt");
 
     context.write_config(indoc::indoc! {r"
         repos:
@@ -1073,8 +1050,7 @@ fn check_added_large_files_hook() -> Result<()> {
     ----- stderr -----
     "#);
 
-    context.git_rm("unstaged_large_file.txt");
-    context.git_clean();
+    context.git().rm("unstaged_large_file.txt").clean();
 
     // Test git-lfs integration
     context.write_config(indoc::indoc! {r"
@@ -1085,12 +1061,13 @@ fn check_added_large_files_hook() -> Result<()> {
                 args: ['--maxkb=1']
         "});
 
-    cwd.child(".gitattributes")
-        .write_str("*.dat filter=lfs diff=lfs merge=lfs -text")?;
-    context.git_add(".gitattributes");
-    let lfs_file = cwd.child("lfs_file.dat");
-    lfs_file.write_binary(&[0; 2048])?; // 2KB file
-    context.git_add_all();
+    context.write_file(
+        ".gitattributes",
+        "*.dat filter=lfs diff=lfs merge=lfs -text",
+    );
+    context.git().add(".gitattributes");
+    context.write_file("lfs_file.dat", [0_u8; 2048]);
+    context.git().add_all();
 
     // Third run: hook should pass because the large file is tracked by git-lfs
     cmd_snapshot!(context, context.run(), @r"
@@ -1101,13 +1078,11 @@ fn check_added_large_files_hook() -> Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     // Regression: builtin hooks receive project-relative filenames even in workspace mode.
     // `check-added-large-files` must therefore resolve git-lfs attributes relative to the
@@ -1128,7 +1103,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() 
         .write_str("*.dat filter=lfs diff=lfs merge=lfs -text")?;
     app.child("large.dat").write_binary(&[0; 2048])?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -1145,7 +1120,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() 
 
 #[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_added_files() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
@@ -1159,7 +1134,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_added_files(
     "})?;
     app.child("large.bin").write_binary(&[0; 2048])?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -1181,7 +1156,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_added_files(
 
 #[test]
 fn tracked_file_exceeds_large_file_limit() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1194,11 +1169,10 @@ fn tracked_file_exceeds_large_file_limit() -> Result<()> {
     // Create and commit a large file
     let large_file = cwd.child("large_file.txt");
     large_file.write_binary(&[0; 2048])?; // 2KB file
-    context.git_add_all();
-    context.git_commit("Add large file");
+    context.git().add_all().commit("Add large file");
     // Modify the large file
     large_file.write_binary(&[0; 4096])?; // 4KB file
-    context.git_add_all();
+    context.git().add_all();
 
     // Run the hook: it should pass because the file is already tracked
     cmd_snapshot!(context, context.run(), @r"
@@ -1215,7 +1189,7 @@ fn tracked_file_exceeds_large_file_limit() -> Result<()> {
 
 #[test]
 fn builtin_hooks_workspace_mode() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -1262,7 +1236,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     // 2KB file to trigger check-added-large-files (1 KB threshold).
     app.child("large.bin").write_binary(&[0u8; 2048])?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: expect failures and auto-fixes where applicable.
     cmd_snapshot!(context, context.run(), @r#"
@@ -1373,7 +1347,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     app.child("duplicate.json")
         .write_str(concat!(r#"{"a": 1, "b": 2}"#, "\n"))?;
     app.child("large.bin").write_binary(&[0u8; 100])?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: all hooks should now pass.
     cmd_snapshot!(context, context.run(), @r#"
@@ -1432,7 +1406,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
 
 #[test]
 fn fix_byte_order_marker_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1451,7 +1425,7 @@ fn fix_byte_order_marker_hook() -> Result<()> {
         .write_binary(&[0xef, 0xbb, 0xbf])?;
     cwd.child("empty.txt").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fix files with BOM
     cmd_snapshot!(context, context.run(), @r"
@@ -1476,7 +1450,7 @@ fn fix_byte_order_marker_hook() -> Result<()> {
     assert_eq!(context.read("without_bom.txt"), "Hello, World!");
     assert_eq!(context.read("empty.txt"), "");
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: all should pass now
     cmd_snapshot!(context, context.run(), @r"
@@ -1493,7 +1467,7 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 
 #[test]
 fn pretty_format_json_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1535,7 +1509,7 @@ fn pretty_format_json_hook() -> Result<()> {
     cwd.child("invalid.json").write_str(r#"{"a": 1,}"#)?;
     cwd.child("empty.json").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail and fix the files
     cmd_snapshot!(context, context.run(), @r#"
@@ -1611,7 +1585,7 @@ fn pretty_format_json_hook() -> Result<()> {
 "#,
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r#"
@@ -1628,7 +1602,7 @@ fn pretty_format_json_hook() -> Result<()> {
 
 #[test]
 fn pretty_format_json_with_options() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1640,7 +1614,7 @@ fn pretty_format_json_with_options() -> Result<()> {
 
     cwd.child("test.json").write_str(r#"{"z":1,"a":2,"m":3}"#)?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -1666,7 +1640,7 @@ fn pretty_format_json_with_options() -> Result<()> {
     }
     "#);
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -1682,7 +1656,7 @@ fn pretty_format_json_with_options() -> Result<()> {
 
 #[test]
 fn pretty_format_json_with_top_keys() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1696,7 +1670,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
         r#"{"description":"test","name":"my-package","author":"me","version":"1.0.0"}"#,
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -1722,7 +1696,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
     }
     "#);
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -1738,7 +1712,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
 
 #[test]
 fn pretty_format_json_no_ensure_ascii() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1751,7 +1725,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
     cwd.child("unicode.json")
         .write_str(r#"{"text":"\u4E2D\u6587\u306B\u307B\u3093\u3054"}"#)?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -1775,7 +1749,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
     }
     "#);
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -1791,7 +1765,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
 
 #[test]
 fn pretty_format_json_custom_space_indent() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1803,7 +1777,7 @@ fn pretty_format_json_custom_space_indent() -> Result<()> {
 
     cwd.child("test.json").write_str(r#"{"a":1,"b":2}"#)?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -1827,7 +1801,7 @@ fn pretty_format_json_custom_space_indent() -> Result<()> {
     }
     "#);
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -1844,7 +1818,7 @@ fn pretty_format_json_custom_space_indent() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn check_symlinks_hook_unix() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1869,7 +1843,7 @@ fn check_symlinks_hook_unix() -> Result<()> {
         cwd.child("broken_link.txt").path(),
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: should fail due to broken symlink
     cmd_snapshot!(context, context.run(), @r"
@@ -1888,7 +1862,7 @@ fn check_symlinks_hook_unix() -> Result<()> {
 
     // Remove broken symlink
     fs_err::remove_file(cwd.child("broken_link.txt").path())?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: should pass
     cmd_snapshot!(context, context.run(), @r"
@@ -1906,7 +1880,7 @@ fn check_symlinks_hook_unix() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn check_symlinks_hook_windows() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1937,7 +1911,7 @@ fn check_symlinks_hook_windows() -> Result<()> {
         return Ok(());
     }
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: should fail due to broken symlink
     cmd_snapshot!(context, context.run(), @r#"
@@ -1956,7 +1930,7 @@ fn check_symlinks_hook_windows() -> Result<()> {
 
     // Remove broken symlink
     fs_err::remove_file(cwd.child("broken_link.txt").path())?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: should pass
     cmd_snapshot!(context, context.run(), @r#"
@@ -1979,7 +1953,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
     const TEST_FILE: &str = "test_file";
     const TEST_FILE_RENAMED: &str = "test_file_renamed";
 
-    let source = TestEnv::new();
+    let source = TestEnv::new_git();
 
     fs_err::os::unix::fs::symlink(
         TEST_SYMLINK_TARGET,
@@ -1989,11 +1963,11 @@ fn destroyed_symlinks_hook() -> Result<()> {
         .work_dir()
         .child(TEST_FILE)
         .write_str("some random content\n")?;
-    source.git_add_all();
-    source.git_commit("initial");
+    source.git().add_all().commit("initial");
 
     let tree = source
         .git()
+        .command()
         .arg("cat-file")
         .arg("-p")
         .arg("HEAD^{tree}")
@@ -2001,9 +1975,10 @@ fn destroyed_symlinks_hook() -> Result<()> {
     assert!(tree.status.success());
     assert!(String::from_utf8(tree.stdout)?.contains("120000 "));
 
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
     context
         .git()
+        .command()
         .arg("-c")
         .arg("core.symlinks=false")
         .arg("clone")
@@ -2014,11 +1989,13 @@ fn destroyed_symlinks_hook() -> Result<()> {
 
     context
         .git()
+        .command()
         .args(["config", "--local", "core.symlinks", "true"])
         .assert()
         .success();
     context
         .git()
+        .command()
         .args(["mv", TEST_FILE, TEST_FILE_RENAMED])
         .assert()
         .success();
@@ -2032,7 +2009,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
               - id: destroyed-symlinks
     "});
 
-    context.git_add(TEST_SYMLINK);
+    context.git().add(TEST_SYMLINK);
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2057,7 +2034,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
         .work_dir()
         .child(TEST_SYMLINK)
         .write_str(&format!("{TEST_SYMLINK_TARGET}\n"))?;
-    context.git_add(TEST_SYMLINK);
+    context.git().add(TEST_SYMLINK);
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2082,7 +2059,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
         .work_dir()
         .child(TEST_SYMLINK)
         .write_str(&format!("{}\n", "0".repeat(TEST_SYMLINK_TARGET.len())))?;
-    context.git_add(TEST_SYMLINK);
+    context.git().add(TEST_SYMLINK);
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -2097,7 +2074,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
         .work_dir()
         .child(TEST_SYMLINK)
         .write_str(&format!("{}\n", "0".repeat(TEST_SYMLINK_TARGET.len() + 3)))?;
-    context.git_add(TEST_SYMLINK);
+    context.git().add(TEST_SYMLINK);
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -2113,7 +2090,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
 
 #[test]
 fn detect_private_key_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2149,7 +2126,7 @@ fn detect_private_key_hook() -> Result<()> {
         .write_str("This is just a regular file\nwith some content\n")?;
     cwd.child("empty.txt").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail due to private keys
     cmd_snapshot!(context, context.run(), @r#"
@@ -2174,17 +2151,18 @@ fn detect_private_key_hook() -> Result<()> {
     "#);
 
     // Remove all private keys
-    context.git_rm("id_rsa");
-    context.git_rm("id_dsa");
-    context.git_rm("id_ecdsa");
-    context.git_rm("id_ed25519");
-    context.git_rm("key.ppk");
-    context.git_rm("private.asc");
-    context.git_rm("ta.key");
-    context.git_rm("doc.txt");
-    context.git_clean();
-
-    context.git_add_all();
+    context
+        .git()
+        .rm("id_rsa")
+        .rm("id_dsa")
+        .rm("id_ecdsa")
+        .rm("id_ed25519")
+        .rm("key.ppk")
+        .rm("private.asc")
+        .rm("ta.key")
+        .rm("doc.txt")
+        .clean()
+        .add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -2201,7 +2179,7 @@ fn detect_private_key_hook() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2239,7 +2217,7 @@ fn check_merge_conflict_hook() -> Result<()> {
         =======
     "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail due to conflict markers
     cmd_snapshot!(context, context.run(), @r#"
@@ -2274,7 +2252,7 @@ fn check_merge_conflict_hook() -> Result<()> {
     cwd.child("partial_separator_conflict.txt")
         .write_str("Some content\nResolved line\n")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -2291,7 +2269,7 @@ fn check_merge_conflict_hook() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_ignores_rst_headings() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2305,7 +2283,7 @@ fn check_merge_conflict_ignores_rst_headings() -> Result<()> {
         =======
     "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -2321,7 +2299,7 @@ fn check_merge_conflict_ignores_rst_headings() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_diff3_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2342,7 +2320,7 @@ fn check_merge_conflict_diff3_hook() -> Result<()> {
         After conflict
     "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -2366,7 +2344,7 @@ fn check_merge_conflict_diff3_hook() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_without_assume_flag() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Without --assume-in-merge, hook should pass even with conflict markers
     // if we're not actually in a merge state
@@ -2387,7 +2365,7 @@ fn check_merge_conflict_without_assume_flag() -> Result<()> {
         >>>>>>> branch
     "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Should pass because we're not in a merge state and no --assume-in-merge flag
     cmd_snapshot!(context, context.run(), @r"
@@ -2404,7 +2382,7 @@ fn check_merge_conflict_without_assume_flag() -> Result<()> {
 
 #[test]
 fn check_xml_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2439,7 +2417,7 @@ fn check_xml_hook() -> Result<()> {
     )?;
     cwd.child("empty.xml").touch()?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail
     cmd_snapshot!(context, context.run(), @r#"
@@ -2480,7 +2458,7 @@ fn check_xml_hook() -> Result<()> {
 </root>"#,
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -2502,7 +2480,7 @@ fn check_xml_hook() -> Result<()> {
 
 #[test]
 fn check_xml_with_features() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2539,7 +2517,7 @@ fn check_xml_with_features() -> Result<()> {
 </root>"#,
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // All should pass
     cmd_snapshot!(context, context.run(), @r"
@@ -2556,7 +2534,7 @@ fn check_xml_with_features() -> Result<()> {
 
 #[test]
 fn no_commit_to_branch_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2567,8 +2545,7 @@ fn no_commit_to_branch_hook() -> Result<()> {
 
     // Create a test file
     cwd.child("test.txt").write_str("Hello World")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     // Test 1: Try to commit to master branch (should fail)
     cmd_snapshot!(context, context.run(), @r"
@@ -2586,12 +2563,13 @@ fn no_commit_to_branch_hook() -> Result<()> {
     ");
 
     // Test 2: Create and switch to a feature branch (should pass)
-    context.git_branch("feature/new-feature");
-    context.git_checkout("feature/new-feature");
+    context
+        .git()
+        .branch("feature/new-feature")
+        .checkout("feature/new-feature");
 
     cwd.child("feature.txt").write_str("Feature content")?;
-    context.git_add_all();
-    context.git_commit("Add feature");
+    context.git().add_all().commit("Add feature");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -2603,11 +2581,10 @@ fn no_commit_to_branch_hook() -> Result<()> {
     ");
 
     // Test 3: Try to commit to main branch (should fail)
-    context.git_branch("main");
-    context.git_checkout("main");
+    context.git().branch("main").checkout("main");
 
     cwd.child("main.txt").write_str("Main content")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2628,7 +2605,7 @@ fn no_commit_to_branch_hook() -> Result<()> {
 
 #[test]
 fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2640,8 +2617,7 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
 
     // Create a test file
     cwd.child("test.txt").write_str("Hello World")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     // Test 1: Try to commit to master branch (should pass - not in custom list)
     cmd_snapshot!(context, context.run(), @r"
@@ -2654,11 +2630,10 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
     ");
 
     // Test 2: Create and switch to develop branch (should fail)
-    context.git_branch("develop");
-    context.git_checkout("develop");
+    context.git().branch("develop").checkout("develop");
 
     cwd.child("develop.txt").write_str("Develop content")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2675,12 +2650,11 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
     ");
 
     // Test 3: Create and switch to production branch (should fail)
-    context.git_branch("production");
-    context.git_checkout("production");
+    context.git().branch("production").checkout("production");
 
     cwd.child("production.txt")
         .write_str("Production content")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2701,7 +2675,7 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
 
 #[test]
 fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2713,8 +2687,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
 
     // Create a test file
     cwd.child("test.txt").write_str("Hello World")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     // Test 1: Try to commit to master branch (should fail - If branch is not specified, branch defaults to master and main)
     cmd_snapshot!(context, context.run(), @r"
@@ -2732,11 +2705,13 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     ");
 
     // Test 2: Create and switch to feature branch (should fail - matches pattern)
-    context.git_branch("feature/new-feature");
-    context.git_checkout("feature/new-feature");
+    context
+        .git()
+        .branch("feature/new-feature")
+        .checkout("feature/new-feature");
 
     cwd.child("feature.txt").write_str("Feature content")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2753,11 +2728,13 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     ");
 
     // Test 3: Create and switch to wip branch (should fail - matches pattern)
-    context.git_branch("my-branch-wip");
-    context.git_checkout("my-branch-wip");
+    context
+        .git()
+        .branch("my-branch-wip")
+        .checkout("my-branch-wip");
 
     cwd.child("wip.txt").write_str("WIP content")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2774,12 +2751,13 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     ");
 
     // Test 4: Create and switch to normal branch (should pass - doesn't match patterns)
-    context.git_branch("normal-branch");
-    context.git_checkout("normal-branch");
+    context
+        .git()
+        .branch("normal-branch")
+        .checkout("normal-branch");
 
     cwd.child("normal.txt").write_str("Normal content")?;
-    context.git_add_all();
-    context.git_commit("Add normal content");
+    context.git().add_all().commit("Add normal content");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -2791,7 +2769,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     ");
 
     // Test 5: Try to run with detached head pointer status (should pass - ignore this status)
-    context.git_checkout("HEAD~1");
+    context.git().checkout("HEAD~1");
     cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
@@ -2810,11 +2788,13 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
                 args: ['--pattern', '*invalid-pattern*']
         "});
 
-    context.git_branch("invalid-branch");
-    context.git_checkout("invalid-branch");
+    context
+        .git()
+        .branch("invalid-branch")
+        .checkout("invalid-branch");
 
     cwd.child("invalid.txt").write_str("Invalid content")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -2833,7 +2813,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_executables_have_shebangs_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2865,7 +2845,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
         std::fs::Permissions::from_mode(0o755),
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: should fail for script_without_shebang.sh and empty.sh
     cmd_snapshot!(context, context.run(), @r"
@@ -2897,7 +2877,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
         std::fs::Permissions::from_mode(0o644),
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -2915,7 +2895,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_win() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2929,15 +2909,17 @@ fn check_executables_have_shebangs_win() -> Result<()> {
     cwd.child("win_script_without_shebang.sh")
         .write_str("missing shebang\n")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     context
         .git_at(cwd)
+        .command()
         .args(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
         .status()?;
 
     context
         .git_at(cwd)
+        .command()
         .args([
             "update-index",
             "--chmod=+x",
@@ -2968,7 +2950,7 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_executables_have_shebangs_various_cases() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3007,7 +2989,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
     )?;
     // non_executable.txt is not marked executable
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Run: should fail for partial_shebang.sh, whitespace.sh, invalid_shebang.sh
     cmd_snapshot!(context, context.run(), @r#"
@@ -3042,7 +3024,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
     cwd.child("invalid_shebang.sh")
         .write_str("#!/bin/bash\necho fixed\n")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -3060,7 +3042,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3079,7 +3061,7 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     cwd.child("invalid_shebang.sh")
         .write_str("##!/bin/bash\necho bad\n")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     let executable_files = [
         "partial_shebang.sh",
@@ -3091,6 +3073,7 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     for file in &executable_files {
         context
             .git_at(cwd.path())
+            .command()
             .args(["update-index", "--chmod=+x", file])
             .status()?;
     }
@@ -3126,7 +3109,7 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
 
 #[test]
 fn check_shebang_scripts_are_executable() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3146,9 +3129,10 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
         std::fs::Permissions::from_mode(0o755),
     )?;
 
-    context.git_add_all();
+    context.git().add_all();
     context
         .git_at(cwd.path())
+        .command()
         .args(["update-index", "--chmod=+x", "script_exec.sh"])
         .assert()
         .success();
@@ -3178,6 +3162,7 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
 
     context
         .git_at(cwd.path())
+        .command()
         .args(["update-index", "--chmod=+x", "script.sh"])
         .assert()
         .success();
@@ -3205,7 +3190,7 @@ fn is_case_sensitive_filesystem(context: &TestEnv) -> Result<bool> {
 
 #[test]
 fn check_case_conflict_hook() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -3213,11 +3198,9 @@ fn check_case_conflict_hook() -> Result<()> {
     }
 
     // Create initial files and commit
-    let cwd = context.work_dir();
-    cwd.child("README.md").write_str("Initial commit")?;
-    cwd.child("src/foo.txt").write_str("existing file")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.write_file("README.md", "Initial commit");
+    context.write_file("src/foo.txt", "existing file");
+    context.git().add_all().commit("Initial commit");
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -3230,7 +3213,7 @@ fn check_case_conflict_hook() -> Result<()> {
 
     // Try to add a file with conflicting case
     cwd.child("src/FOO.txt").write_str("conflicting case")?;
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: should fail due to case conflict
     cmd_snapshot!(context, context.run(), @r#"
@@ -3249,11 +3232,11 @@ fn check_case_conflict_hook() -> Result<()> {
     "#);
 
     // Remove the conflicting file
-    context.git_rm("src/FOO.txt");
+    context.git().rm("src/FOO.txt");
 
     // Add a non-conflicting file
     cwd.child("src/bar.txt").write_str("no conflict")?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: should pass
     cmd_snapshot!(context, context.run(), @r#"
@@ -3270,7 +3253,7 @@ fn check_case_conflict_hook() -> Result<()> {
 
 #[test]
 fn check_case_conflict_directory() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -3278,10 +3261,8 @@ fn check_case_conflict_directory() -> Result<()> {
     }
 
     // Create directory with file
-    let cwd = context.work_dir();
-    cwd.child("src/utils/helper.py").write_str("helper")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.write_file("src/utils/helper.py", "helper");
+    context.git().add_all().commit("Initial commit");
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -3294,7 +3275,7 @@ fn check_case_conflict_directory() -> Result<()> {
 
     // Try to add a file that conflicts with directory name
     cwd.child("src/UTILS/other.py").write_str("conflict")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -3316,7 +3297,7 @@ fn check_case_conflict_directory() -> Result<()> {
 
 #[test]
 fn check_case_conflict_among_new_files() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -3325,8 +3306,7 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
     let cwd = context.work_dir();
     cwd.child("README.md").write_str("Initial")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -3341,7 +3321,7 @@ fn check_case_conflict_among_new_files() -> Result<()> {
     cwd.child("NewFile.txt").write_str("file 1")?;
     cwd.child("newfile.txt").write_str("file 2")?;
     cwd.child("NEWFILE.TXT").write_str("file 3")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -3364,7 +3344,7 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
 #[test]
 fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         return Ok(());
@@ -3376,8 +3356,7 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
     app.create_dir_all()?;
     app.child("foo.txt").write_str("existing file")?;
     app.child("trigger.txt").write_str("tracked trigger")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     app.child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r"
@@ -3388,7 +3367,7 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
     "})?;
 
     app.child("FOO.txt").write_str("conflicting case")?;
-    context.git_add("app/FOO.txt");
+    context.git().add("app/FOO.txt");
 
     // Regression: in workspace mode, staged additions must be reported relative to the nested
     // project root so they still participate in conflict detection even when `--files` only
@@ -3421,7 +3400,7 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
 
 #[test]
 fn check_json5() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3446,7 +3425,7 @@ fn check_json5() -> Result<()> {
         }
     "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run: hooks should fail
     cmd_snapshot!(context, context.run(), @r"
@@ -3471,7 +3450,7 @@ fn check_json5() -> Result<()> {
             key2: 'value2',
         }
     "})?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
@@ -3489,7 +3468,7 @@ fn check_json5() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_illegal_windows_names() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3499,7 +3478,7 @@ fn check_illegal_windows_names() -> Result<()> {
     let cwd = context.work_dir();
     cwd.child("normal.txt").write_str("ok")?;
     cwd.child("CON.txt").write_str("bad")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false
@@ -3528,7 +3507,7 @@ fn check_illegal_windows_names() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a fake "trailing-whitespace-fixer" binary with a shebang in a temp dir.
     // This simulates `pip install pre-commit-hooks` which places such binaries in PATH.
@@ -3548,7 +3527,7 @@ fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
 
     let cwd = context.work_dir();
     cwd.child("test.txt").write_str("hello world   \n")?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Prepend the fake bin directory to PATH so the fake binary is found first.
     let original_path = EnvVars.var_os(EnvVars::PATH).unwrap_or_default();

@@ -7,7 +7,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// Test basic pygrep functionality - case-sensitive matching
 #[test]
 fn basic_case_sensitive() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -25,7 +25,7 @@ fn basic_case_sensitive() -> Result<()> {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -60,7 +60,7 @@ fn basic_case_sensitive() -> Result<()> {
 /// Test case-insensitive matching
 #[test]
 fn case_insensitive() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -79,7 +79,7 @@ fn case_insensitive() -> Result<()> {
                 args: ["--ignore-case"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -101,7 +101,7 @@ fn case_insensitive() -> Result<()> {
 /// Test multiline mode
 #[test]
 fn multiline_mode() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py").write_str(
@@ -119,7 +119,7 @@ fn multiline_mode() -> Result<()> {
                 args: ["--multiline"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -142,7 +142,7 @@ fn multiline_mode() -> Result<()> {
 /// Test negate mode - passes when pattern is NOT found
 #[test]
 fn negate_mode() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("good.py").write_str("print('Hello World')\n")?;
@@ -160,7 +160,7 @@ fn negate_mode() -> Result<()> {
                 args: ["--negate"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -181,7 +181,7 @@ fn negate_mode() -> Result<()> {
 /// Test negate mode with multiline - should output filename if pattern not found
 #[test]
 fn negate_multiline_mode() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("no_pattern.py")
@@ -201,7 +201,7 @@ fn negate_multiline_mode() -> Result<()> {
                 args: ["--multiline", "--negate"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -222,7 +222,7 @@ fn negate_multiline_mode() -> Result<()> {
 /// Test invalid regex pattern
 #[test]
 fn invalid_regex() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -239,7 +239,7 @@ fn invalid_regex() {
                 entry: "[unclosed"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -254,7 +254,7 @@ fn invalid_regex() {
 
 #[test]
 fn python_regex_quirks() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -271,7 +271,7 @@ fn python_regex_quirks() -> Result<()> {
                 entry: "def\\s+\\w+\\([^)]*\\w[^)]*\\):"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -292,7 +292,7 @@ fn python_regex_quirks() -> Result<()> {
 /// Test complex regex with word boundaries and character classes
 #[test]
 fn complex_regex_patterns() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -309,7 +309,7 @@ fn complex_regex_patterns() -> Result<()> {
                 entry: "^import\\s+[a-zA-Z_][a-zA-Z0-9_]*$"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -331,7 +331,7 @@ fn complex_regex_patterns() -> Result<()> {
 /// Test combination of case insensitive and multiline
 #[test]
 fn case_insensitive_multiline() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -348,7 +348,7 @@ fn case_insensitive_multiline() -> Result<()> {
                 args: ["--ignore-case", "--multiline"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -371,7 +371,7 @@ fn case_insensitive_multiline() -> Result<()> {
 /// Test successful case where pattern is not found
 #[test]
 fn pattern_not_found() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -387,7 +387,7 @@ fn pattern_not_found() -> Result<()> {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -403,7 +403,7 @@ fn pattern_not_found() -> Result<()> {
 
 #[test]
 fn invalid_args() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("test.py")
@@ -420,7 +420,7 @@ fn invalid_args() -> Result<()> {
                 args: ["--hello"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

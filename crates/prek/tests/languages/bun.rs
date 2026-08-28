@@ -8,7 +8,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// Test basic Bun hook execution.
 #[test]
 fn basic_bun() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -21,7 +21,7 @@ fn basic_bun() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -40,7 +40,7 @@ fn basic_bun() {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -54,7 +54,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -107,7 +107,7 @@ fn language_version() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -146,7 +146,7 @@ fn language_version() -> Result<()> {
                 additional_dependencies: ["cowsay"] # different dep to force create separate env
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let bun_dir = context.home_dir().child("tools").child("bun");
     bun_dir.assert(predicates::path::missing());

@@ -12,7 +12,7 @@ fn reuses_managed_mise() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -26,7 +26,7 @@ fn reuses_managed_mise() {
                 verbose: true
                 pass_filenames: false
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(
         r"2026\.7\.18 [^\r\n]+ \(\d{4}-\d{2}-\d{2}\)",
@@ -62,7 +62,7 @@ fn reuses_managed_mise() {
                 verbose: true
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
@@ -85,7 +85,7 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let hook_repo = context.create_repo("mise-system-hook");
     fs_err::write(
@@ -104,9 +104,8 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     )?;
     // Provisioning must not read configuration from the hook repository.
     fs_err::write(hook_repo.path().join("mise.toml"), "not valid = [")?;
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add mise hook");
-    let rev = hook_repo.git_rev_parse("HEAD")?;
+    hook_repo.git().add_all().commit("Add mise hook");
+    let rev = hook_repo.git().rev_parse("HEAD")?;
 
     // Keep a conflicting executable beside the real system mise. Activating the private tool must
     // not move this whole directory ahead of the PATH returned by `mise env`.
@@ -133,7 +132,7 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     ", hook_repo.path().display(), rev});
     // Early miserc discovery must not read configuration from the calling project.
     fs_err::write(context.work_dir().join(".miserc.toml"), "not valid = [")?;
-    context.git_add_all();
+    context.git().add_all();
 
     let ambient_data = context.work_dir().join("ambient-mise-data");
     let path = std::env::join_paths(

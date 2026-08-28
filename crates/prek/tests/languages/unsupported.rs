@@ -5,7 +5,7 @@ fn unsupported_language() -> anyhow::Result<()> {
     use crate::common::{TestEnv, cmd_snapshot};
     use assert_fs::fixture::{FileWriteStr, PathChild};
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -27,7 +27,7 @@ fn unsupported_language() -> anyhow::Result<()> {
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#})?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true

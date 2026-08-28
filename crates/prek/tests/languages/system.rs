@@ -6,7 +6,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 #[cfg(unix)]
 #[test]
 fn multiline_entry_without_shell_uses_argv_semantics() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -19,7 +19,7 @@ fn multiline_entry_without_shell_uses_argv_semantics() {
             pass_filenames: false
             verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -38,7 +38,7 @@ fn multiline_entry_without_shell_uses_argv_semantics() {
 #[cfg(unix)]
 #[test]
 fn shell_runs_multiline_entry_as_one_script() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -52,7 +52,7 @@ fn shell_runs_multiline_entry_as_one_script() {
             pass_filenames: false
             verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -72,7 +72,7 @@ fn shell_runs_multiline_entry_as_one_script() {
 #[cfg(unix)]
 #[test]
 fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -91,7 +91,7 @@ fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
             verbose: true
     "#});
     context.work_dir().child("a.txt").write_str("a")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

@@ -5,7 +5,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use crate::common::{TestEnv, cmd_snapshot};
 
 fn ruby_context() -> TestEnv {
-    TestEnv::new().with_filter(
+    TestEnv::new_git().with_filter(
         r"ruby (\d+\.\d+)\.\d+(?:p\d+)? \(\d{4}-\d{2}-\d{2} revision [0-9a-f]{0,10}\).*?\[.+\]",
         "ruby $1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]",
     )
@@ -33,7 +33,7 @@ fn system_ruby() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -71,7 +71,7 @@ fn language_version_default() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -131,7 +131,7 @@ fn specific_ruby_available() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -183,7 +183,7 @@ fn specific_ruby_unavailable() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     #[cfg(target_os = "windows")]
     cmd_snapshot!(context, context.run().arg("-v"), @r"
@@ -217,7 +217,7 @@ fn specific_ruby_unavailable() {
 /// Test Ruby hook with `additional_dependencies` and `require` statement
 #[test]
 fn additional_gem_dependencies() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a Ruby script that uses a gem from additional_dependencies
     // Use 'rspec' - a gem that's NOT bundled with Ruby
@@ -257,7 +257,7 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filters([
         // Normalize unpinned rspec version (only for test-gem-require, not test-gem-require-versioned)
@@ -306,7 +306,7 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
 /// Test Ruby hook with gemspec
 #[test]
 fn gemspec_workflow() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a simple gemspec
     context
@@ -358,7 +358,7 @@ fn gemspec_workflow() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -392,7 +392,7 @@ fn gemspec_workflow() -> anyhow::Result<()> {
 /// Test environment isolation between Ruby hooks
 #[test]
 fn environment_isolation() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -440,7 +440,7 @@ fn environment_isolation() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let output = context.run().output()?;
 
@@ -552,7 +552,7 @@ fn environment_isolation() -> anyhow::Result<()> {
 /// Test local Ruby hook repository with gemspec build and install
 #[test]
 fn local_hook_with_gemspec() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("ruby-hook");
 
     // Create the gemspec
@@ -594,9 +594,8 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
               pass_filenames: false
         "})?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Initial commit");
-    let rev = hook_repo.git_rev_parse("HEAD")?;
+    hook_repo.git().add_all().commit("Initial commit");
+    let rev = hook_repo.git().rev_parse("HEAD")?;
 
     // Configure prek to use this local repo
     let context = context.with_config(indoc::formatdoc! {r"
@@ -614,7 +613,7 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
         hook_repo.path().display(),
         rev
     });
-    context.git_add(".pre-commit-config.yaml");
+    context.git().add(".pre-commit-config.yaml");
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -635,7 +634,7 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
 /// Test Ruby hook with native gem (C extension)
 #[test]
 fn native_gem_dependency() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a Ruby script that uses msgpack (small native gem that compiles quickly)
     context
@@ -666,7 +665,7 @@ fn native_gem_dependency() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -688,7 +687,7 @@ fn native_gem_dependency() -> anyhow::Result<()> {
 /// Test Ruby hook that processes files
 #[test]
 fn process_files() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a Ruby script that validates file extensions
     context
@@ -725,7 +724,7 @@ fn process_files() -> anyhow::Result<()> {
     // Create a text file
     context.work_dir().child("test.txt").write_str("hello")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -780,7 +779,7 @@ fn auto_download() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let ruby_dir = context.home_dir().child("tools").child("ruby");
     ruby_dir.assert(predicates::path::missing());
@@ -850,7 +849,7 @@ fn auto_download() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true

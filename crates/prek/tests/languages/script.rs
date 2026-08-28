@@ -13,7 +13,7 @@ mod unix {
 
     #[test]
     fn script_run() {
-        let context = TestEnv::new().with_config(indoc::indoc! {r"
+        let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/script-hooks
             rev: v1.0.0
@@ -28,7 +28,7 @@ mod unix {
                   VAR2: galaxy
                 verbose: true
         "});
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -51,7 +51,7 @@ mod unix {
 
     #[test]
     fn workspace_script_run() -> Result<()> {
-        let context = TestEnv::new();
+        let context = TestEnv::new_git();
 
         let config = indoc::indoc! {r#"
         repos:
@@ -84,7 +84,7 @@ mod unix {
 
         make_executable(context.work_dir().child("script.sh"))?;
         make_executable(child.child("script.sh"))?;
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r#"
         success: true
@@ -124,7 +124,7 @@ mod unix {
 
     #[test]
     fn local_repo_bash_shebang() -> Result<()> {
-        let context = TestEnv::new().with_config(indoc::indoc! {r"
+        let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -142,7 +142,7 @@ mod unix {
         "#})?;
         make_executable(&script)?;
 
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -162,7 +162,7 @@ mod unix {
 
     #[test]
     fn script_shell_runs_entry_as_shell_source() -> Result<()> {
-        let context = TestEnv::new().with_config(indoc::indoc! {r#"
+        let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -181,7 +181,7 @@ mod unix {
                 verbose: true
         "#});
         context.work_dir().child("a.txt").write_str("a")?;
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -204,7 +204,7 @@ mod unix {
 /// The interpreter must exist in the PATH, the script is not needed to be executable.
 #[test]
 fn windows_script_run() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -222,7 +222,7 @@ fn windows_script_run() -> Result<()> {
     "#})?;
     make_executable(&script)?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

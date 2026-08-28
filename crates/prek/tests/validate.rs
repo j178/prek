@@ -7,7 +7,7 @@ mod common;
 
 #[test]
 fn validate_config() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     // No files to validate.
     cmd_snapshot!(context, context.validate_config(), @r"
@@ -67,7 +67,7 @@ fn validate_config() -> anyhow::Result<()> {
 
 #[test]
 fn mutable_revision_warning_has_actionable_guidance() {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: https://example.com/hooks
             rev: main
@@ -91,7 +91,7 @@ fn mutable_revision_warning_has_actionable_guidance() {
 
 #[test]
 fn invalid_config_error() {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             hooks:
@@ -141,7 +141,7 @@ fn invalid_config_error() {
 
 #[test]
 fn unknown_priority_alias_is_invalid() {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         priorities:
           checks: 10
         repos:
@@ -166,7 +166,7 @@ fn unknown_priority_alias_is_invalid() {
 
 #[test]
 fn priority_aliases_cannot_contain_whitespace() {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         priorities:
           "static checks": 10
         repos: []
@@ -192,7 +192,7 @@ fn priority_aliases_cannot_contain_whitespace() {
 
 #[test]
 fn duplicate_and_unused_priority_aliases_are_valid() {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         priorities:
           checks: 10
           verification: 10
@@ -224,7 +224,7 @@ fn duplicate_and_unused_priority_aliases_are_valid() {
 
 #[test]
 fn validate_manifest() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     // No files to validate.
     cmd_snapshot!(context, context.validate_manifest(), @r"
@@ -293,7 +293,7 @@ fn validate_manifest() -> anyhow::Result<()> {
 
 #[test]
 fn unexpected_keys_warning() {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
         x-anchor: &anchor
           language: system
         repos:

@@ -2,7 +2,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -15,7 +15,7 @@ fn local_hook() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -47,7 +47,7 @@ fn local_hook() {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -61,7 +61,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -81,7 +81,7 @@ fn additional_dependencies() {
 fn project_toml() -> anyhow::Result<()> {
     use assert_fs::fixture::{FileWriteStr, PathChild};
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .work_dir()
@@ -104,7 +104,7 @@ fn project_toml() -> anyhow::Result<()> {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -126,7 +126,7 @@ fn project_toml() -> anyhow::Result<()> {
 fn script_file() -> anyhow::Result<()> {
     use assert_fs::fixture::{FileWriteStr, PathChild};
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .work_dir()
@@ -146,7 +146,7 @@ fn script_file() -> anyhow::Result<()> {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -166,7 +166,7 @@ fn script_file() -> anyhow::Result<()> {
 
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/julia-hooks
             rev: v1.0.0
@@ -176,7 +176,7 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: true

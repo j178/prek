@@ -11,7 +11,7 @@ mod common;
 
 #[test]
 fn install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Install `prek` hook.
     cmd_snapshot!(context, context.install(), @r#"
@@ -142,7 +142,7 @@ fn install() -> anyhow::Result<()> {
 
 #[test]
 fn install_with_git_dir() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     cmd_snapshot!(context, context.install().arg("--git-dir").arg("custom-git-dir"), @r#"
     success: true
@@ -181,10 +181,11 @@ fn install_with_git_dir() {
 
 #[test]
 fn install_with_local_hooks_path_installs_to_configured_directory() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "custom-hooks"])
         .assert()
         .success();
@@ -226,11 +227,12 @@ fn install_with_local_hooks_path_installs_to_configured_directory() {
 
 #[test]
 fn install_with_git_dir_allows_external_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -274,7 +276,7 @@ fn install_with_git_dir_allows_external_hooks_path_set() {
 
 #[test]
 fn install_force_uses_repository_hooks_with_external_hooks_path_set() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context.work_dir().child("custom-hooks").create_dir_all()?;
     context
@@ -285,6 +287,7 @@ fn install_force_uses_repository_hooks_with_external_hooks_path_set() -> anyhow:
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -318,11 +321,12 @@ fn install_force_uses_repository_hooks_with_external_hooks_path_set() -> anyhow:
 
 #[test]
 fn install_refuses_empty_external_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", ""])
         .assert()
@@ -352,10 +356,11 @@ fn install_refuses_empty_external_hooks_path_set() {
 
 #[test]
 fn install_refuses_empty_local_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", ""])
         .assert()
         .success();
@@ -372,10 +377,11 @@ fn install_refuses_empty_local_hooks_path_set() {
 
 #[test]
 fn install_with_dot_hooks_path_installs_to_repo_root() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "."])
         .assert()
         .success();
@@ -394,7 +400,7 @@ fn install_with_dot_hooks_path_installs_to_repo_root() {
 
 #[test]
 fn install_with_included_local_hooks_path_installs_to_configured_directory() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .work_dir()
@@ -406,6 +412,7 @@ fn install_with_included_local_hooks_path_installs_to_configured_directory() -> 
 
     context
         .git()
+        .command()
         .args(["config", "--local", "include.path", "../included-hooks.cfg"])
         .assert()
         .success();
@@ -426,18 +433,19 @@ fn install_with_included_local_hooks_path_installs_to_configured_directory() -> 
 
 #[test]
 fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context.work_dir().child("README.md").write_str("hello\n")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     context
         .git()
+        .command()
         .args(["config", "extensions.worktreeConfig", "true"])
         .assert()
         .success();
     context
         .git()
+        .command()
         .args(["worktree", "add", "worktree", "HEAD"])
         .assert()
         .success();
@@ -445,6 +453,7 @@ fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow
     let worktree = context.work_dir().child("worktree");
     let output = context
         .git_at(&worktree)
+        .command()
         .args(["rev-parse", "--path-format=absolute", "--git-dir"])
         .output()?;
     let worktree_git_dir = String::from_utf8(output.stdout)?.trim().to_string();
@@ -453,6 +462,7 @@ fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow
 
     context
         .git_at(&worktree)
+        .command()
         .args([
             "config",
             "--worktree",
@@ -485,7 +495,7 @@ fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow
 fn install_uses_standard_permissions_by_default() {
     use std::os::unix::fs::PermissionsExt;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context.install().assert().success();
 
@@ -505,11 +515,12 @@ fn install_uses_standard_permissions_by_default() {
 fn install_uses_group_permissions_for_shared_repository() {
     use std::os::unix::fs::PermissionsExt;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Set core.sharedRepository = group
     context
         .git()
+        .command()
         .args(["config", "core.sharedRepository", "group"])
         .assert()
         .success();
@@ -532,10 +543,11 @@ fn install_uses_group_permissions_for_shared_repository() {
 fn install_uses_explicit_shared_repository_mode() {
     use std::os::unix::fs::PermissionsExt;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.sharedRepository", "0640"])
         .assert()
         .success();
@@ -554,7 +566,7 @@ fn install_uses_explicit_shared_repository_mode() {
 /// Run `prek install --prepare-hooks` to install the git hook and prepare prek hook environments.
 #[test]
 fn install_with_hooks() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v5.0.0
@@ -609,7 +621,7 @@ fn install_with_hooks() -> anyhow::Result<()> {
 
 #[test]
 fn install_with_legacy_install_hooks_flag_alias() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -640,7 +652,7 @@ fn install_with_legacy_install_hooks_flag_alias() -> anyhow::Result<()> {
 
 #[test]
 fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Install our hook script first.
     context.install().assert().success();
@@ -687,7 +699,7 @@ fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
 /// Run `prek prepare-hooks` to prepare prek hook environments without installing the git hook.
 #[test]
 fn install_hooks_only() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v5.0.0
@@ -731,7 +743,7 @@ fn install_hooks_only() -> anyhow::Result<()> {
 
 #[test]
 fn install_with_legacy_install_hooks_subcommand_alias() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -763,7 +775,7 @@ fn install_with_legacy_install_hooks_subcommand_alias() -> anyhow::Result<()> {
 
 #[test]
 fn uninstall() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Hook does not exist.
     cmd_snapshot!(context, context.uninstall(), @r#"
@@ -841,10 +853,11 @@ fn uninstall() -> anyhow::Result<()> {
 
 #[test]
 fn uninstall_with_local_hooks_path_removes_configured_hook() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "custom-hooks"])
         .assert()
         .success();
@@ -867,18 +880,19 @@ fn uninstall_with_local_hooks_path_removes_configured_hook() {
 
 #[test]
 fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context.work_dir().child("README.md").write_str("hello\n")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     context
         .git()
+        .command()
         .args(["config", "extensions.worktreeConfig", "true"])
         .assert()
         .success();
     context
         .git()
+        .command()
         .args(["worktree", "add", "worktree", "HEAD"])
         .assert()
         .success();
@@ -886,6 +900,7 @@ fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Resul
     let worktree = context.work_dir().child("worktree");
     let output = context
         .git_at(&worktree)
+        .command()
         .args(["rev-parse", "--path-format=absolute", "--git-dir"])
         .output()?;
     let worktree_git_dir = String::from_utf8(output.stdout)?.trim().to_string();
@@ -894,6 +909,7 @@ fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Resul
 
     context
         .git_at(&worktree)
+        .command()
         .args([
             "config",
             "--worktree",
@@ -944,11 +960,12 @@ fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Resul
 
 #[test]
 fn uninstall_refuses_external_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -975,11 +992,12 @@ fn uninstall_refuses_external_hooks_path_set() {
 
 #[test]
 fn uninstall_with_git_dir_allows_external_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -1014,11 +1032,12 @@ fn uninstall_with_git_dir_allows_external_hooks_path_set() {
 
 #[test]
 fn uninstall_refuses_empty_external_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", ""])
         .assert()
@@ -1045,10 +1064,11 @@ fn uninstall_refuses_empty_external_hooks_path_set() {
 
 #[test]
 fn uninstall_refuses_empty_local_hooks_path_set() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", ""])
         .assert()
         .success();
@@ -1065,10 +1085,11 @@ fn uninstall_refuses_empty_local_hooks_path_set() {
 
 #[test]
 fn uninstall_with_dot_hooks_path_removes_root_hook() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "."])
         .assert()
         .success();
@@ -1084,7 +1105,7 @@ fn uninstall_with_dot_hooks_path_removes_root_hook() {
 
 #[test]
 fn uninstall_with_included_local_hooks_path_removes_configured_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .work_dir()
@@ -1096,6 +1117,7 @@ fn uninstall_with_included_local_hooks_path_removes_configured_hook() -> anyhow:
 
     context
         .git()
+        .command()
         .args(["config", "--local", "include.path", "../included-hooks.cfg"])
         .assert()
         .success();
@@ -1114,7 +1136,7 @@ fn uninstall_with_included_local_hooks_path_removes_configured_hook() -> anyhow:
 /// `prek uninstall --all` should remove all prek-managed hooks.
 #[test]
 fn uninstall_all_managed_hooks() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Install both pre-commit and pre-push hooks.
     context
@@ -1152,7 +1174,7 @@ fn uninstall_all_managed_hooks() -> anyhow::Result<()> {
 
 #[test]
 fn uninstall_remove_legacy_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create the `pre-commit` hook.
     context.install().assert().success();
@@ -1211,7 +1233,7 @@ fn uninstall_remove_legacy_hook() -> anyhow::Result<()> {
 
 #[test]
 fn init_templatedir() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     cmd_snapshot!(context, context.command().arg("init-templatedir").arg(".git"), @r#"
     success: true
@@ -1300,7 +1322,7 @@ fn init_templatedir() -> anyhow::Result<()> {
 /// Tests `prek util init-template-dir` works.
 #[test]
 fn util_init_template_dir() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg(".git"), @r#"
     success: true
@@ -1332,7 +1354,7 @@ fn util_init_template_dir() {
 /// Tests `prek util init-template-dir` in a non-git repository.
 #[test]
 fn init_template_dir_non_git_repo() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg(".git"), @r#"
     success: true
@@ -1369,7 +1391,7 @@ fn init_template_dir_non_git_repo() {
 
 #[test]
 fn workspace_install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r#"
     repos:
@@ -1390,7 +1412,7 @@ fn workspace_install() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Install from root directory.
     cmd_snapshot!(context, context.install(), @r#"
@@ -1515,7 +1537,7 @@ fn workspace_install() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_install_hooks() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r#"
     repos:
@@ -1536,7 +1558,7 @@ fn workspace_install_hooks() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Install by selectors
     cmd_snapshot!(context, context.prepare_hooks().arg("project3").arg("--skip").arg("project3/project5/"), @r"
@@ -1565,7 +1587,7 @@ fn workspace_install_hooks() -> anyhow::Result<()> {
 /// Only install root config's hook types in a workspace.
 #[test]
 fn workspace_install_only_root_hook_types() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let root_config = indoc! {r#"
     default_install_hook_types: [pre-commit, post-commit]
@@ -1599,7 +1621,7 @@ fn workspace_install_only_root_hook_types() -> anyhow::Result<()> {
         .child("project2")
         .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(nested_config)?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.install(), @r#"
     success: true
@@ -1622,7 +1644,7 @@ fn workspace_install_only_root_hook_types() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_uninstall() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r#"
     repos:
@@ -1643,7 +1665,7 @@ fn workspace_uninstall() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Install first
     context.install().assert().success();
@@ -1666,7 +1688,7 @@ fn workspace_uninstall() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_init_template_dir() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r#"
     repos:
@@ -1687,7 +1709,7 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Create a template directory
     let template_dir = context.work_dir().child("template");
@@ -1728,7 +1750,7 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
 /// Test that a warning is shown when the config file exists but is invalid.
 #[test]
 fn install_invalid_config_warning() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Write an invalid config (missing required `rev` field).
     let context = context.with_config(indoc::indoc! {r"

@@ -4,7 +4,7 @@ mod common;
 
 #[test]
 fn list_builtins_basic() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @r"
     success: true
@@ -45,7 +45,7 @@ fn list_builtins_basic() {
 
 #[test]
 fn list_builtins_verbose() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.command().arg("util").arg("list-builtins").arg("--verbose"), @r#"
     success: true
@@ -181,7 +181,7 @@ fn list_builtins_verbose() {
 
 #[test]
 fn list_builtins_json() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.command().arg("util").arg("list-builtins").arg("--output-format=json"), @r#"
     success: true

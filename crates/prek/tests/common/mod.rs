@@ -6,7 +6,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{ChildPath, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
@@ -53,6 +53,98 @@ fn init_repo(path: impl AsRef<Path>, home_dir: impl AsRef<Path>) {
         .success();
 }
 
+/// Git operations for an integration-test repository.
+pub struct TestGit<'a> {
+    path: PathBuf,
+    home_dir: &'a Path,
+}
+
+impl<'a> TestGit<'a> {
+    fn new(path: impl AsRef<Path>, home_dir: &'a Path) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+            home_dir,
+        }
+    }
+
+    /// Create a raw Git command for operations not covered by this wrapper.
+    pub fn command(&self) -> Command {
+        git_cmd(&self.path, self.home_dir)
+    }
+
+    pub fn init(&self) -> &Self {
+        init_repo(&self.path, self.home_dir);
+        self
+    }
+
+    pub fn add(&self, path: impl AsRef<OsStr>) -> &Self {
+        self.command().arg("add").arg(path).assert().success();
+        self
+    }
+
+    pub fn add_all(&self) -> &Self {
+        self.add(".")
+    }
+
+    pub fn commit(&self, message: &str) -> &Self {
+        self.command()
+            .args(["commit", "-m", message])
+            .assert()
+            .success();
+        self
+    }
+
+    pub fn tag(&self, tag: &str) -> &Self {
+        self.command()
+            .args(["tag", tag, "-m"])
+            .arg(format!("Tag {tag}"))
+            .assert()
+            .success();
+        self
+    }
+
+    pub fn rev_parse(&self, rev: &str) -> anyhow::Result<String> {
+        let output = self.command().args(["rev-parse", rev]).output()?;
+        let output = output.assert().success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_owned())
+    }
+
+    pub fn rm(&self, path: &str) -> &Self {
+        self.command()
+            .args(["rm", "--cached", path])
+            .assert()
+            .success();
+        let file_path = self.path.join(path);
+        if file_path.exists() {
+            fs_err::remove_file(file_path).unwrap();
+        }
+        self
+    }
+
+    pub fn clean(&self) -> &Self {
+        self.command().args(["clean", "-fdx"]).assert().success();
+        self
+    }
+
+    pub fn branch(&self, branch_name: &str) -> &Self {
+        self.command()
+            .args(["branch", branch_name])
+            .assert()
+            .success();
+        self
+    }
+
+    pub fn checkout(&self, branch_name: &str) -> &Self {
+        self.command()
+            .args(["checkout", branch_name])
+            .assert()
+            .success();
+        self
+    }
+}
+
 pub struct TestRepo {
     path: ChildPath,
     home_dir: PathBuf,
@@ -70,35 +162,8 @@ impl TestRepo {
         &self.path
     }
 
-    pub fn git(&self) -> Command {
-        git_cmd(&self.path, &self.home_dir)
-    }
-
-    pub fn git_add_all(&self) {
-        self.git().args(["add", "."]).assert().success();
-    }
-
-    pub fn git_commit(&self, message: &str) {
-        self.git()
-            .args(["commit", "-m", message])
-            .assert()
-            .success();
-    }
-
-    pub fn git_tag(&self, tag: &str) {
-        self.git()
-            .args(["tag", tag, "-m"])
-            .arg(format!("Tag {tag}"))
-            .assert()
-            .success();
-    }
-
-    pub fn git_rev_parse(&self, rev: &str) -> anyhow::Result<String> {
-        let output = self.git().args(["rev-parse", rev]).output()?;
-        let output = output.assert().success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_owned())
+    pub fn git(&self) -> TestGit<'_> {
+        TestGit::new(&self.path, &self.home_dir)
     }
 }
 
@@ -114,13 +179,8 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
+    /// Create an isolated test environment without a Git repository.
     pub fn new() -> Self {
-        let env = Self::new_without_git();
-        env.init_project();
-        env
-    }
-
-    pub fn new_without_git() -> Self {
         let bucket = Self::test_bucket_dir();
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
 
@@ -132,13 +192,21 @@ impl TestEnv {
         Self::from_root(root, work_dir)
     }
 
-    pub fn new_at(path: impl AsRef<Path>) -> Self {
-        let env = Self::new_without_git_at(path);
-        env.init_project();
+    /// Create an isolated test environment with a Git repository.
+    pub fn new_git() -> Self {
+        let env = Self::new();
+        init_repo(&env.work_dir, &env.home_dir);
         env
     }
 
-    fn new_without_git_at(path: impl AsRef<Path>) -> Self {
+    /// Create a Git test environment at the given working directory.
+    pub fn new_git_at(path: impl AsRef<Path>) -> Self {
+        let env = Self::new_at(path);
+        init_repo(&env.work_dir, &env.home_dir);
+        env
+    }
+
+    fn new_at(path: impl AsRef<Path>) -> Self {
         let bucket = Self::test_bucket_dir();
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
 
@@ -244,6 +312,22 @@ impl TestEnv {
             .unwrap_or_else(|_| panic!("Missing file: `{}`", file.as_ref().display()))
     }
 
+    /// Write or replace a file in the working directory.
+    pub fn write_file(&self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) {
+        let file = file.as_ref();
+        self.work_dir
+            .child(file)
+            .write_binary(content.as_ref())
+            .unwrap_or_else(|err| panic!("Failed to write test file `{}`: {err}", file.display()));
+    }
+
+    /// Write a file in the working directory and return this environment.
+    #[must_use]
+    pub fn with_file(self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) -> Self {
+        self.write_file(file, content);
+        self
+    }
+
     pub fn command(&self) -> Command {
         let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("prek"));
         cmd.current_dir(self.work_dir())
@@ -264,12 +348,12 @@ impl TestEnv {
         cmd
     }
 
-    pub fn git(&self) -> Command {
+    pub fn git(&self) -> TestGit<'_> {
         self.git_at(&self.work_dir)
     }
 
-    pub fn git_at(&self, dir: impl AsRef<Path>) -> Command {
-        git_cmd(dir, &self.home_dir)
+    pub fn git_at(&self, dir: impl AsRef<Path>) -> TestGit<'_> {
+        TestGit::new(dir, self.home_dir.as_ref())
     }
 
     fn user_config_path(&self) -> ChildPath {
@@ -392,73 +476,6 @@ impl TestEnv {
             self.home_dir.child("test-repos").child(name),
             self.home_dir.to_path_buf(),
         )
-    }
-
-    fn init_project(&self) {
-        init_repo(&self.work_dir, &self.home_dir);
-    }
-
-    /// Run `git add`.
-    pub fn git_add(&self, path: impl AsRef<OsStr>) {
-        self.git().arg("add").arg(path).assert().success();
-    }
-
-    pub fn git_add_all(&self) {
-        self.git_add(".");
-    }
-
-    /// Run `git commit`.
-    pub fn git_commit(&self, message: &str) {
-        self.git()
-            .arg("commit")
-            .arg("-m")
-            .arg(message)
-            .assert()
-            .success();
-    }
-
-    /// Run `git tag`.
-    pub fn git_tag(&self, tag: &str) {
-        self.git()
-            .arg("tag")
-            .arg(tag)
-            .arg("-m")
-            .arg(format!("Tag {tag}"))
-            .assert()
-            .success();
-    }
-
-    /// Run `git rm`.
-    pub fn git_rm(&self, path: &str) {
-        self.git()
-            .arg("rm")
-            .arg("--cached")
-            .arg(path)
-            .assert()
-            .success();
-        let file_path = self.work_dir.child(path);
-        if file_path.exists() {
-            fs_err::remove_file(file_path).unwrap();
-        }
-    }
-
-    /// Run `git clean`.
-    pub fn git_clean(&self) {
-        self.git().arg("clean").arg("-fdx").assert().success();
-    }
-
-    /// Create a new git branch.
-    pub fn git_branch(&self, branch_name: &str) {
-        self.git().arg("branch").arg(branch_name).assert().success();
-    }
-
-    /// Switch to a git branch.
-    pub fn git_checkout(&self, branch_name: &str) {
-        self.git()
-            .arg("checkout")
-            .arg(branch_name)
-            .assert()
-            .success();
     }
 
     /// Write a `.pre-commit-config.yaml` file and return this environment.

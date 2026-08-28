@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -19,7 +19,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -37,7 +37,7 @@ fn additional_dependencies() {
 
 #[test]
 fn pre_commit_channel() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("coursier-hook");
 
     hook_repo
@@ -61,9 +61,11 @@ fn pre_commit_channel() -> anyhow::Result<()> {
             }
         "#})?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add coursier hook");
-    hook_repo.git_tag("v1.0.0");
+    hook_repo
+        .git()
+        .add_all()
+        .commit("Add coursier hook")
+        .tag("v1.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -76,7 +78,7 @@ fn pre_commit_channel() -> anyhow::Result<()> {
                 pass_filenames: false
     ", hook_repo.path().display()});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -96,7 +98,7 @@ fn pre_commit_channel() -> anyhow::Result<()> {
 
 #[test]
 fn local_pre_commit_channel_is_ignored() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let channel_dir = context.work_dir().child(".pre-commit-channel");
     channel_dir.create_dir_all()?;
@@ -114,7 +116,7 @@ fn local_pre_commit_channel_is_ignored() -> anyhow::Result<()> {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false

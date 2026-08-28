@@ -8,7 +8,7 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn docker_image() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     // Test suite from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
@@ -36,7 +36,7 @@ fn docker_image() -> Result<()> {
                 entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose --no-banner --log-level=error
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -70,7 +70,7 @@ fn docker_image() -> Result<()> {
 /// Test that `docker_image` does not try to resolve entry in the host system PATH.
 #[test]
 fn docker_image_does_not_resolve_entry() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     let bin_dir = cwd.child("bin");
@@ -98,7 +98,7 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
                 always_run: true
                 verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let mut cmd = context.run();
     cmd.env(EnvVars::PATH, prepend_paths(&[bin_dir.path()])?);
