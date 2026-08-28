@@ -19,7 +19,7 @@ fn multiline_entry_without_shell_uses_argv_semantics() {
             pass_filenames: false
             verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -52,7 +52,7 @@ fn shell_runs_multiline_entry_as_one_script() {
             pass_filenames: false
             verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -91,7 +91,7 @@ fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
             verbose: true
     "#});
     context.work_dir().child("a.txt").write_str("a")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

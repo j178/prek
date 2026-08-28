@@ -21,7 +21,7 @@ fn bash_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "#});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -60,7 +60,7 @@ fn pwsh_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "#});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -96,7 +96,7 @@ fn powershell_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "#});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -133,7 +133,7 @@ fn cmd_shell_adapter_runs_entry() -> anyhow::Result<()> {
                 verbose: true
     "});
     context.work_dir().child("input.txt").write_str("input")?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -165,7 +165,7 @@ fn shell_rejected_for_pygrep() {
                 always_run: true
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

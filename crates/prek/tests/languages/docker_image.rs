@@ -36,7 +36,7 @@ fn docker_image() -> Result<()> {
                 entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose --no-banner --log-level=error
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -98,7 +98,7 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
                 always_run: true
                 verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let mut cmd = context.run();
     cmd.env(EnvVars::PATH, prepend_paths(&[bin_dir.path()])?);

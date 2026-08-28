@@ -185,6 +185,7 @@ fn install_with_local_hooks_path_installs_to_configured_directory() {
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "custom-hooks"])
         .assert()
         .success();
@@ -231,6 +232,7 @@ fn install_with_git_dir_allows_external_hooks_path_set() {
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -285,6 +287,7 @@ fn install_force_uses_repository_hooks_with_external_hooks_path_set() -> anyhow:
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -323,6 +326,7 @@ fn install_refuses_empty_external_hooks_path_set() {
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", ""])
         .assert()
@@ -356,6 +360,7 @@ fn install_refuses_empty_local_hooks_path_set() {
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", ""])
         .assert()
         .success();
@@ -376,6 +381,7 @@ fn install_with_dot_hooks_path_installs_to_repo_root() {
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "."])
         .assert()
         .success();
@@ -406,6 +412,7 @@ fn install_with_included_local_hooks_path_installs_to_configured_directory() -> 
 
     context
         .git()
+        .command()
         .args(["config", "--local", "include.path", "../included-hooks.cfg"])
         .assert()
         .success();
@@ -428,16 +435,17 @@ fn install_with_included_local_hooks_path_installs_to_configured_directory() -> 
 fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
     context.work_dir().child("README.md").write_str("hello\n")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     context
         .git()
+        .command()
         .args(["config", "extensions.worktreeConfig", "true"])
         .assert()
         .success();
     context
         .git()
+        .command()
         .args(["worktree", "add", "worktree", "HEAD"])
         .assert()
         .success();
@@ -445,6 +453,7 @@ fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow
     let worktree = context.work_dir().child("worktree");
     let output = context
         .git_at(&worktree)
+        .command()
         .args(["rev-parse", "--path-format=absolute", "--git-dir"])
         .output()?;
     let worktree_git_dir = String::from_utf8(output.stdout)?.trim().to_string();
@@ -453,6 +462,7 @@ fn install_with_worktree_hooks_path_installs_to_configured_directory() -> anyhow
 
     context
         .git_at(&worktree)
+        .command()
         .args([
             "config",
             "--worktree",
@@ -510,6 +520,7 @@ fn install_uses_group_permissions_for_shared_repository() {
     // Set core.sharedRepository = group
     context
         .git()
+        .command()
         .args(["config", "core.sharedRepository", "group"])
         .assert()
         .success();
@@ -536,6 +547,7 @@ fn install_uses_explicit_shared_repository_mode() {
 
     context
         .git()
+        .command()
         .args(["config", "core.sharedRepository", "0640"])
         .assert()
         .success();
@@ -845,6 +857,7 @@ fn uninstall_with_local_hooks_path_removes_configured_hook() {
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "custom-hooks"])
         .assert()
         .success();
@@ -869,16 +882,17 @@ fn uninstall_with_local_hooks_path_removes_configured_hook() {
 fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
     context.work_dir().child("README.md").write_str("hello\n")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.git().add_all().commit("Initial commit");
 
     context
         .git()
+        .command()
         .args(["config", "extensions.worktreeConfig", "true"])
         .assert()
         .success();
     context
         .git()
+        .command()
         .args(["worktree", "add", "worktree", "HEAD"])
         .assert()
         .success();
@@ -886,6 +900,7 @@ fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Resul
     let worktree = context.work_dir().child("worktree");
     let output = context
         .git_at(&worktree)
+        .command()
         .args(["rev-parse", "--path-format=absolute", "--git-dir"])
         .output()?;
     let worktree_git_dir = String::from_utf8(output.stdout)?.trim().to_string();
@@ -894,6 +909,7 @@ fn uninstall_with_worktree_hooks_path_removes_configured_hook() -> anyhow::Resul
 
     context
         .git_at(&worktree)
+        .command()
         .args([
             "config",
             "--worktree",
@@ -949,6 +965,7 @@ fn uninstall_refuses_external_hooks_path_set() {
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -980,6 +997,7 @@ fn uninstall_with_git_dir_allows_external_hooks_path_set() {
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", "custom-hooks"])
         .assert()
@@ -1019,6 +1037,7 @@ fn uninstall_refuses_empty_external_hooks_path_set() {
     let global_gitconfig = context.work_dir().join("global.gitconfig");
     context
         .git()
+        .command()
         .env("GIT_CONFIG_GLOBAL", &global_gitconfig)
         .args(["config", "--global", "core.hooksPath", ""])
         .assert()
@@ -1049,6 +1068,7 @@ fn uninstall_refuses_empty_local_hooks_path_set() {
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", ""])
         .assert()
         .success();
@@ -1069,6 +1089,7 @@ fn uninstall_with_dot_hooks_path_removes_root_hook() {
 
     context
         .git()
+        .command()
         .args(["config", "core.hooksPath", "."])
         .assert()
         .success();
@@ -1096,6 +1117,7 @@ fn uninstall_with_included_local_hooks_path_removes_configured_hook() -> anyhow:
 
     context
         .git()
+        .command()
         .args(["config", "--local", "include.path", "../included-hooks.cfg"])
         .assert()
         .success();
@@ -1390,7 +1412,7 @@ fn workspace_install() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Install from root directory.
     cmd_snapshot!(context, context.install(), @r#"
@@ -1536,7 +1558,7 @@ fn workspace_install_hooks() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Install by selectors
     cmd_snapshot!(context, context.prepare_hooks().arg("project3").arg("--skip").arg("project3/project5/"), @r"
@@ -1599,7 +1621,7 @@ fn workspace_install_only_root_hook_types() -> anyhow::Result<()> {
         .child("project2")
         .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(nested_config)?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.install(), @r#"
     success: true
@@ -1643,7 +1665,7 @@ fn workspace_uninstall() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Install first
     context.install().assert().success();
@@ -1687,7 +1709,7 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     // Create a template directory
     let template_dir = context.work_dir().child("template");

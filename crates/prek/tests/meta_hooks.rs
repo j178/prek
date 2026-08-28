@@ -32,7 +32,7 @@ fn meta_hooks() {
                 entry: python3 -c 'import sys; sys.exit(0)'
                 exclude: $nonexistent^
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -72,7 +72,7 @@ fn meta_hooks_unknown_hook() {
             hooks:
               - id: this-hook-does-not-exist
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false
@@ -125,7 +125,7 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
         .write_str("<!DOCTYPE html>")?;
 
     let context = context.with_config(&pre_commit_config);
-    context.git_add_all();
+    context.git().add_all();
     cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r"
     success: false
     exit_code: 1
@@ -176,7 +176,7 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     app.child("main.py").write_str(r#"print "abc"  "#)?;
 
     let context = context.with_config("repos: []");
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -245,7 +245,7 @@ fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Resu
     app.child("hook_excluded").write_str("ignored\n")?;
 
     let context = context.with_config("repos: []");
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r#"
     success: true

@@ -107,7 +107,7 @@ fn language_version() -> anyhow::Result<()> {
                 language_version: 'lts/iron' # node 20
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let node_dir = context.home_dir().child("tools").child("node");
     node_dir.assert(predicates::path::missing());
@@ -196,7 +196,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -287,9 +287,11 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
     "#})?;
     make_executable(cli.path())?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add remote Node hook");
-    hook_repo.git_tag("v1.0.0");
+    hook_repo
+        .git()
+        .add_all()
+        .commit("Add remote Node hook")
+        .tag("v1.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -299,7 +301,7 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
               - id: remote-node-hook
                 verbose: true
     ", hook_repo.path().display()});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().env(EnvVars::PREK_HOME, ".prek-cache"), @r"
     success: true
@@ -388,9 +390,11 @@ fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
         console.log("prepared hook ok");
     "#})?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add source-built Node hook");
-    hook_repo.git_tag("v1.0.0");
+    hook_repo
+        .git()
+        .add_all()
+        .commit("Add source-built Node hook")
+        .tag("v1.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -400,7 +404,7 @@ fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
               - id: prepared-node-hook
                 verbose: true
     ", hook_repo.path().display()});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -458,7 +462,7 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let fake_prefix = context.home_dir().child("fake-prefix");
     fake_prefix.create_dir_all()?;
@@ -515,7 +519,7 @@ fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let new_path = remove_bin_from_path("node", None)?;
 
@@ -546,7 +550,7 @@ fn npm_version() {
                 pass_filenames: false
                 verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"\d+\.\d+\.\d+", "[NPM_VERSION]");
 
@@ -579,8 +583,10 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
           "version": "1.0.0"
         }
     "#})?;
-    dependency_repo.git_add_all();
-    dependency_repo.git_commit("Add sentinel Node dependency");
+    dependency_repo
+        .git()
+        .add_all()
+        .commit("Add sentinel Node dependency");
 
     let hook_repo = context.create_repo("sentinel-node-hook");
 
@@ -614,9 +620,11 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
           pass_filenames: false
     "})?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add sentinel Node hook");
-    hook_repo.git_tag("v1.0.0");
+    hook_repo
+        .git()
+        .add_all()
+        .commit("Add sentinel Node hook")
+        .tag("v1.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -627,11 +635,12 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
                 additional_dependencies:
                   - git+file:///prek-node-git-dependency
     ", repo = hook_repo.path().display()});
-    context.git_add_all();
+    context.git().add_all();
 
     // The regression corrupts the calling repository's index, so capture it before npm runs.
     let staged_before = context
         .git()
+        .command()
         .args(["ls-files", "--stage"])
         .assert()
         .success()
@@ -645,6 +654,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
     // Keep the dependency local while requiring npm's Git subprocess to inherit global config.
     context
         .git()
+        .command()
         .args(["config", "--file"])
         .arg(global_gitconfig.path())
         .arg(format!("url.{dependency_url}.insteadOf"))
@@ -667,6 +677,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
     // Success proves the URL rewrite survived; an unchanged index proves repository isolation.
     let staged_after = context
         .git()
+        .command()
         .args(["ls-files", "--stage"])
         .assert()
         .success()

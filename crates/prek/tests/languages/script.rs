@@ -28,7 +28,7 @@ mod unix {
                   VAR2: galaxy
                 verbose: true
         "});
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -84,7 +84,7 @@ mod unix {
 
         make_executable(context.work_dir().child("script.sh"))?;
         make_executable(child.child("script.sh"))?;
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r#"
         success: true
@@ -142,7 +142,7 @@ mod unix {
         "#})?;
         make_executable(&script)?;
 
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -181,7 +181,7 @@ mod unix {
                 verbose: true
         "#});
         context.work_dir().child("a.txt").write_str("a")?;
-        context.git_add_all();
+        context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -222,7 +222,7 @@ fn windows_script_run() -> Result<()> {
     "#})?;
     make_executable(&script)?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

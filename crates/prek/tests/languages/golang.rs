@@ -61,7 +61,7 @@ fn language_version() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let go_dir = context.home_dir().child("tools").child("go");
     go_dir.assert(predicates::path::missing());
@@ -150,7 +150,7 @@ fn remote_hook() {
               - id: echo
                 verbose: true
         "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -180,7 +180,7 @@ fn remote_hook() {
                 language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -215,7 +215,7 @@ fn remote_hook() {
                 verbose: true
                 language_version: '1.23.11' # will auto download
         "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -274,9 +274,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
           language: golang
           additional_dependencies: [ ./cmd ]
     "})?;
-    go_hook.git_add_all();
-    go_hook.git_commit("Initial commit");
-    go_hook.git().args(["tag", "v1.0", "-m", "v1.0"]).output()?;
+    go_hook.git().add_all().commit("Initial commit").tag("v1.0");
 
     let context = TestEnv::new_git();
     let work_dir = context.work_dir();
@@ -292,7 +290,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
               - id: go-hook
                 verbose: true
    ", hook_url = hook_url})?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -337,9 +335,7 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
         verbose: true
       "})?;
 
-    go_hook.git_add_all();
-    go_hook.git_commit("Initial commit");
-    go_hook.git().args(["tag", "v1.0", "-m", "v1.0"]).output()?;
+    go_hook.git().add_all().commit("Initial commit").tag("v1.0");
 
     // Use it as a remote repo in a separate project.
     let context = TestEnv::new_git();
@@ -353,7 +349,7 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
             - id: echo
               verbose: true
       ", hook_url = hook_url});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false

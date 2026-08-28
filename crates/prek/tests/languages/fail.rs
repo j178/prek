@@ -23,7 +23,7 @@ fn fail() -> Result<()> {
               files: 'changelog/.*(?<!\.rst)$'
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

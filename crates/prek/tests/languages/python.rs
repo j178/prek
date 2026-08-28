@@ -61,7 +61,7 @@ fn language_version() -> anyhow::Result<()> {
                 language_version: '3.11.1' # will auto download
                 always_run: true
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let python_dir = context.home_dir().child("tools").child("python");
     python_dir.assert(predicates::path::missing());
@@ -156,7 +156,7 @@ fn invalid_version() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -184,7 +184,7 @@ fn can_not_download() {
                 language_version: '<=3.6' # not supported version
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filters([
         (
@@ -236,7 +236,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -282,9 +282,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
             }
         )
     "#})?;
-    repo.git_add_all();
-    repo.git_commit("Add manifest");
-    repo.git_tag("v0.1.0");
+    repo.git().add_all().commit("Add manifest").tag("v0.1.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -296,7 +294,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
                 verbose: true
     ", repo_path.display()});
 
-    context.git_add_all();
+    context.git().add_all();
     cmd_snapshot!(context, context.run(), @r"
     success: true
     exit_code: 0
@@ -331,7 +329,7 @@ fn hook_stderr() -> anyhow::Result<()> {
         .child("hook.py")
         .write_str("import sys; print('How are you', file=sys.stderr); sys.exit(1)")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -385,7 +383,7 @@ fn pep723_script() -> anyhow::Result<()> {
         main()
     "#})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -445,7 +443,7 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
                 always_run: true
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     // Simulate worktree environment by setting GIT_DIR (like git does in worktrees)
     cmd_snapshot!(context, context.run()
@@ -499,7 +497,7 @@ fn local_relative_additional_dependency_is_not_resolved_from_worktree() -> anyho
             ),
         ]);
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -551,7 +549,7 @@ fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     // First run installs the hook
     cmd_snapshot!(context, context.run().env(EnvVars::PATH, new_path), @"

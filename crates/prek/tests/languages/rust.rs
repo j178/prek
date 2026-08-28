@@ -39,7 +39,7 @@ fn language_version() -> Result<()> {
                 always_run: true
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let rust_dir = context.home_dir().child("tools/rustup/toolchains");
     rust_dir.assert(predicates::path::missing());
@@ -111,7 +111,7 @@ fn rustup_installer() {
                 language: rust
                 entry: rustc --version
    "});
-    context.git_add_all();
+    context.git().add_all();
     let context = context.with_filter(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X");
 
     cmd_snapshot!(context, context.run().arg("-v").env(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME, "non-exist-rustup"), @r#"
@@ -145,7 +145,7 @@ fn additional_dependencies_cli() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -175,7 +175,7 @@ fn remote_hooks() {
                 always_run: true
                 args: ["Hello World"]
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -205,7 +205,7 @@ fn remote_hook_non_workspace() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -237,7 +237,7 @@ fn remote_hooks_with_lib_deps() {
                 pass_filenames: false
                 always_run: true
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

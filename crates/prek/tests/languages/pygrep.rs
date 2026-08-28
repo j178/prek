@@ -25,7 +25,7 @@ fn basic_case_sensitive() -> Result<()> {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -79,7 +79,7 @@ fn case_insensitive() -> Result<()> {
                 args: ["--ignore-case"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -119,7 +119,7 @@ fn multiline_mode() -> Result<()> {
                 args: ["--multiline"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -160,7 +160,7 @@ fn negate_mode() -> Result<()> {
                 args: ["--negate"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -201,7 +201,7 @@ fn negate_multiline_mode() -> Result<()> {
                 args: ["--multiline", "--negate"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -239,7 +239,7 @@ fn invalid_regex() {
                 entry: "[unclosed"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -271,7 +271,7 @@ fn python_regex_quirks() -> Result<()> {
                 entry: "def\\s+\\w+\\([^)]*\\w[^)]*\\):"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -309,7 +309,7 @@ fn complex_regex_patterns() -> Result<()> {
                 entry: "^import\\s+[a-zA-Z_][a-zA-Z0-9_]*$"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -348,7 +348,7 @@ fn case_insensitive_multiline() -> Result<()> {
                 args: ["--ignore-case", "--multiline"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -387,7 +387,7 @@ fn pattern_not_found() -> Result<()> {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -420,7 +420,7 @@ fn invalid_args() -> Result<()> {
                 args: ["--hello"]
                 files: "\\.py$"
         "#});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

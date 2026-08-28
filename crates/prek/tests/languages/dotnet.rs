@@ -54,7 +54,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
 
@@ -104,7 +104,7 @@ fn invalid_language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -147,7 +147,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 pass_filenames: false
                 verbose: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
 
@@ -215,7 +215,7 @@ fn additional_dependencies_with_version() {
                 verbose: true
                 pass_filenames: false
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]");
 
@@ -268,11 +268,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
           entry: dotnet-outdated --version
           additional_dependencies: ["dotnet-outdated-tool:4.7.1"]
     "#})?;
-    repo.git_add_all();
-    repo.git_commit("Add manifest");
-    repo.git()
-        .args(["tag", "v0.1.0", "-m", "v0.1.0"])
-        .output()?;
+    repo.git().add_all().commit("Add manifest").tag("v0.1.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -284,7 +280,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
                 pass_filenames: false
     ", repo_path.display()});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]");
 
@@ -346,7 +342,7 @@ fn hook_stderr() -> anyhow::Result<()> {
         Environment.Exit(1);
     "#})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @"
     success: false

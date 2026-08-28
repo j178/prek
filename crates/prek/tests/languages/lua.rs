@@ -17,7 +17,7 @@ fn health_check() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -64,7 +64,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -96,7 +96,7 @@ fn hook_stderr() -> anyhow::Result<()> {
         .child("hook.lua")
         .write_str("io.stderr:write('How are you\\n'); os.exit(1)")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -147,7 +147,7 @@ fn script_with_files() -> anyhow::Result<()> {
         .child("test2.lua")
         .write_str("print('test2')")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -184,7 +184,7 @@ fn lua_environment() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"lua-[A-Za-z0-9]+", "lua-[HASH]");
 
@@ -236,7 +236,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -265,7 +265,7 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

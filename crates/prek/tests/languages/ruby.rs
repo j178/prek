@@ -33,7 +33,7 @@ fn system_ruby() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -71,7 +71,7 @@ fn language_version_default() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -131,7 +131,7 @@ fn specific_ruby_available() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -183,7 +183,7 @@ fn specific_ruby_unavailable() {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     #[cfg(target_os = "windows")]
     cmd_snapshot!(context, context.run().arg("-v"), @r"
@@ -257,7 +257,7 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filters([
         // Normalize unpinned rspec version (only for test-gem-require, not test-gem-require-versioned)
@@ -358,7 +358,7 @@ fn gemspec_workflow() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -440,7 +440,7 @@ fn environment_isolation() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
     "#});
-    context.git_add_all();
+    context.git().add_all();
 
     let output = context.run().output()?;
 
@@ -594,9 +594,8 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
               pass_filenames: false
         "})?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Initial commit");
-    let rev = hook_repo.git_rev_parse("HEAD")?;
+    hook_repo.git().add_all().commit("Initial commit");
+    let rev = hook_repo.git().rev_parse("HEAD")?;
 
     // Configure prek to use this local repo
     let context = context.with_config(indoc::formatdoc! {r"
@@ -614,7 +613,7 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
         hook_repo.path().display(),
         rev
     });
-    context.git_add(".pre-commit-config.yaml");
+    context.git().add(".pre-commit-config.yaml");
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -666,7 +665,7 @@ fn native_gem_dependency() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true
@@ -725,7 +724,7 @@ fn process_files() -> anyhow::Result<()> {
     // Create a text file
     context.work_dir().child("test.txt").write_str("hello")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -780,7 +779,7 @@ fn auto_download() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let ruby_dir = context.home_dir().child("tools").child("ruby");
     ruby_dir.assert(predicates::path::missing());
@@ -850,7 +849,7 @@ fn auto_download() -> anyhow::Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-v"), @r"
     success: true

@@ -18,7 +18,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -55,7 +55,7 @@ fn hook_stderr() -> anyhow::Result<()> {
             }
         "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -108,7 +108,7 @@ fn script_with_files() -> anyhow::Result<()> {
         .child("test2.dart")
         .write_str("void main() { print('test2'); }")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -174,7 +174,7 @@ fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
             }
         "#})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -229,7 +229,7 @@ fn with_pubspec() -> anyhow::Result<()> {
             }
         "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -301,7 +301,7 @@ fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
             }
         "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -352,7 +352,7 @@ fn additional_dependencies() {
         "})
         .unwrap();
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -395,7 +395,7 @@ fn additional_dependencies_with_version() {
         "})
         .unwrap();
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -449,7 +449,7 @@ fn executable_alias() -> anyhow::Result<()> {
             }
         "})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -498,7 +498,7 @@ fn dart_environment() {
         "})
         .unwrap();
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -526,7 +526,7 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

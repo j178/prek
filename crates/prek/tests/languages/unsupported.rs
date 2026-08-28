@@ -27,7 +27,7 @@ fn unsupported_language() -> anyhow::Result<()> {
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#})?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true

@@ -24,7 +24,7 @@ fn local_hook() -> anyhow::Result<()> {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -78,7 +78,7 @@ fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -117,9 +117,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
     write_local_r_package(hook_repo.path(), "localdep")?;
     write_renv_project(hook_repo.path())?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add R hook");
-    hook_repo.git_tag("v1.0.0");
+    hook_repo.git().add_all().commit("Add R hook").tag("v1.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -133,7 +131,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 pass_filenames: false
     ", hook_repo.path().display()});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -167,7 +165,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

@@ -18,7 +18,7 @@ fn docker() {
                 always_run: true
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -53,7 +53,7 @@ fn workspace_docker() -> anyhow::Result<()> {
     cwd.child("project1").child("project1.txt").write_str("")?;
     cwd.child("project2").child("project2.txt").write_str("")?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true

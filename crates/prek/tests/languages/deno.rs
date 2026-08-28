@@ -20,7 +20,7 @@ fn basic_deno() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -63,7 +63,7 @@ fn script_file() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -106,7 +106,7 @@ fn builtin_commands() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -135,7 +135,7 @@ fn remote_hook() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -165,7 +165,7 @@ fn remote_hook_with_additional_dependencies() {
                 verbose: true
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -194,7 +194,7 @@ fn remote_hook_with_local_file_additional_dependency() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -227,7 +227,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -284,7 +284,7 @@ fn additional_dependencies_absolute_file() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -347,7 +347,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let deno_dir = context.home_dir().child("tools").child("deno");
     deno_dir.assert(predicates::path::missing());
@@ -427,7 +427,7 @@ fn checksum_policy() {
                 verbose: true
                 pass_filenames: false
     "});
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"deno-[A-Za-z0-9_-]+\.zip", "deno-[TARGET].zip");
 
@@ -481,7 +481,7 @@ fn version_range() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let context = context.with_filter(r"Deno \d+\.\d+\.\d+", "Deno [VERSION]");
 
@@ -527,7 +527,7 @@ fn hook_failure() {
                 verbose: true
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     // The lint should fail due to no-explicit-any
     let output = context.run().output().expect("Failed to run hook");
@@ -563,7 +563,7 @@ fn script_with_permissions() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().env("TEST_VAR", "hello"), @r"
     success: true

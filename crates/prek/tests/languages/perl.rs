@@ -30,7 +30,7 @@ fn local_hook() -> anyhow::Result<()> {
             print "Hello from Perl!\n";
         "#})?;
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
     success: true
@@ -102,9 +102,11 @@ fn remote_repo_install() -> anyhow::Result<()> {
             1;
         "#})?;
 
-    hook_repo.git_add_all();
-    hook_repo.git_commit("Add perl hook");
-    hook_repo.git_tag("v1.0.0");
+    hook_repo
+        .git()
+        .add_all()
+        .commit("Add perl hook")
+        .tag("v1.0.0");
 
     let context = context.with_config(indoc::formatdoc! {r"
         repos:
@@ -117,7 +119,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 pass_filenames: false
     ", hook_repo.path().display()});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
     success: true
@@ -151,7 +153,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     context
         .run()
@@ -176,7 +178,7 @@ fn language_version() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

@@ -377,7 +377,7 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
               - id: ruff-check
                 groups: [local]
         "});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context,
         context.list().arg("--group").arg("ci"),
@@ -607,7 +607,7 @@ fn workspace_list() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.list(), @r"
     success: true
@@ -795,7 +795,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
         ],
         config,
     )?;
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.list().arg("project2/"), @r"
     success: true

@@ -24,7 +24,7 @@ fn local_hook_system_command() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -60,7 +60,7 @@ fn language_version_rejected() {
                 pass_filenames: false
     "});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -94,7 +94,7 @@ fn health_check() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     // First run - installs
     cmd_snapshot!(context, context.run(), @r"
@@ -165,12 +165,11 @@ fn local_package_build() -> anyhow::Result<()> {
           entry: prek-swift-test
           language: swift
     "})?;
-    swift_hook.git_add_all();
-    swift_hook.git_commit("Initial commit");
     swift_hook
         .git()
-        .args(["tag", "v1.0", "-m", "v1.0"])
-        .output()?;
+        .add_all()
+        .commit("Initial commit")
+        .tag("v1.0");
 
     let context = TestEnv::new_git();
 
@@ -185,7 +184,7 @@ fn local_package_build() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
     ", hook_url = hook_url});
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

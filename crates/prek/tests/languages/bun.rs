@@ -21,7 +21,7 @@ fn basic_bun() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -54,7 +54,7 @@ fn additional_dependencies() {
                 pass_filenames: false
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -146,7 +146,7 @@ fn language_version() -> Result<()> {
                 additional_dependencies: ["cowsay"] # different dep to force create separate env
     "#});
 
-    context.git_add_all();
+    context.git().add_all();
 
     let bun_dir = context.home_dir().child("tools").child("bun");
     bun_dir.assert(predicates::path::missing());
