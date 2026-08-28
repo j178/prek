@@ -682,6 +682,19 @@ pub(crate) struct RunOptions {
     #[arg(long, help_heading = "Run options")]
     pub(crate) dry_run: bool,
 
+    /// Hide hook reports with the specified final status.
+    ///
+    /// Can be specified multiple times or as a comma-separated list. This does
+    /// not change hook execution or exit codes.
+    #[arg(
+        long,
+        value_name = "STATUS",
+        value_enum,
+        value_delimiter = ',',
+        help_heading = "Run options"
+    )]
+    pub(crate) hide_status: Vec<run::RunStatus>,
+
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
 }

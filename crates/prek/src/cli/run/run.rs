@@ -26,7 +26,7 @@ use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
     ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
 };
-use crate::cli::{ExitStatus, RunExtraArgs};
+use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
 use crate::config::{PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
@@ -40,25 +40,35 @@ use crate::{fs, git, hooks, warn_user};
 
 use super::{DRY_RUN, FAILED, PASSED, SKIPPED};
 
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     store: &Store,
     config: Option<PathBuf>,
-    includes: Vec<String>,
-    skips: Vec<String>,
-    groups: Vec<String>,
-    required_groups: Vec<String>,
-    no_groups: Vec<String>,
-    hook_stage: Option<Stage>,
-    selection: FileSelection,
-    show_diff_on_failure: bool,
-    fail_fast: Option<bool>,
-    dry_run: bool,
+    args: RunArgs,
     refresh: bool,
-    extra_args: RunExtraArgs,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let RunArgs {
+        options,
+        stage: hook_stage,
+        groups,
+        required_groups,
+        no_groups,
+    } = args;
+    let RunOptions {
+        includes,
+        skips,
+        file_selection,
+        show_diff_on_failure,
+        fail_fast,
+        no_fail_fast,
+        dry_run,
+        hide_status,
+        extra: extra_args,
+    } = options;
+    let selection: FileSelection = file_selection.into();
+    let fail_fast = flag(fail_fast, no_fail_fast);
+
     // Prevent recursive post-checkout hooks.
     if hook_stage == Some(Stage::PostCheckout)
         && EnvVars.is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
@@ -210,6 +220,7 @@ pub(crate) async fn run(
         show_diff_on_failure,
         fail_fast,
         dry_run,
+        &hide_status,
         should_stash,
         verbose,
         printer,
@@ -423,6 +434,7 @@ async fn run_hooks<'paths>(
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
+    hide_status: &[RunStatus],
     worktree_cleaned: bool,
     verbose: bool,
     printer: Printer,
@@ -446,13 +458,14 @@ async fn run_hooks<'paths>(
         hooks,
         store,
         dry_run,
+        hide_status,
         verbose,
         show_project_headers,
         printer,
     );
 
     for projects in ProjectDepthGroups::new(workspace.all_projects()) {
-        let clean_baseline = worktree_cleaned && !session.file_modified;
+        let clean_baseline = worktree_cleaned && !session.outcome.modified_files;
         let mut project_runs = Vec::new();
 
         for project in projects {
@@ -533,35 +546,59 @@ struct ProjectRun<'project> {
 
 struct ProjectRunResult<'project> {
     project: &'project Project,
-    groups: Vec<ProjectGroupRunResult>,
+    groups: Vec<PriorityGroupResult>,
     stop_after_level: bool,
 }
 
 impl ProjectRunResult<'_> {
     fn failed(&self) -> bool {
-        self.groups.iter().any(ProjectGroupRunResult::failed)
+        self.groups.iter().any(PriorityGroupResult::failed)
+    }
+
+    fn has_visible_report(&self, filter: ReportFilter<'_>) -> bool {
+        self.groups
+            .iter()
+            .any(|group| group.has_visible_report(filter))
     }
 }
 
-struct ProjectGroupRunResult {
-    results: Vec<RunResult>,
+struct PriorityGroupResult {
+    results: Vec<HookRunResult>,
     modified_files: bool,
 }
 
-impl ProjectGroupRunResult {
+impl PriorityGroupResult {
+    fn new(mut results: Vec<HookRunResult>, modified_files: bool) -> Self {
+        // A single hook owns the group's modifications, so its final status is failed.
+        if modified_files && let [result] = results.as_mut_slice() {
+            result.status = RunStatus::Failed;
+        }
+        Self {
+            results,
+            modified_files,
+        }
+    }
+
+    fn shows_group_failure(&self, filter: ReportFilter<'_>) -> bool {
+        self.modified_files && self.results.len() > 1 && filter.shows(RunStatus::Failed)
+    }
+
+    fn has_visible_report(&self, filter: ReportFilter<'_>) -> bool {
+        self.shows_group_failure(filter)
+            || self
+                .results
+                .iter()
+                .any(|result| filter.shows(result.status))
+    }
+
     fn hook_fail_fast(&self) -> bool {
         self.results.iter().any(|result| {
-            let ok = if self.modified_files {
-                false
-            } else {
-                result.status.as_bool()
-            };
-            !ok && result.hook.fail_fast
+            (self.modified_files || result.status.is_failure()) && result.hook.fail_fast
         })
     }
 
     fn failed(&self) -> bool {
-        self.modified_files || self.results.iter().any(|result| !result.status.as_bool())
+        self.modified_files || self.results.iter().any(|result| result.status.is_failure())
     }
 
     fn should_stop_project(&self, project_fail_fast: bool) -> bool {
@@ -569,16 +606,47 @@ impl ProjectGroupRunResult {
     }
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[derive(Clone, Copy)]
+struct ReportFilter<'a> {
+    hidden_statuses: &'a [RunStatus],
+}
+
+impl<'a> ReportFilter<'a> {
+    fn new(hidden_statuses: &'a [RunStatus]) -> Self {
+        Self { hidden_statuses }
+    }
+
+    fn shows(self, status: RunStatus) -> bool {
+        if status == RunStatus::DryRun {
+            true
+        } else {
+            !self.hidden_statuses.contains(&status)
+        }
+    }
+}
+
+#[derive(Default)]
+struct RunOutcome {
+    failed: bool,
+    modified_files: bool,
+}
+
+impl RunOutcome {
+    fn record(&mut self, group: &PriorityGroupResult) {
+        self.failed |= group.failed();
+        self.modified_files |= group.modified_files;
+    }
+}
+
 struct HookRunSession<'a> {
     store: &'a Store,
     reporter: HookRunReporter,
     status_printer: StatusPrinter,
     printer: Printer,
     dry_run: bool,
+    report_filter: ReportFilter<'a>,
     verbose: bool,
-    success: bool,
-    file_modified: bool,
+    outcome: RunOutcome,
 }
 
 impl<'a> HookRunSession<'a> {
@@ -586,6 +654,7 @@ impl<'a> HookRunSession<'a> {
         hooks: &[InstalledHook],
         store: &'a Store,
         dry_run: bool,
+        hidden_statuses: &'a [RunStatus],
         verbose: bool,
         show_project_headers: bool,
         printer: Printer,
@@ -600,9 +669,9 @@ impl<'a> HookRunSession<'a> {
             status_printer,
             printer,
             dry_run,
+            report_filter: ReportFilter::new(hidden_statuses),
             verbose,
-            success: true,
-            file_modified: false,
+            outcome: RunOutcome::default(),
         }
     }
 
@@ -645,7 +714,11 @@ impl<'a> HookRunSession<'a> {
                     .run_project(project_run, input, file_index, clean_baseline, semaphore)
                     .await;
                 if let Ok(result) = &result {
-                    self.reporter.on_project_complete(project, result.failed());
+                    if result.has_visible_report(self.report_filter) {
+                        self.reporter.on_project_complete(project, result.failed());
+                    } else {
+                        self.reporter.hide_project(project);
+                    }
                 }
                 result.map(|result| (idx, result))
             });
@@ -717,10 +790,7 @@ impl<'a> HookRunSession<'a> {
             }
             let group_modified_files = known_modified_files || diff_detected_modifications;
 
-            let group = ProjectGroupRunResult {
-                results: group_results,
-                modified_files: group_modified_files,
-            };
+            let group = PriorityGroupResult::new(group_results, group_modified_files);
             self.update_live_priority_group(&group);
             stop_after_level = group.should_stop_project(project_run.project_fail_fast);
             groups.push(group);
@@ -743,7 +813,7 @@ impl<'a> HookRunSession<'a> {
         project_input: &ProjectHookInput<'_, '_>,
         tag_cache: &FileTagCache,
         semaphore: Rc<Semaphore>,
-    ) -> Result<Vec<RunResult>> {
+    ) -> Result<Vec<HookRunResult>> {
         debug!(
             "Running priority group with priority {}: {:?}",
             group_hooks[0].priority,
@@ -766,18 +836,18 @@ impl<'a> HookRunSession<'a> {
         runs.try_collect().await
     }
 
-    fn update_live_priority_group(&self, group: &ProjectGroupRunResult) {
-        let single_hook_modified_files = group.results.len() == 1 && group.modified_files;
-
+    fn update_live_priority_group(&self, group: &PriorityGroupResult) {
         for result in &group.results {
-            let status = if single_hook_modified_files && result.status == RunStatus::Success {
-                RunStatus::Failed
-            } else {
-                result.status
-            };
-
-            if !status.is_skipped() {
-                self.reporter.on_run_result(&result.hook, status.as_bool());
+            let status = result.status;
+            match status {
+                RunStatus::Passed | RunStatus::Failed if self.report_filter.shows(status) => {
+                    self.reporter
+                        .on_run_result(&result.hook, status == RunStatus::Passed);
+                }
+                RunStatus::Passed | RunStatus::Failed => {
+                    self.reporter.hide_run_result(&result.hook);
+                }
+                RunStatus::DryRun | RunStatus::Skipped => {}
             }
         }
     }
@@ -787,12 +857,14 @@ impl<'a> HookRunSession<'a> {
         project_result: ProjectRunResult<'_>,
         show_project_headers: bool,
     ) -> Result<bool> {
+        let show_project_header =
+            show_project_headers && project_result.has_visible_report(self.report_filter);
         self.render_project_header(
             project_result.project,
             project_result.failed(),
-            show_project_headers,
+            show_project_header,
         )?;
-        let hook_prefix = if show_project_headers { "  " } else { "" };
+        let hook_prefix = if show_project_header { "  " } else { "" };
 
         for group in project_result.groups {
             self.finish_priority_group(group, hook_prefix)?;
@@ -803,57 +875,41 @@ impl<'a> HookRunSession<'a> {
 
     fn finish_priority_group(
         &mut self,
-        group: ProjectGroupRunResult,
+        mut group: PriorityGroupResult,
         hook_prefix: &str,
     ) -> Result<()> {
-        let ProjectGroupRunResult {
-            mut results,
-            modified_files,
-        } = group;
         // Print results in a stable order (same order as config within the project).
-        results.sort_unstable_by_key(|a| a.hook.idx);
+        group.results.sort_unstable_by_key(|result| result.hook.idx);
 
-        self.file_modified |= modified_files;
+        self.outcome.record(&group);
 
         self.reporter.clear_completed();
-        self.reporter
-            .suspend(|| self.render_priority_group(&results, modified_files, hook_prefix))?;
-
-        for RunResult { status, .. } in &results {
-            let ok = if modified_files {
-                false
-            } else {
-                status.as_bool()
-            };
-            self.success &= ok;
+        for result in &group.results {
+            if result.shows_details(self.verbose) {
+                result.write_log_file()?;
+            }
         }
+        self.reporter
+            .suspend(|| self.render_priority_group(&group, hook_prefix))?;
 
         Ok(())
     }
 
-    fn render_priority_group(
-        &self,
-        group_results: &[RunResult],
-        group_modified_files: bool,
-        hook_prefix: &str,
-    ) -> Result<()> {
-        // Only show a special group UI when the group failed due to file modifications.
-        // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
-        let show_group_ui = group_modified_files && group_results.len() > 1;
-        let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
-        let group_output_prefix = if show_group_ui {
-            format!("{hook_prefix}{}", "  │ ".dimmed())
+    fn render_priority_group(&self, group: &PriorityGroupResult, hook_prefix: &str) -> Result<()> {
+        let group_results = &group.results;
+        let group_modified_files = group.modified_files;
+        let show_group_failure = group.shows_group_failure(self.report_filter);
+        let mut visible_results = group_results
+            .iter()
+            .filter(|result| self.report_filter.shows(result.status))
+            .peekable();
+        let mut first_result = true;
+        let group_output_prefix = if show_group_failure {
+            Some(format!("{hook_prefix}{}", "  │ ".dimmed()))
         } else {
-            String::new()
+            None
         };
-        let detail_prefix = if show_group_ui {
-            group_output_prefix.as_str()
-        } else {
-            hook_prefix
-        };
-        let group_separator = format!("{hook_prefix}{}", "  │".dimmed());
-
-        if show_group_ui {
+        if show_group_failure {
             self.status_printer.write(
                 "Files were modified by following hooks",
                 hook_prefix,
@@ -861,128 +917,118 @@ impl<'a> HookRunSession<'a> {
             )?;
         }
 
-        for (i, result) in group_results.iter().enumerate() {
-            let prefix = if show_group_ui {
-                if i == 0 {
-                    "  ┌ "
-                } else if i + 1 == group_results.len() {
+        while let Some(result) = visible_results.next() {
+            let status = result.status;
+
+            let connector = if show_group_failure {
+                if visible_results.peek().is_none() {
                     "  └ "
+                } else if first_result {
+                    "  ┌ "
                 } else {
                     "  │ "
                 }
             } else {
                 ""
             };
-            let prefix = format!("{hook_prefix}{prefix}");
-
-            // If a single hook modified files, treat it as failed.
-            let status = if single_hook_modified_files && result.status == RunStatus::Success {
-                RunStatus::Failed
-            } else {
-                result.status
-            };
+            first_result = false;
+            let prefix = format!("{hook_prefix}{connector}");
 
             self.status_printer
                 .write(&result.hook.name, &prefix, status)?;
 
-            if matches!(status, RunStatus::NoFiles) {
-                continue;
-            }
-
-            let mut stdout = match status {
-                RunStatus::Failed => self.printer.stdout_important(),
-                _ => self.printer.stdout(),
-            };
-
-            if self.verbose || result.hook.verbose || status == RunStatus::Failed {
-                writeln!(
-                    stdout,
-                    "{detail_prefix}{}",
-                    format!("- hook id: {}", result.hook.id).dimmed()
+            if status != RunStatus::Skipped && result.shows_details(self.verbose) {
+                self.render_hook_details(
+                    result,
+                    hook_prefix,
+                    group_output_prefix.as_deref(),
+                    group_modified_files && group_results.len() == 1,
                 )?;
-                if !result.hook.alias.is_empty() && result.hook.alias != result.hook.id {
-                    writeln!(
-                        stdout,
-                        "{detail_prefix}{}",
-                        format!("- hook alias: {}", result.hook.alias).dimmed()
-                    )?;
-                }
-                if let Some(description) = result.hook.description.as_deref()
-                    && let Some(description) = description.trim().lines().next()
-                {
-                    let description = description.trim_end().trim_end_matches('.');
-                    writeln!(
-                        stdout,
-                        "{detail_prefix}{}",
-                        format!("- description: {description}").dimmed()
-                    )?;
-                }
-                if self.verbose || result.hook.verbose {
-                    writeln!(
-                        stdout,
-                        "{detail_prefix}{}",
-                        format!("- duration: {:.2?}s", result.duration.as_secs_f64()).dimmed()
-                    )?;
-                }
-                if result.exit_status != 0 {
-                    writeln!(
-                        stdout,
-                        "{detail_prefix}{}",
-                        format!("- exit code: {}", result.exit_status).dimmed()
-                    )?;
-                }
-                if single_hook_modified_files {
-                    writeln!(
-                        stdout,
-                        "{detail_prefix}{}",
-                        "- files were modified by this hook".dimmed()
-                    )?;
-                }
+            }
+        }
 
-                let output = result.output.trim_ascii();
-                if !output.is_empty() {
-                    if let Some(file) = result.hook.log_file.as_deref() {
-                        let file = Path::new(file);
-                        let config_file = result.hook.project().config_file();
-                        let file = if file.is_relative() {
-                            let config_dir = config_file
-                                .parent()
-                                .context("Configuration file must have a parent directory")?;
-                            config_dir.join(file)
-                        } else {
-                            file.to_path_buf()
-                        };
-                        let mut file = fs_err::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(file)?;
-                        file.write_all(output)?;
-                        file.flush()?;
-                    } else {
-                        let text = sanitize_output(output);
-                        if text.is_empty() {
-                            continue;
-                        }
-                        if show_group_ui {
-                            writeln!(stdout, "{group_separator}")?;
-                        } else {
-                            writeln!(stdout)?;
-                        }
-                        for line in text.lines() {
-                            if line.is_empty() {
-                                if show_group_ui {
-                                    writeln!(stdout, "{group_separator}")?;
-                                } else {
-                                    writeln!(stdout)?;
-                                }
-                            } else if show_group_ui {
-                                writeln!(stdout, "{group_output_prefix}{line}")?;
-                            } else {
-                                writeln!(stdout, "{hook_prefix}  {line}")?;
-                            }
-                        }
-                    }
-                }
+        Ok(())
+    }
+
+    fn render_hook_details(
+        &self,
+        result: &HookRunResult,
+        hook_prefix: &str,
+        group_output_prefix: Option<&str>,
+        modified_files: bool,
+    ) -> Result<()> {
+        let detail_prefix = group_output_prefix.unwrap_or(hook_prefix);
+        let mut stdout = match result.status {
+            RunStatus::Failed => self.printer.stdout_important(),
+            _ => self.printer.stdout(),
+        };
+
+        writeln!(
+            stdout,
+            "{detail_prefix}{}",
+            format!("- hook id: {}", result.hook.id).dimmed()
+        )?;
+        if !result.hook.alias.is_empty() && result.hook.alias != result.hook.id {
+            writeln!(
+                stdout,
+                "{detail_prefix}{}",
+                format!("- hook alias: {}", result.hook.alias).dimmed()
+            )?;
+        }
+        if let Some(description) = result.hook.description.as_deref()
+            && let Some(description) = description.trim().lines().next()
+        {
+            let description = description.trim_end().trim_end_matches('.');
+            writeln!(
+                stdout,
+                "{detail_prefix}{}",
+                format!("- description: {description}").dimmed()
+            )?;
+        }
+        if self.verbose || result.hook.verbose {
+            writeln!(
+                stdout,
+                "{detail_prefix}{}",
+                format!("- duration: {:.2?}s", result.duration.as_secs_f64()).dimmed()
+            )?;
+        }
+        if result.exit_status != 0 {
+            writeln!(
+                stdout,
+                "{detail_prefix}{}",
+                format!("- exit code: {}", result.exit_status).dimmed()
+            )?;
+        }
+        if modified_files {
+            writeln!(
+                stdout,
+                "{detail_prefix}{}",
+                "- files were modified by this hook".dimmed()
+            )?;
+        }
+
+        let output = result.output.trim_ascii();
+        if output.is_empty() || result.hook.log_file.is_some() {
+            return Ok(());
+        }
+        let text = sanitize_output(output);
+        if text.is_empty() {
+            return Ok(());
+        }
+
+        let separator = if group_output_prefix.is_some() {
+            format!("{hook_prefix}{}", "  │".dimmed())
+        } else {
+            String::new()
+        };
+        writeln!(stdout, "{separator}")?;
+        for line in text.lines() {
+            if line.is_empty() {
+                writeln!(stdout, "{separator}")?;
+            } else if let Some(group_output_prefix) = group_output_prefix {
+                writeln!(stdout, "{group_output_prefix}{line}")?;
+            } else {
+                writeln!(stdout, "{hook_prefix}  {line}")?;
             }
         }
 
@@ -996,7 +1042,7 @@ impl<'a> HookRunSession<'a> {
     ) -> Result<ExitStatus> {
         self.reporter.on_complete();
 
-        if !self.success && show_diff_on_failure && self.file_modified {
+        if self.outcome.failed && show_diff_on_failure && self.outcome.modified_files {
             if EnvVars::is_under_ci() {
                 writeln!(
                     self.printer.stdout(),
@@ -1035,10 +1081,10 @@ impl<'a> HookRunSession<'a> {
                 .await?;
         }
 
-        if self.success {
-            Ok(ExitStatus::Success)
-        } else {
+        if self.outcome.failed {
             Ok(ExitStatus::Failure)
+        } else {
+            Ok(ExitStatus::Success)
         }
     }
 }
@@ -1198,21 +1244,19 @@ impl<'a> HookRunInput<'a> {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum RunStatus {
-    Success,
+#[derive(Debug, Copy, Clone, Eq, PartialEq, clap::ValueEnum)]
+pub(crate) enum RunStatus {
+    Passed,
     Failed,
+    // Dry-run is a mode, not a filterable hook outcome.
+    #[value(skip)]
     DryRun,
-    NoFiles,
+    Skipped,
 }
 
 impl RunStatus {
-    fn as_bool(self) -> bool {
-        matches!(self, Self::Success | Self::NoFiles | Self::DryRun)
-    }
-
-    fn is_skipped(self) -> bool {
-        matches!(self, Self::DryRun | Self::NoFiles)
+    fn is_failure(self) -> bool {
+        self == Self::Failed
     }
 }
 
@@ -1256,9 +1300,9 @@ impl StatusPrinter {
         status: RunStatus,
     ) -> Result<(), std::fmt::Error> {
         let (suffix, status_line) = match status {
-            RunStatus::NoFiles => (Self::NO_FILES, SKIPPED),
+            RunStatus::Skipped => (Self::NO_FILES, SKIPPED),
             RunStatus::DryRun => ("", DRY_RUN),
-            RunStatus::Success => ("", PASSED),
+            RunStatus::Passed => ("", PASSED),
             RunStatus::Failed => ("", FAILED),
         };
         let (prefix, prefix_width) = if prefix.is_empty() {
@@ -1280,7 +1324,7 @@ impl StatusPrinter {
     }
 }
 
-struct RunResult {
+struct HookRunResult {
     hook: InstalledHook,
     status: RunStatus,
     duration: std::time::Duration,
@@ -1289,16 +1333,49 @@ struct RunResult {
     file_changes: hooks::FileChanges,
 }
 
-impl RunResult {
-    fn from_status(hook: InstalledHook, status: RunStatus) -> Self {
+impl HookRunResult {
+    fn skipped(hook: InstalledHook) -> Self {
         Self {
             hook,
-            status,
+            status: RunStatus::Skipped,
             duration: std::time::Duration::ZERO,
             exit_status: 0,
             output: Vec::new(),
             file_changes: hooks::FileChanges::Unchanged,
         }
+    }
+
+    fn shows_details(&self, verbose: bool) -> bool {
+        verbose || self.hook.verbose || self.status == RunStatus::Failed
+    }
+
+    fn write_log_file(&self) -> Result<()> {
+        let Some(file) = self.hook.log_file.as_deref() else {
+            return Ok(());
+        };
+        let output = self.output.trim_ascii();
+        if output.is_empty() {
+            return Ok(());
+        }
+
+        let file = Path::new(file);
+        let config_file = self.hook.project().config_file();
+        let file = if file.is_relative() {
+            let config_dir = config_file
+                .parent()
+                .context("Configuration file must have a parent directory")?;
+            config_dir.join(file)
+        } else {
+            file.to_path_buf()
+        };
+        let mut file = fs_err::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(file)?;
+        file.write_all(output)?;
+        file.flush()?;
+
+        Ok(())
     }
 }
 
@@ -1310,7 +1387,7 @@ async fn run_hook(
     dry_run: bool,
     reporter: &HookRunReporter,
     semaphore: Rc<Semaphore>,
-) -> Result<RunResult> {
+) -> Result<HookRunResult> {
     let _permit = if dry_run {
         None
     } else {
@@ -1328,7 +1405,7 @@ async fn run_hook(
     );
 
     if !matched && !hook.always_run {
-        return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
+        return Ok(HookRunResult::skipped(hook));
     }
     let start = std::time::Instant::now();
 
@@ -1362,12 +1439,12 @@ async fn run_hook(
     let run_status = if dry_run {
         RunStatus::DryRun
     } else if exit_status == 0 {
-        RunStatus::Success
+        RunStatus::Passed
     } else {
         RunStatus::Failed
     };
 
-    Ok(RunResult {
+    Ok(HookRunResult {
         hook,
         status: run_status,
         duration,

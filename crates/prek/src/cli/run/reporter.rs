@@ -16,7 +16,8 @@
 //! header, the collapsed hidden-summary row, and completed hook rows. A
 //! completed hook moves from `running` into its project's `CompletedBars` before
 //! the running lock is released, so other layout operations never observe the
-//! hook as missing from both states.
+//! hook as missing from both states. It remains there until the group is
+//! cleared, collapsed, or filtered from the report.
 //!
 //! # Visual order and anchors
 //!
@@ -80,7 +81,7 @@ use super::{FAILED, PASSED};
 /// `HOOK_OUTPUT_PREVIEW_LINES` preview lines inserted directly below it.
 /// While the hook is running, `HookRunReporter::running` owns this value. After
 /// the hook completes, it moves into the owning project's `HookGroup::completed`
-/// until the group is cleared or collapsed.
+/// until the group is cleared, collapsed, or filtered from the report.
 #[derive(Debug)]
 struct HookBar {
     /// Stable identity used to match a completed bar with the later hook result.
@@ -236,6 +237,14 @@ impl CompletedBars {
         }
 
         None
+    }
+
+    fn remove_hook(&mut self, hook_key: HookKey) -> Option<HookBar> {
+        let (&line_order, _) = self
+            .visible
+            .iter()
+            .find(|(_, completed)| completed.hook_key == hook_key)?;
+        self.visible.remove(&line_order)
     }
 
     fn line_count(&self) -> usize {
@@ -663,6 +672,20 @@ impl HookRunReporter {
         }
     }
 
+    pub fn hide_run_result(&self, hook: &Hook) {
+        // Hidden results never record `passed`, so they cannot enter the collapsed summary.
+        let hook_key = HookKey::from_hook(hook);
+        let completed = {
+            let mut groups = self.groups.lock().unwrap();
+            groups
+                .get_mut(&hook_key.project_idx)
+                .and_then(|group| group.completed.remove_hook(hook_key))
+        };
+        if let Some(completed) = completed {
+            self.remove_hook_bar(completed);
+        }
+    }
+
     pub fn on_run_result(&self, hook: &Hook, passed: bool) {
         let hook_key = HookKey::from_hook(hook);
         let progress = {
@@ -705,6 +728,18 @@ impl HookRunReporter {
         ));
 
         header.finish();
+    }
+
+    pub fn hide_project(&self, project: &workspace::Project) {
+        let header = {
+            let mut groups = self.groups.lock().unwrap();
+            groups
+                .get_mut(&project.idx())
+                .and_then(|group| group.header.take())
+        };
+        if let Some(header) = header {
+            self.reporter.children.remove(&header);
+        }
     }
 
     pub fn clear_completed(&self) {

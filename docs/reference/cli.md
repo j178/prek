@@ -291,7 +291,14 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--group"><a href="#prek-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to the specified group.</p>
 <p>Can be specified multiple times; a hook may match any specified group. When combined with <code>--require-group</code>, both filters must match. <code>@ungrouped</code> matches hooks without groups.</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-run--last-commit"><a href="#prek-run--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
+</dd><dt id="prek-run--hide-status"><a href="#prek-run--hide-status"><code>--hide-status</code></a> <i>status</i></dt><dd><p>Hide hook reports with the specified final status.</p>
+<p>Can be specified multiple times or as a comma-separated list. This does not change hook execution or exit codes.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>passed</code></li>
+<li><code>failed</code></li>
+<li><code>skipped</code></li>
+</ul></dd><dt id="prek-run--last-commit"><a href="#prek-run--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
 </dd><dt id="prek-run--log-file"><a href="#prek-run--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-run--no-group"><a href="#prek-run--no-group"><code>--no-group</code></a> <i>group</i></dt><dd><p>Do not run hooks belonging to the specified group.</p>
 <p>Can be specified multiple times. Exclusion wins over inclusion. The special selector <code>@ungrouped</code> is also supported.</p>
@@ -865,7 +872,14 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--glob"><a href="#prek-try-repo--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
 <p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-try-repo--last-commit"><a href="#prek-try-repo--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
+</dd><dt id="prek-try-repo--hide-status"><a href="#prek-try-repo--hide-status"><code>--hide-status</code></a> <i>status</i></dt><dd><p>Hide hook reports with the specified final status.</p>
+<p>Can be specified multiple times or as a comma-separated list. This does not change hook execution or exit codes.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>passed</code></li>
+<li><code>failed</code></li>
+<li><code>skipped</code></li>
+</ul></dd><dt id="prek-try-repo--last-commit"><a href="#prek-try-repo--last-commit"><code>--last-commit</code></a></dt><dd><p>Run hooks against the last commit. Equivalent to <code>--from-ref HEAD~1 --to-ref HEAD</code></p>
 </dd><dt id="prek-try-repo--log-file"><a href="#prek-try-repo--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-try-repo--no-progress"><a href="#prek-try-repo--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
