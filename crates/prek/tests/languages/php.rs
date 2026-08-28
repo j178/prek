@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn local_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -55,7 +55,7 @@ fn local_hook() -> anyhow::Result<()> {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("php-hook");
 
     hook_repo
@@ -123,7 +123,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
 #[test]
 fn additional_dependencies() -> anyhow::Result<()> {
-    let dependency = TestEnv::new_without_git();
+    let dependency = TestEnv::new();
     dependency
         .work_dir()
         .child(COMPOSER_JSON)
@@ -141,7 +141,7 @@ fn additional_dependencies() -> anyhow::Result<()> {
     "#})?;
     make_executable(dependency_binary.path())?;
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -194,7 +194,7 @@ fn additional_dependencies() -> anyhow::Result<()> {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

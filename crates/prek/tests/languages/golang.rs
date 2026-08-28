@@ -14,7 +14,7 @@ fn language_version() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -139,7 +139,7 @@ fn language_version() -> anyhow::Result<()> {
 /// Test a remote go hook.
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Run hooks with system found go.
     let context = context.with_config(indoc::indoc! {r"
@@ -234,7 +234,7 @@ fn remote_hook() {
 /// Fix <https://github.com/j178/prek/issues/901>
 #[test]
 fn local_additional_deps() -> anyhow::Result<()> {
-    let go_hook = TestEnv::new();
+    let go_hook = TestEnv::new_git();
 
     // Create a local go hook with additional_dependencies.
     go_hook
@@ -278,7 +278,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
     go_hook.git_commit("Initial commit");
     go_hook.git().args(["tag", "v1.0", "-m", "v1.0"]).output()?;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let work_dir = context.work_dir();
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
@@ -315,7 +315,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
 #[test]
 fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
     // Create a remote repo containing a golang hook.
-    let go_hook = TestEnv::new();
+    let go_hook = TestEnv::new_git();
 
     go_hook
         .work_dir()
@@ -342,7 +342,7 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
     go_hook.git().args(["tag", "v1.0", "-m", "v1.0"]).output()?;
 
     // Use it as a remote repo in a separate project.
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
     let context = context.with_config(indoc::formatdoc! {r"

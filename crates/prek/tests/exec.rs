@@ -25,7 +25,7 @@ fn config() -> &'static str {
 }
 
 fn context_with_config() -> TestEnv {
-    TestEnv::new().with_config(config())
+    TestEnv::new_git().with_config(config())
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn exec_propagates_child_exit_status() {
 
 #[test]
 fn exec_rejects_ambiguous_hook_selector() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context.setup_workspace(&["frontend"], config())?;
 
     cmd_snapshot!(context, context.exec().args([
@@ -133,7 +133,7 @@ fn exec_rejects_ambiguous_hook_selector() -> Result<()> {
 
 #[test]
 fn exec_keeps_current_working_directory() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context.setup_workspace(&["frontend"], config())?;
 
     cmd_snapshot!(context, context.exec().args([
@@ -156,7 +156,7 @@ fn exec_keeps_current_working_directory() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn exec_resolves_relative_command_from_current_working_directory() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context.setup_workspace(&["frontend"], config())?;
 
     let command = context.work_dir().join("exec-tool");
@@ -180,7 +180,7 @@ fn exec_resolves_relative_command_from_current_working_directory() -> Result<()>
 
 #[test]
 fn exec_rejects_unsupported_language_before_install() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

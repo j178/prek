@@ -58,7 +58,7 @@ repos:
 
 #[test]
 fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -154,7 +154,7 @@ fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_force_overwrite() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -195,7 +195,7 @@ fn yaml_to_toml_force_overwrite() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_rejects_invalid_config() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -226,7 +226,7 @@ fn yaml_to_toml_rejects_invalid_config() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_same_output() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -257,7 +257,7 @@ fn yaml_to_toml_same_output() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_discovers_pre_commit_config_yaml() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -286,7 +286,7 @@ fn yaml_to_toml_discovers_pre_commit_config_yaml() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_discovers_pre_commit_config_yml() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     context
         .work_dir()
@@ -315,7 +315,7 @@ fn yaml_to_toml_discovers_pre_commit_config_yml() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_prefers_yaml_over_yml() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     // Write different content to each file so we can verify which was used.
     let yaml_only = indoc::indoc! {r"
@@ -364,7 +364,7 @@ fn yaml_to_toml_prefers_yaml_over_yml() -> anyhow::Result<()> {
 
 #[test]
 fn yaml_to_toml_error_when_no_config_found() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context,
         context.command().args(["util", "yaml-to-toml"]),

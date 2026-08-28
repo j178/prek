@@ -15,7 +15,7 @@ fn language_version() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -142,7 +142,7 @@ fn language_version() -> anyhow::Result<()> {
 
 #[test]
 fn invalid_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -173,7 +173,7 @@ fn invalid_version() {
 /// Request a version that neither can be found nor downloaded.
 #[test]
 fn can_not_download() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -221,7 +221,7 @@ fn can_not_download() {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -254,7 +254,7 @@ fn additional_dependencies() {
 
 #[test]
 fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let repo = context.create_repo("python-hook");
     let repo_path = repo.path();
     repo_path
@@ -316,7 +316,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 /// Ensure that stderr from hooks is captured and shown to the user.
 #[test]
 fn hook_stderr() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -353,7 +353,7 @@ fn hook_stderr() -> anyhow::Result<()> {
 /// Only if no additional dependencies are specified.
 #[test]
 fn pep723_script() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -415,7 +415,7 @@ fn pep723_script() -> anyhow::Result<()> {
 /// Regression test for <https://github.com/j178/prek/issues/1354>
 #[test]
 fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // setup.py that fails if GIT_DIR leaks into pip install
     context
@@ -464,7 +464,7 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
 /// Regression test for <https://github.com/j178/prek/issues/1603>.
 #[test]
 fn local_relative_additional_dependency_is_not_resolved_from_worktree() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context
         .work_dir()
         .child("pyproject.toml")
@@ -531,7 +531,7 @@ fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
     use fs_err::os::unix::fs::symlink;
     use prek_consts::prepend_paths;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Find a Python executable, create a symlinked directory to its parent,
     // and prepend that to PATH so that prek picks up the symlinked path.

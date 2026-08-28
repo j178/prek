@@ -8,7 +8,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// Test basic Bun hook execution.
 #[test]
 fn basic_bun() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -40,7 +40,7 @@ fn basic_bun() {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -107,7 +107,7 @@ fn language_version() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:

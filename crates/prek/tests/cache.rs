@@ -12,7 +12,7 @@ mod common;
 
 #[test]
 fn cache_dir() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
     let home = context.work_dir().child("home");
 
     cmd_snapshot!(context, context.command().arg("cache").arg("dir").env("PREK_HOME", &*home), @r"
@@ -27,7 +27,7 @@ fn cache_dir() {
 
 #[test]
 fn cache_gc_verbose_shows_removed_entries() {
-    let context = TestEnv::new_without_git().with_config("repos: []\n");
+    let context = TestEnv::new().with_config("repos: []\n");
     let home = context.home_dir();
 
     // Seed store entries that will be removed.
@@ -108,7 +108,7 @@ fn cache_gc_verbose_shows_removed_entries() {
 
 #[test]
 fn cache_clean() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git().with_filter(
+    let context = TestEnv::new().with_filter(
         r"(?m)^Removed \d+ files? \([^)]+\)\n",
         "Removed [N] file(s) ([SIZE])\n",
     );
@@ -150,7 +150,7 @@ fn cache_clean() -> anyhow::Result<()> {
 
 #[test]
 fn cache_size_output_formats() {
-    let context = TestEnv::new_without_git().with_filter(r"(?m)^\d+\n", "[BYTES]\n");
+    let context = TestEnv::new().with_filter(r"(?m)^\d+\n", "[BYTES]\n");
 
     cmd_snapshot!(context, context.command().args(["cache", "size", "--no-log-file", "--output-format", "auto"]), @r"
     success: true
@@ -182,7 +182,7 @@ fn cache_size_output_formats() {
 
 #[test]
 fn cache_size_with_populated_cache() -> anyhow::Result<()> {
-    let context = TestEnv::new()
+    let context = TestEnv::new_git()
         .with_filter(r"(?m)^\d+\n", "[BYTES]\n")
         .with_config(indoc::indoc! {r"
         repos:
@@ -222,7 +222,7 @@ fn cache_size_with_populated_cache() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v6.0.0
@@ -289,7 +289,7 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let hook_repo = context.work_dir().child("hook-repo");
     hook_repo.create_dir_all()?;
@@ -370,7 +370,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -525,7 +525,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -606,7 +606,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
 
 #[test]
 fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -678,7 +678,7 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git().with_config("repos: []\n");
+    let context = TestEnv::new().with_config("repos: []\n");
 
     let home = context.home_dir();
     let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
@@ -758,7 +758,7 @@ fn write_patch_file(path: &ChildPath, content: &str, modified: SystemTime) -> an
 
 #[test]
 fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     let cwd = context.work_dir();
     context.git_add_all();
@@ -801,7 +801,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     // Intentionally invalid YAML.
@@ -837,7 +837,7 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     let cwd = context.work_dir();
     context.git_add_all();

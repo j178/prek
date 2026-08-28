@@ -8,7 +8,7 @@ mod common;
 #[cfg(unix)] // "executable" tag is different on Windows
 #[test]
 fn identify_text_with_missing_paths() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
     context
         .work_dir()
         .child("hello.py")
@@ -40,7 +40,7 @@ fn identify_text_with_missing_paths() -> anyhow::Result<()> {
 #[cfg(unix)] // "executable" tag is different on Windows
 #[test]
 fn identify_json_with_missing_paths() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
     context
         .work_dir()
         .child("hello.py")

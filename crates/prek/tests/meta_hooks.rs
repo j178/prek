@@ -6,16 +6,13 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 #[test]
-fn meta_hooks() -> anyhow::Result<()> {
-    let context = TestEnv::new();
-
-    let cwd = context.work_dir();
-    cwd.child("file.txt").write_str("Hello, world!\n")?;
-    cwd.child("valid.json").write_str("{}")?;
-    cwd.child("invalid.json").write_str("{}")?;
-    cwd.child("main.py").write_str(r#"print "abc"  "#)?;
-
-    let context = context.with_config(indoc::indoc! {r"
+fn meta_hooks() {
+    let context = TestEnv::new_git()
+        .with_file("file.txt", "Hello, world!\n")
+        .with_file("valid.json", "{}")
+        .with_file("invalid.json", "{}")
+        .with_file("main.py", r#"print "abc"  "#)
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -65,13 +62,11 @@ fn meta_hooks() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[test]
 fn meta_hooks_unknown_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -98,7 +93,7 @@ fn meta_hooks_unknown_hook() {
 
 #[test]
 fn check_useless_excludes_remote() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // When checking useless excludes, remote hooks are not actually cloned,
     // so hook options defined from HookManifest are not used.
@@ -149,7 +144,7 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
 
 #[test]
 fn meta_hooks_workspace() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
@@ -218,7 +213,7 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
 
 #[test]
 fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Workspace layout:
     // - Root project has no hooks.

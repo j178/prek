@@ -10,7 +10,7 @@ fn language_version() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -90,7 +90,7 @@ fn language_version() {
 /// Test invalid `language_version` format is rejected.
 #[test]
 fn invalid_language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -126,7 +126,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -202,7 +202,7 @@ fn additional_dependencies_with_version() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -256,7 +256,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let repo = context.create_repo("dotnet-hook");
     let repo_path = repo.path();
     repo_path
@@ -312,7 +312,7 @@ fn hook_stderr() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

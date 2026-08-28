@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -35,7 +35,7 @@ fn language_version() {
 
 #[test]
 fn local_hook_with_additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -69,7 +69,7 @@ fn local_hook_with_additional_dependencies() {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("conda-hook");
 
     hook_repo

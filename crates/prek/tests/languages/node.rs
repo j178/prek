@@ -9,7 +9,7 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable, remove_bin_from_path
 
 #[test]
 fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let package = context.work_dir().child("node-env-tool");
     package.create_dir_all()?;
@@ -66,7 +66,7 @@ fn language_version() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -182,7 +182,7 @@ fn language_version() -> anyhow::Result<()> {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -249,7 +249,7 @@ fn additional_dependencies() {
 /// <https://github.com/npm/cli/issues/9189>
 #[test]
 fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("remote-node-hook");
 
     hook_repo
@@ -326,7 +326,7 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
 /// its development dependencies.
 #[test]
 fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("prepared-node-hook");
 
     hook_repo
@@ -421,7 +421,7 @@ fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
 /// Test that lowercase npm config inherited from `npm exec` cannot redirect installs.
 #[test]
 fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let package_dir = context.work_dir().child("prefix-fixture");
     package_dir.create_dir_all()?;
@@ -502,7 +502,7 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
 /// Regression test for #1492: `install()` must use the provisioned toolchain.
 #[test]
 fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -534,7 +534,7 @@ fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
 /// Test that `npm.cmd` can be found on Windows.
 #[test]
 fn npm_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -566,7 +566,7 @@ fn npm_version() {
 
 #[test]
 fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Installing this additional dependency forces npm to invoke Git during environment setup.
     let dependency_repo = context.create_repo("sentinel-node-dependency");

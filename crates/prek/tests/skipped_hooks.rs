@@ -42,7 +42,7 @@ fn remove_loose_blob(context: &TestEnv, filename: &str) -> Result<()> {
 /// All hooks skip when no staged files match their file patterns.
 #[test]
 fn all_hooks_skipped_no_matching_files() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -88,7 +88,7 @@ fn all_hooks_skipped_no_matching_files() -> Result<()> {
 /// Installable hooks with no matching files should not create environments.
 #[test]
 fn skipped_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -121,7 +121,7 @@ fn skipped_installable_hook_does_not_install_env() -> Result<()> {
 /// Installable hooks excluded by group selection should not create environments.
 #[test]
 fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -158,7 +158,7 @@ fn group_excluded_installable_hook_does_not_install_env() -> Result<()> {
 /// `always_run` installable hooks still install and run without matching files.
 #[test]
 fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -193,7 +193,7 @@ fn always_run_installable_hook_installs_without_matching_files() -> Result<()> {
 /// `--dry-run` skips hooks without executing them.
 #[test]
 fn dry_run_skips_all_hooks() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -232,7 +232,7 @@ fn dry_run_skips_all_hooks() -> Result<()> {
 /// Hooks that match staged files run; others are skipped.
 #[test]
 fn mixed_skipped_and_executed_hooks() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -275,7 +275,7 @@ fn mixed_skipped_and_executed_hooks() -> Result<()> {
 /// Skipped hooks in untouched workspace projects should not install environments.
 #[test]
 fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     let proj_a = cwd.child("proj-a");
@@ -334,7 +334,7 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
 
 #[test]
 fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     let child = cwd.child("child");
@@ -396,7 +396,7 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
 /// contains non-deterministic timestamps and timing data unsuitable for snapshots.
 #[test]
 fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -450,7 +450,7 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
 
 #[test]
 fn external_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -490,7 +490,7 @@ fn external_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -549,7 +549,7 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
 
 #[test]
 fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -595,7 +595,7 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
 
 #[test]
 fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
     let cwd = context.work_dir();
     let status = context
         .git_at(cwd)
@@ -658,7 +658,7 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
 
 #[test]
 fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -710,7 +710,7 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
 
 #[test]
 fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -772,7 +772,7 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
 
 #[test]
 fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     let child = cwd.child("child");
@@ -834,7 +834,7 @@ fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
 
 #[test]
 fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -868,7 +868,7 @@ fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
 
 #[test]
 fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -921,7 +921,7 @@ fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
 
 #[test]
 fn same_group_known_modification_skips_diff_detection() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: builtin
             hooks:
@@ -976,7 +976,7 @@ fn same_group_known_modification_skips_diff_detection() -> Result<()> {
 
 #[test]
 fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: builtin
             hooks:
@@ -1037,7 +1037,7 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
 
 #[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: builtin
             hooks:
@@ -1091,7 +1091,7 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
 
 #[test]
 fn failed_non_modifying_builtin_skips_diff_detection() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:

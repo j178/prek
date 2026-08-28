@@ -7,7 +7,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -50,7 +50,7 @@ fn local_hook() -> anyhow::Result<()> {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("perl-hook");
 
     hook_repo
@@ -137,7 +137,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -162,7 +162,7 @@ fn additional_dependencies() {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

@@ -13,7 +13,7 @@ mod unix {
 
     #[test]
     fn script_run() {
-        let context = TestEnv::new().with_config(indoc::indoc! {r"
+        let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/script-hooks
             rev: v1.0.0
@@ -51,7 +51,7 @@ mod unix {
 
     #[test]
     fn workspace_script_run() -> Result<()> {
-        let context = TestEnv::new();
+        let context = TestEnv::new_git();
 
         let config = indoc::indoc! {r#"
         repos:
@@ -124,7 +124,7 @@ mod unix {
 
     #[test]
     fn local_repo_bash_shebang() -> Result<()> {
-        let context = TestEnv::new().with_config(indoc::indoc! {r"
+        let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -162,7 +162,7 @@ mod unix {
 
     #[test]
     fn script_shell_runs_entry_as_shell_source() -> Result<()> {
-        let context = TestEnv::new().with_config(indoc::indoc! {r#"
+        let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -204,7 +204,7 @@ mod unix {
 /// The interpreter must exist in the PATH, the script is not needed to be executable.
 #[test]
 fn windows_script_run() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:

@@ -12,7 +12,7 @@ fn reuses_managed_mise() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -85,7 +85,7 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let hook_repo = context.create_repo("mise-system-hook");
     fs_err::write(

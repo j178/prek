@@ -11,7 +11,7 @@ mod common;
 
 #[test]
 fn hook_impl() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
         - repo: local
           hooks:
@@ -54,7 +54,7 @@ fn hook_impl() {
 
 #[test]
 fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
         - repo: local
           hooks:
@@ -97,7 +97,7 @@ fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
 
 #[test]
 fn hook_impl_pre_push() -> anyhow::Result<()> {
-    let context = TestEnv::new()
+    let context = TestEnv::new_git()
         .with_filter(r"\b[0-9a-f]{7}\b", "[SHA1]")
         .with_config(indoc::indoc! {r#"
         repos:
@@ -201,7 +201,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 
 #[test]
 fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Regression test for https://github.com/j178/prek/issues/2088.
     // The hook fails after printing its filenames so the assertion can inspect
@@ -334,7 +334,7 @@ fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
 
 #[test]
 fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     context
         .work_dir()
@@ -387,7 +387,7 @@ fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
 
 #[test]
 fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
     repos:
     - repo: local
       hooks:
@@ -460,7 +460,7 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
 /// Test prek hook runs in the correct worktree.
 #[test]
 fn run_worktree() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
         - repo: local
           hooks:
@@ -525,7 +525,7 @@ fn run_worktree() -> anyhow::Result<()> {
 /// Test prek hooks runs with `GIT_DIR` respected.
 #[test]
 fn git_dir_respected() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
         - repo: local
           hooks:
@@ -574,7 +574,7 @@ fn git_dir_respected() {
 
 #[test]
 fn git_dir_synthesized_git_work_tree_not_leaked_to_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
         - repo: local
           hooks:
@@ -611,7 +611,7 @@ fn git_dir_synthesized_git_work_tree_not_leaked_to_hook() {
 /// it runs must still resolve the repository root, not the project directory.
 #[test]
 fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
-    let context = TestEnv::new()
+    let context = TestEnv::new_git()
         .with_filter("[a-f0-9]{7}", "abc1234")
         .with_config(indoc::indoc! {r"
         repos:
@@ -724,7 +724,7 @@ fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "abc1234");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
 
     let config = indoc! {r#"
     repos:
@@ -792,7 +792,7 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "abc1234");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
 
     let config = indoc! {r#"
     default_install_hook_types:
@@ -855,7 +855,7 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
 
 #[test]
 fn commit_msg_builtin_hook_respects_message_file_filters() {
-    let context = TestEnv::new()
+    let context = TestEnv::new_git()
         .with_filter("[a-f0-9]{7}", "abc1234")
         .with_config(indoc::indoc! {r"
     default_install_hook_types:
@@ -894,7 +894,7 @@ fn commit_msg_builtin_hook_respects_message_file_filters() {
 
 #[test]
 fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "abc1234");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
     let cwd = context.work_dir();
 
     let config = indoc! {r#"
@@ -954,7 +954,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
 /// Install from a subdirectory, and run commit in another worktree.
 #[test]
 fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "abc1234");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
     let cwd = context.work_dir();
 
     let config = indoc! {r#"
@@ -1025,7 +1025,7 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "1d5e501");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "1d5e501");
 
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
@@ -1124,7 +1124,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
 
 #[test]
 fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "abc1234");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
 
     // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
     context
@@ -1175,7 +1175,7 @@ fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_filter("[a-f0-9]{7}", "abc1234");
+    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
     let cwd = context.work_dir();
 
     let config = indoc! {r#"

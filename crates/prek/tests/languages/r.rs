@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     context
         .work_dir()
         .child(".Rprofile")
@@ -58,7 +58,7 @@ fn local_hook() -> anyhow::Result<()> {
 
 #[test]
 fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     write_local_r_package(context.work_dir(), "localdep")?;
     let dependency_path = std::path::absolute(context.work_dir().child("localdep").path())?;
@@ -98,7 +98,7 @@ fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let hook_repo = context.create_repo("r-hook");
 
     hook_repo
@@ -153,7 +153,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

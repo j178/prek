@@ -8,7 +8,7 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn docker_image() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     // Test suite from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
@@ -70,7 +70,7 @@ fn docker_image() -> Result<()> {
 /// Test that `docker_image` does not try to resolve entry in the host system PATH.
 #[test]
 fn docker_image_does_not_resolve_entry() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     let bin_dir = cwd.child("bin");

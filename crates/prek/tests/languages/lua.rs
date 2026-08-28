@@ -4,7 +4,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn health_check() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -50,7 +50,7 @@ fn health_check() {
 /// Test specifying `language_version` for Lua hooks which is not supported for now.
 #[test]
 fn language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -81,7 +81,7 @@ fn language_version() {
 /// Test that stderr from hooks is captured and shown to the user.
 #[test]
 fn hook_stderr() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -117,7 +117,7 @@ fn hook_stderr() -> anyhow::Result<()> {
 /// Test Lua script execution with file arguments.
 #[test]
 fn script_with_files() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -171,7 +171,7 @@ fn script_with_files() -> anyhow::Result<()> {
 /// Test Lua environment variables (`LUA_PATH` and `LUA_CPATH`)
 #[test]
 fn lua_environment() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -222,7 +222,7 @@ fn lua_environment() {
 /// Test Lua hook with additional dependencies.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -255,7 +255,7 @@ fn additional_dependencies() {
 /// Test remote Lua hook from GitHub repository.
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/lua-hooks
             rev: v1.0.0

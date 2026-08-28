@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(unix)]
 #[test]
 fn bash_shell_adapter_runs_entry() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -45,7 +45,7 @@ fn pwsh_shell_adapter_runs_entry() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -81,7 +81,7 @@ fn pwsh_shell_adapter_runs_entry() -> anyhow::Result<()> {
 #[cfg(windows)]
 #[test]
 fn powershell_shell_adapter_runs_entry() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -117,7 +117,7 @@ fn powershell_shell_adapter_runs_entry() -> anyhow::Result<()> {
 #[cfg(windows)]
 #[test]
 fn cmd_shell_adapter_runs_entry() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -153,7 +153,7 @@ fn cmd_shell_adapter_runs_entry() -> anyhow::Result<()> {
 
 #[test]
 fn shell_rejected_for_pygrep() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

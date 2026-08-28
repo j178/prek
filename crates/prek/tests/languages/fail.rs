@@ -6,7 +6,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// GitHub Action only has docker for linux hosted runners.
 #[test]
 fn fail() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let cwd = context.work_dir();
     cwd.child("changelog").create_dir_all()?;

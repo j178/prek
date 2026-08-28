@@ -11,7 +11,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn basic_discovery() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let cwd = context.work_dir();
 
     let config = indoc! {r"
@@ -201,7 +201,7 @@ fn basic_discovery() -> Result<()> {
 
 #[test]
 fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []");
+    let context = TestEnv::new_git().with_config("repos: []");
     context
         .work_dir()
         .child("concurrent_hook.py")
@@ -268,7 +268,7 @@ fn same_depth_project_concurrency_has_stable_output() -> Result<()> {
 
 #[test]
 fn fail_fast_stops_after_current_project_level() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -337,7 +337,7 @@ fn fail_fast_stops_after_current_project_level() -> Result<()> {
 
 #[test]
 fn config_not_staged() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let cwd = context.work_dir();
 
     let config = indoc! {r"
@@ -423,7 +423,7 @@ fn config_not_staged() -> Result<()> {
 
 #[test]
 fn run_with_selectors() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r"
     repos:
@@ -724,7 +724,7 @@ fn run_with_selectors() -> Result<()> {
 
 #[test]
 fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -801,7 +801,7 @@ fn run_with_mixed_project_and_hook_selectors() -> Result<()> {
 
 #[test]
 fn skips() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r"
     repos:
@@ -1033,7 +1033,7 @@ fn skips() -> Result<()> {
 
 #[test]
 fn workspace_no_projects() {
-    let context = TestEnv::new().with_config("repos: []");
+    let context = TestEnv::new_git().with_config("repos: []");
     context.git_add_all();
 
     cmd_snapshot!(context, context.run().arg("--skip").arg("."), @r"
@@ -1050,7 +1050,7 @@ fn workspace_no_projects() {
 
 #[test]
 fn gitignore_respected() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r"
     repos:
@@ -1109,7 +1109,7 @@ fn gitignore_respected() -> Result<()> {
 
 #[test]
 fn nested_project_exclude_is_relative() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Regression test for nested workspaces:
     // `exclude` must be evaluated against paths *relative to each project root*.
@@ -1182,7 +1182,7 @@ fn nested_project_exclude_is_relative() -> Result<()> {
 /// Tests that `--files` arguments references files in other projects, should be filtered out properly.
 #[test]
 fn reference_files_across_projects() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r"
     repos:
@@ -1218,7 +1218,7 @@ fn reference_files_across_projects() -> Result<()> {
 
 #[test]
 fn submodule_discovery() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let cwd = context.work_dir();
 
     let config = indoc! {r"
@@ -1236,7 +1236,7 @@ fn submodule_discovery() -> Result<()> {
 
     // Create a submodule
     let submodule_path = cwd.child("submodule");
-    let submodule_context = TestEnv::new_at(&submodule_path).with_config(config);
+    let submodule_context = TestEnv::new_git_at(&submodule_path).with_config(config);
     submodule_context.git_add_all();
     submodule_context.git_commit("Initial commit");
 
@@ -1308,7 +1308,7 @@ fn submodule_discovery() -> Result<()> {
 
 #[test]
 fn cookiecutter_template_directories_are_skipped() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let config = indoc! {r"
     repos:
@@ -1355,7 +1355,7 @@ fn cookiecutter_template_directories_are_skipped() -> Result<()> {
 
 #[test]
 fn orphan_projects() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a hook that shows which files it processes
     let config = indoc! {r#"
@@ -1525,7 +1525,7 @@ fn orphan_projects() -> Result<()> {
 }
 
 fn setup_relative_repo_path_project() -> Result<TestEnv> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a local hook repository at the root level
     let hook_repo = context.work_dir().child("hook-repo");

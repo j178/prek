@@ -16,7 +16,7 @@ mod common;
 /// Tests that `repo: builtin` hooks doesn't create hook env.
 #[test]
 fn builtin_hooks_not_create_env() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -46,7 +46,7 @@ fn builtin_hooks_not_create_env() {
 
 #[test]
 fn builtin_hooks_unknown_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -73,7 +73,7 @@ fn builtin_hooks_unknown_hook() {
 
 #[test]
 fn deny_filename_pattern_hook_matches_only_basename() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -109,7 +109,7 @@ fn deny_filename_pattern_hook_matches_only_basename() -> Result<()> {
 
 #[test]
 fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -152,7 +152,7 @@ fn deny_pattern_hook_reports_matching_lines() -> Result<()> {
 
 #[test]
 fn deny_pattern_hook_rejects_invalid_regex() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -186,7 +186,7 @@ fn deny_pattern_hook_rejects_invalid_regex() -> Result<()> {
 
 #[test]
 fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // `END` is listed first, but `BEGIN.*END` starts earlier in the file.
     // Multiline matching should report the earliest match, not the first pattern.
@@ -232,7 +232,7 @@ fn deny_pattern_hook_reports_earliest_multiline_match() -> Result<()> {
 
 #[test]
 fn require_filename_pattern_hook_accepts_any_pattern_for_basename() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -274,7 +274,7 @@ fn require_filename_pattern_hook_accepts_any_pattern_for_basename() -> Result<()
 
 #[test]
 fn require_pattern_hook_reports_files_without_any_match() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -308,7 +308,7 @@ fn require_pattern_hook_reports_files_without_any_match() -> Result<()> {
 
 #[test]
 fn end_of_file_fixer_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -379,7 +379,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
 
 #[test]
 fn file_contents_sorter_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -436,7 +436,7 @@ fn file_contents_sorter_hook() -> Result<()> {
 
 #[test]
 fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -474,7 +474,7 @@ fn builtin_hook_checks_filename_from_args_after_options() -> Result<()> {
 
 #[test]
 fn requirements_txt_fixer_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -563,7 +563,7 @@ fn requirements_txt_fixer_hook() -> Result<()> {
 
 #[test]
 fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     let cwd = context.work_dir();
     cwd.child("project2").create_dir_all()?;
@@ -637,7 +637,7 @@ fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
 
 #[test]
 fn check_yaml_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -700,7 +700,7 @@ fn check_yaml_hook() -> Result<()> {
 
 #[test]
 fn check_yaml_multiple_document() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -750,7 +750,7 @@ fn check_yaml_multiple_document() -> Result<()> {
 
 #[test]
 fn check_vcs_permalinks_builtin() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -788,7 +788,7 @@ fn check_vcs_permalinks_builtin() -> Result<()> {
 
 #[test]
 fn check_json_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -844,7 +844,7 @@ fn check_json_hook() -> Result<()> {
 
 #[test]
 fn mixed_line_ending_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -999,29 +999,21 @@ fn mixed_line_ending_hook() -> Result<()> {
 }
 
 #[test]
-fn check_added_large_files_hook() -> Result<()> {
-    let context = TestEnv::new();
-
+fn check_added_large_files_hook() {
     // Create an initial commit
-    let cwd = context.work_dir();
-    cwd.child("README.md").write_str("Initial commit")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    let context = TestEnv::new_git().with_file("README.md", "Initial commit");
+    context.git_add_all().git_commit("Initial commit");
 
-    let context = context.with_config(indoc::indoc! {r"
-        repos:
-          - repo: builtin
-            hooks:
-              - id: check-added-large-files
-                args: ['--maxkb', '1']
-    "});
-
-    let cwd = context.work_dir();
-
-    // Create test files
-    cwd.child("small_file.txt").write_str("Hello World\n")?;
-    let large_file = cwd.child("large_file.txt");
-    large_file.write_binary(&[0; 2048])?; // 2KB file
+    let context = context
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: builtin
+                hooks:
+                  - id: check-added-large-files
+                    args: ['--maxkb', '1']
+        "})
+        .with_file("small_file.txt", "Hello World\n")
+        .with_file("large_file.txt", [0_u8; 2048]);
 
     context.git_add_all();
 
@@ -1041,12 +1033,10 @@ fn check_added_large_files_hook() -> Result<()> {
     ");
 
     // Commit the files
-    context.git_add_all();
-    context.git_commit("Add large file");
+    context.git_add_all().git_commit("Add large file");
 
     // Create a new unstaged large file
-    let unstaged_large_file = cwd.child("unstaged_large_file.txt");
-    unstaged_large_file.write_binary(&[0; 2048])?; // 2KB file
+    context.write_file("unstaged_large_file.txt", [0_u8; 2048]);
     context.git_add("unstaged_large_file.txt");
 
     context.write_config(indoc::indoc! {r"
@@ -1073,8 +1063,7 @@ fn check_added_large_files_hook() -> Result<()> {
     ----- stderr -----
     "#);
 
-    context.git_rm("unstaged_large_file.txt");
-    context.git_clean();
+    context.git_rm("unstaged_large_file.txt").git_clean();
 
     // Test git-lfs integration
     context.write_config(indoc::indoc! {r"
@@ -1085,11 +1074,12 @@ fn check_added_large_files_hook() -> Result<()> {
                 args: ['--maxkb=1']
         "});
 
-    cwd.child(".gitattributes")
-        .write_str("*.dat filter=lfs diff=lfs merge=lfs -text")?;
+    context.write_file(
+        ".gitattributes",
+        "*.dat filter=lfs diff=lfs merge=lfs -text",
+    );
     context.git_add(".gitattributes");
-    let lfs_file = cwd.child("lfs_file.dat");
-    lfs_file.write_binary(&[0; 2048])?; // 2KB file
+    context.write_file("lfs_file.dat", [0_u8; 2048]);
     context.git_add_all();
 
     // Third run: hook should pass because the large file is tracked by git-lfs
@@ -1101,13 +1091,11 @@ fn check_added_large_files_hook() -> Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     // Regression: builtin hooks receive project-relative filenames even in workspace mode.
     // `check-added-large-files` must therefore resolve git-lfs attributes relative to the
@@ -1145,7 +1133,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() 
 
 #[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_added_files() -> Result<()> {
-    let context = TestEnv::new().with_config("repos: []\n");
+    let context = TestEnv::new_git().with_config("repos: []\n");
 
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
@@ -1181,7 +1169,7 @@ fn check_added_large_files_workspace_mode_respects_project_relative_added_files(
 
 #[test]
 fn tracked_file_exceeds_large_file_limit() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1215,7 +1203,7 @@ fn tracked_file_exceeds_large_file_limit() -> Result<()> {
 
 #[test]
 fn builtin_hooks_workspace_mode() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -1432,7 +1420,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
 
 #[test]
 fn fix_byte_order_marker_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1493,7 +1481,7 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 
 #[test]
 fn pretty_format_json_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1628,7 +1616,7 @@ fn pretty_format_json_hook() -> Result<()> {
 
 #[test]
 fn pretty_format_json_with_options() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1682,7 +1670,7 @@ fn pretty_format_json_with_options() -> Result<()> {
 
 #[test]
 fn pretty_format_json_with_top_keys() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1738,7 +1726,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
 
 #[test]
 fn pretty_format_json_no_ensure_ascii() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1791,7 +1779,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
 
 #[test]
 fn pretty_format_json_custom_space_indent() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1844,7 +1832,7 @@ fn pretty_format_json_custom_space_indent() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn check_symlinks_hook_unix() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1906,7 +1894,7 @@ fn check_symlinks_hook_unix() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn check_symlinks_hook_windows() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -1979,7 +1967,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
     const TEST_FILE: &str = "test_file";
     const TEST_FILE_RENAMED: &str = "test_file_renamed";
 
-    let source = TestEnv::new();
+    let source = TestEnv::new_git();
 
     fs_err::os::unix::fs::symlink(
         TEST_SYMLINK_TARGET,
@@ -2001,7 +1989,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
     assert!(tree.status.success());
     assert!(String::from_utf8(tree.stdout)?.contains("120000 "));
 
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
     context
         .git()
         .arg("-c")
@@ -2113,7 +2101,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
 
 #[test]
 fn detect_private_key_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2201,7 +2189,7 @@ fn detect_private_key_hook() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2291,7 +2279,7 @@ fn check_merge_conflict_hook() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_ignores_rst_headings() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2321,7 +2309,7 @@ fn check_merge_conflict_ignores_rst_headings() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_diff3_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2366,7 +2354,7 @@ fn check_merge_conflict_diff3_hook() -> Result<()> {
 
 #[test]
 fn check_merge_conflict_without_assume_flag() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Without --assume-in-merge, hook should pass even with conflict markers
     // if we're not actually in a merge state
@@ -2404,7 +2392,7 @@ fn check_merge_conflict_without_assume_flag() -> Result<()> {
 
 #[test]
 fn check_xml_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2502,7 +2490,7 @@ fn check_xml_hook() -> Result<()> {
 
 #[test]
 fn check_xml_with_features() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2556,7 +2544,7 @@ fn check_xml_with_features() -> Result<()> {
 
 #[test]
 fn no_commit_to_branch_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2586,8 +2574,9 @@ fn no_commit_to_branch_hook() -> Result<()> {
     ");
 
     // Test 2: Create and switch to a feature branch (should pass)
-    context.git_branch("feature/new-feature");
-    context.git_checkout("feature/new-feature");
+    context
+        .git_branch("feature/new-feature")
+        .git_checkout("feature/new-feature");
 
     cwd.child("feature.txt").write_str("Feature content")?;
     context.git_add_all();
@@ -2603,8 +2592,7 @@ fn no_commit_to_branch_hook() -> Result<()> {
     ");
 
     // Test 3: Try to commit to main branch (should fail)
-    context.git_branch("main");
-    context.git_checkout("main");
+    context.git_branch("main").git_checkout("main");
 
     cwd.child("main.txt").write_str("Main content")?;
     context.git_add_all();
@@ -2628,7 +2616,7 @@ fn no_commit_to_branch_hook() -> Result<()> {
 
 #[test]
 fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2701,7 +2689,7 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
 
 #[test]
 fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2833,7 +2821,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_executables_have_shebangs_hook() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2915,7 +2903,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_win() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2968,7 +2956,7 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_executables_have_shebangs_various_cases() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3060,7 +3048,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3126,7 +3114,7 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
 
 #[test]
 fn check_shebang_scripts_are_executable() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3205,7 +3193,7 @@ fn is_case_sensitive_filesystem(context: &TestEnv) -> Result<bool> {
 
 #[test]
 fn check_case_conflict_hook() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -3213,11 +3201,9 @@ fn check_case_conflict_hook() -> Result<()> {
     }
 
     // Create initial files and commit
-    let cwd = context.work_dir();
-    cwd.child("README.md").write_str("Initial commit")?;
-    cwd.child("src/foo.txt").write_str("existing file")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.write_file("README.md", "Initial commit");
+    context.write_file("src/foo.txt", "existing file");
+    context.git_add_all().git_commit("Initial commit");
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -3270,7 +3256,7 @@ fn check_case_conflict_hook() -> Result<()> {
 
 #[test]
 fn check_case_conflict_directory() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -3278,10 +3264,8 @@ fn check_case_conflict_directory() -> Result<()> {
     }
 
     // Create directory with file
-    let cwd = context.work_dir();
-    cwd.child("src/utils/helper.py").write_str("helper")?;
-    context.git_add_all();
-    context.git_commit("Initial commit");
+    context.write_file("src/utils/helper.py", "helper");
+    context.git_add_all().git_commit("Initial commit");
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -3316,7 +3300,7 @@ fn check_case_conflict_directory() -> Result<()> {
 
 #[test]
 fn check_case_conflict_among_new_files() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -3364,7 +3348,7 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
 #[test]
 fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     if !is_case_sensitive_filesystem(&context)? {
         return Ok(());
@@ -3421,7 +3405,7 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
 
 #[test]
 fn check_json5() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3489,7 +3473,7 @@ fn check_json5() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_illegal_windows_names() -> Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -3528,7 +3512,7 @@ fn check_illegal_windows_names() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     // Create a fake "trailing-whitespace-fixer" binary with a shebang in a temp dir.
     // This simulates `pip install pre-commit-hooks` which places such binaries in PATH.

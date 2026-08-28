@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// GitHub Action only has docker for linux hosted runners.
 #[test]
 fn docker() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/docker-hooks
             rev: v1.0
@@ -36,7 +36,7 @@ fn docker() {
 
 #[test]
 fn workspace_docker() -> anyhow::Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
     let cwd = context.work_dir();
 
     let config = indoc::indoc! {r"

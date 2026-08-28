@@ -6,7 +6,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 #[cfg(unix)]
 #[test]
 fn multiline_entry_without_shell_uses_argv_semantics() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -38,7 +38,7 @@ fn multiline_entry_without_shell_uses_argv_semantics() {
 #[cfg(unix)]
 #[test]
 fn shell_runs_multiline_entry_as_one_script() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -72,7 +72,7 @@ fn shell_runs_multiline_entry_as_one_script() {
 #[cfg(unix)]
 #[test]
 fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:

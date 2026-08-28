@@ -4,7 +4,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -34,7 +34,7 @@ fn language_version() {
 
 #[test]
 fn hook_stderr() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -75,7 +75,7 @@ fn hook_stderr() -> anyhow::Result<()> {
 
 #[test]
 fn script_with_files() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -131,7 +131,7 @@ fn script_with_files() -> anyhow::Result<()> {
 
 #[test]
 fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -194,7 +194,7 @@ fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
 
 #[test]
 fn with_pubspec() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -254,7 +254,7 @@ fn with_pubspec() -> anyhow::Result<()> {
 
 #[test]
 fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -326,7 +326,7 @@ fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -370,7 +370,7 @@ fn additional_dependencies() {
 
 #[test]
 fn additional_dependencies_with_version() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -413,7 +413,7 @@ fn additional_dependencies_with_version() {
 
 #[test]
 fn executable_alias() -> anyhow::Result<()> {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -469,7 +469,7 @@ fn executable_alias() -> anyhow::Result<()> {
 
 #[test]
 fn dart_environment() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -516,7 +516,7 @@ fn dart_environment() {
 
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/dart-hooks
             rev: v1.1.0

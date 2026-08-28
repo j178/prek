@@ -11,7 +11,7 @@ fn local_hook_system_command() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -47,7 +47,7 @@ fn language_version_rejected() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -81,7 +81,7 @@ fn health_check() {
         return;
     }
 
-    let context = TestEnv::new().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -132,7 +132,7 @@ fn local_package_build() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let swift_hook = TestEnv::new();
+    let swift_hook = TestEnv::new_git();
 
     // Create a minimal Swift package
     swift_hook
@@ -172,7 +172,7 @@ fn local_package_build() -> anyhow::Result<()> {
         .args(["tag", "v1.0", "-m", "v1.0"])
         .output()?;
 
-    let context = TestEnv::new();
+    let context = TestEnv::new_git();
 
     let hook_url = swift_hook.work_dir().to_str().unwrap();
     let context = context.with_config(indoc::formatdoc! {r"

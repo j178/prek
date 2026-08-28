@@ -6,7 +6,7 @@ mod common;
 
 #[test]
 fn sample_config() -> anyhow::Result<()> {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.sample_config(), @"
     success: true
@@ -99,7 +99,7 @@ fn sample_config() -> anyhow::Result<()> {
 
 #[test]
 fn sample_config_toml() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.sample_config().arg("-f").arg("prek.toml"), @r#"
     success: true
@@ -127,7 +127,7 @@ fn sample_config_toml() {
 
 #[test]
 fn sample_config_format() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     cmd_snapshot!(context, context.sample_config().arg("--format").arg("toml"), @r#"
     success: true
@@ -181,7 +181,7 @@ fn sample_config_format() {
 
 #[test]
 fn respect_format() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     // Write YAML format even with `.toml` extension.
     cmd_snapshot!(context, context.sample_config().arg("--format").arg("yaml").arg("-f").arg("prek.toml"), @"
@@ -209,7 +209,7 @@ fn respect_format() {
 
 #[test]
 fn respect_format_if_filename_missing() {
-    let context = TestEnv::new_without_git();
+    let context = TestEnv::new();
 
     // Create `prek.toml` when TOML format is specified but filename is not given.
     cmd_snapshot!(context, context.sample_config().arg("--format").arg("toml").arg("-f"), @"
