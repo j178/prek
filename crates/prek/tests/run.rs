@@ -3281,7 +3281,7 @@ fn git_commit_a() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -3365,7 +3365,7 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<(
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -3450,6 +3450,7 @@ fn selectors_completion() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    init	Create a prek configuration and install Git hook shims
     install	Install prek Git hook shims
     prepare-hooks	Prepare environments for configured hooks
     run	Run configured hooks
@@ -3458,7 +3459,6 @@ fn selectors_completion() -> Result<()> {
     uninstall	Uninstall prek Git hook shims
     validate-config	Validate prek configuration files
     validate-manifest	Validate pre-commit hook manifests (`.pre-commit-hooks.yaml`)
-    sample-config	Generate a sample prek configuration file
     update	Update configured repositories
     cache	Manage the prek cache
     try-repo	Try hooks from a repository

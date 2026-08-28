@@ -42,6 +42,13 @@ This helps catch corrupted or unexpectedly changed downloads before they are unp
 
 For a compatibility-focused command mapping, see [Compatibility with pre-commit](compatibility.md).
 
+### `prek init`
+
+- `prek init` creates a starter `prek.toml` at the Git worktree root and installs the Git hook shim in one command.
+- `prek init <PATH>` creates the configuration in an existing subdirectory. The path must be inside the current Git worktree.
+- `prek init --format yaml` creates `.pre-commit-config.yaml` instead. Existing configuration files are kept unchanged.
+- `prek init --no-install` creates the configuration without installing Git hook shims.
+
 ### `prek run`
 
 - `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](workspace.md#running-specific-hooks-or-projects) for details.
@@ -75,10 +82,6 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 - `prek update` supports the `--cooldown-days` option to skip releases newer than the specified number of days (based on the tag creation timestamp for annotated tags, or the tagged commit timestamp for lightweight tags).
 - `prek update` supports `--exclude-repo` to skip selected repositories while updating everything else.
 - `prek update` supports tag filtering with `--include-tag`, `--exclude-tag`, `--repo-include-tag`, and `--repo-exclude-tag`, using glob patterns to keep or remove matching tags before selecting an update.
-
-### `prek sample-config`
-
-- `prek sample-config` can generate either YAML or TOML and can write directly to a file with `--file`.
 
 ### `prek util`
 

@@ -1,21 +1,26 @@
 # Common Workflows
 
-This page explains how to use prek in a repository that already contains a
-`prek.toml` or `.pre-commit-config.yaml`, including setup, running hooks, and
-handling a hook that prevents a commit.
+This page explains how to set up and use prek in a Git repository, including
+creating or reusing a configuration, running hooks, and handling a hook that
+prevents a commit.
 
 ## Set up the repository
 
-First, [install prek](installation.md), then run this command from the repository
-root:
+First, [install prek](installation.md). The next step depends on whether the
+repository already has a configuration.
+
+### Use an existing configuration
+
+If the repository already contains a supported configuration file, run this
+command from the repository root:
 
 ```bash
 prek install
 ```
 
 This installs the Git shims selected by the repository's configuration so that
-prek runs automatically during Git operations. If the repository does not
-select any hook types, prek installs a `pre-commit` shim by default.
+prek runs automatically during Git operations. By default, prek installs a
+`pre-commit` shim.
 
 If another tool already owns the hook, a normal install moves that hook to a
 `.legacy` file and configures prek to run both implementations. This migration
@@ -36,6 +41,29 @@ prepare them during setup instead, run:
 ```bash
 prek install --prepare-hooks
 ```
+
+### Create a configuration
+
+If the repository does not have a configuration yet, run `prek init` from
+anywhere in the Git worktree:
+
+```bash
+prek init
+```
+
+This creates a starter `prek.toml` at the Git worktree root and installs the
+`pre-commit` Git shim in one step.
+
+To place the configuration in an existing subdirectory, pass its path:
+
+```bash
+prek init packages/my-project
+```
+
+The directory must be inside the current Git worktree. Use `--format yaml` to
+create `.pre-commit-config.yaml` instead of `prek.toml`. Add `--no-install` to
+create only the configuration; run `prek install` later to install the Git hook
+shims.
 
 ## What happens when you commit
 

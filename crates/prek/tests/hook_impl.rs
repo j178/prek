@@ -31,7 +31,7 @@ fn hook_impl() {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -118,7 +118,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-push`
+    Installed Git hook at `.git/hooks/pre-push`
 
     ----- stderr -----
     "#);
@@ -353,14 +353,14 @@ fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
     context.work_dir().child("file.txt").write_str("x")?;
     context.git_add_all();
 
-    cmd_snapshot!(context, context.install(), @r"
+    cmd_snapshot!(context, context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
-  ");
+    "#);
 
     let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
     legacy_hook.write_str(indoc::indoc! {r#"
@@ -401,13 +401,13 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
     context.git_commit("Initial commit");
 
     cmd_snapshot!(context, context.install().arg("--hook-type").arg("pre-push"), @r#"
-  success: true
-  exit_code: 0
-  ----- stdout -----
-  prek installed at `.git/hooks/pre-push`
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `.git/hooks/pre-push`
 
-  ----- stderr -----
-  "#);
+    ----- stderr -----
+    "#);
 
     let legacy_hook = context.work_dir().child(".git/hooks/pre-push.legacy");
     legacy_hook.write_str(indoc::indoc! {r#"
@@ -477,7 +477,7 @@ fn run_worktree() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -542,7 +542,7 @@ fn git_dir_respected() {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -653,7 +653,7 @@ fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -745,7 +745,7 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
     "#);
@@ -812,14 +812,14 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
     context.setup_workspace(&["template"], config)?;
     context.git_add_all();
 
-    cmd_snapshot!(context, context.install(), @r"
+    cmd_snapshot!(context, context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/commit-msg`
+    Installed Git hook at `.git/hooks/commit-msg`
 
     ----- stderr -----
-    ");
+    "#);
 
     let mut commit = context.git();
     commit.arg("commit").arg("-m").arg("feat: initial");
@@ -867,14 +867,14 @@ fn commit_msg_builtin_hook_respects_message_file_filters() {
     "});
     context.git_add_all();
 
-    cmd_snapshot!(context, context.install(), @r"
+    cmd_snapshot!(context, context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/commit-msg`
+    Installed Git hook at `.git/hooks/commit-msg`
 
     ----- stderr -----
-    ");
+    "#);
 
     let mut commit = context.git();
     commit.arg("commit").arg("-m").arg("dummy");
@@ -912,16 +912,16 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     context.git_add_all();
 
     // Install from a subdirectory
-    cmd_snapshot!(context, context.install().current_dir(cwd.join("project2")), @r"
+    cmd_snapshot!(context, context.install().current_dir(cwd.join("project2")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
+    Installed Git hook at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
 
     hint: this hook installed for `[TEMP_DIR]/project2` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
 
     ----- stderr -----
-    ");
+    "#);
 
     let mut commit = context.git_at(cwd);
     commit
@@ -973,16 +973,16 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     context.git_commit("Initial commit");
 
     // Install from a subdirectory
-    cmd_snapshot!(context, context.install().current_dir(cwd.join("project2")), @r"
+    cmd_snapshot!(context, context.install().current_dir(cwd.join("project2")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
+    Installed Git hook at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
 
     hint: this hook installed for `[TEMP_DIR]/project2` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
 
     ----- stderr -----
-    ");
+    "#);
 
     // Create a new worktree.
     context
@@ -1034,14 +1034,14 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     context.git_add_all();
 
     // Install hook that allows missing config
-    cmd_snapshot!(context, context.install(), @r"
+    cmd_snapshot!(context, context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    ");
+    "#);
 
     // Try to run hook-impl from directory without config
     let mut commit = context.git_at(&empty_dir);
@@ -1145,14 +1145,14 @@ fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
     context.git_add_all();
 
     // Install the git hook (which invokes `prek hook-impl`).
-    cmd_snapshot!(context, context.install(), @r"
+    cmd_snapshot!(context, context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    ");
+    "#);
 
     // Commit should succeed; the hook should not error just because no hooks match pre-commit.
     let mut commit = context.git();
@@ -1192,14 +1192,14 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     context.setup_workspace(&["project2", "project3"], config)?;
     context.git_add_all();
 
-    cmd_snapshot!(context, context.install().arg("project2/"), @r"
+    cmd_snapshot!(context, context.install().arg("project2/"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `.git/hooks/pre-commit`
+    Installed Git hook at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    ");
+    "#);
 
     let mut commit = context.git_at(cwd);
     commit

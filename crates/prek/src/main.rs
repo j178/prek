@@ -23,6 +23,7 @@ use crate::cli::{
 };
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
@@ -216,9 +217,18 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         .command
         .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
     match command {
+        Command::Init(args) => {
+            if cli.globals.config.is_some() {
+                anyhow::bail!(
+                    "`--config` cannot be used with `prek init`; pass the target directory instead"
+                );
+            }
+            cli::init(&store, args.path, args.format, args.no_install, printer).await
+        }
         Command::Install(args) => {
             cli::install(
                 &store,
+                &CWD,
                 cli.globals.config,
                 args.includes,
                 args.skips,

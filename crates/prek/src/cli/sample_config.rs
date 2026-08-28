@@ -61,23 +61,7 @@ pub(crate) fn sample_config(
     };
 
     if let Some(path) = path {
-        fs_err::create_dir_all(path.parent().unwrap_or(Path::new(".")))?;
-        let mut file = match fs_err::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(f) => f,
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-                anyhow::bail!("File `{}` already exists", path.simplified_display().cyan());
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        match format {
-            SampleConfigFormat::Yaml => write!(file, "{SAMPLE_CONFIG_YAML}")?,
-            SampleConfigFormat::Toml => write!(file, "{SAMPLE_CONFIG_TOML}")?,
-        }
+        write_sample_config(&path, format)?;
 
         writeln!(
             printer.stdout(),
@@ -98,4 +82,26 @@ pub(crate) fn sample_config(
         }
     }
     Ok(ExitStatus::Success)
+}
+
+pub(crate) fn write_sample_config(path: &Path, format: SampleConfigFormat) -> Result<()> {
+    fs_err::create_dir_all(path.parent().unwrap_or(Path::new(".")))?;
+    let mut file = match fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            anyhow::bail!("File `{}` already exists", path.simplified_display().cyan());
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    match format {
+        SampleConfigFormat::Yaml => write!(file, "{SAMPLE_CONFIG_YAML}")?,
+        SampleConfigFormat::Toml => write!(file, "{SAMPLE_CONFIG_TOML}")?,
+    }
+
+    Ok(())
 }

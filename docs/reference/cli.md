@@ -25,7 +25,8 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git hook shims</p></dd>
+<dl class="cli-reference"><dt><a href="#prek-init"><code>prek init</code></a></dt><dd><p>Create a prek configuration and install Git hook shims</p></dd>
+<dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git hook shims</p></dd>
 <dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for configured hooks</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run configured hooks</p></dd>
 <dt><a href="#prek-exec"><code>prek exec</code></a></dt><dd><p>Run a command in the environment prepared for a configured hook</p></dd>
@@ -33,13 +34,55 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek Git hook shims</p></dd>
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate prek configuration files</p></dd>
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate pre-commit hook manifests (<code>.pre-commit-hooks.yaml</code>)</p></dd>
-<dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Generate a sample prek configuration file</p></dd>
 <dt><a href="#prek-update"><code>prek update</code></a></dt><dd><p>Update configured repositories</p></dd>
 <dt><a href="#prek-cache"><code>prek cache</code></a></dt><dd><p>Manage the prek cache</p></dd>
 <dt><a href="#prek-try-repo"><code>prek try-repo</code></a></dt><dd><p>Try hooks from a repository</p></dd>
 <dt><a href="#prek-util"><code>prek util</code></a></dt><dd><p>Run utility commands</p></dd>
 <dt><a href="#prek-self"><code>prek self</code></a></dt><dd><p>Manage the prek installation</p></dd>
 </dl>
+
+## prek init
+
+Create a prek configuration and install Git hook shims
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek init [OPTIONS] [PATH]
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="prek-init--path"><a href="#prek-init--path"><code>PATH</code></a></dt><dd><p>Existing directory to initialize.</p>
+<p>Defaults to the current Git worktree root. Relative paths are resolved from the current directory after applying <code>--cd</code>, and the resolved path must be inside the current Git worktree.</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="prek-init--cd"><a href="#prek-init--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-init--color"><a href="#prek-init--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="prek-init--config"><a href="#prek-init--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-init--format"><a href="#prek-init--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the configuration format to create</p>
+<p>[default: toml]</p><p>Possible values:</p>
+<ul>
+<li><code>yaml</code></li>
+<li><code>toml</code></li>
+</ul></dd><dt id="prek-init--help"><a href="#prek-init--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-init--log-file"><a href="#prek-init--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-init--no-install"><a href="#prek-init--no-install"><code>--no-install</code></a></dt><dd><p>Do not install Git hook shims</p>
+</dd><dt id="prek-init--no-progress"><a href="#prek-init--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+</dd><dt id="prek-init--quiet"><a href="#prek-init--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-init--refresh"><a href="#prek-init--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-init--verbose"><a href="#prek-init--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-init--version"><a href="#prek-init--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd></dl>
 
 ## prek install
 
@@ -569,44 +612,6 @@ prek validate-manifest [OPTIONS] [MANIFEST]...
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-validate-manifest--refresh"><a href="#prek-validate-manifest--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-validate-manifest--verbose"><a href="#prek-validate-manifest--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-validate-manifest--version"><a href="#prek-validate-manifest--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
-</dd></dl>
-
-## prek sample-config
-
-Generate a sample prek configuration file
-
-<h3 class="cli-reference">Usage</h3>
-
-```
-prek sample-config [OPTIONS]
-```
-
-<h3 class="cli-reference">Options</h3>
-
-<dl class="cli-reference"><dt id="prek-sample-config--cd"><a href="#prek-sample-config--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
-</dd><dt id="prek-sample-config--color"><a href="#prek-sample-config--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
-<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
-<ul>
-<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
-<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
-<li><code>never</code>:  Disables colored output</li>
-</ul></dd><dt id="prek-sample-config--config"><a href="#prek-sample-config--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-sample-config--file"><a href="#prek-sample-config--file"><code>--file</code></a>, <code>-f</code> <i>file</i></dt><dd><p>Write the sample config to a file.</p>
-<p>Defaults to <code>.pre-commit-config.yaml</code> unless <code>--format toml</code> is set, which uses <code>prek.toml</code>. If a path is provided without <code>--format</code>, the format is inferred from the file extension (<code>.toml</code> uses TOML).</p>
-</dd><dt id="prek-sample-config--format"><a href="#prek-sample-config--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the sample configuration format</p>
-<p>Possible values:</p>
-<ul>
-<li><code>yaml</code></li>
-<li><code>toml</code></li>
-</ul></dd><dt id="prek-sample-config--help"><a href="#prek-sample-config--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-sample-config--log-file"><a href="#prek-sample-config--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
-</dd><dt id="prek-sample-config--no-progress"><a href="#prek-sample-config--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
-<p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-sample-config--quiet"><a href="#prek-sample-config--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
-<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-sample-config--refresh"><a href="#prek-sample-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-sample-config--verbose"><a href="#prek-sample-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-sample-config--version"><a href="#prek-sample-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek update
