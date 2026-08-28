@@ -693,7 +693,7 @@ pub(crate) struct RunOptions {
         value_delimiter = ',',
         help_heading = "Run options"
     )]
-    pub(crate) hide_status: Vec<run::RunStatus>,
+    pub(crate) hide_status: Vec<run::HideStatus>,
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,

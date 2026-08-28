@@ -192,6 +192,13 @@ pub(crate) struct Selectors {
     usage: Arc<Mutex<FilterUsage>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum HookSelection {
+    Selected,
+    Skipped,
+    NotSelected,
+}
+
 impl Selectors {
     /// Create selectors for one explicit include without applying skip environment variables.
     pub(crate) fn from_include(include: &str, workspace_root: &Path) -> Result<Self, Error> {
@@ -283,8 +290,8 @@ impl Selectors {
             })
     }
 
-    /// Check if a hook matches any of the selection criteria.
-    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
+    /// Select a hook and retain whether an explicit skip caused its exclusion.
+    pub(super) fn select_hook(&self, hook: &Hook) -> HookSelection {
         let mut usage = self.usage.lock().unwrap();
 
         // Always check every selector to track usage
@@ -295,22 +302,31 @@ impl Selectors {
                 skipped = true;
             }
         }
-        if skipped {
-            return false;
-        }
-
-        if self.includes.is_empty() {
-            return true; // No `includes` mean all hooks are included
-        }
-
-        let mut included = false;
-        for (idx, include) in self.includes.iter().enumerate() {
-            if include.matches_hook(hook) {
-                usage.use_include(idx);
-                included = true;
+        let included = if self.includes.is_empty() {
+            true
+        } else {
+            let mut included = false;
+            for (idx, include) in self.includes.iter().enumerate() {
+                if include.matches_hook(hook) {
+                    usage.use_include(idx);
+                    included = true;
+                }
             }
+            included
+        };
+
+        if !included {
+            HookSelection::NotSelected
+        } else if skipped {
+            HookSelection::Skipped
+        } else {
+            HookSelection::Selected
         }
-        included
+    }
+
+    /// Check if a hook matches any of the selection criteria.
+    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
+        self.select_hook(hook) == HookSelection::Selected
     }
 
     /// Return whether skip selectors rule out a hook from config alone.

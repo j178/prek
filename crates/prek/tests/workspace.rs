@@ -608,14 +608,23 @@ fn run_with_selectors() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context, context.run().arg("--skip").arg("show-cwd"), @r"
-    success: false
-    exit_code: 1
+    cmd_snapshot!(context, context.run().arg("--skip").arg("show-cwd"), @r#"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    ✓ nested/project4
+      Show CWD..............................................................Skipped
+    ✓ project3/project5
+      Show CWD..............................................................Skipped
+    ✓ project2
+      Show CWD..............................................................Skipped
+    ✓ project3
+      Show CWD..............................................................Skipped
+    ✓ <workspace>
+      Show CWD..............................................................Skipped
 
     ----- stderr -----
-    error: No hooks found after filtering with the given selectors
-    ");
+    "#);
 
     cmd_snapshot!(context, context.run().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r#"
     success: true
@@ -635,6 +644,8 @@ fn run_with_selectors() -> Result<()> {
 
         [TEMP_DIR]/project3/project5
         ['.pre-commit-config.yaml']
+    ✓ project2
+      Show CWD..............................................................Skipped
     ✓ project3
       Show CWD...............................................................Passed
       - hook id: show-cwd
