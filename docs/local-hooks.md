@@ -1,8 +1,7 @@
-# Run Existing Project Commands
+# Local Hooks
 
-Use a local hook when the command belongs to the current project rather than a
-separate hook repository. This is the usual choice for a linter, formatter, or
-test command already declared in the project's dependencies.
+`repo: local` defines hooks directly in the current project's configuration
+instead of loading them from a separate hook repository.
 
 ## A minimal local hook
 

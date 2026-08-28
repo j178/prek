@@ -250,8 +250,8 @@ prek cache clean
 
 - [Configuration](configuration.md) covers config file formats, discovery, and
   validation.
-- [Run Existing Project Commands](local-hooks.md) covers local linters,
-  formatters, and test commands.
+- [Local Hooks](local-hooks.md) covers inline hook definitions, file passing,
+  filtering, and working-directory behavior.
 - [Continuous Integration](ci.md) covers full-repository and revision-range
   checks in CI.
 - [Workspace Mode](workspace.md) covers monorepos and nested project configs.
