@@ -1431,6 +1431,16 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
     ----- stderr -----
     ");
 
+    context.work_dir().child("file.txt").write_str("hello\n")?;
+    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Files were modified by following hooks...................................Failed
+
+    ----- stderr -----
+    "#);
+
     Ok(())
 }
 
@@ -1576,6 +1586,114 @@ fn skips() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+fn hide_status_filters_hook_reports() {
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: pass
+                name: Passing Hook
+                language: system
+                entry: python3 -c "print('passed output')"
+                always_run: true
+                verbose: true
+              - id: fail
+                name: Failing Hook
+                language: system
+                entry: python3 -c "import sys; print('failed output'); sys.exit(1)"
+                always_run: true
+              - id: skip
+                name: Skipped Hook
+                language: system
+                entry: echo
+                files: \.py$
+    "#});
+    context.git().add_all();
+
+    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed,skipped"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failing Hook.............................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      failed output
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context, context.run().arg("--hide-status").arg("failed"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Passing Hook.............................................................Passed
+    - hook id: pass
+    - duration: [TIME]
+
+      passed output
+    Skipped Hook.........................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn hide_status_uses_final_display_status() -> Result<()> {
+    let context = TestEnv::new_git();
+    context.work_dir().child("file.txt").write_str("hello\n")?;
+    let context = context.with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify
+                name: Modifies File
+                language: system
+                entry: python3 -c "from pathlib import Path; p = Path('file.txt'); p.write_text(p.read_text() + 'changed')"
+                always_run: true
+    "#});
+    context.git().add_all();
+
+    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Modifies File............................................................Failed
+    - hook id: modify
+    - files were modified by this hook
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn hidden_failed_status_still_writes_log_file() {
+    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail
+                name: Failing Hook
+                language: system
+                entry: python3 -c "import sys; print('logged output'); sys.exit(1)"
+                always_run: true
+                log_file: hook.log
+    "#});
+    context.git().add_all();
+
+    context
+        .run()
+        .arg("--hide-status")
+        .arg("failed")
+        .assert()
+        .failure();
+
+    assert_eq!(context.read("hook.log"), "logged output");
 }
 
 /// Run hooks with matched `stage`.
@@ -3474,6 +3592,7 @@ fn selectors_completion() -> Result<()> {
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
+    --hide-status	Hide hook reports with the specified final status
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output

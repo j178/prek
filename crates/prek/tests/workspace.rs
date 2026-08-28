@@ -447,6 +447,14 @@ fn run_with_selectors() -> Result<()> {
     )?;
     context.git().add_all();
 
+    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
     cmd_snapshot!(context, context.run().arg("project2/"), @r#"
     success: true
     exit_code: 0

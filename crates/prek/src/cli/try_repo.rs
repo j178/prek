@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::run::Selectors;
-use crate::cli::{ExitStatus, RunOptions, flag};
+use crate::cli::{ExitStatus, RunArgs, RunOptions};
 use crate::config::{self, Stage};
 use crate::git;
 use crate::git::GIT_ROOT;
@@ -273,22 +273,20 @@ pub(crate) async fn try_repo(
     )?;
     writeln!(printer.stdout(), "{}", display_config_str.dimmed())?;
 
-    let file_selection = run_args.file_selection.into();
+    let mut run_args = run_args;
+    // The generated config already contains only the hooks selected above.
+    run_args.includes.clear();
+    run_args.skips.clear();
+
     crate::cli::run(
         &store,
         Some(config_file),
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        stage,
-        file_selection,
-        run_args.show_diff_on_failure,
-        flag(run_args.fail_fast, run_args.no_fail_fast),
-        run_args.dry_run,
+        RunArgs {
+            options: run_args,
+            stage,
+            ..RunArgs::default()
+        },
         refresh,
-        run_args.extra,
         verbose,
         printer,
     )

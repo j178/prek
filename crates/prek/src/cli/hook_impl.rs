@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::cli::{self, ExitStatus, RunOptions, flag};
+use crate::cli::{self, ExitStatus, RunArgs, RunOptions};
 use crate::config::HookType;
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
@@ -115,26 +115,21 @@ pub(crate) async fn hook_impl(
         );
     }
 
-    let Some(run_args) = to_run_args(hook_type, &args, &stdin).await? else {
+    let Some(mut run_args) = to_run_args(hook_type, &args, &stdin).await? else {
         return Ok(legacy_code.into());
     };
-    let file_selection = run_args.file_selection.into();
+    run_args.includes = includes;
+    run_args.skips = skips;
 
     let status = cli::run(
         store,
         config,
-        includes,
-        skips,
-        vec![],
-        vec![],
-        vec![],
-        Some(hook_type.into()),
-        file_selection,
+        RunArgs {
+            options: run_args,
+            stage: Some(hook_type.into()),
+            ..RunArgs::default()
+        },
         false,
-        flag(run_args.fail_fast, run_args.no_fail_fast),
-        false,
-        false,
-        run_args.extra,
         false,
         printer,
     )
