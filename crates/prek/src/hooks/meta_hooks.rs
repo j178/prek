@@ -11,7 +11,7 @@ use crate::cli::run::HookRunReporter;
 use crate::cli::run::{
     CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, collect_run_input,
 };
-use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
+use crate::config::{FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
 use crate::store::Store;
@@ -194,26 +194,6 @@ fn load_meta_projects(hook: &Hook, filenames: &[&Path]) -> Result<Vec<Project>> 
         .collect()
 }
 
-fn extend_hook_options<'a>(
-    repo: &'a config::Repo,
-    hook_options: &mut Vec<(&'a String, &'a HookOptions)>,
-) {
-    match repo {
-        config::Repo::Remote(repo) => {
-            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
-        }
-        config::Repo::Local(repo) => {
-            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
-        }
-        config::Repo::Meta(repo) => {
-            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
-        }
-        config::Repo::Builtin(repo) => {
-            hook_options.extend(repo.hooks.iter().map(|hook| (&hook.id, &hook.options)));
-        }
-    }
-}
-
 fn matches_patterns(
     filename: &Path,
     include: Option<&FilePattern>,
@@ -288,7 +268,7 @@ pub(crate) async fn check_useless_excludes(hook: &Hook, filenames: &[&Path]) -> 
 
         let mut hook_options = Vec::new();
         for repo in &config.repos {
-            extend_hook_options(repo, &mut hook_options);
+            hook_options.extend(repo.hooks().map(|hook| (hook.id, hook.options)));
         }
         if hook_options.iter().all(|(_, opts)| opts.exclude.is_none()) {
             continue;

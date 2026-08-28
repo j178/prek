@@ -83,22 +83,9 @@ pub(crate) struct Config {
 
 impl Config {
     fn validate_priorities(&self) -> std::result::Result<(), Error> {
-        macro_rules! validate_hooks {
-            ($hooks:expr) => {
-                for hook in $hooks {
-                    if let Some(priority) = &hook.priority {
-                        priority.resolve(&self.priorities, &hook.id)?;
-                    }
-                }
-            };
-        }
-
-        for repo in &self.repos {
-            match repo {
-                Repo::Remote(repo) => validate_hooks!(&repo.hooks),
-                Repo::Local(repo) => validate_hooks!(&repo.hooks),
-                Repo::Meta(repo) => validate_hooks!(&repo.hooks),
-                Repo::Builtin(repo) => validate_hooks!(&repo.hooks),
+        for hook in self.repos.iter().flat_map(Repo::hooks) {
+            if let Some(priority) = hook.priority {
+                priority.resolve(&self.priorities, hook.id)?;
             }
         }
         Ok(())
@@ -201,25 +188,12 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
     );
 
     for (repo_idx, repo) in config.repos.iter().enumerate() {
-        let (repo_unused_keys, hooks_options): (_, Box<dyn Iterator<Item = &HookOptions>>) =
-            match repo {
-                Repo::Remote(remote) => (
-                    &remote._unused_keys,
-                    Box::new(remote.hooks.iter().map(|h| &h.options)),
-                ),
-                Repo::Local(local) => (
-                    &local._unused_keys,
-                    Box::new(local.hooks.iter().map(|h| &h.options)),
-                ),
-                Repo::Meta(meta) => (
-                    &meta._unused_keys,
-                    Box::new(meta.hooks.iter().map(|h| &h.options)),
-                ),
-                Repo::Builtin(builtin) => (
-                    &builtin._unused_keys,
-                    Box::new(builtin.hooks.iter().map(|h| &h.options)),
-                ),
-            };
+        let repo_unused_keys = match repo {
+            Repo::Remote(repo) => &repo._unused_keys,
+            Repo::Local(repo) => &repo._unused_keys,
+            Repo::Meta(repo) => &repo._unused_keys,
+            Repo::Builtin(repo) => &repo._unused_keys,
+        };
 
         if !repo_unused_keys.is_empty() {
             let repo_prefix = format!("repos[{repo_idx}]");
@@ -229,7 +203,8 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
                 repo_unused_keys.keys().map(String::as_str),
             );
         }
-        for (hook_idx, options) in hooks_options.enumerate() {
+        for (hook_idx, hook) in repo.hooks().enumerate() {
+            let options = hook.options;
             if options._unused_keys.is_empty() {
                 continue;
             }
