@@ -958,9 +958,13 @@ impl<'a> HookRunSession<'a> {
         let modifications_belong_to_single_hook =
             group.modification == Some(ModificationScope::SingleHook);
         let show_group_failure = group.shows_group_failure(self.report_filter);
+
+        // Hooks that did not run cannot have modified files, so report them outside
+        // the modification group.
         let mut visible_results = group_results
             .iter()
             .filter(|result| self.report_filter.shows(result.status))
+            .filter(|result| !show_group_failure || result.status.was_executed())
             .peekable();
         let mut first_result = true;
         let group_output_prefix = if show_group_failure {
@@ -1002,6 +1006,15 @@ impl<'a> HookRunSession<'a> {
                     group_output_prefix.as_deref(),
                     modifications_belong_to_single_hook,
                 )?;
+            }
+        }
+
+        if show_group_failure {
+            for result in group_results {
+                if !result.status.was_executed() && self.report_filter.shows(result.status) {
+                    self.status_printer
+                        .write(&result.hook.name, hook_prefix, result.status)?;
+                }
             }
         }
 

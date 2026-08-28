@@ -1436,6 +1436,12 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
         repos:
           - repo: local
             hooks:
+              - id: skipped
+                name: Skipped Check
+                language: system
+                entry: python3 -c "raise SystemExit(1)"
+                always_run: true
+                priority: 0
               - id: modify
                 name: Modifies File
                 language: system
@@ -1467,7 +1473,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
 
     context.git().add_all();
 
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("skipped"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1481,6 +1487,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
       │
       │ hello from loud
       └ No Output............................................................Passed
+    Skipped Check...........................................................Skipped
     Later Hook...............................................................Passed
     - hook id: later
     - duration: [TIME]
@@ -1491,11 +1498,12 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
     ");
 
     context.work_dir().child("file.txt").write_str("hello\n")?;
-    cmd_snapshot!(context, context.run().arg("--hide-status").arg("passed"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("skipped").arg("--hide-status").arg("passed"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
     Files were modified by following hooks...................................Failed
+    Skipped Check...........................................................Skipped
 
     ----- stderr -----
     "#);
