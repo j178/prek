@@ -52,9 +52,9 @@ Both formats are first-class and will be supported long-term. They describe the 
             pass_filenames: false
     ```
 
-For a command that is already installed by your project, see
-[Run Existing Project Commands](local-hooks.md). The rest of this page explains
-config discovery, file formats, filters, and validation.
+For hooks defined directly in your project configuration, see
+[Local Hooks](local-hooks.md). The rest of this page explains config discovery,
+file formats, filters, and validation.
 
 ## Pre-commit compatibility
 
