@@ -636,6 +636,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#automatically-fix-pull-requests-with-autofixci" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Automatically fix pull requests with autofix.ci
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#other-ci-systems" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1474,6 +1485,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#automatically-fix-pull-requests-with-autofixci" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Automatically fix pull requests with autofix.ci
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#other-ci-systems" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1553,24 +1575,71 @@ extra wrapper is required.</p>
 <p>The official <a href="https://github.com/j178/prek-action"><code>j178/prek-action</code></a> installs
 prek and runs <code>prek run --all-files</code>. See the ready-to-copy workflow in
 <a href="../integrations/#github-actions">Integrations</a>.</p>
+<h2 id="automatically-fix-pull-requests-with-autofixci">Automatically fix pull requests with autofix.ci<a class="headerlink" href="#automatically-fix-pull-requests-with-autofixci" title="Permanent link">&para;</a></h2>
+<p><a href="https://autofix.ci/"><code>autofix.ci</code></a> can commit changes made by formatting and
+other fixing hooks back to a pull request. It cannot fix a check-only failure;
+the configured hook must modify files itself.</p>
+<p>Install the <a href="https://autofix.ci/setup">autofix.ci GitHub App</a>, then add
+<code>.github/workflows/autofix.yml</code>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autofix.ci</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">on</span><span class="p">:</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">pull_request</span><span class="p">:</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">push</span><span class="p">:</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="nt">permissions</span><span class="p">:</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nt">jobs</span><span class="p">:</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">autofix</span><span class="p">:</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1</span><span class="w"> </span><span class="c1"># v7</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece</span><span class="w"> </span><span class="c1"># v3.0.0</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">        </span><span class="nt">with</span><span class="p">:</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">          </span><span class="nt">install-only</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Run prek</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">        </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prek</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">        </span><span class="nt">continue-on-error</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prek run --all-files</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Verify fixes</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">        </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steps.prek.outcome == &#39;failure&#39;</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prek run --all-files</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Commit fixes</span>
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="w">        </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">always() &amp;&amp; !cancelled()</span>
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a</span><span class="w"> </span><span class="c1"># v1.3.4</span>
+</span></code></pre></div>
+<p>Keep the workflow name exactly <code>autofix.ci</code>; the service uses it to identify
+the trusted workflow. The first prek run may fail after a hook changes files,
+so the workflow lets that step continue and runs prek again against the updated
+working tree. The final step still records those changes when another check
+cannot be fixed, while the failed verification keeps the job unsuccessful.</p>
+<p>Run all fixing tools in this job and call <code>autofix-ci/action</code> only once, after
+they finish. The workflow itself keeps read-only repository access; the GitHub
+App provides the scoped permission used to create the fix commit. See the
+<a href="https://autofix.ci/security">autofix.ci security model</a> for details.</p>
 <h2 id="other-ci-systems">Other CI systems<a class="headerlink" href="#other-ci-systems" title="Permanent link">&para;</a></h2>
 <p>Install a pinned prek version using one of the methods in the
 <a href="../installation/">Installation</a> guide, check out the repository, and run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
 </span></code></pre></div>
 <p>Project-local commands still need their project dependencies. For example, a
 local hook that invokes <code>npm exec</code> requires the Node dependencies to be
 installed before prek runs.</p>
 <h2 id="check-only-a-revision-range">Check only a revision range<a class="headerlink" href="#check-only-a-revision-range" title="Permanent link">&para;</a></h2>
 <p>Large repositories can run hooks only for files changed between two refs:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--from-ref<span class="w"> </span>origin/main<span class="w"> </span>--to-ref<span class="w"> </span>HEAD
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--from-ref<span class="w"> </span>origin/main<span class="w"> </span>--to-ref<span class="w"> </span>HEAD
 </span></code></pre></div>
 <p>The checkout must contain both refs and enough history to calculate the diff.
 Shallow CI checkouts often need a larger fetch depth or an explicit fetch of the
 base branch. If that setup is unreliable, use <code>--all-files</code>.</p>
 <h2 id="validate-updates-without-changing-the-config">Validate updates without changing the config<a class="headerlink" href="#validate-updates-without-changing-the-config" title="Permanent link">&para;</a></h2>
 <p>Repository maintainers can check whether pinned hook revisions are outdated:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>update<span class="w"> </span>--check
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>prek<span class="w"> </span>update<span class="w"> </span>--check
 </span></code></pre></div>
 <p>Use <a href="../reference/cli/#prek-validate-config"><code>prek validate-config</code></a> after editing
 a config, and use <a href="../reference/cli/#prek-validate-manifest"><code>prek validate-manifest</code></a>
