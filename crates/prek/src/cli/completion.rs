@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clap::builder::StyledStr;
 use clap_complete::CompletionCandidate;
 
-use crate::config;
+use crate::config::Repo;
 use crate::fs::{CWD, PathClean};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -246,29 +246,8 @@ impl HookTarget<'_> {
 }
 
 fn visit_hooks<'a>(project: &'a Project, mut visit: impl FnMut(&'a str, Option<&'a str>)) {
-    for repo in &project.config().repos {
-        match repo {
-            config::Repo::Remote(repo) => {
-                for hook in &repo.hooks {
-                    visit(&hook.id, hook.name.as_deref());
-                }
-            }
-            config::Repo::Local(repo) => {
-                for hook in &repo.hooks {
-                    visit(&hook.id, Some(&hook.name));
-                }
-            }
-            config::Repo::Meta(repo) => {
-                for hook in &repo.hooks {
-                    visit(&hook.id, Some(&hook.name));
-                }
-            }
-            config::Repo::Builtin(repo) => {
-                for hook in &repo.hooks {
-                    visit(&hook.id, Some(&hook.name));
-                }
-            }
-        }
+    for hook in project.config().repos.iter().flat_map(Repo::hooks) {
+        visit(hook.id, hook.name);
     }
 }
 

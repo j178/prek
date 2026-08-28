@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
+use std::slice;
 
 use anyhow::Result;
 use serde::de::{Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::hook::{BuiltinHook, LocalHook, MetaHook, RemoteHook};
+use super::hook::{BuiltinHook, HookOptions, LocalHook, MetaHook, RemoteHook};
+use super::priority::Priority;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct RemoteRepo {
@@ -135,6 +137,99 @@ pub(crate) enum Repo {
     Local(LocalRepo),
     Meta(MetaRepo),
     Builtin(BuiltinRepo),
+}
+
+/// A borrowed view of common fields on a hook in a project configuration.
+pub(crate) struct HookConfigRef<'a> {
+    pub(crate) id: &'a str,
+    /// The hook name available without resolving a remote manifest.
+    pub(crate) name: Option<&'a str>,
+    pub(crate) priority: Option<&'a Priority>,
+    pub(crate) options: &'a HookOptions,
+}
+
+impl<'a> From<&'a RemoteHook> for HookConfigRef<'a> {
+    fn from(hook: &'a RemoteHook) -> Self {
+        Self {
+            id: &hook.id,
+            name: hook.name.as_deref(),
+            priority: hook.priority.as_ref(),
+            options: &hook.options,
+        }
+    }
+}
+
+impl<'a> From<&'a LocalHook> for HookConfigRef<'a> {
+    fn from(hook: &'a LocalHook) -> Self {
+        Self {
+            id: &hook.id,
+            name: Some(hook.name.as_str()),
+            priority: hook.priority.as_ref(),
+            options: &hook.options,
+        }
+    }
+}
+
+impl<'a> From<&'a MetaHook> for HookConfigRef<'a> {
+    fn from(hook: &'a MetaHook) -> Self {
+        Self {
+            id: &hook.id,
+            name: Some(hook.name.as_str()),
+            priority: hook.priority.as_ref(),
+            options: &hook.options,
+        }
+    }
+}
+
+impl<'a> From<&'a BuiltinHook> for HookConfigRef<'a> {
+    fn from(hook: &'a BuiltinHook) -> Self {
+        Self {
+            id: &hook.id,
+            name: Some(hook.name.as_str()),
+            priority: hook.priority.as_ref(),
+            options: &hook.options,
+        }
+    }
+}
+
+enum RepoHooks<'a> {
+    Remote(slice::Iter<'a, RemoteHook>),
+    Local(slice::Iter<'a, LocalHook>),
+    Meta(slice::Iter<'a, MetaHook>),
+    Builtin(slice::Iter<'a, BuiltinHook>),
+}
+
+impl<'a> Iterator for RepoHooks<'a> {
+    type Item = HookConfigRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Remote(hooks) => hooks.next().map(HookConfigRef::from),
+            Self::Local(hooks) => hooks.next().map(HookConfigRef::from),
+            Self::Meta(hooks) => hooks.next().map(HookConfigRef::from),
+            Self::Builtin(hooks) => hooks.next().map(HookConfigRef::from),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Self::Remote(hooks) => hooks.size_hint(),
+            Self::Local(hooks) => hooks.size_hint(),
+            Self::Meta(hooks) => hooks.size_hint(),
+            Self::Builtin(hooks) => hooks.size_hint(),
+        }
+    }
+}
+
+impl Repo {
+    pub(crate) fn hooks(&self) -> impl Iterator<Item = HookConfigRef<'_>> {
+        match self {
+            Self::Remote(repo) => RepoHooks::Remote(repo.hooks.iter()),
+            Self::Local(repo) => RepoHooks::Local(repo.hooks.iter()),
+            Self::Meta(repo) => RepoHooks::Meta(repo.hooks.iter()),
+            Self::Builtin(repo) => RepoHooks::Builtin(repo.hooks.iter()),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Repo {
