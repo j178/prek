@@ -17,6 +17,60 @@ The official [`j178/prek-action`](https://github.com/j178/prek-action) installs
 prek and runs `prek run --all-files`. See the ready-to-copy workflow in
 [Integrations](integrations.md#github-actions).
 
+## Automatically fix pull requests with autofix.ci
+
+[`autofix.ci`](https://autofix.ci/) can commit changes made by formatting and
+other fixing hooks back to a pull request. It cannot fix a check-only failure;
+the configured hook must modify files itself.
+
+Install the [autofix.ci GitHub App](https://autofix.ci/setup), then add
+`.github/workflows/autofix.yml`:
+
+```yaml
+name: autofix.ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+        with:
+          install-only: true
+
+      - name: Run prek
+        id: prek
+        continue-on-error: true
+        run: prek run --all-files
+
+      - name: Verify fixes
+        if: steps.prek.outcome == 'failure'
+        run: prek run --all-files
+
+      - name: Commit fixes
+        if: always() && !cancelled()
+        uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a # v1.3.4
+```
+
+Keep the workflow name exactly `autofix.ci`; the service uses it to identify
+the trusted workflow. The first prek run may fail after a hook changes files,
+so the workflow lets that step continue and runs prek again against the updated
+working tree. The final step still records those changes when another check
+cannot be fixed, while the failed verification keeps the job unsuccessful.
+
+Run all fixing tools in this job and call `autofix-ci/action` only once, after
+they finish. The workflow itself keeps read-only repository access; the GitHub
+App provides the scoped permission used to create the fix commit. See the
+[autofix.ci security model](https://autofix.ci/security) for details.
+
 ## Other CI systems
 
 Install a pinned prek version using one of the methods in the
