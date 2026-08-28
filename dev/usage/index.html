@@ -552,6 +552,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Set up the repository">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-an-existing-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Use an existing configuration
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-a-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Create a configuration
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1526,6 +1554,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Set up the repository">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-an-existing-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Use an existing configuration
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-a-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Create a configuration
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1652,17 +1708,20 @@
 
 
 <h1 id="common-workflows">Common Workflows<a class="headerlink" href="#common-workflows" title="Permanent link">&para;</a></h1>
-<p>This page explains how to use prek in a repository that already contains a
-<code>prek.toml</code> or <code>.pre-commit-config.yaml</code>, including setup, running hooks, and
-handling a hook that prevents a commit.</p>
+<p>This page explains how to set up and use prek in a Git repository, including
+creating or reusing a configuration, running hooks, and handling a hook that
+prevents a commit.</p>
 <h2 id="set-up-the-repository">Set up the repository<a class="headerlink" href="#set-up-the-repository" title="Permanent link">&para;</a></h2>
-<p>First, <a href="../installation/">install prek</a>, then run this command from the repository
-root:</p>
+<p>First, <a href="../installation/">install prek</a>. The next step depends on whether the
+repository already has a configuration.</p>
+<h3 id="use-an-existing-configuration">Use an existing configuration<a class="headerlink" href="#use-an-existing-configuration" title="Permanent link">&para;</a></h3>
+<p>If the repository already contains a supported configuration file, run this
+command from the repository root:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>prek<span class="w"> </span>install
 </span></code></pre></div>
 <p>This installs the Git shims selected by the repository's configuration so that
-prek runs automatically during Git operations. If the repository does not
-select any hook types, prek installs a <code>pre-commit</code> shim by default.</p>
+prek runs automatically during Git operations. By default, prek installs a
+<code>pre-commit</code> shim.</p>
 <p>If another tool already owns the hook, a normal install moves that hook to a
 <code>.legacy</code> file and configures prek to run both implementations. This migration
 mode lets you compare them before removing the old setup. When you are ready to
@@ -1676,14 +1735,28 @@ before using <code>--force</code> on a hook whose contents you have not reviewed
 prepare them during setup instead, run:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>prek<span class="w"> </span>install<span class="w"> </span>--prepare-hooks
 </span></code></pre></div>
+<h3 id="create-a-configuration">Create a configuration<a class="headerlink" href="#create-a-configuration" title="Permanent link">&para;</a></h3>
+<p>If the repository does not have a configuration yet, run <code>prek init</code> from
+anywhere in the Git worktree:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>init
+</span></code></pre></div>
+<p>This creates a starter <code>prek.toml</code> at the Git worktree root and installs the
+<code>pre-commit</code> Git shim in one step.</p>
+<p>To place the configuration in an existing subdirectory, pass its path:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>prek<span class="w"> </span>init<span class="w"> </span>packages/my-project
+</span></code></pre></div>
+<p>The directory must be inside the current Git worktree. Use <code>--format yaml</code> to
+create <code>.pre-commit-config.yaml</code> instead of <code>prek.toml</code>. Add <code>--no-install</code> to
+create only the configuration; run <code>prek install</code> later to install the Git hook
+shims.</p>
 <h2 id="what-happens-when-you-commit">What happens when you commit<a class="headerlink" href="#what-happens-when-you-commit" title="Permanent link">&para;</a></h2>
 <p>Use Git as usual: stage the changes that belong in the commit, then commit them.</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="gp">$ </span>git<span class="w"> </span>add<span class="w"> </span>settings.json
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update settings&quot;</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="go">check json...............................................................Passed</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="go">mixed line ending........................................................Passed</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="go">[main 0123456] Update settings</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="go"> 1 file changed, 1 insertion(+)</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="gp">$ </span>git<span class="w"> </span>add<span class="w"> </span>settings.json
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update settings&quot;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="go">check json...............................................................Passed</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="go">mixed line ending........................................................Passed</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="go">[main 0123456] Update settings</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="go"> 1 file changed, 1 insertion(+)</span>
 </span></code></pre></div>
 <p>Before Git creates the commit, the <code>pre-commit</code> shim runs hooks configured for
 that stage against the staged files. Unstaged changes are temporarily stashed
@@ -1693,20 +1766,20 @@ first run may take longer while prek downloads and prepares hook environments.</
 prek exits unsuccessfully and Git stops without creating the commit.</p>
 <h2 id="when-a-hook-reports-a-failure">When a hook reports a failure<a class="headerlink" href="#when-a-hook-reports-a-failure" title="Permanent link">&para;</a></h2>
 <p>A hook can reject a change and print the problem it found. For example:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update settings&quot;</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="go">check json...............................................................Failed</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="go">- hook id: check-json</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="go">- exit code: 1</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="go">  settings.json: Failed to json decode (trailing comma at line 3 column 1)</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update settings&quot;</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="go">check json...............................................................Failed</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="go">- hook id: check-json</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="go">- exit code: 1</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="go">  settings.json: Failed to json decode (trailing comma at line 3 column 1)</span>
 </span></code></pre></div>
 <p>Read the hook output, fix the reported problem, stage the corrected file, and
 retry the commit:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="gp">$ </span>git<span class="w"> </span>add<span class="w"> </span>settings.json
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update settings&quot;</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="go">check json...............................................................Passed</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="go">[main 0123456] Update settings</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="go"> 1 file changed, 1 insertion(+)</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="gp">$ </span>git<span class="w"> </span>add<span class="w"> </span>settings.json
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update settings&quot;</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="go">check json...............................................................Passed</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="go">[main 0123456] Update settings</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="go"> 1 file changed, 1 insertion(+)</span>
 </span></code></pre></div>
 <p>The failed attempt did not create a partial commit. Other hooks may have reported
 additional problems, so check the complete output before retrying.</p>
@@ -1714,22 +1787,22 @@ additional problems, so check the complete output before retrying.</p>
 <p>Formatters and other fixing hooks can update files automatically. prek marks the
 run as failed so that you can review and stage those changes before committing
 them:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Normalize line endings&quot;</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="go">mixed line ending........................................................Failed</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="go">- hook id: mixed-line-ending</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="go">- exit code: 1</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="go">- files were modified by this hook</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="go">  Fixing mixed.txt</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Normalize line endings&quot;</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="go">mixed line ending........................................................Failed</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="go">- hook id: mixed-line-ending</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="go">- exit code: 1</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="go">- files were modified by this hook</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="go">  Fixing mixed.txt</span>
 </span></code></pre></div>
 <p>Inspect the changes, make any further edits you want, stage the final result, and
 retry:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="gp">$ </span>git<span class="w"> </span>diff<span class="w"> </span>--<span class="w"> </span>mixed.txt
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="gp">$ </span>git<span class="w"> </span>add<span class="w"> </span>mixed.txt
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Normalize line endings&quot;</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="go">mixed line ending........................................................Passed</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="go">[main 0123456] Normalize line endings</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="go"> 1 file changed, 3 insertions(+), 3 deletions(-)</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="gp">$ </span>git<span class="w"> </span>diff<span class="w"> </span>--<span class="w"> </span>mixed.txt
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="gp">$ </span>git<span class="w"> </span>add<span class="w"> </span>mixed.txt
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="gp">$ </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Normalize line endings&quot;</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="go">mixed line ending........................................................Passed</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="go">[main 0123456] Normalize line endings</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="go"> 1 file changed, 3 insertions(+), 3 deletions(-)</span>
 </span></code></pre></div>
 <p>A hook can both modify files and report another error. In that case, keep the
 automatic fixes you want and resolve the remaining error before staging and
@@ -1737,26 +1810,26 @@ retrying.</p>
 <h2 id="run-hooks-yourself">Run hooks yourself<a class="headerlink" href="#run-hooks-yourself" title="Permanent link">&para;</a></h2>
 <p>You do not need to create a commit to run the configured hooks.</p>
 <p>Run hooks for the files currently staged in Git:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>prek<span class="w"> </span>run
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>prek<span class="w"> </span>run
 </span></code></pre></div>
 <p>Run hooks against the whole repository, commonly before opening a pull request:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
 </span></code></pre></div>
 <p>Run a single hook by ID:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>prek<span class="w"> </span>run<span class="w"> </span>ruff
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>prek<span class="w"> </span>run<span class="w"> </span>ruff
 </span></code></pre></div>
 <p>Inspect what would run without executing hooks or changing files:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--dry-run
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--dry-run
 </span></code></pre></div>
 <h2 id="run-a-command-in-a-hook-environment">Run a command in a hook environment<a class="headerlink" href="#run-a-command-in-a-hook-environment" title="Permanent link">&para;</a></h2>
 <p>Use <code>prek exec</code> to run an explicit command with the toolchain, installed
 dependencies, and environment variables prepared for one configured hook. The
 hook environment is prepared first if necessary:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>prek<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>prettier<span class="w"> </span>--<span class="w"> </span>prettier<span class="w"> </span>--stdin-filepath<span class="w"> </span>src/app.js<span class="w"> </span>&lt;<span class="w"> </span>src/app.js
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>prek<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>prettier<span class="w"> </span>--<span class="w"> </span>prettier<span class="w"> </span>--stdin-filepath<span class="w"> </span>src/app.js<span class="w"> </span>&lt;<span class="w"> </span>src/app.js
 </span></code></pre></div>
 <p>The hook selector must resolve to exactly one hook. In a workspace, use a
 project-qualified selector when needed, for example:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>prek<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>frontend:prettier<span class="w"> </span>--<span class="w"> </span>prettier<span class="w"> </span>--version
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>prek<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>frontend:prettier<span class="w"> </span>--<span class="w"> </span>prettier<span class="w"> </span>--version
 </span></code></pre></div>
 <p>Everything after <code>--</code> is the command to execute. It replaces the hook's
 configured <code>entry</code> and <code>args</code>; <code>prek exec</code> does not select files, schedule other
@@ -1769,45 +1842,45 @@ Builtin and meta hooks are also unsupported; <code>prek exec</code> reports an e
 these cases.</p>
 <h2 id="skip-hooks-for-one-commit">Skip hooks for one commit<a class="headerlink" href="#skip-hooks-for-one-commit" title="Permanent link">&para;</a></h2>
 <p>When one known hook is not applicable, skip only that hook by ID:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nv">PREK_SKIP</span><span class="o">=</span>ruff<span class="w"> </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update generated files&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nv">PREK_SKIP</span><span class="o">=</span>ruff<span class="w"> </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Update generated files&quot;</span>
 </span></code></pre></div>
 <p><code>SKIP=ruff</code> is accepted for compatibility. In a workspace, the value can also be
 a <a href="../workspace/#project-and-hook-selection">project or project-qualified selector</a>.</p>
 <p>When the repository's policy permits it, Git can instead bypass the entire
 <code>pre-commit</code> and <code>commit-msg</code> hook chain for one commit:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>git<span class="w"> </span>commit<span class="w"> </span>--no-verify
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>git<span class="w"> </span>commit<span class="w"> </span>--no-verify
 </span></code></pre></div>
 <p>This does not fix the reported problem, and the same checks may still fail in
 continuous integration. Prefer fixing or explicitly resolving the hook failure
 when possible.</p>
 <h2 id="inspect-and-debug">Inspect and debug<a class="headerlink" href="#inspect-and-debug" title="Permanent link">&para;</a></h2>
 <p>List the hooks and projects discovered in the current workspace:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>prek<span class="w"> </span>list
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>prek<span class="w"> </span>list
 </span></code></pre></div>
 <p>Use verbose output when a hook fails without enough context:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>prek<span class="w"> </span>run<span class="w"> </span>-vvv
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>prek<span class="w"> </span>run<span class="w"> </span>-vvv
 </span></code></pre></div>
 <p>prek also writes a log file to <code>~/.cache/prek/prek.log</code> by default. See
 <a href="../debugging/">Debugging</a> when reporting a prek problem.</p>
 <h2 id="maintain-the-repositorys-hook-configuration">Maintain the repository's hook configuration<a class="headerlink" href="#maintain-the-repositorys-hook-configuration" title="Permanent link">&para;</a></h2>
 <p>If you maintain the repository's prek setup, validate its configuration after
 editing it:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>prek<span class="w"> </span>validate-config<span class="w"> </span>prek.toml
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>prek<span class="w"> </span>validate-config<span class="w"> </span>prek.toml
 </span></code></pre></div>
 <p>Use <code>.pre-commit-config.yaml</code> instead if that is the repository's config file.</p>
 <p>Inspect file type tags when <code>types</code>, <code>types_or</code>, or <code>exclude_types</code> filters do not
 match as expected:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>prek<span class="w"> </span>util<span class="w"> </span>identify<span class="w"> </span>path/to/file
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>prek<span class="w"> </span>util<span class="w"> </span>identify<span class="w"> </span>path/to/file
 </span></code></pre></div>
 <p>Update pinned hook repository revisions or prepare hook environments without
 touching Git shims:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>prek<span class="w"> </span>update
-</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>prek<span class="w"> </span>prepare-hooks
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>prek<span class="w"> </span>update
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>prek<span class="w"> </span>prepare-hooks
 </span></code></pre></div>
 <p>Show or clean cached repositories, hook environments, and toolchains:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>prek<span class="w"> </span>cache<span class="w"> </span>dir
-</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>prek<span class="w"> </span>cache<span class="w"> </span>gc
-</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>prek<span class="w"> </span>cache<span class="w"> </span>clean
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>prek<span class="w"> </span>cache<span class="w"> </span>dir
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>prek<span class="w"> </span>cache<span class="w"> </span>gc
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>prek<span class="w"> </span>cache<span class="w"> </span>clean
 </span></code></pre></div>
 <h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>

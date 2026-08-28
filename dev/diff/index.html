@@ -1338,6 +1338,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#prek-init" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>prek init</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prek-run" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1386,17 +1397,6 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code>prek update</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#prek-sample-config" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>prek sample-config</code>
       </span>
     </span>
   </a>
@@ -1646,6 +1646,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#prek-init" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>prek init</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prek-run" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1694,17 +1705,6 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code>prek update</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#prek-sample-config" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>prek sample-config</code>
       </span>
     </span>
   </a>
@@ -1803,6 +1803,13 @@
 <p><code>uv</code> downloads are not covered by this behavior yet.</p>
 <h2 id="command-line-interface">Command line interface<a class="headerlink" href="#command-line-interface" title="Permanent link">&para;</a></h2>
 <p>For a compatibility-focused command mapping, see <a href="../compatibility/">Compatibility with pre-commit</a>.</p>
+<h3 id="prek-init"><code>prek init</code><a class="headerlink" href="#prek-init" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>prek init</code> creates a starter <code>prek.toml</code> at the Git worktree root and installs the Git hook shim in one command.</li>
+<li><code>prek init &lt;PATH&gt;</code> creates the configuration in an existing subdirectory. The path must be inside the current Git worktree.</li>
+<li><code>prek init --format yaml</code> creates <code>.pre-commit-config.yaml</code> instead. Existing configuration files are kept unchanged.</li>
+<li><code>prek init --no-install</code> creates the configuration without installing Git hook shims.</li>
+</ul>
 <h3 id="prek-run"><code>prek run</code><a class="headerlink" href="#prek-run" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>prek run [HOOK|PROJECT]...</code> supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See <a href="../workspace/#running-specific-hooks-or-projects">Running Specific Hooks or Projects</a> for details.</li>
@@ -1834,10 +1841,6 @@
 <li><code>prek update</code> supports the <code>--cooldown-days</code> option to skip releases newer than the specified number of days (based on the tag creation timestamp for annotated tags, or the tagged commit timestamp for lightweight tags).</li>
 <li><code>prek update</code> supports <code>--exclude-repo</code> to skip selected repositories while updating everything else.</li>
 <li><code>prek update</code> supports tag filtering with <code>--include-tag</code>, <code>--exclude-tag</code>, <code>--repo-include-tag</code>, and <code>--repo-exclude-tag</code>, using glob patterns to keep or remove matching tags before selecting an update.</li>
-</ul>
-<h3 id="prek-sample-config"><code>prek sample-config</code><a class="headerlink" href="#prek-sample-config" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>prek sample-config</code> can generate either YAML or TOML and can write directly to a file with <code>--file</code>.</li>
 </ul>
 <h3 id="prek-util"><code>prek util</code><a class="headerlink" href="#prek-util" title="Permanent link">&para;</a></h3>
 <ul>

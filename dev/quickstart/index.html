@@ -434,10 +434,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-create-a-configuration" class="md-nav__link">
+  <a href="#1-initialize-the-repository" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        1. Create a configuration
+        1. Initialize the repository
       </span>
     </span>
   </a>
@@ -456,10 +456,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-wire-hooks-into-git-automatically" class="md-nav__link">
+  <a href="#3-customize-the-hooks" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        3. Wire hooks into git automatically
+        3. Customize the hooks
       </span>
     </span>
   </a>
@@ -1503,10 +1503,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-create-a-configuration" class="md-nav__link">
+  <a href="#1-initialize-the-repository" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        1. Create a configuration
+        1. Initialize the repository
       </span>
     </span>
   </a>
@@ -1525,10 +1525,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-wire-hooks-into-git-automatically" class="md-nav__link">
+  <a href="#3-customize-the-hooks" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        3. Wire hooks into git automatically
+        3. Customize the hooks
       </span>
     </span>
   </a>
@@ -1605,45 +1605,60 @@
 </ul>
 <h2 id="new-to-pre-commit-style-workflows">New to pre-commit-style workflows?<a class="headerlink" href="#new-to-pre-commit-style-workflows" title="Permanent link">&para;</a></h2>
 <p>Follow this short example to experience how prek automates linting and formatting tasks.</p>
-<h3 id="1-create-a-configuration">1. Create a configuration<a class="headerlink" href="#1-create-a-configuration" title="Permanent link">&para;</a></h3>
-<p>In the root of your repository, add a <code>prek.toml</code>:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[[repos]]</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/pre-commit/pre-commit-hooks&quot;</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">rev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;v6.0.0&quot;</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;check-yaml&quot;</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;end-of-file-fixer&quot;</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">]</span>
+<h3 id="1-initialize-the-repository">1. Initialize the repository<a class="headerlink" href="#1-initialize-the-repository" title="Permanent link">&para;</a></h3>
+<p>Run <code>prek init</code> from anywhere in your Git worktree:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>prek<span class="w"> </span>init
 </span></code></pre></div>
-<p>This configuration uses the <code>pre-commit-hooks</code> repository and enables two hooks: <code>check-yaml</code> validates YAML files, and <code>end-of-file-fixer</code> ensures every file ends with a newline.</p>
+<p>This creates a starter <code>prek.toml</code> at the Git worktree root and installs the
+<code>pre-commit</code> Git shim. If the root already has a supported configuration file,
+prek keeps it unchanged and installs the shim.</p>
+<p>The generated configuration uses prek's built-in hooks:</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;builtin&quot;</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;trailing-whitespace&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;end-of-file-fixer&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;check-added-large-files&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">]</span>
+</span></code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p><code>prek.toml</code> is the native configuration file for <strong>prek</strong>. If you already have a <code>.pre-commit-config.yaml</code>, prek can still read it today.</p>
 </div>
 <p>Add a small YAML file so the first run has something to check, then stage both
 files:</p>
-<div class="language-yaml highlight"><span class="filename">example.yaml</span><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prek</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<div class="language-yaml highlight"><span class="filename">example.yaml</span><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prek</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>add<span class="w"> </span>prek.toml<span class="w"> </span>example.yaml
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>add<span class="w"> </span>prek.toml<span class="w"> </span>example.yaml
 </span></code></pre></div>
 <p><code>prek run</code> checks the staged snapshot, so a new or changed config must be staged
 before this default run. You can still review or unstage it after trying the
 workflow.</p>
 <h3 id="2-run-hooks-on-demand">2. Run hooks on demand<a class="headerlink" href="#2-run-hooks-on-demand" title="Permanent link">&para;</a></h3>
 <p>Use <code>prek run</code> to execute all configured hooks on the files in your current git staging area:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="gp">$ </span>prek<span class="w"> </span>run
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="go">check yaml...............................................................Passed</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="go">fix end of files.........................................................Passed</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="gp">$ </span>prek<span class="w"> </span>run
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="go">trim trailing whitespace.................................................Passed</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="go">fix end of files.........................................................Passed</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="go">check for added large files..............................................Passed</span>
 </span></code></pre></div>
 <p>The first run can take longer because prek downloads the hook repository and
 prepares its environment.</p>
-<p>Need to run a single hook? Pass its ID, for example <code>prek run check-yaml</code>. You can also target specific files with <code>--files</code>, or run against the entire repository with <code>--all-files</code>. Use <code>--all-files</code> after adding or changing a hook to check existing files that are not staged.</p>
-<h3 id="3-wire-hooks-into-git-automatically">3. Wire hooks into git automatically<a class="headerlink" href="#3-wire-hooks-into-git-automatically" title="Permanent link">&para;</a></h3>
-<p>To run the hooks every time you commit, install prek’s Git shim integration:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>prek<span class="w"> </span>install
+<p>Need to run a single hook? Pass its ID, for example <code>prek run trailing-whitespace</code>. You can also target specific files with <code>--files</code>, or run against the entire repository with <code>--all-files</code>. Use <code>--all-files</code> after adding or changing a hook to check existing files that are not staged.</p>
+<h3 id="3-customize-the-hooks">3. Customize the hooks<a class="headerlink" href="#3-customize-the-hooks" title="Permanent link">&para;</a></h3>
+<p>Edit the generated configuration to add or remove hooks. For example, add Ruff
+to lint and format Python files:</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">[[repos]]</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">repo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/astral-sh/ruff-pre-commit&quot;</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">rev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;v0.16.0&quot;</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">hooks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;ruff-check&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;ruff-format&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">]</span>
 </span></code></pre></div>
-<p>Now every <code>git commit</code> will invoke <code>prek run</code> for the files included in the commit. If you ever want to undo this, run <code>prek uninstall</code>.</p>
+<p>Because <code>prek init</code> installed the Git shim, every <code>git commit</code> invokes the
+configured hooks for the files in that commit. Run <code>prek install</code> to reinstall
+the shim later, or <code>prek uninstall</code> to remove it.</p>
 <h3 id="4-go-further">4. Go further<a class="headerlink" href="#4-go-further" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Explore richer configuration options in the official <a href="https://pre-commit.com/">pre-commit documentation</a>. Every example there works with prek.</li>
