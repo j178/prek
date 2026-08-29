@@ -8,7 +8,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{TestEnv, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 mod common;
 
@@ -2995,11 +2995,7 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
 
     let cwd = context.work_dir();
 
-    #[cfg(unix)]
-    fs_err::set_permissions(
-        cwd.child("script_exec.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
+    make_executable(cwd.child("script_exec.sh"))?;
 
     context.git().add_all();
     context
@@ -3026,11 +3022,7 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
     ----- stderr -----
     ");
 
-    #[cfg(unix)]
-    fs_err::set_permissions(
-        cwd.child("script.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
+    make_executable(cwd.child("script.sh"))?;
 
     context
         .git_at(cwd.path())
