@@ -1281,6 +1281,41 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn configured_env_changes_do_not_invalidate_an_installed_environment() -> Result<()> {
+        let (temp, project) = setup_hook_test()?;
+        let repo = Arc::new(Repo::Local);
+        let mut env = FxHashMap::default();
+        env.insert("PACKAGE_INDEX".to_string(), "first".to_string());
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            language_overridden: false,
+            priority: None,
+            groups: None,
+            options: HookOptions {
+                env: Some(env),
+                ..Default::default()
+            },
+        };
+        let mut hook = Hook::from_spec(project, repo, hook_spec, 0).await?;
+        let hooks_dir = temp.path().join("hooks");
+        fs_err::create_dir(&hooks_dir)?;
+        let install_info = InstallInfo::new(&hook, &hooks_dir)?;
+
+        hook.env
+            .insert("PACKAGE_INDEX".to_string(), "second".to_string());
+
+        assert!(
+            hook.environment_requirement()
+                .expect("Python hook installs an environment")
+                .is_satisfied_by(&install_info)
+        );
+        Ok(())
+    }
+
     #[test]
     fn install_info_requires_schema_version() {
         let err = serde_json::from_value::<InstallInfo>(json!({

@@ -309,7 +309,7 @@ See [Supported Git Hook Stages](#supported-git-hook-stages) for what each value 
 
     `default_env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
 
-Runtime environment variables to apply to every hook in this config.
+Environment variables to apply when `prek` creates hook environments and runs hooks in this config.
 If a hook sets the same variable in [`env`](#prek-only-env), the hook-level value wins.
 
 - Type: map of string to string
@@ -893,27 +893,33 @@ Example:
 
     `env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
 
-Extra runtime environment variables for the hook process.
+Extra environment variables for hook environment creation and the hook process.
 
 - Type: map of string to string
 
 Values override the existing process environment (including variables such as `PATH`).
-They are applied when the hook runs, not when `prek` installs or prepares the hook environment.
+They are applied to commands that create the hook environment and when the hook runs.
 
-!!! note "Runtime only"
+!!! note "Creation time"
 
-    `env` cannot be used to control hook installation or environment preparation.
-    Keeping it runtime-only means the installed hook environment does not depend on
-    ambient variables from the invoking shell. If those variables affected
-    installation, changing one of them would imply that `prek` may need to
-    recreate the hook environment.
+    When a matching hook environment already exists, `prek` reuses it without applying
+    these variables to installation again. Changing `env` does not recreate or select a
+    different environment. The new values affect installation the next time the environment
+    is created for another reason. If multiple hooks share an environment, only the `env` of
+    the hook that creates it affects installation.
+
+Language backends may override or remove variables they manage to preserve hook environment
+isolation.
+This applies to subprocesses started by a backend. `env` is not treated as configuration for
+download logic implemented directly inside `prek`.
 
 For remote hooks, `env` may also be set by the hook author in
 `.pre-commit-hooks.yaml`. Values from the project configuration are merged with
 manifest values and override duplicate keys.
 Values set directly on a hook override matching [`default_env`](#default_env) values.
 
-For `docker` / `docker_image` hooks, these variables are passed into the container rather than being applied to the container runtime command.
+When running `docker` / `docker_image` hooks, these variables are passed into the container rather
+than being applied to the container runtime command.
 
 Example:
 

@@ -487,7 +487,7 @@ pub(crate) struct HookOptions {
     pub additional_dependencies: Option<Vec<String>>,
     /// Additional arguments to pass to the hook.
     pub args: Option<Vec<String>>,
-    /// Environment variables to set for the hook.
+    /// Environment variables to set while preparing and running the hook.
     pub env: Option<FxHashMap<String, String>>,
     /// This hook will run even if there are no matching files.
     /// Default is false.

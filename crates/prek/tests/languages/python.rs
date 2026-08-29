@@ -459,6 +459,48 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn configured_env_is_applied_to_python_install() -> anyhow::Result<()> {
+    let context = TestEnv::new_git();
+    context
+        .work_dir()
+        .child("setup.py")
+        .write_str(indoc::indoc! {r#"
+            import os, sys
+            from setuptools import setup
+            if os.environ.get("PREK_TEST_INSTALL_ENV") != "configured":
+                sys.exit("configured hook env was not applied during installation")
+            setup(name="test-install-env", version="0.1.0")
+        "#})?;
+
+    let dependency = serde_json::to_string(&context.work_dir().path().to_string_lossy())?;
+    let context = context.with_config(indoc::formatdoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: install-env
+                name: install-env
+                language: python
+                entry: python -c "print('ok')"
+                additional_dependencies: [{dependency}]
+                env:
+                  PREK_TEST_INSTALL_ENV: configured
+                always_run: true
+    "#});
+    context.git().add_all();
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    install-env..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/j178/prek/issues/1603>.
 #[test]
 fn local_relative_additional_dependency_is_not_resolved_from_worktree() -> anyhow::Result<()> {

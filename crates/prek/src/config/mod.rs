@@ -58,7 +58,7 @@ pub(crate) struct Config {
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
     pub default_stages: Option<Stages>,
-    /// Default runtime environment variables for hooks.
+    /// Default environment variables for preparing and running hooks.
     pub default_env: Option<FxHashMap<String, String>>,
     /// Global file include pattern.
     pub files: Option<FilePattern>,

@@ -19,7 +19,7 @@ use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
 use crate::hooks::{self, HookOutput};
-use crate::process::Cmd;
+use crate::process::{Cmd, with_command_env};
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
@@ -563,7 +563,13 @@ impl Language {
         install_cwd: &'a Path,
         reporter: &'a HookInstallReporter,
     ) -> LanguageFuture<'a, InstalledHook> {
-        self.backend().install(store, hook, install_cwd, reporter)
+        let env = hook
+            .env
+            .iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect();
+        let install = self.backend().install(store, hook, install_cwd, reporter);
+        Box::pin(with_command_env(env, install))
     }
 
     pub(crate) fn check_health<'a>(&'a self, info: &'a InstallInfo) -> LanguageFuture<'a, ()> {
