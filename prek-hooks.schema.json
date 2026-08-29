@@ -1,0 +1,276 @@
+{
+  "$id": "https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": ".pre-commit-hooks.yaml",
+  "description": "The hook manifest for prek, a git hook manager written in Rust.",
+  "type": "array",
+  "items": {
+    "$ref": "#/definitions/ManifestHook"
+  },
+  "definitions": {
+    "ManifestHook": {
+      "description": "Common hook options.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The id of the hook.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the hook.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "The command to run. It can contain arguments that will not be overridden.",
+          "type": "string"
+        },
+        "language": {
+          "description": "The language of the hook. Tells prek how to install and run the hook.",
+          "$ref": "#/definitions/Language"
+        },
+        "alias": {
+          "description": "Not documented in the official docs.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The pattern of files to run on.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "exclude": {
+          "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
+          "$ref": "#/definitions/FilePattern"
+        },
+        "types": {
+          "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "types_or": {
+          "description": "List of file types to run on (OR).\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exclude_types": {
+          "description": "List of file types to exclude.\nDefault is `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "additional_dependencies": {
+          "description": "Not documented in the official docs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "description": "Additional arguments to pass to the hook.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "description": "Environment variables to set while preparing and running the hook.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "always_run": {
+          "description": "This hook will run even if there are no matching files.\nDefault is false.",
+          "type": "boolean"
+        },
+        "fail_fast": {
+          "description": "If this hook fails, don't run any more hooks.\nDefault is false.",
+          "type": "boolean"
+        },
+        "pass_filenames": {
+          "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
+          "$ref": "#/definitions/PassFilenames"
+        },
+        "description": {
+          "description": "A description of the hook.",
+          "type": "string"
+        },
+        "language_version": {
+          "description": "Select a language version and optionally configure the toolchain source preference.\nDefault is `default`.\nSee <https://pre-commit.com/#overriding-language-version>.",
+          "$ref": "#/definitions/LanguageVersion"
+        },
+        "log_file": {
+          "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
+          "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
+        },
+        "require_serial": {
+          "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
+          "type": "boolean"
+        },
+        "stages": {
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Stage"
+          },
+          "uniqueItems": true
+        },
+        "verbose": {
+          "description": "Print the output of the hook even if it passes.\nDefault is false.",
+          "type": "boolean"
+        },
+        "minimum_prek_version": {
+          "description": "The minimum version of prek required to run this hook.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "entry",
+        "language"
+      ]
+    },
+    "Language": {
+      "type": "string",
+      "enum": [
+        "bun",
+        "conda",
+        "coursier",
+        "dart",
+        "deno",
+        "docker",
+        "docker_image",
+        "dotnet",
+        "fail",
+        "golang",
+        "haskell",
+        "julia",
+        "lua",
+        "mise",
+        "node",
+        "perl",
+        "php",
+        "pygrep",
+        "python",
+        "r",
+        "ruby",
+        "rust",
+        "script",
+        "swift",
+        "system"
+      ]
+    },
+    "FilePattern": {
+      "description": "A file pattern, either a regex or glob pattern(s).",
+      "oneOf": [
+        {
+          "description": "A regular expression pattern.",
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "glob": {
+              "oneOf": [
+                {
+                  "description": "A glob pattern.",
+                  "type": "string"
+                },
+                {
+                  "description": "A list of glob patterns.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "glob"
+          ]
+        }
+      ]
+    },
+    "PassFilenames": {
+      "description": "Whether to pass filenames to the hook. `true` passes all matching filenames (default), `false` passes none, and a positive integer limits each invocation to at most that many filenames.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      ]
+    },
+    "LanguageVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request": {
+              "description": "A language-specific version request. Defaults to `default`.",
+              "type": "string"
+            },
+            "preference": {
+              "description": "Which toolchain sources to prefer or require. Defaults to `managed`.",
+              "$ref": "#/definitions/ToolchainPreference"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolchainPreference": {
+      "type": "string",
+      "enum": [
+        "only-managed",
+        "managed",
+        "system",
+        "only-system"
+      ]
+    },
+    "Shell": {
+      "description": "A predefined shell adapter used to run hook entries as shell source.",
+      "type": "string",
+      "enum": [
+        "sh",
+        "bash",
+        "pwsh",
+        "powershell",
+        "cmd"
+      ]
+    },
+    "Stage": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "commit-msg",
+        "post-checkout",
+        "post-commit",
+        "post-merge",
+        "post-rewrite",
+        "pre-commit",
+        "pre-merge-commit",
+        "pre-push",
+        "pre-rebase",
+        "prepare-commit-msg"
+      ]
+    }
+  }
+}

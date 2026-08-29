@@ -85,7 +85,7 @@ jobs:
             [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" =~ ^crates/.*/Cargo\.toml$ ]] && rust_deps_changed=1
             [[ "$file" == "rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
             [[ "$file" == "pyproject.toml" ]] && pyproject_changed=1
-            [[ "$file" == "docs/reference/cli.md" || "$file" == "docs/reference/configuration.md" || "$file" == "prek.schema.json" ]] && generated_from_code_changed=1
+            [[ "$file" == "docs/reference/cli.md" || "$file" == "docs/reference/configuration.md" || "$file" == "prek.schema.json" || "$file" == "prek-hooks.schema.json" ]] && generated_from_code_changed=1
             [[ "$file" =~ ^docs/ || "$file" == "mkdocs.yml" || "$file" == "pyproject.toml" || "$file" == "uv.lock" || "$file" == ".github/workflows/publish-docs.yml" ]] && docs_related_changed=1
             [[ "$file" =~ ^\.github/workflows/.*\.ya?ml$ ]] && workflow_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
