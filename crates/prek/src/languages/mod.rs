@@ -1,7 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::future::Future;
 use std::path::Path;
-use std::pin::Pin;
 use std::process::Stdio;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -265,8 +264,6 @@ fn is_path_env(key: impl AsRef<OsStr>) -> bool {
         key == OsStr::new(EnvVars::PATH)
     }
 }
-
-type LanguageFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + 'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellSupport {
@@ -562,17 +559,20 @@ impl Language {
         hook: Arc<Hook>,
         install_cwd: &'a Path,
         reporter: &'a HookInstallReporter,
-    ) -> LanguageFuture<'a, InstalledHook> {
+    ) -> impl Future<Output = Result<InstalledHook>> + 'a {
         let env = hook
             .env
             .iter()
             .map(|(key, value)| (key.into(), value.into()))
             .collect();
         let install = self.backend().install(store, hook, install_cwd, reporter);
-        Box::pin(with_command_env(env, install))
+        with_command_env(env, install)
     }
 
-    pub(crate) fn check_health<'a>(&'a self, info: &'a InstallInfo) -> LanguageFuture<'a, ()> {
+    pub(crate) fn check_health<'a>(
+        &'a self,
+        info: &'a InstallInfo,
+    ) -> impl Future<Output = Result<()>> + 'a {
         self.backend().check_health(info)
     }
 
