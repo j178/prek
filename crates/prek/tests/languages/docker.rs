@@ -1,5 +1,3 @@
-use assert_fs::fixture::{FileWriteStr, PathChild};
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 /// GitHub Action only has docker for linux hosted runners.
@@ -39,7 +37,6 @@ fn workspace_docker() {
     let context = TestEnv::new_git()
         .with_file("project1/project1.txt", "")
         .with_file("project2/project2.txt", "");
-    let cwd = context.work_dir();
 
     let config = indoc::indoc! {r"
         repos:

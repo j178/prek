@@ -1,11 +1,12 @@
 mod common;
 
-use anyhow::Result;
 use indoc::indoc;
 
 #[cfg(unix)]
 use crate::common::make_executable;
 use crate::common::{TestEnv, cmd_snapshot};
+#[cfg(unix)]
+use anyhow::Result;
 
 fn config() -> &'static str {
     indoc! {r#"

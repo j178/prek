@@ -1,6 +1,6 @@
 use anyhow::Result;
 use assert_cmd::Command;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
