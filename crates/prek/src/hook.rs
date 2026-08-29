@@ -346,6 +346,15 @@ fn hook_error(hook: &str, error: impl Into<anyhow::Error>) -> Error {
     }
 }
 
+/// Workspace-local identity of a configured hook.
+///
+/// Hook indexes are scoped to a project config, so the project index is part of the key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct HookKey {
+    pub(crate) project_idx: usize,
+    pub(crate) hook_idx: usize,
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
@@ -498,6 +507,13 @@ impl Hook {
 
     pub(crate) fn project(&self) -> &Project {
         &self.project
+    }
+
+    pub(crate) fn key(&self) -> HookKey {
+        HookKey {
+            project_idx: self.project.idx(),
+            hook_idx: self.idx,
+        }
     }
 
     pub(crate) fn repo(&self) -> &Repo {

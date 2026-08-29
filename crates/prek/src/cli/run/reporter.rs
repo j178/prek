@@ -68,7 +68,7 @@ use rustc_hash::FxHashMap;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::cli::reporter::{ProgressReporter, SPINNER_TICKS, set_current_reporter};
-use crate::hook::Hook;
+use crate::hook::{Hook, HookKey};
 use crate::printer::Printer;
 use crate::process::OutputSink;
 use crate::workspace;
@@ -104,7 +104,7 @@ struct HookBar {
 impl HookBar {
     fn new(hook: &Hook, line_order: usize, progress: ProgressBar) -> Self {
         Self {
-            hook_key: HookKey::from_hook(hook),
+            hook_key: hook.key(),
             line_order,
             progress,
             output_bars: Vec::new(),
@@ -159,21 +159,6 @@ impl HookBar {
 
     fn visual_tail(&self) -> &ProgressBar {
         self.output_bars.last().unwrap_or(&self.progress)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct HookKey {
-    project_idx: usize,
-    hook_idx: usize,
-}
-
-impl HookKey {
-    fn from_hook(hook: &Hook) -> Self {
-        Self {
-            project_idx: hook.project().idx(),
-            hook_idx: hook.idx,
-        }
     }
 }
 
@@ -674,7 +659,7 @@ impl HookRunReporter {
 
     pub fn hide_run_result(&self, hook: &Hook) {
         // Hidden results never record `passed`, so they cannot enter the collapsed summary.
-        let hook_key = HookKey::from_hook(hook);
+        let hook_key = hook.key();
         let completed = {
             let mut groups = self.groups.lock().unwrap();
             groups
@@ -687,7 +672,7 @@ impl HookRunReporter {
     }
 
     pub fn on_run_result(&self, hook: &Hook, passed: bool) {
-        let hook_key = HookKey::from_hook(hook);
+        let hook_key = hook.key();
         let progress = {
             let mut groups = self.groups.lock().unwrap();
             let Some(group) = groups.get_mut(&hook_key.project_idx) else {
