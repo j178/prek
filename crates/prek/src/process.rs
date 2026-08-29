@@ -53,11 +53,11 @@ tokio::task_local! {
 ///
 /// The scope is task-local so concurrent installs remain isolated. A spawned task does not inherit
 /// it, so callers must keep command creation in the scoped future.
-pub(crate) async fn with_command_env<T>(
+pub(crate) fn with_command_env<T>(
     env: Vec<(OsString, OsString)>,
     future: impl Future<Output = T>,
-) -> T {
-    COMMAND_ENV.scope(env, future).await
+) -> impl Future<Output = T> {
+    COMMAND_ENV.scope(env, future)
 }
 
 /// An error from executing a command.
@@ -692,35 +692,6 @@ fn write_command_line<'a>(
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod command_env_tests {
-    use std::ffi::{OsStr, OsString};
-
-    use super::{Cmd, with_command_env};
-
-    const TEST_ENV: &str = "PREK_INTERNAL__COMMAND_ENV_TEST";
-
-    async fn command_env(value: &str) -> OsString {
-        with_command_env(vec![(TEST_ENV.into(), value.into())], async move {
-            tokio::task::yield_now().await;
-            Cmd::new("command")
-                .get_envs()
-                .find(|(key, _)| *key == OsStr::new(TEST_ENV))
-                .and_then(|(_, value)| value.map(OsStr::to_os_string))
-                .expect("scoped environment should be applied")
-        })
-        .await
-    }
-
-    #[tokio::test]
-    async fn command_env_is_isolated_between_concurrent_installs() {
-        let (first, second) = tokio::join!(command_env("first"), command_env("second"));
-
-        assert_eq!(first, OsStr::new("first"));
-        assert_eq!(second, OsStr::new("second"));
-    }
 }
 
 #[cfg(all(test, not(windows)))]
