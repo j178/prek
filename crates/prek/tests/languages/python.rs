@@ -1,6 +1,6 @@
 #[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::PathChild;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
@@ -250,38 +250,46 @@ fn additional_dependencies() {
 }
 
 #[test]
-fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
+fn additional_dependencies_in_remote_repo() {
     let context = TestEnv::new_git();
-    let repo = context.create_repo("python-hook");
-    let repo_path = repo.path();
-    repo_path
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r#"
-        - id: hello
-          name: hello
-          language: python
-          entry: pyecho Greetings from hook
-          additional_dependencies: [".[cli]"]
-    "#})?;
-    repo_path.child("module.py").write_str(indoc::indoc! {r#"
-        def greet():
-            print("Greetings from module")
-    "#})?;
-    repo_path.child("setup.py").write_str(indoc::indoc! {r#"
-        from setuptools import setup, find_packages
-
-        setup(
-            name="remote-hooks",
-            version="0.1.0",
-            py_modules=["module"],
-            extras_require={
-                "cli": ["pyecho-cli"]
-            }
+    let repo = context
+        .create_repo("python-hook")
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r#"
+            - id: hello
+              name: hello
+              language: python
+              entry: pyecho Greetings from hook
+              additional_dependencies: [".[cli]"]
+        "#},
         )
-    "#})?;
+        .with_file(
+            "module.py",
+            indoc::indoc! {r#"
+            def greet():
+                print("Greetings from module")
+        "#},
+        )
+        .with_file(
+            "setup.py",
+            indoc::indoc! {r#"
+            from setuptools import setup, find_packages
+
+            setup(
+                name="remote-hooks",
+                version="0.1.0",
+                py_modules=["module"],
+                extras_require={
+                    "cli": ["pyecho-cli"]
+                }
+            )
+        "#},
+        );
+    let repo_path = repo.path();
     repo.git().add_all().commit("Add manifest").tag("v0.1.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v0.1.0
@@ -304,8 +312,6 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Ensure that stderr from hooks is captured and shown to the user.
@@ -422,7 +428,7 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
         "{}[test]",
         context.work_dir().path().to_string_lossy()
     ))?;
-    let context = context.with_config(indoc::formatdoc! {r#"
+    context.write_config(indoc::formatdoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -452,20 +458,19 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
 
 #[test]
 fn configured_env_is_applied_to_python_install() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-    context
-        .work_dir()
-        .child("setup.py")
-        .write_str(indoc::indoc! {r#"
+    let context = TestEnv::new_git().with_file(
+        "setup.py",
+        indoc::indoc! {r#"
             import os, sys
             from setuptools import setup
             if os.environ.get("PREK_TEST_INSTALL_ENV") != "configured":
                 sys.exit("configured hook env was not applied during installation")
             setup(name="test-install-env", version="0.1.0")
-        "#})?;
+        "#},
+    );
 
     let dependency = serde_json::to_string(&context.work_dir().path().to_string_lossy())?;
-    let context = context.with_config(indoc::formatdoc! {r#"
+    context.write_config(indoc::formatdoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -564,11 +569,11 @@ fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
     // Find a Python executable, create a symlinked directory to its parent,
     // and prepend that to PATH so that prek picks up the symlinked path.
     let python_executable = which::which("python3")?;
-    let symlinked_bin = context.work_dir().child("symlinked-bin");
+    let symlinked_bin = context.child("symlinked-bin");
     symlink(python_executable.parent().unwrap(), &symlinked_bin)?;
     let new_path = prepend_paths(&[&*symlinked_bin])?;
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:

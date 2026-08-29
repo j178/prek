@@ -48,7 +48,7 @@ fn workspace_docker() {
                 verbose: true
     "};
 
-    context.setup_workspace(&["project1", "project2"], config);
+    context.write_workspace(["project1", "project2"], config);
 
     context.git().add_all();
 

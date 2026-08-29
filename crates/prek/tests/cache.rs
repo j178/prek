@@ -3,16 +3,32 @@ use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use serde_json::json;
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use crate::common::{TestEnv, cmd_snapshot};
 
 mod common;
 
+fn create_dirs<P>(root: &ChildPath, paths: impl IntoIterator<Item = P>) -> anyhow::Result<()>
+where
+    P: AsRef<Path>,
+{
+    for path in paths {
+        root.child(path).create_dir_all()?;
+    }
+    Ok(())
+}
+
+fn write_json(path: &ChildPath, value: &impl serde::Serialize) -> anyhow::Result<()> {
+    path.write_str(&serde_json::to_string_pretty(value)?)?;
+    Ok(())
+}
+
 #[test]
 fn cache_dir() {
     let context = TestEnv::new();
-    let home = context.work_dir().child("home");
+    let home = context.child("home");
 
     cmd_snapshot!(context, context.command().arg("cache").arg("dir").env("PREK_HOME", &*home), @r"
     success: true
@@ -25,60 +41,48 @@ fn cache_dir() {
 }
 
 #[test]
-fn cache_gc_verbose_shows_removed_entries() {
+fn cache_gc_verbose_shows_removed_entries() -> anyhow::Result<()> {
     let context = TestEnv::new().with_config("repos: []\n");
     let home = context.home_dir();
 
     // Seed store entries that will be removed.
-    home.child("repos/deadbeef")
-        .create_dir_all()
-        .expect("create repo dir");
-    home.child("repos/deadbeef/.prek-repo.json")
-        .write_str(
-            &serde_json::to_string_pretty(&json!({
-                "repo": "https://github.com/pre-commit/pre-commit-hooks",
+    write_json(
+        &home.child("repos/deadbeef/.prek-repo.json"),
+        &json!({
+            "repo": "https://github.com/pre-commit/pre-commit-hooks",
+            "rev": "v1.0.0",
+        }),
+    )?;
+    write_json(
+        &home.child("hooks/hook-env-dead/.prek-hook.json"),
+        &json!({
+            "schema_version": 1,
+            "language": "python",
+            "language_version": "3.12.0",
+            "repo": {
+                "url": "https://example.com/repo",
                 "rev": "v1.0.0",
-            }))
-            .expect("serialize repo marker"),
-        )
-        .expect("write repo marker");
-    home.child("hooks/hook-env-dead")
-        .create_dir_all()
-        .expect("create hook env dir");
-    home.child("hooks/hook-env-dead/.prek-hook.json")
-        .write_str(
-            &serde_json::to_string_pretty(&json!({
-                "schema_version": 1,
-                "language": "python",
-                "language_version": "3.12.0",
-                "repo": {
-                    "url": "https://example.com/repo",
-                    "rev": "v1.0.0",
-                },
-                "dependencies": [
-                    "dep1",
-                    "dep2",
-                    "dep3",
-                    "dep4",
-                    "dep5",
-                    "dep6",
-                    "dep7",
-                ],
-                "env_path": home.child("hooks/hook-env-dead").path(),
-                "toolchain": "/usr/bin/python3",
-                "extra": {},
-            }))
-            .expect("serialize hook marker"),
-        )
-        .expect("write hook marker");
+            },
+            "dependencies": [
+                "dep1",
+                "dep2",
+                "dep3",
+                "dep4",
+                "dep5",
+                "dep6",
+                "dep7",
+            ],
+            "env_path": home.child("hooks/hook-env-dead").path(),
+            "toolchain": "/usr/bin/python3",
+            "extra": {},
+        }),
+    )?;
 
-    home.child("cache/go")
-        .create_dir_all()
-        .expect("create cache dir");
+    home.child("cache/go").create_dir_all()?;
 
     // Have a tracked config that exists but references nothing (so everything above is unreferenced).
-    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
-    write_config_tracking_file(home, &[config_path.path()]).expect("write tracking file");
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
+    write_config_tracking_file(home, &[config_path.path()])?;
 
     cmd_snapshot!(context, context.command().args(["cache", "gc", "-v"]),@r"
     success: true
@@ -103,6 +107,8 @@ fn cache_gc_verbose_shows_removed_entries() {
 
     ----- stderr -----
     ");
+
+    Ok(())
 }
 
 #[test]
@@ -114,7 +120,7 @@ fn cache_clean() {
         )
         .with_file("home/cache/data.bin", "hello")
         .with_file("home/cache/nested/data.bin", "world!");
-    let home = context.work_dir().child("home");
+    let home = context.child("home");
 
     cmd_snapshot!(context, context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @"
     success: true
@@ -242,10 +248,15 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     ");
 
     // Add a few obviously-unused entries.
-    home.child("repos/unused-repo").create_dir_all()?;
-    home.child("hooks/unused-hook-env").create_dir_all()?;
-    home.child("tools/node").create_dir_all()?;
-    home.child("cache/go").create_dir_all()?;
+    create_dirs(
+        home,
+        [
+            "repos/unused-repo",
+            "hooks/unused-hook-env",
+            "tools/node",
+            "cache/go",
+        ],
+    )?;
 
     // Reduce hooks
     context.write_config(indoc::indoc! {r"
@@ -287,7 +298,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
           always_run: true
     "},
     );
-    let hook_repo = context.work_dir().child("hook-repo");
+    let hook_repo = context.child("hook-repo");
     let git = context.git_at(&hook_repo);
     let revision = git
         .init()
@@ -378,36 +389,34 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     let home = context.home_dir();
 
     // Track the config so GC has something to mark from.
-    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Seed "used" hook env markers so GC can read `.prek-hook.json` and retain the
     // corresponding tool versions per language.
+    create_dirs(
+        home,
+        [
+            "hooks/python-keep",
+            "hooks/node-keep",
+            "hooks/go-keep",
+            "hooks/ruby-remove",
+            "hooks/rust-remove",
+            "tools/python/3.12.0",
+            "tools/python/3.11.0",
+            "tools/node/22.0.0",
+            "tools/node/21.0.0",
+            "tools/go/1.24.0",
+            "tools/go/1.23.0",
+        ],
+    )?;
+
     let env_py = home.child("hooks/python-keep");
     let env_node = home.child("hooks/node-keep");
     let env_go = home.child("hooks/go-keep");
-    let env_ruby = home.child("hooks/ruby-remove");
-    let env_rust = home.child("hooks/rust-remove");
-    env_py.create_dir_all()?;
-    env_node.create_dir_all()?;
-    env_go.create_dir_all()?;
-    env_ruby.create_dir_all()?;
-    env_rust.create_dir_all()?;
-
     let py_keep = home.child("tools/python/3.12.0");
-    let py_remove = home.child("tools/python/3.11.0");
-    py_keep.create_dir_all()?;
-    py_remove.create_dir_all()?;
-
     let node_keep = home.child("tools/node/22.0.0");
-    let node_remove = home.child("tools/node/21.0.0");
-    node_keep.create_dir_all()?;
-    node_remove.create_dir_all()?;
-
     let go_keep = home.child("tools/go/1.24.0");
-    let go_remove = home.child("tools/go/1.23.0");
-    go_keep.create_dir_all()?;
-    go_remove.create_dir_all()?;
 
     // Match logic for local hooks: empty deps + language request is `Any` by default.
     let marker_py = json!({
@@ -419,9 +428,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         "toolchain": py_keep.child("bin/python").path(),
         "extra": {},
     });
-    env_py
-        .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&marker_py)?)?;
+    write_json(&env_py.child(".prek-hook.json"), &marker_py)?;
 
     let marker_node = json!({
         "schema_version": 1,
@@ -432,9 +439,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         "toolchain": node_keep.child("bin/node").path(),
         "extra": {},
     });
-    env_node
-        .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&marker_node)?)?;
+    write_json(&env_node.child(".prek-hook.json"), &marker_node)?;
 
     let marker_go = json!({
         "schema_version": 1,
@@ -445,9 +450,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         "toolchain": go_keep.child("bin/go").path(),
         "extra": {},
     });
-    env_go
-        .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&marker_go)?)?;
+    write_json(&env_go.child(".prek-hook.json"), &marker_go)?;
 
     cmd_snapshot!(context, context.command().args(["cache", "gc", "--dry-run", "-v"]), @r#"
     success: true
@@ -513,14 +516,25 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     let home = context.home_dir();
 
     // Track the config so GC has something to mark from.
-    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Seed a matching installed hook env marker, but use a toolchain path that is *not* inside
     // PREK_HOME/tools. This means we cannot positively identify a used tool version, so all
     // tool versions under the bucket are unused and should be pruned.
+    create_dirs(
+        home,
+        [
+            "hooks/python-keep",
+            "tools/python/3.12.0",
+            "tools/python/3.11.0",
+            "repos/.temp",
+            "tools/.temp",
+        ],
+    )?;
     let env_py = home.child("hooks/python-keep");
-    env_py.create_dir_all()?;
+    let py_312 = home.child("tools/python/3.12.0");
+    let py_311 = home.child("tools/python/3.11.0");
     let marker_py = json!({
         "schema_version": 1,
         "language": "python",
@@ -530,19 +544,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
         "toolchain": "/usr/bin/python3",
         "extra": {},
     });
-    env_py
-        .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&marker_py)?)?;
-
-    // Seed tool versions that should be removed.
-    let py_312 = home.child("tools/python/3.12.0");
-    let py_311 = home.child("tools/python/3.11.0");
-    py_312.create_dir_all()?;
-    py_311.create_dir_all()?;
-
-    // Add a temp dir to ensure it is not removed.
-    home.child("repos/.temp").create_dir_all()?;
-    home.child("tools/.temp").create_dir_all()?;
+    write_json(&env_py.child(".prek-hook.json"), &marker_py)?;
 
     cmd_snapshot!(context,
         context.command().args(["cache", "gc", "--dry-run", "-v"]),
@@ -655,7 +657,7 @@ fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
     let context = TestEnv::new().with_config("repos: []\n");
 
     let home = context.home_dir();
-    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     let old_patch = home.child("patches/old.patch");
@@ -714,15 +716,11 @@ fn write_config_tracking_file(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    let content = serde_json::to_string_pretty(&configs)?;
-    home.child("config-tracking.json").write_str(&content)?;
-    Ok(())
+    write_json(&home.child("config-tracking.json"), &configs)
 }
 
 fn write_patch_file(path: &ChildPath, content: &str, modified: SystemTime) -> anyhow::Result<()> {
-    let parent = path.path().parent().expect("patch file has parent");
-    fs_err::create_dir_all(parent)?;
-    fs_err::write(path.path(), content)?;
+    path.write_str(content)?;
     fs_err::OpenOptions::new()
         .write(true)
         .open(path.path())?
@@ -734,23 +732,27 @@ fn write_patch_file(path: &ChildPath, content: &str, modified: SystemTime) -> an
 fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     let context = TestEnv::new_git().with_config("repos: []\n");
 
-    let cwd = context.work_dir();
     context.git().add_all();
 
     let home = context.home_dir();
-    let config_path = cwd.child(PRE_COMMIT_CONFIG_YAML);
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Simulate config being deleted between runs.
     fs_err::remove_file(config_path.path())?;
 
     // Add a few obviously-unused entries to ensure GC sweeps.
-    home.child("repos/unused-repo").create_dir_all()?;
-    home.child("hooks/unused-hook-env").create_dir_all()?;
-    home.child("tools/node").create_dir_all()?;
-    home.child("cache/go").create_dir_all()?;
-    home.child("scratch/some-temp").create_dir_all()?;
-    home.child("patches/some-patch").create_dir_all()?;
+    create_dirs(
+        home,
+        [
+            "repos/unused-repo",
+            "hooks/unused-hook-env",
+            "tools/node",
+            "cache/go",
+            "scratch/some-temp",
+            "patches/some-patch",
+        ],
+    )?;
 
     cmd_snapshot!(context, context.command().arg("cache").arg("gc"), @r#"
     success: true
@@ -778,18 +780,22 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
     // Keep the tracked config intentionally invalid while exercising GC.
     let context = TestEnv::new_git().with_file(PRE_COMMIT_CONFIG_YAML, "repos: [\n");
 
-    let cwd = context.work_dir();
     context.git().add_all();
 
     let home = context.home_dir();
-    let config_path = cwd.child(PRE_COMMIT_CONFIG_YAML);
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Add a few obviously-unused entries to ensure GC sweeps even when config is unparsable.
-    home.child("repos/unused-repo").create_dir_all()?;
-    home.child("hooks/unused-hook-env").create_dir_all()?;
-    home.child("tools/node").create_dir_all()?;
-    home.child("cache/go").create_dir_all()?;
+    create_dirs(
+        home,
+        [
+            "repos/unused-repo",
+            "hooks/unused-hook-env",
+            "tools/node",
+            "cache/go",
+        ],
+    )?;
 
     cmd_snapshot!(context, context.command().arg("cache").arg("gc"), @r#"
     success: true
@@ -812,19 +818,23 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
 fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
     let context = TestEnv::new_git().with_config("repos: []\n");
 
-    let cwd = context.work_dir();
     context.git().add_all();
 
     let home = context.home_dir();
     // Seed tracking with a missing config to force sweeping everything.
-    let missing_config_path = cwd.child("missing-config.yaml");
+    let missing_config_path = context.child("missing-config.yaml");
     write_config_tracking_file(home, &[missing_config_path.path()])?;
 
-    home.child("repos/unused-repo").create_dir_all()?;
-    home.child("hooks/unused-hook-env").create_dir_all()?;
-    home.child("tools/node").create_dir_all()?;
-    home.child("cache/go").create_dir_all()?;
-    home.child("scratch/some-temp").create_dir_all()?;
+    create_dirs(
+        home,
+        [
+            "repos/unused-repo",
+            "hooks/unused-hook-env",
+            "tools/node",
+            "cache/go",
+            "scratch/some-temp",
+        ],
+    )?;
 
     cmd_snapshot!(context, context.command().arg("cache").arg("gc").arg("--dry-run"), @r#"
     success: true

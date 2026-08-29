@@ -1,14 +1,8 @@
-use anyhow::Result;
-use assert_fs::fixture::PathChild;
-
-use crate::common::make_executable;
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[cfg(unix)]
 mod unix {
     use super::*;
-
-    use assert_fs::fixture::PathChild;
 
     #[test]
     fn script_run() {
@@ -49,7 +43,7 @@ mod unix {
     }
 
     #[test]
-    fn workspace_script_run() -> Result<()> {
+    fn workspace_script_run() {
         let config = indoc::indoc! {r#"
         repos:
           - repo: local
@@ -64,25 +58,23 @@ mod unix {
         "#};
         let context = TestEnv::new_git()
             .with_config(config)
-            .with_file(
+            .with_executable_file(
                 "script.sh",
                 indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "$MESSAGE!"
         "#},
             )
-            .with_file("child/.pre-commit-config.yaml", config)
-            .with_file(
+            .with_project_config("child", config)
+            .with_executable_file(
                 "child/script.sh",
                 indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "$MESSAGE from child!"
         "#},
             );
-        let child = context.work_dir().child("child");
+        let child = context.child("child");
 
-        make_executable(context.work_dir().child("script.sh"))?;
-        make_executable(child.child("script.sh"))?;
         context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r#"
@@ -117,12 +109,10 @@ mod unix {
 
         ----- stderr -----
         ");
-
-        Ok(())
     }
 
     #[test]
-    fn local_repo_bash_shebang() -> Result<()> {
+    fn local_repo_bash_shebang() {
         let context = TestEnv::new_git()
             .with_config(indoc::indoc! {r"
         repos:
@@ -134,15 +124,13 @@ mod unix {
                 entry: ./echo.sh
                 verbose: true
         "})
-            .with_file(
+            .with_executable_file(
                 "echo.sh",
                 indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#},
             );
-        let script = context.work_dir().child("echo.sh");
-        make_executable(&script)?;
 
         context.git().add_all();
 
@@ -158,8 +146,6 @@ mod unix {
 
         ----- stderr -----
         ");
-
-        Ok(())
     }
 
     #[test]
@@ -205,7 +191,7 @@ mod unix {
 /// Test that a script with a shebang line works correctly on Windows.
 /// The interpreter must exist in the PATH, the script is not needed to be executable.
 #[test]
-fn windows_script_run() -> Result<()> {
+fn windows_script_run() {
     let context = TestEnv::new_git()
         .with_config(indoc::indoc! {r"
     repos:
@@ -217,15 +203,13 @@ fn windows_script_run() -> Result<()> {
             entry: ./echo.sh
             verbose: true
     "})
-        .with_file(
+        .with_executable_file(
             "echo.sh",
             indoc::indoc! {r#"
         #!/usr/bin/env python3
         print("Hello, World!")
     "#},
         );
-    let script = context.work_dir().child("echo.sh");
-    make_executable(&script)?;
 
     context.git().add_all();
 
@@ -241,6 +225,4 @@ fn windows_script_run() -> Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }

@@ -5,7 +5,7 @@ use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 use url::Url;
 
-use crate::common::{TestEnv, cmd_snapshot, make_executable, remove_bin_from_path};
+use crate::common::{TestEnv, cmd_snapshot, remove_bin_from_path};
 
 #[test]
 fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
@@ -22,19 +22,17 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
         }
     "#},
         )
-        .with_file(
+        .with_executable_file(
             "node-env-tool/cli.js",
             indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("exec node env ok");
     "#},
         );
-    let package = context.work_dir().child("node-env-tool");
-    let cli = package.child("cli.js");
-    make_executable(cli.path())?;
+    let package = context.child("node-env-tool");
 
     let dependency = serde_json::to_string(package.path())?;
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -248,44 +246,45 @@ fn additional_dependencies() {
 /// propagation bug rejects root-level Git dependencies with EALLOWGIT:
 /// <https://github.com/npm/cli/issues/9189>
 #[test]
-fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
+fn remote_package_is_installed_from_git() {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("remote-node-hook");
-
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
-        - id: remote-node-hook
-          name: remote-node-hook
-          language: node
-          entry: remote-node-hook
-          always_run: true
-          pass_filenames: false
-    "})?;
-    hook_repo
-        .path()
-        .child("package.json")
-        .write_str(indoc::indoc! {r#"
-        {
-          "name": "remote-node-hook",
-          "version": "1.0.0",
-          "bin": {
-            "remote-node-hook": "cli.js"
-          },
-          "dependencies": {
-            "is-number": "7.0.0"
-          }
-        }
-    "#})?;
-    let cli = hook_repo.path().child("cli.js");
-    cli.write_str(indoc::indoc! {r#"
+    let hook_repo = context
+        .create_repo("remote-node-hook")
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
+                - id: remote-node-hook
+                  name: remote-node-hook
+                  language: node
+                  entry: remote-node-hook
+                  always_run: true
+                  pass_filenames: false
+            "},
+        )
+        .with_file(
+            "package.json",
+            indoc::indoc! {r#"
+                {
+                  "name": "remote-node-hook",
+                  "version": "1.0.0",
+                  "bin": {
+                    "remote-node-hook": "cli.js"
+                  },
+                  "dependencies": {
+                    "is-number": "7.0.0"
+                  }
+                }
+            "#},
+        )
+        .with_executable_file(
+            "cli.js",
+            indoc::indoc! {r#"
         #!/usr/bin/env node
         const isNumber = require("is-number");
         if (!isNumber(42)) process.exit(1);
         console.log("remote hook ok");
-    "#})?;
-    make_executable(cli.path())?;
+    "#},
+        );
 
     hook_repo
         .git()
@@ -293,7 +292,7 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
         .commit("Add remote Node hook")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -315,8 +314,6 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// A remote Node package's `prepare` script must be able to use its dev dependencies.
@@ -327,68 +324,65 @@ fn remote_package_is_installed_from_git() -> anyhow::Result<()> {
 /// Installing it as a Git package makes npm prepare a temporary clone after installing
 /// its development dependencies.
 #[test]
-fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
+fn remote_prepare_uses_dev_dependencies() {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("prepared-node-hook");
-
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
-        - id: prepared-node-hook
-          name: prepared-node-hook
-          language: node
-          entry: prepared-node-hook
-          always_run: true
-          pass_filenames: false
-    "})?;
-    hook_repo
-        .path()
-        .child("package.json")
-        .write_str(indoc::indoc! {r#"
-        {
-          "name": "prepared-node-hook",
-          "version": "1.0.0",
-          "bin": {
-            "prepared-node-hook": "dist/cli.js"
-          },
-          "files": [
-            "dist"
-          ],
-          "scripts": {
-            "prepare": "tsc"
-          },
-          "devDependencies": {
-            "typescript": "5.6.3"
-          }
-        }
-    "#})?;
-    hook_repo
-        .path()
-        .child("tsconfig.json")
-        .write_str(indoc::indoc! {r#"
-        {
-          "compilerOptions": {
-            "module": "CommonJS",
-            "outDir": "dist",
-            "target": "ES2020"
-          },
-          "include": [
-            "src"
-          ]
-        }
-    "#})?;
-    hook_repo
-        .path()
-        .child(".gitignore")
-        .write_str("dist/\nnode_modules/\n")?;
-
-    let source = hook_repo.path().child("src");
-    source.create_dir_all()?;
-    source.child("cli.ts").write_str(indoc::indoc! {r#"
-        #!/usr/bin/env node
-        console.log("prepared hook ok");
-    "#})?;
+    let hook_repo = context
+        .create_repo("prepared-node-hook")
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
+                - id: prepared-node-hook
+                  name: prepared-node-hook
+                  language: node
+                  entry: prepared-node-hook
+                  always_run: true
+                  pass_filenames: false
+            "},
+        )
+        .with_file(
+            "package.json",
+            indoc::indoc! {r#"
+                {
+                  "name": "prepared-node-hook",
+                  "version": "1.0.0",
+                  "bin": {
+                    "prepared-node-hook": "dist/cli.js"
+                  },
+                  "files": [
+                    "dist"
+                  ],
+                  "scripts": {
+                    "prepare": "tsc"
+                  },
+                  "devDependencies": {
+                    "typescript": "5.6.3"
+                  }
+                }
+            "#},
+        )
+        .with_file(
+            "tsconfig.json",
+            indoc::indoc! {r#"
+                {
+                  "compilerOptions": {
+                    "module": "CommonJS",
+                    "outDir": "dist",
+                    "target": "ES2020"
+                  },
+                  "include": [
+                    "src"
+                  ]
+                }
+            "#},
+        )
+        .with_file(".gitignore", "dist/\nnode_modules/\n")
+        .with_file(
+            "src/cli.ts",
+            indoc::indoc! {r#"
+                #!/usr/bin/env node
+                console.log("prepared hook ok");
+            "#},
+        );
 
     hook_repo
         .git()
@@ -396,7 +390,7 @@ fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
         .commit("Add source-built Node hook")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -418,8 +412,6 @@ fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Test that lowercase npm config inherited from `npm exec` cannot redirect installs.
@@ -438,19 +430,17 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
         }
     "#},
         )
-        .with_file(
+        .with_executable_file(
             "prefix-fixture/cli.js",
             indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("prefix fixture ok")
     "#},
         );
-    let package_dir = context.work_dir().child("prefix-fixture");
-    let cli = package_dir.child("cli.js");
-    make_executable(cli.path())?;
+    let package_dir = context.child("prefix-fixture");
 
     let dependency = serde_json::to_string(package_dir.path())?;
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -575,27 +565,25 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
     let context = TestEnv::new_git();
 
     // Installing this additional dependency forces npm to invoke Git during environment setup.
-    let dependency_repo = context.create_repo("sentinel-node-dependency");
-    dependency_repo
-        .path()
-        .child("package.json")
-        .write_str(indoc::indoc! {r#"
+    let dependency_repo = context.create_repo("sentinel-node-dependency").with_file(
+        "package.json",
+        indoc::indoc! {r#"
         {
           "name": "sentinel-node-dependency",
           "version": "1.0.0"
         }
-    "#})?;
+    "#},
+    );
     dependency_repo
         .git()
         .add_all()
         .commit("Add sentinel Node dependency");
 
-    let hook_repo = context.create_repo("sentinel-node-hook");
-
-    hook_repo
-        .path()
-        .child("package.json")
-        .write_str(indoc::indoc! {r#"
+    let hook_repo = context
+        .create_repo("sentinel-node-hook")
+        .with_file(
+            "package.json",
+            indoc::indoc! {r#"
         {
           "name": "sentinel-node-tool",
           "version": "1.0.0",
@@ -603,24 +591,26 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
             "sentinel-node-tool": "cli.js"
           }
         }
-    "#})?;
-    let cli = hook_repo.path().child("cli.js");
-    cli.write_str(indoc::indoc! {r#"
+    "#},
+        )
+        .with_executable_file(
+            "cli.js",
+            indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("sentinel node ok");
-    "#})?;
-    make_executable(cli.path())?;
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
+    "#},
+        )
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
         - id: sentinel-node
           name: sentinel-node
           entry: sentinel-node-tool
           language: node
           always_run: true
           pass_filenames: false
-    "})?;
+    "},
+        );
 
     hook_repo
         .git()
@@ -628,7 +618,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
         .commit("Add sentinel Node hook")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {repo}
             rev: v1.0.0
@@ -652,7 +642,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
 
     let dependency_url = Url::from_file_path(dependency_repo.path().path())
         .map_err(|()| anyhow::anyhow!("Failed to create dependency repository URL"))?;
-    let global_gitconfig = context.work_dir().child("global.gitconfig");
+    let global_gitconfig = context.child("global.gitconfig");
     // Keep the dependency local while requiring npm's Git subprocess to inherit global config.
     context
         .git()
@@ -664,7 +654,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
         .assert()
         .success();
 
-    let git_dir = context.work_dir().child(".git");
+    let git_dir = context.child(".git");
     // Simulate the repository-local variables Git exports to hooks from a linked worktree.
     context
         .run()

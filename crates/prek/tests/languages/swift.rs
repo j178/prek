@@ -1,4 +1,3 @@
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -114,40 +113,38 @@ fn health_check() {
 
 /// Test that a Swift Package.swift is built and the executable is available.
 #[test]
-fn local_package_build() -> anyhow::Result<()> {
-    let swift_hook = TestEnv::new_git();
-
+fn local_package_build() {
     // Create a minimal Swift package
-    swift_hook
-        .work_dir()
-        .child("Package.swift")
-        .write_str(indoc::indoc! {r#"
-        // swift-tools-version:6.0
-        import PackageDescription
+    let swift_hook = TestEnv::new_git()
+        .with_file(
+            "Package.swift",
+            indoc::indoc! {r#"
+                // swift-tools-version:6.0
+                import PackageDescription
 
-        let package = Package(
-            name: "prek-swift-test",
-            targets: [
-                .executableTarget(name: "prek-swift-test", path: "Sources")
-            ]
+                let package = Package(
+                    name: "prek-swift-test",
+                    targets: [
+                        .executableTarget(name: "prek-swift-test", path: "Sources")
+                    ]
+                )
+            "#},
         )
-    "#})?;
-    swift_hook.work_dir().child("Sources").create_dir_all()?;
-    swift_hook
-        .work_dir()
-        .child("Sources/main.swift")
-        .write_str(indoc::indoc! {r#"
-        print("Hello from Swift package!")
-    "#})?;
-    swift_hook
-        .work_dir()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
-        - id: swift-package-test
-          name: swift-package-test
-          entry: prek-swift-test
-          language: swift
-    "})?;
+        .with_file(
+            "Sources/main.swift",
+            indoc::indoc! {r#"
+                print("Hello from Swift package!")
+            "#},
+        )
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
+                - id: swift-package-test
+                  name: swift-package-test
+                  entry: prek-swift-test
+                  language: swift
+            "},
+        );
     swift_hook
         .git()
         .add_all()
@@ -157,7 +154,7 @@ fn local_package_build() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
 
     let hook_url = swift_hook.work_dir().to_str().unwrap();
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {hook_url}
             rev: v1.0
@@ -181,6 +178,4 @@ fn local_package_build() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }

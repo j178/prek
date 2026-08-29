@@ -77,12 +77,14 @@ fn reuses_managed_mise() {
 
 #[test]
 fn system_mise_installs_and_activates_dependencies() -> Result<()> {
-    let context = TestEnv::new_git();
+    // Early miserc discovery must not read configuration from the calling project.
+    let context = TestEnv::new_git().with_file(".miserc.toml", "not valid = [");
 
-    let hook_repo = context.create_repo("mise-system-hook");
-    fs_err::write(
-        hook_repo.path().join(".pre-commit-hooks.yaml"),
-        indoc::indoc! {r#"
+    let hook_repo = context
+        .create_repo("mise-system-hook")
+        .with_file(
+            ".pre-commit-hooks.yaml",
+            indoc::indoc! {r#"
             - id: mise-system
               name: mise system
               language: mise
@@ -93,9 +95,9 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
               verbose: true
               pass_filenames: false
         "#},
-    )?;
-    // Provisioning must not read configuration from the hook repository.
-    fs_err::write(hook_repo.path().join("mise.toml"), "not valid = [")?;
+        )
+        // Provisioning must not read configuration from the hook repository.
+        .with_file("mise.toml", "not valid = [");
     hook_repo.git().add_all().commit("Add mise hook");
     let rev = hook_repo.git().rev_parse("HEAD")?;
 
@@ -115,15 +117,13 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     #[cfg(windows)]
     fs_err::write(system_bin.join("zoxide.cmd"), "@exit /b 1\r\n")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: '{}'
             rev: {}
             hooks:
               - id: mise-system
     ", hook_repo.path().display(), rev});
-    // Early miserc discovery must not read configuration from the calling project.
-    fs_err::write(context.work_dir().join(".miserc.toml"), "not valid = [")?;
     context.git().add_all();
 
     let ambient_data = context.work_dir().join("ambient-mise-data");

@@ -1,4 +1,3 @@
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -36,30 +35,28 @@ fn additional_dependencies() {
 }
 
 #[test]
-fn pre_commit_channel() -> anyhow::Result<()> {
+fn pre_commit_channel() {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("coursier-hook");
-
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
+    let hook_repo = context
+        .create_repo("coursier-hook")
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
             - id: echo-java
               name: echo-java
               language: coursier
               entry: echo-java Hello World from coursier
-        "})?;
-
-    let channel_dir = hook_repo.path().child(".pre-commit-channel");
-    channel_dir.create_dir_all()?;
-    channel_dir
-        .child("echo-java.json")
-        .write_str(indoc::indoc! {r#"
+        "},
+        )
+        .with_file(
+            ".pre-commit-channel/echo-java.json",
+            indoc::indoc! {r#"
             {
               "repositories": ["central"],
               "dependencies": ["io.get-coursier:echo:latest.stable"]
             }
-        "#})?;
+        "#},
+        );
 
     hook_repo
         .git()
@@ -67,7 +64,7 @@ fn pre_commit_channel() -> anyhow::Result<()> {
         .commit("Add coursier hook")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -92,8 +89,6 @@ fn pre_commit_channel() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]

@@ -42,9 +42,11 @@ fn run_basic() {
                 files: ^file\.txt$
               - id: check-json
     "})
-        .with_file("file.txt", "z-project\na-project\n")
-        .with_file("valid.json", "{}")
-        .with_file("main.py", r#"print "abc"  "#);
+        .with_files([
+            ("file.txt", "z-project\na-project\n"),
+            ("valid.json", "{}"),
+            ("main.py", r#"print "abc"  "#),
+        ]);
 
     context.git().add_all();
 
@@ -105,9 +107,11 @@ fn fast_path_checks_filenames_from_entry_and_args() {
                 args: [from-args.json]
                 files: ^selected\.json$
     "})
-        .with_file("from-entry.json", "invalid")
-        .with_file("from-args.json", "invalid")
-        .with_file("selected.json", "{}");
+        .with_files([
+            ("from-entry.json", "invalid"),
+            ("from-args.json", "invalid"),
+            ("selected.json", "{}"),
+        ]);
 
     context.git().add_all();
 
@@ -141,7 +145,7 @@ fn run_preserves_stdout_stderr_order() {
         "#},
     );
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -284,13 +288,7 @@ fn run_tracks_relative_config_as_absolute_path() -> Result<()> {
 
     assert_eq!(
         tracked,
-        vec![
-            context
-                .work_dir()
-                .child(PRE_COMMIT_CONFIG_YAML)
-                .path()
-                .to_path_buf()
-        ]
+        vec![context.child(PRE_COMMIT_CONFIG_YAML).path().to_path_buf()]
     );
 
     Ok(())
@@ -318,9 +316,11 @@ fn run_glob_patterns_with_multiple_hooks() {
                   glob: "**/*.md"
                 verbose: true
     "#})
-        .with_file("src/main.py", "print('hi')")
-        .with_file("docs/readme.md", "# Docs")
-        .with_file("notes.txt", "note");
+        .with_files([
+            ("src/main.py", "print('hi')"),
+            ("docs/readme.md", "# Docs"),
+            ("notes.txt", "note"),
+        ]);
 
     context.git().add_all();
 
@@ -497,10 +497,12 @@ fn same_repo() {
             hooks:
               - id: trailing-whitespace
     "})
-        .with_file("file.txt", "Hello, world!\n")
-        .with_file("valid.json", "{}")
-        .with_file("invalid.json", "{}")
-        .with_file("main.py", r#"print "abc"  "#);
+        .with_files([
+            ("file.txt", "Hello, world!\n"),
+            ("valid.json", "{}"),
+            ("invalid.json", "{}"),
+            ("main.py", r#"print "abc"  "#),
+        ]);
 
     context.git().add_all();
 
@@ -576,28 +578,29 @@ fn hook_repo_placeholder_expands_to_local_project() {
 }
 
 #[test]
-fn hook_repo_placeholder_expands_to_remote_checkout() -> Result<()> {
+fn hook_repo_placeholder_expands_to_remote_checkout() {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("hook-repo-placeholder");
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r#"
+    let hook_repo = context
+        .create_repo("hook-repo-placeholder")
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r#"
             - id: hook-repo-remote
               name: remote
               language: system
               entry: git -C "{hook_repo}" cat-file -e HEAD:hook-repo-marker
               always_run: true
               pass_filenames: false
-    "#})?;
-    hook_repo.path().child("hook-repo-marker").write_str("")?;
+        "#},
+        )
+        .with_file("hook-repo-marker", "");
     hook_repo
         .git()
         .add_all()
         .commit("Add remote hook")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: '{}'
             rev: v1.0.0
@@ -614,8 +617,6 @@ fn hook_repo_placeholder_expands_to_remote_checkout() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 /// Test multiple hook IDs scenarios.
@@ -1351,8 +1352,8 @@ fn priority_fail_fast_stops_later_groups() {
 fn explicitly_skipped_hook_does_not_affect_priority_group_outcome() {
     let context = TestEnv::new_git().with_file("file.txt", "hello\n");
 
-    let context = context
-        .with_config(indoc::indoc! {r#"
+    context
+        .write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -1408,7 +1409,7 @@ fn explicitly_skipped_hook_does_not_affect_priority_group_outcome() {
 fn priority_group_modified_files_is_group_failure_and_output_is_indented() {
     let context = TestEnv::new_git().with_file("file.txt", "hello\n");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -1492,7 +1493,7 @@ fn config_not_staged() {
 
     context.git().add_all();
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -1518,7 +1519,7 @@ fn config_outside_repo() -> Result<()> {
     let context = TestEnv::new();
 
     // Initialize a git repository in ./work.
-    let root = context.work_dir().child("work");
+    let root = context.child("work");
     root.create_dir_all()?;
     context.git_at(&root).init();
 
@@ -1686,7 +1687,7 @@ fn hide_status_filters_hook_reports() {
 fn hide_status_uses_final_display_status() {
     let context = TestEnv::new_git().with_file("file.txt", "hello\n");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -1894,7 +1895,7 @@ fn files_and_exclude() {
         .with_file("main.py", r#"print "abc"  "#);
 
     // Global files and exclude.
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         files: file.txt
         repos:
           - repo: local
@@ -1987,7 +1988,7 @@ fn file_types() {
         .with_file("json.json", "{}\n  ")
         .with_file("main.py", r#"print "abc"  "#);
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -2209,8 +2210,7 @@ fn subdirectory() {
                 entry: python3 -c 'import sys; print(sys.argv[1]); exit(1)'
                 always_run: true
     "});
-    let cwd = context.work_dir();
-    let child = cwd.child("foo/bar/baz");
+    let child = context.child("foo/bar/baz");
 
     context.git().add_all();
 
@@ -2285,7 +2285,7 @@ fn log_file() -> Result<()> {
                 log_file: log.txt
         "#},
     );
-    let config_dir = context.work_dir().child("config");
+    let config_dir = context.child("config");
     let config_file = config_dir.child(PRE_COMMIT_CONFIG_YAML);
     context.git().add_all();
 
@@ -2387,12 +2387,11 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
                 files: ^test\.py$
    "#});
 
-    let cwd = context.work_dir();
     context.git().add(PRE_COMMIT_CONFIG_YAML);
 
     context.write_file("intent.txt", "preserve me\n");
     context
-        .git_at(cwd)
+        .git()
         .command()
         .arg("add")
         .arg("--intent-to-add")
@@ -2422,7 +2421,7 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     assert_eq!(context.read("test.py"), "a=1\nb = 2\n");
 
     let output = context
-        .git_at(cwd)
+        .git()
         .command()
         .arg("diff")
         .arg("--diff-filter=A")
@@ -2489,8 +2488,6 @@ fn merge_conflicts() {
     let context = TestEnv::new_git().with_file("file.txt", "Hello, world!");
 
     // Create a merge conflict.
-    let cwd = context.work_dir();
-
     context.git().add_all().commit("Initial commit");
 
     context.git().branch("feature").checkout("feature");
@@ -2502,14 +2499,14 @@ fn merge_conflicts() {
     context.git().add_all().commit("Master commit");
 
     context
-        .git_at(cwd)
+        .git()
         .command()
         .arg("merge")
         .arg("feature")
         .assert()
         .code(1);
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -2664,20 +2661,18 @@ fn skipped_remote_repo_is_not_cloned() {
 }
 
 #[test]
-fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
+fn skipped_same_key_remote_repo_entry_is_not_initialized() {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("duplicate-key-hook");
-
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
+    let hook_repo = context.create_repo("duplicate-key-hook").with_file(
+        PRE_COMMIT_HOOKS_YAML,
+        indoc::indoc! {r"
         - id: test-hook
           name: Test Hook
           entry: echo ok
           language: system
           always_run: true
-    "})?;
+    "},
+    );
 
     hook_repo
         .git()
@@ -2685,7 +2680,7 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
         .commit("Initial commit")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {repo}
             rev: v1.0.0
@@ -2706,8 +2701,6 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() -> Result<()> {
         .arg("missing-hook")
         .assert()
         .success();
-
-    Ok(())
 }
 
 #[test]
@@ -2967,11 +2960,13 @@ fn run_glob() {
                 verbose: true
                 types: [text]
     "})
-        .with_file("root.rs", "fn main() {}")
-        .with_file("src/lib.rs", "pub fn lib() {}")
-        .with_file("src/lib.py", "print('hello')")
-        .with_file("src/nested/mod.rs", "pub mod nested;")
-        .with_file("docs/readme.md", "# Readme");
+        .with_files([
+            ("root.rs", "fn main() {}"),
+            ("src/lib.rs", "pub fn lib() {}"),
+            ("src/lib.py", "print('hello')"),
+            ("src/nested/mod.rs", "pub mod nested;"),
+            ("docs/readme.md", "# Readme"),
+        ]);
 
     context.git().add_all();
     context.write_file("src/untracked.rs", "pub fn untracked() {}");
@@ -3066,7 +3061,6 @@ fn run_directory() {
     "})
         .with_file("dir1/file.txt", "Hello, world!")
         .with_file("dir2/file.txt", "Hello, world!");
-
     let cwd = context.work_dir();
 
     context.git().add_all();
@@ -3537,7 +3531,7 @@ fn selectors_completion() -> Result<()> {
     write_project_config(&app_lib, &[("lib-hook", "Lib Hook")])?;
 
     // Unrelated non-project dir should not appear in subdir suggestions
-    cwd.child("scratch").create_dir_all()?;
+    context.child("scratch").create_dir_all()?;
 
     cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
     success: true
@@ -3710,10 +3704,10 @@ fn reuse_env() -> Result<()> {
             "local_pkg/local_pkg.py",
             "def hello():\n     print('hello')\n",
         );
-    let pkg_dir = context.work_dir().child("local_pkg");
+    let pkg_dir = context.child("local_pkg");
 
     let dependency = serde_json::to_string(&std::path::absolute(pkg_dir.path())?)?;
-    let context = context.with_config(indoc::formatdoc! {r#"
+    context.write_config(indoc::formatdoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -4044,7 +4038,7 @@ fn show_diff_on_failure() {
     ");
 
     // Run in the `app` subproject.
-    let app = context.work_dir().child("app");
+    let app = context.child("app");
     context.write_file("app/file.txt", "Original line\n");
     context.write_file("app/.pre-commit-config.yaml", config);
 
@@ -4243,10 +4237,7 @@ fn run_log_file() {
 
     ----- stderr -----
     ");
-    context
-        .work_dir()
-        .child("log")
-        .assert(predicate::path::exists());
+    context.child("log").assert(predicate::path::exists());
 }
 
 /// Test `language_version: system` works and disables downloading.
@@ -4447,7 +4438,7 @@ fn expands_tilde_in_prek_home() -> Result<()> {
     "});
     context.git().add_all();
 
-    let fake_home = context.work_dir().child("fake-home");
+    let fake_home = context.child("fake-home");
     fake_home.create_dir_all()?;
 
     cmd_snapshot!(context, context
@@ -4470,10 +4461,7 @@ fn expands_tilde_in_prek_home() -> Result<()> {
     store.child("scratch").assert(predicate::path::is_dir());
 
     // Ensure we didn't create a literal `./~` directory under the project.
-    context
-        .work_dir()
-        .child("~")
-        .assert(predicate::path::missing());
+    context.child("~").assert(predicate::path::missing());
 
     Ok(())
 }
@@ -4493,8 +4481,6 @@ fn run_with_tree_object_as_ref() {
     "})
         .with_file("file1.txt", "hello");
 
-    let cwd = context.work_dir();
-
     context.git().add_all().commit("Initial commit");
 
     // Create some changes and stage them
@@ -4503,7 +4489,7 @@ fn run_with_tree_object_as_ref() {
 
     // Get the tree object from the staged changes
     let tree_output = context
-        .git_at(cwd)
+        .git()
         .command()
         .arg("write-tree")
         .output()
@@ -4545,9 +4531,7 @@ fn pass_filenames_1_limits_batch_size() {
                 require_serial: true
                 verbose: true
     "#})
-        .with_file("a.txt", "a")
-        .with_file("b.txt", "b")
-        .with_file("c.txt", "c");
+        .with_files([("a.txt", "a"), ("b.txt", "b"), ("c.txt", "c")]);
 
     context.git().add_all();
 
@@ -4583,11 +4567,13 @@ fn pass_filenames_2_limits_batch_size() {
                     require_serial: true
                     verbose: true
         "#})
-        .with_file("a.txt", "a")
-        .with_file("b.txt", "b")
-        .with_file("c.txt", "c")
-        .with_file("d.txt", "d")
-        .with_file("e.txt", "e");
+        .with_files([
+            ("a.txt", "a"),
+            ("b.txt", "b"),
+            ("c.txt", "c"),
+            ("d.txt", "d"),
+            ("e.txt", "e"),
+        ]);
 
     context.git().add_all();
 

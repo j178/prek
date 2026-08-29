@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
@@ -5,7 +7,7 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 
-use crate::common::{TestEnv, cmd_snapshot, snapshot};
+use crate::common::{TestEnv, TestGit, cmd_snapshot, snapshot};
 
 mod common;
 
@@ -13,22 +15,27 @@ const BASE_TIMESTAMP: u64 = 1_000_000_000;
 const INCREMENTING_STEP_SECS: u64 = 100;
 const FIXED_STEP_SECS: u64 = 0;
 
+fn git_command_at(git: &TestGit<'_>, timestamp: u64) -> Command {
+    let date = format!("{timestamp} +0000");
+    let mut command = git.command();
+    command
+        .env("GIT_AUTHOR_DATE", &date)
+        .env("GIT_COMMITTER_DATE", date);
+    command
+}
+
 fn context_with_commit_sha_filter() -> TestEnv {
     TestEnv::new_git().with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]")
 }
 
 /// Helper function to create a local git repository with hooks and incrementing timestamps.
-fn create_local_git_repo(context: &TestEnv, repo_name: &str, tags: &[&str]) -> Result<String> {
+fn create_local_git_repo(context: &TestEnv, repo_name: &str, tags: &[&str]) -> String {
     create_local_git_repo_with_timestamps(context, repo_name, tags, INCREMENTING_STEP_SECS)
 }
 
 /// Like `create_local_git_repo`, but all commits and tags share a single fixed timestamp.
 /// Simulates mirror repos where all tags are imported simultaneously.
-fn create_local_git_repo_fixed_ts(
-    context: &TestEnv,
-    repo_name: &str,
-    tags: &[&str],
-) -> Result<String> {
+fn create_local_git_repo_fixed_ts(context: &TestEnv, repo_name: &str, tags: &[&str]) -> String {
     create_local_git_repo_with_timestamps(context, repo_name, tags, FIXED_STEP_SECS)
 }
 
@@ -37,7 +44,7 @@ fn create_local_git_repo_with_timestamps(
     repo_name: &str,
     tags: &[&str],
     timestamp_step_secs: u64,
-) -> Result<String> {
+) -> String {
     let mut timestamp = BASE_TIMESTAMP;
     let tags = tags
         .iter()
@@ -64,7 +71,9 @@ fn create_local_git_repo_with_tag_ages(
         .map(|(tag, days_ago)| (*tag, now.saturating_sub(days_ago * 86400)))
         .collect::<Vec<_>>();
 
-    create_local_git_repo_with_tag_timestamps(context, repo_name, &tags, now)
+    Ok(create_local_git_repo_with_tag_timestamps(
+        context, repo_name, &tags, now,
+    ))
 }
 
 fn create_local_git_repo_with_tag_timestamps(
@@ -72,85 +81,71 @@ fn create_local_git_repo_with_tag_timestamps(
     repo_name: &str,
     tags: &[(&str, u64)],
     tip_timestamp: u64,
-) -> Result<String> {
-    let repo = context.create_repo(repo_name);
-    let repo_dir = repo.path();
+) -> String {
+    let repo = context.create_repo(repo_name).with_file(
+        ".pre-commit-hooks.yaml",
+        indoc::indoc! {r#"
+            - id: test-hook
+              name: Test Hook
+              entry: echo
+              language: system
+            - id: another-hook
+              name: Another Hook
+              entry: python3 -c 'print("hello")'
+              language: python
+        "#},
+    );
     let initial_timestamp = tags
         .first()
         .map_or(BASE_TIMESTAMP, |(_, timestamp)| timestamp.saturating_sub(1));
 
-    // Create .pre-commit-hooks.yaml
-    repo_dir
-        .child(".pre-commit-hooks.yaml")
-        .write_str(indoc::indoc! {r#"
-        - id: test-hook
-          name: Test Hook
-          entry: echo
-          language: system
-        - id: another-hook
-          name: Another Hook
-          entry: python3 -c 'print("hello")'
-          language: python
-    "#})?;
+    let git = repo.git();
+    git.add(".");
 
-    repo.git().add(".");
-
-    repo.git()
-        .command()
+    git_command_at(&git, initial_timestamp)
         .arg("commit")
         .arg("-m")
         .arg("Initial commit")
-        .env("GIT_AUTHOR_DATE", format!("{initial_timestamp} +0000"))
-        .env("GIT_COMMITTER_DATE", format!("{initial_timestamp} +0000"))
         .assert()
         .success();
 
     // Create tags
     for (tag, timestamp) in tags {
-        repo.git()
-            .command()
+        git_command_at(&git, *timestamp)
             .arg("commit")
             .arg("-m")
             .arg(format!("Release {tag}"))
             .arg("--allow-empty")
-            .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
-            .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
             .assert()
             .success();
-        repo.git()
-            .command()
+        git_command_at(&git, *timestamp)
             .arg("tag")
             .arg(tag)
             .arg("-m")
             .arg(tag)
-            .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
-            .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
             .assert()
             .success();
     }
 
     // Add an extra commit to the tip
-    repo.git()
-        .command()
+    git_command_at(&git, tip_timestamp)
         .arg("commit")
         .arg("-m")
         .arg("tip")
         .arg("--allow-empty")
-        .env("GIT_AUTHOR_DATE", format!("{tip_timestamp} +0000"))
-        .env("GIT_COMMITTER_DATE", format!("{tip_timestamp} +0000"))
         .assert()
         .success();
 
-    Ok(repo.path().to_string_lossy().replace('\\', "/"))
+    repo.path().to_string_lossy().replace('\\', "/")
 }
 
 #[test]
-fn update_basic() -> Result<()> {
+fn update_basic() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -176,17 +171,15 @@ fn update_basic() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_already_up_to_date() -> Result<()> {
+fn update_already_up_to_date() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "up-to-date-repo", &["v1.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "up-to-date-repo", &["v1.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -211,8 +204,6 @@ fn update_already_up_to_date() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
@@ -225,7 +216,7 @@ fn update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
         &[("v0.9.25", 8), ("v0.10.2", 2), ("v0.10.3", 1)],
     )?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v0.10.2
@@ -266,7 +257,7 @@ fn update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
         &[("v0.9.25", 8), ("v0.10.2", 2), ("v0.10.3", 1)],
     )?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v0.10.2
@@ -298,12 +289,12 @@ fn update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
 }
 
 #[test]
-fn update_already_up_to_date_verbose() -> Result<()> {
+fn update_already_up_to_date_verbose() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "up-to-date-repo-verbose", &["v1.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "up-to-date-repo-verbose", &["v1.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -322,8 +313,6 @@ fn update_already_up_to_date_verbose() -> Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
@@ -333,9 +322,9 @@ fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
 
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "up-to-date-repo-mtime", &["v1.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "up-to-date-repo-mtime", &["v1.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -344,7 +333,7 @@ fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
     ", repo_path});
     context.git().add_all();
 
-    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
+    let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
 
     let before_secs = fs_err::metadata(config_path.path())?
         .modified()?
@@ -370,13 +359,13 @@ fn update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
 }
 
 #[test]
-fn update_multiple_repos_mixed() -> Result<()> {
+fn update_multiple_repos_mixed() {
     let context = TestEnv::new_git();
 
-    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
-    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0"])?;
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"]);
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -421,19 +410,17 @@ fn update_multiple_repos_mixed() -> Result<()> {
                 hooks:
                   - id: another-hook
             ");
-
-    Ok(())
 }
 
 /// Test that `prek update` ignores the `GIT_DIR` environment variable.
 #[test]
-fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
+fn test_resolve_revision_ignores_git_dir_env_var() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "target-repo", &["v0.1.0", "v0.2.0"])?;
-    let external_repo_path = create_local_git_repo(&context, "external-repo", &["v9.9.9"])?;
+    let repo_path = create_local_git_repo(&context, "target-repo", &["v0.1.0", "v0.2.0"]);
+    let external_repo_path = create_local_git_repo(&context, "external-repo", &["v9.9.9"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v0.1.0
@@ -464,18 +451,16 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_specific_repos() -> Result<()> {
+fn update_specific_repos() {
     let context = TestEnv::new_git();
 
-    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
-    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"]);
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -534,17 +519,15 @@ fn update_specific_repos() -> Result<()> {
                 hooks:
                   - id: another-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_warns_for_missing_repos() -> Result<()> {
+fn update_warns_for_missing_repos() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "configured-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "configured-repo", &["v1.0.0", "v1.1.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -573,18 +556,16 @@ fn update_warns_for_missing_repos() -> Result<()> {
       - `--repo-include-tag=missing-from-include=v*`
       - `--repo-exclude-tag=missing-from-exclude=nightly`
     ");
-
-    Ok(())
 }
 
 #[test]
-fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
+fn update_warns_when_repo_override_matches_another_project() {
     let context = TestEnv::new_git();
 
-    let repo1_path = create_local_git_repo(&context, "project-repo-1", &["v1.0.0", "v1.1.0"])?;
-    let repo2_path = create_local_git_repo(&context, "project-repo-2", &["v1.0.0", "v1.1.0"])?;
+    let repo1_path = create_local_git_repo(&context, "project-repo-1", &["v1.0.0", "v1.1.0"]);
+    let repo2_path = create_local_git_repo(&context, "project-repo-2", &["v1.0.0", "v1.1.0"]);
 
-    context.setup_workspace(&["project-a", "project-b"], "repos: []");
+    context.write_workspace(["project-a", "project-b"], "repos: []");
     let context = context
         .with_file(
             "project-a/.pre-commit-config.yaml",
@@ -636,22 +617,20 @@ fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
       `project-b/.pre-commit-config.yaml`:
         - `[HOME]/test-repos/project-repo-1`
     ");
-
-    Ok(())
 }
 
 #[test]
-fn update_repo_options_match_relative_config_value() -> Result<()> {
+fn update_repo_options_match_relative_config_value() {
     let context = TestEnv::new_git();
 
     let selected_path = create_local_git_repo(
         &context,
         "relative-selected",
         &["v1.0.0", "v1.1.0", "v1.2.0", "v2.0.0"],
-    )?;
+    );
 
     let selected_repo = "../home/test-repos/relative-selected";
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {selected_repo}
             rev: v1.0.0
@@ -691,22 +670,20 @@ fn update_repo_options_match_relative_config_value() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
+fn update_exclude_repo_skips_fetching_repo() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "included-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "included-repo", &["v1.0.0", "v1.1.0"]);
     let missing_repo_path = context
         .home_dir()
         .child("test-repos/missing-repo")
         .to_string_lossy()
         .to_string();
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -741,20 +718,18 @@ fn update_exclude_repo_skips_fetching_repo() -> Result<()> {
                 hooks:
                   - id: another-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_exclude_repo_matches_relative_config_value() -> Result<()> {
+fn update_exclude_repo_matches_relative_config_value() {
     let context = TestEnv::new_git();
 
-    create_local_git_repo(&context, "relative-excluded", &["v1.0.0", "v2.0.0"])?;
-    create_local_git_repo(&context, "relative-included", &["v1.0.0", "v2.0.0"])?;
+    create_local_git_repo(&context, "relative-excluded", &["v1.0.0", "v2.0.0"]);
+    create_local_git_repo(&context, "relative-included", &["v1.0.0", "v2.0.0"]);
 
     let excluded_repo = "../home/test-repos/relative-excluded";
     let included_repo = "../home/test-repos/relative-included";
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {excluded_repo}
             rev: v1.0.0
@@ -790,21 +765,19 @@ fn update_exclude_repo_matches_relative_config_value() -> Result<()> {
         hooks:
           - id: test-hook
     ");
-
-    Ok(())
 }
 
 #[test]
-fn update_tag_filters_include_then_exclude() -> Result<()> {
+fn update_tag_filters_include_then_exclude() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "tag-filter-repo",
         &["v1.0.0", "v1.1.0", "v2.0.0", "nightly"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -835,26 +808,24 @@ fn update_tag_filters_include_then_exclude() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_uses_project_tag_filter_config() -> Result<()> {
+fn update_uses_project_tag_filter_config() {
     let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(
         &context,
         "tag-filter-config-1",
         &["v1.0.0", "v2.0.0", "v2.1.0", "v3.0.0-rc1"],
-    )?;
+    );
     let repo2_path = create_local_git_repo(
         &context,
         "tag-filter-config-2",
         &["v1.0.0", "v2.0.0", "v2.1.0", "v3.0.0-rc1"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r#"
+    context.write_config(indoc::formatdoc! {r#"
         update:
           include_tags: "v*"
           exclude_tags: ["*-rc*"]
@@ -906,21 +877,19 @@ fn update_uses_project_tag_filter_config() -> Result<()> {
                 hooks:
                   - id: test-hook
             "#);
-
-    Ok(())
 }
 
 #[test]
-fn update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
+fn update_tag_filters_can_select_older_track_without_cooldown() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "tag-filter-older-track",
         &["v1.0.0", "v1.1.0", "v2.0.0"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v2.0.0
@@ -949,26 +918,24 @@ fn update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_repo_include_tag_is_repo_specific() -> Result<()> {
+fn update_repo_include_tag_is_repo_specific() {
     let context = TestEnv::new_git();
 
     let repo1_path = create_local_git_repo(
         &context,
         "repo-include-tag-1",
         &["v1.0.0", "v1.1.0", "v2.0.0"],
-    )?;
+    );
     let repo2_path = create_local_git_repo(
         &context,
         "repo-include-tag-2",
         &["v1.0.0", "v1.1.0", "v2.0.0"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1011,21 +978,19 @@ fn update_repo_include_tag_is_repo_specific() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
+fn update_repo_include_tag_overrides_global_include_tag() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "repo-include-tag-intersection",
         &["v1.0.0", "v1.1.0", "v2.1.0"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1057,18 +1022,16 @@ fn update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
+fn update_repo_exclude_tag_can_leave_repo_unchanged() {
     let context = TestEnv::new_git();
 
-    let repo1_path = create_local_git_repo(&context, "repo-exclude-tag-1", &["v1.0.0", "v2.0.0"])?;
-    let repo2_path = create_local_git_repo(&context, "repo-exclude-tag-2", &["v1.0.0", "v2.0.0"])?;
+    let repo1_path = create_local_git_repo(&context, "repo-exclude-tag-1", &["v1.0.0", "v2.0.0"]);
+    let repo2_path = create_local_git_repo(&context, "repo-exclude-tag-2", &["v1.0.0", "v2.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1109,17 +1072,15 @@ fn update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_bleeding_edge() -> Result<()> {
+fn update_bleeding_edge() {
     let context = context_with_commit_sha_filter();
 
-    let repo_path = create_local_git_repo(&context, "bleeding-repo", &["v1.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "bleeding-repo", &["v1.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1146,15 +1107,13 @@ fn update_bleeding_edge() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_freeze() -> Result<()> {
+fn update_freeze() {
     let context = context_with_commit_sha_filter();
 
-    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"]);
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
     context
         .git_at(&repo_path)
@@ -1167,7 +1126,7 @@ fn update_freeze() -> Result<()> {
         .assert()
         .success();
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         update:
           freeze: true
         repos:
@@ -1199,16 +1158,13 @@ fn update_freeze() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
 fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
     let context = TestEnv::new_git();
 
-    let repo_path =
-        create_local_git_repo(&context, "freeze-annotated-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "freeze-annotated-repo", &["v1.0.0", "v1.1.0"]);
 
     let git = context.git_at(&repo_path);
     let tag_object_sha = git.rev_parse("v1.1.0")?;
@@ -1219,7 +1175,7 @@ fn update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
         "sanity check failed: annotated tag object SHA should differ from commit SHA"
     );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1261,7 +1217,7 @@ fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<
         &context,
         "shared-target-different-frozen-repo",
         &["v1.0.0", "v1.1.0"],
-    )?;
+    );
 
     context
         .git_at(&repo_path)
@@ -1274,7 +1230,7 @@ fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<
 
     let old_commit_sha = context.git_at(&repo_path).rev_parse("v1.0.0^{}")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1317,14 +1273,14 @@ fn update_shared_target_with_different_frozen_comments_displays_sha() -> Result<
 }
 
 #[test]
-fn update_preserve_quote_style() -> Result<()> {
+fn update_preserve_quote_style() {
     let context = TestEnv::new_git();
 
-    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
-    let repo2_path = create_local_git_repo(&context, "repo2", &["v1.0.0", "v1.1.0"])?;
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"]);
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v1.0.0", "v1.1.0"]);
 
     // Use specific formatting with comments
-    let context = context.with_config(indoc::formatdoc! {r#"
+    context.write_config(indoc::formatdoc! {r#"
         # Pre-commit configuration
         repos:
           - repo: {}  # Test repository
@@ -1385,20 +1341,17 @@ fn update_preserve_quote_style() -> Result<()> {
                     # Hook configuration
                     name: Test Hook
             "#);
-
-    Ok(())
 }
 
 #[test]
-fn update_with_existing_frozen_comment() -> Result<()> {
+fn update_with_existing_frozen_comment() {
     let context = TestEnv::new_git();
 
-    let repo_path =
-        create_local_git_repo(&context, "frozen-repo", &["v1.0.0", "v1.1.0", "v1.2.0"])?;
+    let repo_path = create_local_git_repo(&context, "frozen-repo", &["v1.0.0", "v1.1.0", "v1.2.0"]);
 
     let commit_sha = "1234567890abcdef1234567890abcdef12345678";
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1434,19 +1387,17 @@ fn update_with_existing_frozen_comment() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
 fn update_updates_mismatched_frozen_comment() -> Result<()> {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "check-frozen-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "check-frozen-repo", &["v1.0.0", "v1.1.0"]);
 
     let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1494,11 +1445,11 @@ fn update_updates_unresolvable_frozen_comment() -> Result<()> {
         &context,
         "check-unresolvable-frozen-repo",
         &["v1.0.0", "v1.1.0"],
-    )?;
+    );
 
     let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: does-not-exist
@@ -1546,11 +1497,11 @@ fn update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
         &context,
         "check-remove-frozen-comment-repo",
         &["v1.0.0", "v1.1.0"],
-    )?;
+    );
 
     let commit_sha = context.git_at(&repo_path).rev_parse("HEAD")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.1.0
@@ -1598,7 +1549,7 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
         &context,
         "check-branch-only-pinned-frozen-repo",
         &["v1.0.0", "v1.1.0"],
-    )?;
+    );
 
     context
         .git_at(&repo_path)
@@ -1621,7 +1572,7 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
     let branch_commit = context.git_at(&repo_path).rev_parse("HEAD")?;
     context.git_at(&repo_path).checkout("master");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1663,18 +1614,18 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
 }
 
 #[test]
-fn update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
+fn update_warns_for_invalid_pinned_commit_with_frozen_comment() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "check-invalid-pinned-frozen-repo",
         &["v1.0.0", "v1.1.0"],
-    )?;
+    );
 
     let invalid_commit = "1234567890abcdef1234567890abcdef12345678";
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1713,8 +1664,6 @@ fn update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
@@ -1722,11 +1671,11 @@ fn update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
     let context = TestEnv::new_git();
 
     let repo_path =
-        create_local_git_repo(&context, "check-frozen-dry-run-repo", &["v1.0.0", "v1.1.0"])?;
+        create_local_git_repo(&context, "check-frozen-dry-run-repo", &["v1.0.0", "v1.1.0"]);
 
     let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1771,11 +1720,11 @@ fn update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
     let context = TestEnv::new_git();
 
     let repo_path =
-        create_local_git_repo(&context, "check-frozen-check-repo", &["v1.0.0", "v1.1.0"])?;
+        create_local_git_repo(&context, "check-frozen-check-repo", &["v1.0.0", "v1.1.0"]);
 
     let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: {}  # frozen: v1.0.0
@@ -1820,7 +1769,7 @@ fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
     let context = TestEnv::new_git();
 
     let repo_path =
-        create_local_git_repo(&context, "check-frozen-repo-toml", &["v1.0.0", "v1.1.0"])?;
+        create_local_git_repo(&context, "check-frozen-repo-toml", &["v1.0.0", "v1.1.0"]);
 
     let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
@@ -1870,12 +1819,12 @@ fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
 }
 
 #[test]
-fn update_local_repo_ignored() -> Result<()> {
+fn update_local_repo_ignored() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -1914,15 +1863,13 @@ fn update_local_repo_ignored() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
 fn missing_hook_ids() -> Result<()> {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "missing-hook-repo", &["v1.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "missing-hook-repo", &["v1.0.0"]);
 
     // Remove the 'test-hook' from the hooks file
     ChildPath::new(&repo_path)
@@ -1940,7 +1887,7 @@ fn missing_hook_ids() -> Result<()> {
         .commit("Remove test-hook")
         .tag("v2.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1963,16 +1910,16 @@ fn missing_hook_ids() -> Result<()> {
 }
 
 #[test]
-fn update_workspace() -> Result<()> {
+fn update_workspace() {
     let context = TestEnv::new_git();
 
     let repo1_path =
-        create_local_git_repo(&context, "workspace-repo1", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
-    let repo2_path = create_local_git_repo(&context, "workspace-repo2", &["v1.0.0", "v1.5.0"])?;
-    let repo3_path = create_local_git_repo(&context, "workspace-repo3", &["v2.0.0"])?;
+        create_local_git_repo(&context, "workspace-repo1", &["v1.0.0", "v1.1.0", "v2.0.0"]);
+    let repo2_path = create_local_git_repo(&context, "workspace-repo2", &["v1.0.0", "v1.5.0"]);
+    let repo3_path = create_local_git_repo(&context, "workspace-repo3", &["v2.0.0"]);
 
-    context.setup_workspace(
-        &["project-a", "project-b"],
+    context.write_workspace(
+        ["project-a", "project-b"],
         "repos: []", // Minimal valid config for root
     );
 
@@ -2049,12 +1996,10 @@ fn update_workspace() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
+fn update_workspace_same_repo_uses_project_cooldown() {
     let context = TestEnv::new_git();
     context.write_user_config(indoc::indoc! {r"
         [update]
@@ -2062,7 +2007,7 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
     "});
 
     let repo_path =
-        create_local_git_repo(&context, "workspace-cooldown-repo", &["v1.0.0", "v1.1.0"])?;
+        create_local_git_repo(&context, "workspace-cooldown-repo", &["v1.0.0", "v1.1.0"]);
     context
         .git_at(&repo_path)
         .command()
@@ -2074,8 +2019,8 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
         .success();
     context.git_at(&repo_path).tag("v2.0.0");
 
-    context.setup_workspace(
-        &["project-a", "project-b"],
+    context.write_workspace(
+        ["project-a", "project-b"],
         "repos: []", // Minimal valid config for root
     );
 
@@ -2137,18 +2082,16 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 // When multiple tags point to the same object, prek prefers a tag that:
 // - contains a dot (e.g., a SemVer-like tag), and
 // - is most similar to the current revision, as measured by Levenshtein distance.
 #[test]
-fn prefer_similar_tags() -> Result<()> {
+fn prefer_similar_tags() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"]);
     // Add a second tag (`foo-v1.1.0`) pointing at the same commit as `v1.1.0`.
     // From the current `rev` (`v1.0.0`):
     // - `levenshtein(v1.0.0, v1.1.0) == 1`
@@ -2177,7 +2120,7 @@ fn prefer_similar_tags() -> Result<()> {
         .assert()
         .success();
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -2216,17 +2159,15 @@ fn prefer_similar_tags() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_dry_run() -> Result<()> {
+fn update_dry_run() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+    let repo_path = create_local_git_repo(&context, "test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2252,18 +2193,16 @@ fn update_dry_run() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_check() -> Result<()> {
+fn update_check() {
     let context = TestEnv::new_git();
 
     let repo_path =
-        create_local_git_repo(&context, "check-test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+        create_local_git_repo(&context, "check-test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2289,21 +2228,19 @@ fn update_check() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_dry_run_exit_code() -> Result<()> {
+fn update_dry_run_exit_code() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "dry-run-exit-code-test-repo",
         &["v1.0.0", "v1.1.0", "v2.0.0"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2329,21 +2266,19 @@ fn update_dry_run_exit_code() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_exit_code_updates_config() -> Result<()> {
+fn update_exit_code_updates_config() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "exit-code-test-repo",
         &["v1.0.0", "v1.1.0", "v2.0.0"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2369,21 +2304,19 @@ fn update_exit_code_updates_config() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_exit_code_succeeds_when_up_to_date() -> Result<()> {
+fn update_exit_code_succeeds_when_up_to_date() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo(
         &context,
         "exit-code-up-to-date-test-repo",
         &["v1.0.0", "v2.0.0"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v2.0.0
@@ -2407,19 +2340,17 @@ fn update_exit_code_succeeds_when_up_to_date() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn quoting_float_like_version_number() -> Result<()> {
+fn quoting_float_like_version_number() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "test-repo", &["0.49", "0.50"])?;
+    let repo_path = create_local_git_repo(&context, "test-repo", &["0.49", "0.50"]);
 
     // Our serializer will quote these float-like strings by default. Use a different
     // quoting style here to validate that explicit quotes are still preserved.
-    let context = context.with_config(indoc::formatdoc! {r#"
+    context.write_config(indoc::formatdoc! {r#"
         repos:
           - repo: {}
             rev: "0.49"
@@ -2445,17 +2376,15 @@ fn quoting_float_like_version_number() -> Result<()> {
                 hooks:
                   - id: test-hook
             "#);
-
-    Ok(())
 }
 
 #[test]
-fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
+fn quoting_float_like_version_number_without_existing_quotes() {
     let context = TestEnv::new_git();
 
-    let repo_path = create_local_git_repo(&context, "test-repo", &["v0.19", "0.51"])?;
+    let repo_path = create_local_git_repo(&context, "test-repo", &["v0.19", "0.51"]);
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v0.19
@@ -2481,8 +2410,6 @@ fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
                 hooks:
                   - id: test-hook
             "#);
-
-    Ok(())
 }
 
 #[test]
@@ -2506,11 +2433,11 @@ fn update_with_invalid_config_file() {
 }
 
 #[test]
-fn update_toml() -> Result<()> {
+fn update_toml() {
     let context = TestEnv::new_git();
 
     let repo_path =
-        create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+        create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"]);
 
     let context = context.with_file(
         PREK_TOML,
@@ -2543,16 +2470,14 @@ fn update_toml() -> Result<()> {
           { id = "test-hook" },
         ]
         "#);
-
-    Ok(())
 }
 
 #[test]
-fn update_toml_with_comment() -> Result<()> {
+fn update_toml_with_comment() {
     let context = TestEnv::new_git();
 
     let repo_path =
-        create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+        create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"]);
 
     let context = context.with_file(
         PREK_TOML,
@@ -2620,15 +2545,13 @@ fn update_toml_with_comment() -> Result<()> {
           { id = "test-hook" },
         ]
         "#);
-
-    Ok(())
 }
 
 #[test]
-fn update_freeze_toml() -> Result<()> {
+fn update_freeze_toml() {
     let context = context_with_commit_sha_filter();
 
-    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"]);
     context.write_user_config(indoc::indoc! {r"
         [update]
         freeze = true
@@ -2678,21 +2601,19 @@ fn update_freeze_toml() -> Result<()> {
               { id = "test-hook" },
             ]
             "#);
-
-    Ok(())
 }
 
 #[test]
-fn update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
+fn update_equal_timestamp_tags_picks_highest_version() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo_fixed_ts(
         &context,
         "mirror-repo",
         &["v1.0.0", "v1.0.1", "v1.0.2", "v1.0.3", "v1.0.4", "v1.0.5"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.3
@@ -2719,23 +2640,21 @@ fn update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 // When all tags share a timestamp and some are non-semver (e.g. "latest", "stable"),
 // semver tags should be preferred and sorted highest-first.
 #[test]
-fn update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
+fn update_equal_timestamp_prefers_semver_over_nonsemver() {
     let context = TestEnv::new_git();
 
     let repo_path = create_local_git_repo_fixed_ts(
         &context,
         "mixed-tags-repo",
         &["v1.0.0", "latest", "v2.0.0", "stable"],
-    )?;
+    );
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2762,18 +2681,16 @@ fn update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 // When tags span multiple timestamp groups, the newest group should be selected first.
 // Within an equal-timestamp group, semver tiebreaker picks the highest version.
 #[test]
-fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
+fn update_mixed_timestamps_with_equal_subgroups() {
     let context = TestEnv::new_git();
 
     // Create base repo with v1.0.x tags at incrementing timestamps.
-    let repo_path = create_local_git_repo(&context, "mixed-ts-repo", &["v1.0.0", "v1.0.1"])?;
+    let repo_path = create_local_git_repo(&context, "mixed-ts-repo", &["v1.0.0", "v1.0.1"]);
 
     // Add a second group of tags sharing a single newer timestamp
     // (must be in the past so the cooldown filter doesn't exclude them).
@@ -2803,7 +2720,7 @@ fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
             .success();
     }
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2830,15 +2747,13 @@ fn update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
-
-    Ok(())
 }
 
 #[test]
-fn update_freeze_toml_with_comment() -> Result<()> {
+fn update_freeze_toml_with_comment() {
     let context = context_with_commit_sha_filter();
 
-    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"]);
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
     context
         .git_at(&repo_path)
@@ -2888,6 +2803,4 @@ fn update_freeze_toml_with_comment() -> Result<()> {
               { id = "test-hook" },
             ]
             "#);
-
-    Ok(())
 }

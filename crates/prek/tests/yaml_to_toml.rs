@@ -1,5 +1,4 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -222,10 +221,7 @@ fn yaml_to_toml_same_output() {
     "
     );
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .assert(predicates::path::missing());
+    context.child(PREK_TOML).assert(predicates::path::missing());
 }
 
 #[test]
@@ -244,10 +240,7 @@ fn yaml_to_toml_discovers_pre_commit_config_yaml() {
     "
     );
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .assert(predicates::path::exists());
+    context.child(PREK_TOML).assert(predicates::path::exists());
 }
 
 #[test]
@@ -266,10 +259,7 @@ fn yaml_to_toml_discovers_pre_commit_config_yml() {
     "
     );
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .assert(predicates::path::exists());
+    context.child(PREK_TOML).assert(predicates::path::exists());
 }
 
 #[test]

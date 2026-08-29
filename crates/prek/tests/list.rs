@@ -598,8 +598,8 @@ fn workspace_list() {
           verbose: true
     "};
 
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "project2",
             "project3",
             "nested/project4",
@@ -784,8 +784,8 @@ fn list_with_selectors() {
           verbose: true
     "};
 
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "project2",
             "project3",
             "nested/project4",

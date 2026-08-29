@@ -4,6 +4,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
+#[cfg(unix)]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
@@ -81,9 +82,11 @@ fn deny_filename_pattern_hook_matches_only_basename() {
                 args: [--ignore-case, 'readme']
                 files: '\.md$'
     "})
-        .with_file("docs/README.md", "")
-        .with_file("README/guide.md", "")
-        .with_file("docs/guide.md", "");
+        .with_files([
+            ("docs/README.md", ""),
+            ("README/guide.md", ""),
+            ("docs/guide.md", ""),
+        ]);
 
     context.git().add_all();
 
@@ -234,11 +237,13 @@ fn require_filename_pattern_hook_accepts_any_pattern_for_basename() {
                   - '^conftest\.py$'
                 files: '(^|/)tests/.+\.py$'
     "})
-        .with_file("tests/unit/test_parser.py", "")
-        .with_file("tests/unit/parser_test.py", "")
-        .with_file("tests/unit/__init__.py", "")
-        .with_file("tests/unit/conftest.py", "")
-        .with_file("tests/test_unit/parser.py", "");
+        .with_files([
+            ("tests/unit/test_parser.py", ""),
+            ("tests/unit/parser_test.py", ""),
+            ("tests/unit/__init__.py", ""),
+            ("tests/unit/conftest.py", ""),
+            ("tests/test_unit/parser.py", ""),
+        ]);
 
     context.git().add_all();
 
@@ -299,14 +304,16 @@ fn end_of_file_fixer_hook() {
             hooks:
               - id: end-of-file-fixer
     "})
-        .with_file("correct_lf.txt", "Hello World\n")
-        .with_file("correct_crlf.txt", "Hello World\r\n")
-        .with_file("no_newline.txt", "No trailing newline")
-        .with_file("multiple_lf.txt", "Multiple newlines\n\n\n")
-        .with_file("multiple_crlf.txt", "Multiple newlines\r\n\r\n")
-        .with_file("empty.txt", "")
-        .with_file("only_newlines.txt", "\n\n")
-        .with_file("only_win_newlines.txt", "\r\n\r\n");
+        .with_files([
+            ("correct_lf.txt", "Hello World\n"),
+            ("correct_crlf.txt", "Hello World\r\n"),
+            ("no_newline.txt", "No trailing newline"),
+            ("multiple_lf.txt", "Multiple newlines\n\n\n"),
+            ("multiple_crlf.txt", "Multiple newlines\r\n\r\n"),
+            ("empty.txt", ""),
+            ("only_newlines.txt", "\n\n"),
+            ("only_win_newlines.txt", "\r\n\r\n"),
+        ]);
 
     context.git().add_all();
 
@@ -545,25 +552,19 @@ fn forbid_new_submodules_hook_in_workspace_project() {
     context.git().add_all().commit("Initial commit");
 
     let context = context.with_file("project2/sub module/README.md", "submodule\n");
-    let cwd = context.work_dir();
-    let submodule_path = cwd.child("project2/sub module");
+    let submodule_path = context.child("project2/sub module");
     context
         .git_at(&submodule_path)
         .init()
         .add("README.md")
         .commit("Initial commit");
 
-    context
-        .git_at(cwd)
-        .command()
-        .args([
-            "submodule",
-            "add",
-            "./project2/sub module",
-            "project2/sub module",
-        ])
-        .assert()
-        .success();
+    context.git().run([
+        "submodule",
+        "add",
+        "./project2/sub module",
+        "project2/sub module",
+    ]);
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -1019,8 +1020,8 @@ fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() 
     // mode instead of depending on the separate staged-file path filtering behavior.
     let context = TestEnv::new_git()
         .with_config("repos: []\n")
-        .with_file(
-            "app/.pre-commit-config.yaml",
+        .with_project_config(
+            "app",
             indoc::indoc! {r"
         repos:
           - repo: builtin
@@ -1136,17 +1137,19 @@ fn builtin_hooks_workspace_mode() {
                 args: ['--maxkb', '1']
     "},
         )
-        .with_file("app/eof_no_newline.txt", "No trailing newline")
-        .with_file("app/eof_multiple_lf.txt", "Multiple\n\n")
-        .with_file("app/mixed.txt", "line1\nline2\r\n")
-        .with_file("app/trailing_ws.txt", "line with trailing space \n")
-        .with_file("app/correct.txt", "All good here\n")
-        .with_file("app/invalid.yaml", "a: b: c")
-        .with_file("app/duplicate.yaml", "a: 1\na: 2")
-        .with_file("app/empty.yaml", "")
-        .with_file("app/invalid.json", r#"{"a": 1,}"#)
-        .with_file("app/duplicate.json", r#"{"a": 1, "a": 2}"#)
-        .with_file("app/empty.json", "")
+        .with_files([
+            ("app/eof_no_newline.txt", "No trailing newline"),
+            ("app/eof_multiple_lf.txt", "Multiple\n\n"),
+            ("app/mixed.txt", "line1\nline2\r\n"),
+            ("app/trailing_ws.txt", "line with trailing space \n"),
+            ("app/correct.txt", "All good here\n"),
+            ("app/invalid.yaml", "a: b: c"),
+            ("app/duplicate.yaml", "a: 1\na: 2"),
+            ("app/empty.yaml", ""),
+            ("app/invalid.json", r#"{"a": 1,}"#),
+            ("app/duplicate.json", r#"{"a": 1, "a": 2}"#),
+            ("app/empty.json", ""),
+        ])
         .with_file("app/large.bin", [0u8; 2048]);
 
     context.git().add_all();
@@ -1723,18 +1726,16 @@ fn check_symlinks_hook_unix() -> Result<()> {
         .with_file("regular.txt", "regular file")
         .with_file("target.txt", "target content");
 
-    let cwd = context.work_dir();
-
     // Create valid symlink
     fs_err::os::unix::fs::symlink(
-        cwd.child("target.txt").path(),
-        cwd.child("valid_link.txt").path(),
+        context.child("target.txt").path(),
+        context.child("valid_link.txt").path(),
     )?;
 
     // Create broken symlink
     fs_err::os::unix::fs::symlink(
-        cwd.child("nonexistent.txt").path(),
-        cwd.child("broken_link.txt").path(),
+        context.child("nonexistent.txt").path(),
+        context.child("broken_link.txt").path(),
     )?;
 
     context.git().add_all();
@@ -1755,7 +1756,7 @@ fn check_symlinks_hook_unix() -> Result<()> {
     ");
 
     // Remove broken symlink
-    fs_err::remove_file(cwd.child("broken_link.txt").path())?;
+    fs_err::remove_file(context.child("broken_link.txt").path())?;
     context.git().add_all();
 
     // Second run: should pass
@@ -1784,18 +1785,16 @@ fn check_symlinks_hook_windows() -> Result<()> {
         .with_file("regular.txt", "regular file")
         .with_file("target.txt", "target content");
 
-    let cwd = context.work_dir();
-
     // Try to create valid symlink (may fail without admin/developer mode)
     let valid_link_result = fs_err::os::windows::fs::symlink_file(
-        cwd.child("target.txt").path(),
-        cwd.child("valid_link.txt").path(),
+        context.child("target.txt").path(),
+        context.child("valid_link.txt").path(),
     );
 
     // Try to create broken symlink (may fail without admin/developer mode)
     let broken_link_result = fs_err::os::windows::fs::symlink_file(
-        cwd.child("nonexistent.txt").path(),
-        cwd.child("broken_link.txt").path(),
+        context.child("nonexistent.txt").path(),
+        context.child("broken_link.txt").path(),
     );
 
     // Skip test if we can't create symlinks (insufficient permissions)
@@ -1822,7 +1821,7 @@ fn check_symlinks_hook_windows() -> Result<()> {
     "#);
 
     // Remove broken symlink
-    fs_err::remove_file(cwd.child("broken_link.txt").path())?;
+    fs_err::remove_file(context.child("broken_link.txt").path())?;
     context.git().add_all();
 
     // Second run: should pass
@@ -1846,16 +1845,9 @@ fn destroyed_symlinks_hook() -> Result<()> {
     const TEST_FILE: &str = "test_file";
     const TEST_FILE_RENAMED: &str = "test_file_renamed";
 
-    let source = TestEnv::new_git();
+    let source = TestEnv::new_git().with_file(TEST_FILE, "some random content\n");
 
-    fs_err::os::unix::fs::symlink(
-        TEST_SYMLINK_TARGET,
-        source.work_dir().child(TEST_SYMLINK).path(),
-    )?;
-    source
-        .work_dir()
-        .child(TEST_FILE)
-        .write_str("some random content\n")?;
+    fs_err::os::unix::fs::symlink(TEST_SYMLINK_TARGET, source.child(TEST_SYMLINK).path())?;
     source.git().add_all().commit("initial");
 
     let tree = source
@@ -1882,20 +1874,12 @@ fn destroyed_symlinks_hook() -> Result<()> {
 
     context
         .git()
-        .command()
-        .args(["config", "--local", "core.symlinks", "true"])
-        .assert()
-        .success();
-    context
-        .git()
-        .command()
-        .args(["mv", TEST_FILE, TEST_FILE_RENAMED])
-        .assert()
-        .success();
+        .run(["config", "--local", "core.symlinks", "true"])
+        .run(["mv", TEST_FILE, TEST_FILE_RENAMED]);
 
-    assert!(!context.work_dir().child(TEST_SYMLINK).path().is_symlink());
+    assert!(!context.child(TEST_SYMLINK).path().is_symlink());
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -2711,26 +2695,10 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
             hooks:
               - id: check-executables-have-shebangs
     "})
-        .with_file("script_with_shebang.sh", "#!/bin/bash\necho ok\n")
-        .with_file("script_without_shebang.sh", "echo missing shebang\n")
+        .with_executable_file("script_with_shebang.sh", "#!/bin/bash\necho ok\n")
+        .with_executable_file("script_without_shebang.sh", "echo missing shebang\n")
         .with_file("not_executable.txt", "not executable\n")
-        .with_file("empty.sh", "");
-
-    let cwd = context.work_dir();
-
-    // Mark scripts as executable
-    fs_err::set_permissions(
-        cwd.child("script_with_shebang.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
-    fs_err::set_permissions(
-        cwd.child("script_without_shebang.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
-    fs_err::set_permissions(
-        cwd.child("empty.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
+        .with_executable_file("empty.sh", "");
 
     context.git().add_all();
 
@@ -2759,7 +2727,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     // Fix the files: remove executable bit or add shebang
     context.write_file("script_without_shebang.sh", "#!/bin/sh\necho fixed\n");
     fs_err::set_permissions(
-        cwd.child("empty.sh").path(),
+        context.child("empty.sh").path(),
         std::fs::Permissions::from_mode(0o644),
     )?;
 
@@ -2780,7 +2748,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 
 #[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs_win() -> Result<()> {
+fn check_executables_have_shebangs_win() {
     let context = TestEnv::new_git()
         .with_config(indoc::indoc! {r"
         repos:
@@ -2791,25 +2759,16 @@ fn check_executables_have_shebangs_win() -> Result<()> {
         .with_file("win_script_with_shebang.sh", "#!/bin/bash\necho ok\n")
         .with_file("win_script_without_shebang.sh", "missing shebang\n");
 
-    let cwd = context.work_dir();
-
     context.git().add_all();
 
     context
-        .git_at(cwd)
-        .command()
-        .args(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
-        .status()?;
-
-    context
-        .git_at(cwd)
-        .command()
-        .args([
+        .git()
+        .run(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
+        .run([
             "update-index",
             "--chmod=+x",
             "win_script_without_shebang.sh",
-        ])
-        .status()?;
+        ]);
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -2827,13 +2786,11 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[cfg(unix)]
 #[test]
-fn check_executables_have_shebangs_various_cases() -> Result<()> {
+fn check_executables_have_shebangs_various_cases() {
     let context = TestEnv::new_git()
         .with_config(indoc::indoc! {r"
         repos:
@@ -2841,32 +2798,11 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
             hooks:
               - id: check-executables-have-shebangs
     "})
-        .with_file("partial_shebang.sh", "#\necho partial\n")
-        .with_file("shebang_with_space.sh", "#! /bin/bash\necho ok\n")
+        .with_executable_file("partial_shebang.sh", "#\necho partial\n")
+        .with_executable_file("shebang_with_space.sh", "#! /bin/bash\necho ok\n")
         .with_file("non_executable.txt", "not executable\n")
-        .with_file("whitespace.sh", "   \n")
-        .with_file("invalid_shebang.sh", "##!/bin/bash\necho bad\n");
-
-    let cwd = context.work_dir();
-
-    // Mark scripts as executable
-    fs_err::set_permissions(
-        cwd.child("partial_shebang.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
-    fs_err::set_permissions(
-        cwd.child("shebang_with_space.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
-    fs_err::set_permissions(
-        cwd.child("whitespace.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
-    fs_err::set_permissions(
-        cwd.child("invalid_shebang.sh").path(),
-        std::fs::Permissions::from_mode(0o755),
-    )?;
-    // non_executable.txt is not marked executable
+        .with_executable_file("whitespace.sh", "   \n")
+        .with_executable_file("invalid_shebang.sh", "##!/bin/bash\necho bad\n");
 
     context.git().add_all();
 
@@ -2912,13 +2848,11 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
+fn check_executables_have_shebangs_various_cases_win() {
     let context = TestEnv::new_git()
         .with_config(indoc::indoc! {r"
         repos:
@@ -2926,13 +2860,13 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
             hooks:
               - id: check-executables-have-shebangs
     "})
-        .with_file("partial_shebang.sh", "#\necho partial\n")
-        .with_file("shebang_with_space.sh", "#! /bin/bash\necho ok\n")
-        .with_file("non_executable.txt", "not executable\n")
-        .with_file("whitespace.sh", "   \n")
-        .with_file("invalid_shebang.sh", "##!/bin/bash\necho bad\n");
-
-    let cwd = context.work_dir();
+        .with_files([
+            ("partial_shebang.sh", "#\necho partial\n"),
+            ("shebang_with_space.sh", "#! /bin/bash\necho ok\n"),
+            ("non_executable.txt", "not executable\n"),
+            ("whitespace.sh", "   \n"),
+            ("invalid_shebang.sh", "##!/bin/bash\necho bad\n"),
+        ]);
 
     context.git().add_all();
 
@@ -2943,12 +2877,8 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
         "invalid_shebang.sh",
     ];
 
-    for file in &executable_files {
-        context
-            .git_at(cwd.path())
-            .command()
-            .args(["update-index", "--chmod=+x", file])
-            .status()?;
+    for file in executable_files {
+        context.git().run(["update-index", "--chmod=+x", file]);
     }
 
     // Run: should fail for partial_shebang.sh, whitespace.sh, invalid_shebang.sh
@@ -2976,8 +2906,6 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[test]
@@ -2991,19 +2919,12 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
     "})
         .with_file("plain.txt", "plain text\n")
         .with_file("script.sh", "#!/bin/sh\necho hi\n")
-        .with_file("script_exec.sh", "#!/bin/sh\necho hi\n");
-
-    let cwd = context.work_dir();
-
-    make_executable(cwd.child("script_exec.sh"))?;
+        .with_executable_file("script_exec.sh", "#!/bin/sh\necho hi\n");
 
     context.git().add_all();
     context
-        .git_at(cwd.path())
-        .command()
-        .args(["update-index", "--chmod=+x", "script_exec.sh"])
-        .assert()
-        .success();
+        .git()
+        .run(["update-index", "--chmod=+x", "script_exec.sh"]);
 
     cmd_snapshot!(context, context.run(), @"
     success: false
@@ -3022,14 +2943,11 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
     ----- stderr -----
     ");
 
-    make_executable(cwd.child("script.sh"))?;
+    make_executable(context.child("script.sh"))?;
 
     context
-        .git_at(cwd.path())
-        .command()
-        .args(["update-index", "--chmod=+x", "script.sh"])
-        .assert()
-        .success();
+        .git()
+        .run(["update-index", "--chmod=+x", "script.sh"]);
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -3044,9 +2962,9 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
 }
 
 fn is_case_sensitive_filesystem(context: &TestEnv) -> Result<bool> {
-    let test_lower = context.work_dir().child("case_test_file.txt");
+    let test_lower = context.child("case_test_file.txt");
     test_lower.write_str("test")?;
-    let test_upper = context.work_dir().child("CASE_TEST_FILE.txt");
+    let test_upper = context.child("CASE_TEST_FILE.txt");
     let is_sensitive = !test_upper.exists();
     fs_err::remove_file(test_lower.path())?;
     Ok(is_sensitive)

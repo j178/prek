@@ -87,7 +87,7 @@ fn project_toml() {
         "#},
     );
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -121,7 +121,7 @@ fn script_file() {
     let context =
         TestEnv::new_git().with_file("my_script.jl", r#"println("Hello from script file!")"#);
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
