@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
-use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use serde_json::json;
 use std::time::{Duration, SystemTime};
 
@@ -106,17 +106,15 @@ fn cache_gc_verbose_shows_removed_entries() {
 }
 
 #[test]
-fn cache_clean() -> anyhow::Result<()> {
+fn cache_clean() {
     let context = TestEnv::new().with_filter(
         r"(?m)^Removed \d+ files? \([^)]+\)\n",
         "Removed [N] file(s) ([SIZE])\n",
     );
 
     let home = context.work_dir().child("home");
-    home.create_dir_all()?;
-    home.child("cache/nested").create_dir_all()?;
-    home.child("cache/data.bin").write_str("hello")?;
-    home.child("cache/nested/data.bin").write_str("world!")?;
+    context.write_file("home/cache/data.bin", "hello");
+    context.write_file("home/cache/nested/data.bin", "world!");
 
     cmd_snapshot!(context, context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @"
     success: true
@@ -130,9 +128,7 @@ fn cache_clean() -> anyhow::Result<()> {
     home.assert(predicates::path::missing());
 
     // Test `prek clean` works for backward compatibility
-    home.create_dir_all()?;
-    home.child("cache").create_dir_all()?;
-    home.child("cache/one.txt").write_str("abc")?;
+    context.write_file("home/cache/one.txt", "abc");
     cmd_snapshot!(context, context.command().arg("clean").env("PREK_HOME", &*home), @"
     success: true
     exit_code: 0
@@ -143,8 +139,6 @@ fn cache_clean() -> anyhow::Result<()> {
     ");
 
     home.assert(predicates::path::missing());
-
-    Ok(())
 }
 
 #[test]
@@ -180,7 +174,7 @@ fn cache_size_output_formats() {
 }
 
 #[test]
-fn cache_size_with_populated_cache() -> anyhow::Result<()> {
+fn cache_size_with_populated_cache() {
     let context = TestEnv::new_git()
         .with_filter(r"(?m)^\d+\n", "[BYTES]\n")
         .with_config(indoc::indoc! {r"
@@ -189,11 +183,9 @@ fn cache_size_with_populated_cache() -> anyhow::Result<()> {
             rev: v5.0.0
             hooks:
               - id: end-of-file-fixer
-    "});
+    "})
+        .with_file("file.txt", "Hello, world!\n");
 
-    let cwd = context.work_dir();
-
-    cwd.child("file.txt").write_str("Hello, world!\n")?;
     context.git().add_all();
 
     context.run();
@@ -215,13 +207,12 @@ fn cache_size_with_populated_cache() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
 fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v6.0.0
@@ -233,11 +224,9 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
                 name: Python Hook
                 entry: python -c "print('Hello from Python')"
                 language: python
-    "#});
+    "#})
+        .with_file("valid.yaml", "a: 1\n");
 
-    let cwd = context.work_dir();
-
-    cwd.child("valid.yaml").write_str("a: 1\n")?;
     context.git().add_all();
 
     let home = context.home_dir();
@@ -291,16 +280,16 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
 
     let hook_repo = context.work_dir().child("hook-repo");
-    hook_repo.create_dir_all()?;
-    hook_repo
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
+    context.write_file(
+        "hook-repo/.pre-commit-hooks.yaml",
+        indoc::indoc! {r"
         - id: test-hook
           name: Test Hook
           entry: echo test
           language: system
           always_run: true
-    "})?;
+    "},
+    );
     let git = context.git_at(&hook_repo);
     let revision = git
         .init()
@@ -308,17 +297,16 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
         .commit("Initial commit")
         .rev_parse("HEAD")?;
 
-    let subproject = context.work_dir().child("subproject");
-    subproject.create_dir_all()?;
-    subproject
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str(&indoc::formatdoc! {r"
+    context.write_file(
+        "subproject/.pre-commit-config.yaml",
+        indoc::formatdoc! {r"
             repos:
               - repo: ../hook-repo
                 rev: {revision}
                 hooks:
                   - id: test-hook
-        "})?;
+        "},
+    );
     context.git().add_all();
 
     cmd_snapshot!(context, context.run()
@@ -595,7 +583,8 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
 
 #[test]
 fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -603,11 +592,9 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
                 name: Local Python Hook
                 entry: python -c "print('hello')"
                 language: python
-    "#});
+    "#})
+        .with_file("file.txt", "Hello\n");
 
-    let cwd = context.work_dir();
-
-    cwd.child("file.txt").write_str("Hello\n")?;
     context.git().add_all();
 
     // Install + run the local hook so it creates a hook env under PREK_HOME/hooks.
@@ -790,11 +777,10 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    // Keep the tracked config intentionally invalid while exercising GC.
+    let context = TestEnv::new_git().with_file(PRE_COMMIT_CONFIG_YAML, "repos: [\n");
 
     let cwd = context.work_dir();
-    // Intentionally invalid YAML.
-    cwd.child(PRE_COMMIT_CONFIG_YAML).write_str("repos: [\n")?;
     context.git().add_all();
 
     let home = context.home_dir();

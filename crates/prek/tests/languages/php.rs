@@ -4,8 +4,9 @@ use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
-fn local_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+fn local_hook() {
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -16,11 +17,9 @@ fn local_hook() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-    context
-        .work_dir()
-        .child("hello.php")
-        .write_str("<?php echo \"Hello from PHP!\\n\";\n")?;
+    "})
+        .with_file("hello.php", "<?php echo \"Hello from PHP!\\n\";\n");
+
     context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
@@ -49,8 +48,6 @@ fn local_hook() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]

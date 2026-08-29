@@ -102,7 +102,7 @@ fn local_pre_commit_channel_is_ignored() -> anyhow::Result<()> {
 
     let channel_dir = context.work_dir().child(".pre-commit-channel");
     channel_dir.create_dir_all()?;
-    channel_dir.child("scalafmt.json").write_str("{}")?;
+    context.write_file(".pre-commit-channel/scalafmt.json", "{}");
 
     let context = context.with_config(indoc::indoc! {r"
         repos:

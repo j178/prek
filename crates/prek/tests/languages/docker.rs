@@ -35,7 +35,7 @@ fn docker() {
 }
 
 #[test]
-fn workspace_docker() -> anyhow::Result<()> {
+fn workspace_docker() {
     let context = TestEnv::new_git();
     let cwd = context.work_dir();
 
@@ -49,9 +49,9 @@ fn workspace_docker() -> anyhow::Result<()> {
                 verbose: true
     "};
 
-    context.setup_workspace(&["project1", "project2"], config)?;
-    cwd.child("project1").child("project1.txt").write_str("")?;
-    cwd.child("project2").child("project2.txt").write_str("")?;
+    context.setup_workspace(&["project1", "project2"], config);
+    context.write_file("project1/project1.txt", "");
+    context.write_file("project2/project2.txt", "");
 
     context.git().add_all();
 
@@ -81,6 +81,4 @@ fn workspace_docker() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }

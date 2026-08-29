@@ -1,5 +1,5 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -42,13 +42,12 @@ fn script_file() {
     let context = TestEnv::new_git();
 
     // Create a TypeScript script
-    context
-        .work_dir()
-        .child("check.ts")
-        .write_str(indoc::indoc! {r#"
+    context.write_file(
+        "check.ts",
+        indoc::indoc! {r#"
             console.log("Script executed successfully!");
-        "#})
-        .expect("Failed to write check.ts");
+        "#},
+    );
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -85,14 +84,13 @@ fn builtin_commands() {
     let context = TestEnv::new_git();
 
     // Create a TypeScript file for formatting check
-    context
-        .work_dir()
-        .child("example.ts")
-        .write_str(indoc::indoc! {r"
+    context.write_file(
+        "example.ts",
+        indoc::indoc! {r"
         const x = 1;
         console.log(x);
-    "})
-        .expect("Failed to write example.ts");
+    "},
+    );
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -263,10 +261,12 @@ fn additional_dependencies_absolute_file() {
     let context = TestEnv::new_git();
 
     let tool = context.work_dir().child("tool.ts");
-    tool.write_str(indoc::indoc! {r#"
+    context.write_file(
+        "tool.ts",
+        indoc::indoc! {r#"
             console.log("Hello from local additional dependency!");
-        "#})
-        .expect("Failed to write tool.ts");
+        "#},
+    );
     let dependency = serde_json::to_string(&format!("{}:echo-tool", tool.path().display()))
         .expect("Failed to serialize Deno dependency");
 
@@ -505,15 +505,14 @@ fn hook_failure() {
     let context = TestEnv::new_git();
 
     // Create a TypeScript file with a lint error
-    context
-        .work_dir()
-        .child("bad.ts")
-        .write_str(indoc::indoc! {r"
+    context.write_file(
+        "bad.ts",
+        indoc::indoc! {r"
         // This has a lint error: no-explicit-any
         let x: any = 1;
         console.log(x);
-    "})
-        .expect("Failed to write bad.ts");
+    "},
+    );
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -541,13 +540,12 @@ fn script_with_permissions() {
     let context = TestEnv::new_git();
 
     // Create a script that reads an environment variable
-    context
-        .work_dir()
-        .child("read_env.ts")
-        .write_str(indoc::indoc! {r#"
+    context.write_file(
+        "read_env.ts",
+        indoc::indoc! {r#"
         console.log(Deno.env.get("TEST_VAR") ?? "not set");
-    "#})
-        .expect("Failed to write read_env.ts");
+    "#},
+    );
 
     // Permissions must be specified before the script path when using deno run
     let context = context.with_config(indoc::indoc! {r"

@@ -12,8 +12,9 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
 
     let package = context.work_dir().child("node-env-tool");
-    package.create_dir_all()?;
-    package.child("package.json").write_str(indoc::indoc! {r#"
+    context.write_file(
+        "node-env-tool/package.json",
+        indoc::indoc! {r#"
         {
           "name": "node-env-tool",
           "version": "1.0.0",
@@ -21,12 +22,16 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
             "node-env-tool": "cli.js"
           }
         }
-    "#})?;
+    "#},
+    );
     let cli = package.child("cli.js");
-    cli.write_str(indoc::indoc! {r#"
+    context.write_file(
+        "node-env-tool/cli.js",
+        indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("exec node env ok");
-    "#})?;
+    "#},
+    );
     make_executable(cli.path())?;
 
     let dependency = serde_json::to_string(package.path())?;
@@ -428,10 +433,9 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
     let context = TestEnv::new_git();
 
     let package_dir = context.work_dir().child("prefix-fixture");
-    package_dir.create_dir_all()?;
-    package_dir
-        .child("package.json")
-        .write_str(indoc::indoc! {r#"
+    context.write_file(
+        "prefix-fixture/package.json",
+        indoc::indoc! {r#"
         {
           "name": "prek-prefix-fixture",
           "version": "1.0.0",
@@ -439,12 +443,16 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
             "prek-prefix-fixture": "cli.js"
           }
         }
-    "#})?;
+    "#},
+    );
     let cli = package_dir.child("cli.js");
-    cli.write_str(indoc::indoc! {r#"
+    context.write_file(
+        "prefix-fixture/cli.js",
+        indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("prefix fixture ok")
-    "#})?;
+    "#},
+    );
     make_executable(cli.path())?;
 
     let dependency = serde_json::to_string(package_dir.path())?;

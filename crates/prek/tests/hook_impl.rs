@@ -1,5 +1,5 @@
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::PathChild;
 use indoc::indoc;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
@@ -66,11 +66,14 @@ fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
     "#});
 
     let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
-    legacy_hook.write_str(indoc::indoc! {r#"
+    context.write_file(
+        ".git/hooks/pre-commit.legacy",
+        indoc::indoc! {r#"
         #!/bin/sh
         python3 -c 'print("legacy pre-commit ran")'
         exit 1
-    "#})?;
+    "#},
+    );
     make_executable(legacy_hook.path())?;
 
     // Git 2.54+ config-based hooks can invoke `hook-impl` without
@@ -206,7 +209,8 @@ fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
     // Regression test for https://github.com/j178/prek/issues/2088.
     // The hook fails after printing its filenames so the assertion can inspect
     // the exact file set selected by the pre-push range calculation.
-    let context = context.with_config(indoc::indoc! {r"
+    let context = context
+        .with_config(indoc::indoc! {r"
         repos:
         - repo: local
           hooks:
@@ -215,18 +219,19 @@ fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
              language: system
              entry: python3 print_filenames.py
              stages: [ pre-push ]
-    "});
-    context
-        .work_dir()
-        .child("print_filenames.py")
-        .write_str(indoc! { r"
+    "})
+        .with_file(
+            "print_filenames.py",
+            indoc! { r"
             import sys
 
             for filename in sys.argv[1:]:
                 print(filename)
 
             raise SystemExit(1)
-        "})?;
+        "},
+        );
+
     context.git().add_all().commit("Initial commit");
 
     let remote_repo_path = context.home_dir().join("remote.git");
@@ -259,10 +264,7 @@ fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
     checkout_feature.arg("checkout").arg("-b").arg("feature");
     checkout_feature.output()?.assert().success();
 
-    context
-        .work_dir()
-        .child("feature.txt")
-        .write_str("feature")?;
+    context.write_file("feature.txt", "feature");
     context.git().add_all().commit("Add feature file");
 
     let mut push_feature = context.git().command();
@@ -273,7 +275,7 @@ fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
     // rebased onto this commit, main.txt must not appear in the pre-push file
     // list because it is default-branch churn, not a feature-branch change.
     context.git().checkout("master");
-    context.work_dir().child("main.txt").write_str("main")?;
+    context.write_file("main.txt", "main");
     context.git().add_all().commit("Update master");
 
     let mut push_master = context.git().command();
@@ -331,12 +333,10 @@ fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
 
 #[test]
 fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    context
-        .work_dir()
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str(indoc! {r"
+    let context = TestEnv::new_git()
+        .with_file(
+            PRE_COMMIT_CONFIG_YAML,
+            indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -345,9 +345,10 @@ fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
                 language: system
                 entry: echo manual-only
                 stages: [ manual ]
-  "})?;
+  "},
+        )
+        .with_file("file.txt", "x");
 
-    context.work_dir().child("file.txt").write_str("x")?;
     context.git().add_all();
 
     cmd_snapshot!(context, context.install(), @r#"
@@ -360,11 +361,14 @@ fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
     "#);
 
     let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
-    legacy_hook.write_str(indoc::indoc! {r#"
+    context.write_file(
+        ".git/hooks/pre-commit.legacy",
+        indoc::indoc! {r#"
         #!/bin/sh
         python3 -c 'print("legacy pre-commit ran")'
         exit 1
-    "#})?;
+    "#},
+    );
     make_executable(legacy_hook.path())?;
 
     let mut commit = context.git().command();
@@ -406,11 +410,14 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
     "#);
 
     let legacy_hook = context.work_dir().child(".git/hooks/pre-push.legacy");
-    legacy_hook.write_str(indoc::indoc! {r#"
+    context.write_file(
+        ".git/hooks/pre-push.legacy",
+        indoc::indoc! {r#"
         #!/bin/sh
         python3 -c 'print("legacy pre-push ran")'
         exit 1
-    "#})?;
+    "#},
+    );
     make_executable(legacy_hook.path())?;
 
     let remote_repo_path = context.home_dir().join("remote.git");
@@ -432,7 +439,7 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
         .arg(&remote_repo_path);
     add_remote.output()?.assert().success();
 
-    context.work_dir().child("file.txt").write_str("x")?;
+    context.write_file("file.txt", "x");
     context.git().add_all().commit("Second commit");
 
     let mut push_cmd = context.git().command();
@@ -489,10 +496,7 @@ fn run_worktree() -> anyhow::Result<()> {
         .success();
 
     // Modify the config in the main worktree
-    context
-        .work_dir()
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str("")?;
+    context.write_file(PRE_COMMIT_CONFIG_YAML, "");
 
     let mut commit = context
         .git_at(context.work_dir().child("worktree"))
@@ -607,7 +611,7 @@ fn git_dir_synthesized_git_work_tree_not_leaked_to_hook() {
 /// work tree root. A workspace hook runs in its own project directory, so a Git command
 /// it runs must still resolve the repository root, not the project directory.
 #[test]
-fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
+fn workspace_hook_in_linked_worktree_keeps_git_index() {
     let context = TestEnv::new_git()
         .with_filter("[a-f0-9]{7}", "abc1234")
         .with_config(indoc::indoc! {r"
@@ -620,11 +624,10 @@ fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
              entry: true
              always_run: true
              pass_filenames: false
-    "});
-
-    let project = context.work_dir().child("sub");
-    project.create_dir_all()?;
-    project.child(PRE_COMMIT_CONFIG_YAML).write_str(indoc! { r"
+    "})
+        .with_file(
+            "sub/.pre-commit-config.yaml",
+            indoc! { r"
         repos:
         - repo: local
           hooks:
@@ -634,14 +637,12 @@ fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
              entry: git add -u
              always_run: true
              pass_filenames: false
-    "})?;
-
-    context.work_dir().child("README.md").write_str("root\n")?;
-    context.work_dir().child("tracked.txt").write_str("b\n")?;
-    project.child("README.md").write_str("sub\n")?;
-    let nested = context.work_dir().child("deep").child("nested");
-    nested.create_dir_all()?;
-    nested.child("a.txt").write_str("a\n")?;
+    "},
+        )
+        .with_file("README.md", "root\n")
+        .with_file("tracked.txt", "b\n")
+        .with_file("sub/README.md", "sub\n")
+        .with_file("deep/nested/a.txt", "a\n");
 
     context.git().add_all().commit("Initial commit");
 
@@ -662,7 +663,7 @@ fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
         .success();
 
     let worktree = context.work_dir().child("worktree");
-    worktree.child("tracked.txt").write_str("b2\n")?;
+    context.write_file("worktree/tracked.txt", "b2\n");
     context.git_at(&worktree).add("tracked.txt");
 
     let mut commit = context.git_at(&worktree).command();
@@ -711,12 +712,10 @@ fn workspace_hook_in_linked_worktree_keeps_git_index() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
-fn workspace_hook_impl_root() -> anyhow::Result<()> {
+fn workspace_hook_impl_root() {
     let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
 
     let config = indoc! {r#"
@@ -730,7 +729,7 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
           verbose: true
     "#};
 
-    context.setup_workspace(&["project2", "project3"], config)?;
+    context.setup_workspace(&["project2", "project3"], config);
     context.git().add_all();
 
     // Install from root
@@ -779,12 +778,10 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
 
         cwd: [TEMP_DIR]/
     "#);
-
-    Ok(())
 }
 
 #[test]
-fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow::Result<()> {
+fn workspace_commit_msg_hook_receives_message_file_for_each_project() {
     let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
 
     let config = indoc! {r#"
@@ -802,7 +799,7 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
           verbose: true
     "#};
 
-    context.setup_workspace(&["template"], config)?;
+    context.setup_workspace(&["template"], config);
     context.git().add_all();
 
     cmd_snapshot!(context, context.install(), @r#"
@@ -842,8 +839,6 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
         cwd: [TEMP_DIR]/
         args: ['.git/COMMIT_EDITMSG']
     "#);
-
-    Ok(())
 }
 
 #[test]
@@ -886,7 +881,7 @@ fn commit_msg_builtin_hook_respects_message_file_filters() {
 }
 
 #[test]
-fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
+fn workspace_hook_impl_subdirectory() {
     let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
     let cwd = context.work_dir();
 
@@ -901,7 +896,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
           verbose: true
     "#};
 
-    context.setup_workspace(&["project2", "project3"], config)?;
+    context.setup_workspace(&["project2", "project3"], config);
     context.git().add_all();
 
     // Install from a subdirectory
@@ -940,8 +935,6 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
 
       cwd: [TEMP_DIR]/project2
     ");
-
-    Ok(())
 }
 
 /// Install from a subdirectory, and run commit in another worktree.
@@ -961,7 +954,7 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
           verbose: true
     "#};
 
-    context.setup_workspace(&["project2", "project3"], config)?;
+    context.setup_workspace(&["project2", "project3"], config);
     context.git().add_all().commit("Initial commit");
 
     // Install from a subdirectory
@@ -989,11 +982,7 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
         .success();
 
     // Modify the config in the main worktree
-    context
-        .work_dir()
-        .child("project2")
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str("")?;
+    context.write_file("project2/.pre-commit-config.yaml", "");
 
     let mut commit = context.git_at(cwd.child("worktree")).command();
     commit
@@ -1017,13 +1006,12 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
 }
 
 #[test]
-fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
+fn workspace_hook_impl_no_project_found() {
     let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "1d5e501");
 
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
-    empty_dir.create_dir_all()?;
-    empty_dir.child("file.txt").write_str("Some content")?;
+    context.write_file("empty/file.txt", "Some content");
     context.git().add_all();
 
     // Install hook that allows missing config
@@ -1075,10 +1063,9 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     ");
 
     // Create the root `.pre-commit-config.yaml`
-    context
-        .work_dir()
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str(indoc::indoc! {r"
+    context.write_file(
+        PRE_COMMIT_CONFIG_YAML,
+        indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -1086,7 +1073,8 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
                 name: fail
                 entry: fail
                 language: fail
-    "})?;
+    "},
+    );
     context.git().add_all();
 
     // Commit with `PREK_ALLOW_NO_CONFIG=1` again, the hooks should run (and fail)
@@ -1111,19 +1099,15 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
 
       .pre-commit-config.yaml
     ");
-
-    Ok(())
 }
 
 #[test]
-fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
-
-    // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
-    context
-        .work_dir()
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str(indoc::indoc! {r"
+fn hook_impl_does_not_fail_when_no_hooks_match_stage() {
+    let context = TestEnv::new_git()
+        .with_filter("[a-f0-9]{7}", "abc1234")
+        .with_file(
+            PRE_COMMIT_CONFIG_YAML,
+            indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -1132,9 +1116,12 @@ fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
                 language: system
                 entry: echo manual-only
                 stages: [ manual ]
-    "})?;
+    "},
+        )
+        .with_file("file.txt", "x");
 
-    context.work_dir().child("file.txt").write_str("x")?;
+    // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
+
     context.git().add_all();
 
     // Install the git hook (which invokes `prek hook-impl`).
@@ -1162,12 +1149,10 @@ fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
-fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
+fn workspace_hook_impl_with_selectors() {
     let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "abc1234");
     let cwd = context.work_dir();
 
@@ -1182,7 +1167,7 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
           verbose: true
     "#};
 
-    context.setup_workspace(&["project2", "project3"], config)?;
+    context.setup_workspace(&["project2", "project3"], config);
     context.git().add_all();
 
     cmd_snapshot!(context, context.install().arg("project2/"), @r#"
@@ -1218,6 +1203,4 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
 
         cwd: [TEMP_DIR]/project2
     "#);
-
-    Ok(())
 }

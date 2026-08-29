@@ -1,4 +1,4 @@
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
@@ -303,12 +303,13 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 
 /// Ensure that stderr from hooks is captured and shown to the user.
 #[test]
-fn hook_stderr() -> anyhow::Result<()> {
+fn hook_stderr() {
     if !EnvVars.is_set(EnvVars::CI) {
-        return Ok(());
+        return;
     }
 
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -316,14 +317,10 @@ fn hook_stderr() -> anyhow::Result<()> {
                 name: local
                 language: dotnet
                 entry: dotnet run --project ./hook
-    "});
-
-    // Create a minimal console app that writes to stderr
-    context.work_dir().child("hook").create_dir_all()?;
-    context
-        .work_dir()
-        .child("hook/hook.csproj")
-        .write_str(indoc::indoc! {r#"
+    "})
+        .with_file(
+            "hook/hook.csproj",
+            indoc::indoc! {r#"
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
             <OutputType>Exe</OutputType>
@@ -331,16 +328,17 @@ fn hook_stderr() -> anyhow::Result<()> {
             <ImplicitUsings>disable</ImplicitUsings>
           </PropertyGroup>
         </Project>
-    "#})?;
-    context
-        .work_dir()
-        .child("hook/Program.cs")
-        .write_str(indoc::indoc! {r#"
+    "#},
+        )
+        .with_file(
+            "hook/Program.cs",
+            indoc::indoc! {r#"
         using System;
         Console.Error.WriteLine("Error from hook");
         Console.Error.Flush();
         Environment.Exit(1);
-    "#})?;
+    "#},
+        );
 
     context.git().add_all();
 
@@ -356,6 +354,4 @@ fn hook_stderr() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }

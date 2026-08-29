@@ -1,18 +1,12 @@
 #[cfg(unix)]
 use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(unix)]
-use assert_fs::fixture::{FileWriteStr, PathChild};
-
 mod common;
 
 #[cfg(unix)] // "executable" tag is different on Windows
 #[test]
-fn identify_text_with_missing_paths() -> anyhow::Result<()> {
-    let context = TestEnv::new();
-    context
-        .work_dir()
-        .child("hello.py")
-        .write_str("print('hi')\n")?;
+fn identify_text_with_missing_paths() {
+    let context = TestEnv::new().with_file("hello.py", "print('hi')\n");
 
     cmd_snapshot!(context,
         context
@@ -33,18 +27,12 @@ fn identify_text_with_missing_paths() -> anyhow::Result<()> {
     error: missing.py: failed to query metadata of symlink `missing.py`: No such file or directory (os error 2)
     "
     );
-
-    Ok(())
 }
 
 #[cfg(unix)] // "executable" tag is different on Windows
 #[test]
-fn identify_json_with_missing_paths() -> anyhow::Result<()> {
-    let context = TestEnv::new();
-    context
-        .work_dir()
-        .child("hello.py")
-        .write_str("print('hi')\n")?;
+fn identify_json_with_missing_paths() {
+    let context = TestEnv::new().with_file("hello.py", "print('hi')\n");
 
     cmd_snapshot!(context,
         context
@@ -81,6 +69,4 @@ fn identify_json_with_missing_paths() -> anyhow::Result<()> {
     ----- stderr -----
     error: missing.py: failed to query metadata of symlink `missing.py`: No such file or directory (os error 2)
     "#);
-
-    Ok(())
 }

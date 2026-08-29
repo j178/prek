@@ -107,9 +107,9 @@ fn exec_propagates_child_exit_status() {
 }
 
 #[test]
-fn exec_rejects_ambiguous_hook_selector() -> Result<()> {
+fn exec_rejects_ambiguous_hook_selector() {
     let context = TestEnv::new_git();
-    context.setup_workspace(&["frontend"], config())?;
+    context.setup_workspace(&["frontend"], config());
 
     cmd_snapshot!(context, context.exec().args([
         "exec-test",
@@ -128,13 +128,12 @@ fn exec_rejects_ambiguous_hook_selector() -> Result<()> {
       - .:exec-test
     Use a `project-path:hook-id` selector to select one hook
     ");
-    Ok(())
 }
 
 #[test]
-fn exec_keeps_current_working_directory() -> Result<()> {
+fn exec_keeps_current_working_directory() {
     let context = TestEnv::new_git();
-    context.setup_workspace(&["frontend"], config())?;
+    context.setup_workspace(&["frontend"], config());
 
     cmd_snapshot!(context, context.exec().args([
             "frontend:exec-test",
@@ -150,14 +149,13 @@ fn exec_keeps_current_working_directory() -> Result<()> {
 
     ----- stderr -----
     ");
-    Ok(())
 }
 
 #[cfg(unix)]
 #[test]
 fn exec_resolves_relative_command_from_current_working_directory() -> Result<()> {
     let context = TestEnv::new_git();
-    context.setup_workspace(&["frontend"], config())?;
+    context.setup_workspace(&["frontend"], config());
 
     let command = context.work_dir().join("exec-tool");
     fs_err::write(&command, "#!/bin/sh\necho relative command ok\n")?;

@@ -583,7 +583,7 @@ fn list_json_output() {
 }
 
 #[test]
-fn workspace_list() -> anyhow::Result<()> {
+fn workspace_list() {
     let context = TestEnv::new_git();
     let cwd = context.work_dir().to_path_buf();
 
@@ -606,7 +606,7 @@ fn workspace_list() -> anyhow::Result<()> {
             "project3/project5",
         ],
         config,
-    )?;
+    );
     context.git().add_all();
 
     cmd_snapshot!(context, context.list(), @r"
@@ -767,12 +767,10 @@ fn workspace_list() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
-fn list_with_selectors() -> anyhow::Result<()> {
+fn list_with_selectors() {
     let context = TestEnv::new_git();
 
     let config = indoc! {r"
@@ -794,7 +792,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
             "project3/project5",
         ],
         config,
-    )?;
+    );
     context.git().add_all();
 
     cmd_snapshot!(context, context.list().arg("project2/"), @r"
@@ -913,6 +911,4 @@ fn list_with_selectors() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }

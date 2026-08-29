@@ -1,5 +1,5 @@
 use anyhow::Result;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::PathChild;
 
 use crate::common::make_executable;
 use crate::common::{TestEnv, cmd_snapshot};
@@ -8,8 +8,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 mod unix {
     use super::*;
 
-    use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-    use prek_consts::PRE_COMMIT_CONFIG_YAML;
+    use assert_fs::fixture::PathChild;
 
     #[test]
     fn script_run() {
@@ -65,22 +64,23 @@ mod unix {
                   MESSAGE: "Hello, World"
                 verbose: true
         "#};
-        let context = context.with_config(config);
-        context
-            .work_dir()
-            .child("script.sh")
-            .write_str(indoc::indoc! {r#"
+        let context = context.with_config(config).with_file(
+            "script.sh",
+            indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "$MESSAGE!"
-        "#})?;
+        "#},
+        );
 
         let child = context.work_dir().child("child");
-        child.create_dir_all()?;
-        child.child(PRE_COMMIT_CONFIG_YAML).write_str(config)?;
-        child.child("script.sh").write_str(indoc::indoc! {r#"
+        context.write_file("child/.pre-commit-config.yaml", config);
+        context.write_file(
+            "child/script.sh",
+            indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "$MESSAGE from child!"
-        "#})?;
+        "#},
+        );
 
         make_executable(context.work_dir().child("script.sh"))?;
         make_executable(child.child("script.sh"))?;
@@ -136,10 +136,13 @@ mod unix {
         "});
 
         let script = context.work_dir().child("echo.sh");
-        script.write_str(indoc::indoc! {r#"
+        context.write_file(
+            "echo.sh",
+            indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "Hello, World!"
-        "#})?;
+        "#},
+        );
         make_executable(&script)?;
 
         context.git().add_all();
@@ -161,8 +164,9 @@ mod unix {
     }
 
     #[test]
-    fn script_shell_runs_entry_as_shell_source() -> Result<()> {
-        let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    fn script_shell_runs_entry_as_shell_source() {
+        let context = TestEnv::new_git()
+            .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -179,8 +183,9 @@ mod unix {
                 shell: sh
                 args: [configured]
                 verbose: true
-        "#});
-        context.work_dir().child("a.txt").write_str("a")?;
+        "#})
+            .with_file("a.txt", "a");
+
         context.git().add_all();
 
         cmd_snapshot!(context, context.run(), @r"
@@ -195,8 +200,6 @@ mod unix {
 
         ----- stderr -----
         ");
-
-        Ok(())
     }
 }
 
@@ -216,10 +219,13 @@ fn windows_script_run() -> Result<()> {
     "});
 
     let script = context.work_dir().child("echo.sh");
-    script.write_str(indoc::indoc! {r#"
+    context.write_file(
+        "echo.sh",
+        indoc::indoc! {r#"
         #!/usr/bin/env python3
         print("Hello, World!")
-    "#})?;
+    "#},
+    );
     make_executable(&script)?;
 
     context.git().add_all();
