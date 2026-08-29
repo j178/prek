@@ -26,8 +26,6 @@ class PlatformSpec:
     os: list[str]
     cpu: list[str]
     libc: str | None = None
-    arm_version_min: int | None = None
-    arm_version_max: int | None = None
 
     def output_dir(self, base_dir: Path) -> Path:
         return base_dir.joinpath(*self.package_name.split("/"))
@@ -42,10 +40,6 @@ class PlatformSpec:
         }
         if self.libc is not None:
             config["libc"] = self.libc
-        if self.arm_version_min is not None:
-            config["armVersionMin"] = self.arm_version_min
-        if self.arm_version_max is not None:
-            config["armVersionMax"] = self.arm_version_max
         return config
 
     def package_json(self, version: str) -> dict[str, object]:
@@ -129,71 +123,6 @@ PLATFORMS = (
         cpu=["arm64"],
     ),
     PlatformSpec(
-        rust_target="armv7-unknown-linux-gnueabihf",
-        package_name="@j178/prek-linux-arm-gnueabihf",
-        archive_file="prek-armv7-unknown-linux-gnueabihf.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["arm"],
-        libc="glibc",
-        arm_version_min=7,
-    ),
-    PlatformSpec(
-        rust_target="arm-unknown-linux-musleabihf",
-        package_name="@j178/prek-linux-arm-musleabihf",
-        archive_file="prek-arm-unknown-linux-musleabihf.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["arm"],
-        libc="musl",
-    ),
-    PlatformSpec(
-        rust_target="armv7-unknown-linux-musleabihf",
-        package_name="@j178/prek-linux-armv7-musleabihf",
-        archive_file="prek-armv7-unknown-linux-musleabihf.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["arm"],
-        libc="musl",
-        arm_version_min=7,
-    ),
-    PlatformSpec(
-        rust_target="i686-unknown-linux-gnu",
-        package_name="@j178/prek-linux-ia32-gnu",
-        archive_file="prek-i686-unknown-linux-gnu.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["ia32"],
-        libc="glibc",
-    ),
-    PlatformSpec(
-        rust_target="i686-unknown-linux-musl",
-        package_name="@j178/prek-linux-ia32-musl",
-        archive_file="prek-i686-unknown-linux-musl.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["ia32"],
-        libc="musl",
-    ),
-    PlatformSpec(
-        rust_target="riscv64gc-unknown-linux-gnu",
-        package_name="@j178/prek-linux-riscv64-gnu",
-        archive_file="prek-riscv64gc-unknown-linux-gnu.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["riscv64"],
-        libc="glibc",
-    ),
-    PlatformSpec(
-        rust_target="s390x-unknown-linux-gnu",
-        package_name="@j178/prek-linux-s390x-gnu",
-        archive_file="prek-s390x-unknown-linux-gnu.tar.gz",
-        binary_name="prek",
-        os=["linux"],
-        cpu=["s390x"],
-        libc="glibc",
-    ),
-    PlatformSpec(
         rust_target="x86_64-unknown-linux-gnu",
         package_name="@j178/prek-linux-x64-gnu",
         archive_file="prek-x86_64-unknown-linux-gnu.tar.gz",
@@ -218,14 +147,6 @@ PLATFORMS = (
         binary_name="prek.exe",
         os=["win32"],
         cpu=["arm64"],
-    ),
-    PlatformSpec(
-        rust_target="i686-pc-windows-msvc",
-        package_name="@j178/prek-win32-ia32-msvc",
-        archive_file="prek-i686-pc-windows-msvc.zip",
-        binary_name="prek.exe",
-        os=["win32"],
-        cpu=["ia32"],
     ),
     PlatformSpec(
         rust_target="x86_64-pc-windows-msvc",
