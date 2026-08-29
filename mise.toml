@@ -40,7 +40,7 @@ run = "cargo insta test --review --test '*'"
 
 [tasks.test]
 description = "Run all tests"
-run = "cargo test --all-targets --all-features --workspace"
+run = "cargo test --all-targets --features docker,schemars --workspace"
 
 [tasks.generate-cli-reference]
 description = "Generate CLI reference"

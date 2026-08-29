@@ -17,6 +17,8 @@ default = ["docker"]
 self-update = ["dep:axoupdater"]
 # Enable the profiler for benchmarking
 profiler = ["dep:pprof", "pprof/flamegraph"]
+# Enable tests that depend on the CI environment
+ci = []
 # Enable docker related tests in integration tests
 docker = []
 # Enable generation of JSON schema

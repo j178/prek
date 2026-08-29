@@ -721,17 +721,11 @@ fn process_files() {
 /// is requested that isn't available on the system.
 /// Windows doesn't support auto-download, so this test is only for non-Windows platforms.
 /// The Windows-specific message is tested in `specific_ruby_unavailable`.
+#[cfg(feature = "ci")]
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn auto_download() -> anyhow::Result<()> {
     use assert_fs::assert::PathAssert;
-    use prek_consts::env_vars::{EnvVars, EnvVarsRead};
-
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI: local environments may have
-        // unexpected Ruby versions installed.
-        return Ok(());
-    }
 
     let context = ruby_context();
     let context = context.with_config(indoc::indoc! {r"

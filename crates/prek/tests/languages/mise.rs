@@ -8,10 +8,6 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn reuses_managed_mise() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return;
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -81,10 +77,6 @@ fn reuses_managed_mise() {
 
 #[test]
 fn system_mise_installs_and_activates_dependencies() -> Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return Ok(());
-    }
-
     let context = TestEnv::new_git();
 
     let hook_repo = context.create_repo("mise-system-hook");
