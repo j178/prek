@@ -2971,7 +2971,7 @@ For glob syntax details, see the <a href="https://docs.rs/globset/latest/globset
 <p class="admonition-title">prek-only</p>
 <p><code>default_env</code> is a <code>prek</code> extension and may not be recognized by upstream <code>pre-commit</code>.</p>
 </div>
-<p>Runtime environment variables to apply to every hook in this config.
+<p>Environment variables to apply when <code>prek</code> creates hook environments and runs hooks in this config.
 If a hook sets the same variable in <a href="#prek-only-env"><code>env</code></a>, the hook-level value wins.</p>
 <ul>
 <li>Type: map of string to string</li>
@@ -3613,25 +3613,30 @@ hooks.</p>
 <p class="admonition-title">prek-only</p>
 <p><code>env</code> is a <code>prek</code> extension and may not be recognized by upstream <code>pre-commit</code>.</p>
 </div>
-<p>Extra runtime environment variables for the hook process.</p>
+<p>Extra environment variables for hook environment creation and the hook process.</p>
 <ul>
 <li>Type: map of string to string</li>
 </ul>
 <p>Values override the existing process environment (including variables such as <code>PATH</code>).
-They are applied when the hook runs, not when <code>prek</code> installs or prepares the hook environment.</p>
+They are applied to commands that create the hook environment and when the hook runs.</p>
 <div class="admonition note">
-<p class="admonition-title">Runtime only</p>
-<p><code>env</code> cannot be used to control hook installation or environment preparation.
-Keeping it runtime-only means the installed hook environment does not depend on
-ambient variables from the invoking shell. If those variables affected
-installation, changing one of them would imply that <code>prek</code> may need to
-recreate the hook environment.</p>
+<p class="admonition-title">Creation time</p>
+<p>When a matching hook environment already exists, <code>prek</code> reuses it without applying
+these variables to installation again. Changing <code>env</code> does not recreate or select a
+different environment. The new values affect installation the next time the environment
+is created for another reason. If multiple hooks share an environment, only the <code>env</code> of
+the hook that creates it affects installation.</p>
 </div>
+<p>Language backends may override or remove variables they manage to preserve hook environment
+isolation.
+This applies to subprocesses started by a backend. <code>env</code> is not treated as configuration for
+download logic implemented directly inside <code>prek</code>.</p>
 <p>For remote hooks, <code>env</code> may also be set by the hook author in
 <code>.pre-commit-hooks.yaml</code>. Values from the project configuration are merged with
 manifest values and override duplicate keys.
 Values set directly on a hook override matching <a href="#default_env"><code>default_env</code></a> values.</p>
-<p>For <code>docker</code> / <code>docker_image</code> hooks, these variables are passed into the container rather than being applied to the container runtime command.</p>
+<p>When running <code>docker</code> / <code>docker_image</code> hooks, these variables are passed into the container rather
+than being applied to the container runtime command.</p>
 <p>Example:</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="15:2"><input checked="checked" id="env-prektoml" name="__tabbed_15" type="radio" /><input id="env-pre-commit-configyaml" name="__tabbed_15" type="radio" /><div class="tabbed-labels"><label for="env-prektoml">prek.toml</label><label for="env-pre-commit-configyaml">.pre-commit-config.yaml</label></div>
 <div class="tabbed-content">
