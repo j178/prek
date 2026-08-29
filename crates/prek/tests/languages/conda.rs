@@ -1,4 +1,3 @@
-use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -68,29 +67,28 @@ fn local_hook_with_additional_dependencies() {
 }
 
 #[test]
-fn remote_repo_install() -> anyhow::Result<()> {
+fn remote_repo_install() {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("conda-hook");
-
-    hook_repo
-        .path()
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
+    let hook_repo = context
+        .create_repo("conda-hook")
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
             - id: conda-remote
               name: conda-remote
               language: conda
               entry: openssl version
-        "})?;
-
-    hook_repo
-        .path()
-        .child("environment.yml")
-        .write_str(indoc::indoc! {r"
+        "},
+        )
+        .with_file(
+            "environment.yml",
+            indoc::indoc! {r"
             channels:
               - conda-forge
             dependencies:
               - openssl
-        "})?;
+        "},
+        );
 
     hook_repo
         .git()
@@ -98,7 +96,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
         .commit("Add conda hook")
         .tag("v1.0.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -125,6 +123,4 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }

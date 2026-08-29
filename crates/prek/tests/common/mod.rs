@@ -44,6 +44,22 @@ fn git_cmd(dir: impl AsRef<Path>, home_dir: impl AsRef<Path>) -> Command {
     cmd
 }
 
+fn write_test_file(root: &ChildPath, file: &Path, content: &[u8]) {
+    root.child(file)
+        .write_binary(content)
+        .unwrap_or_else(|err| panic!("Failed to write test file `{}`: {err}", file.display()));
+}
+
+fn write_executable_test_file(root: &ChildPath, file: &Path, content: &[u8]) {
+    write_test_file(root, file, content);
+    make_executable(root.child(file)).unwrap_or_else(|err| {
+        panic!(
+            "Failed to make test file `{}` executable: {err}",
+            file.display()
+        )
+    });
+}
+
 fn init_repo(path: impl AsRef<Path>, home_dir: impl AsRef<Path>) {
     git_cmd(path, home_dir)
         .arg("-c")
@@ -72,6 +88,15 @@ impl<'a> TestGit<'a> {
         git_cmd(&self.path, self.home_dir)
     }
 
+    /// Run a Git command that is expected to succeed.
+    pub fn run<S>(&self, args: impl IntoIterator<Item = S>) -> &Self
+    where
+        S: AsRef<OsStr>,
+    {
+        self.command().args(args).assert().success();
+        self
+    }
+
     pub fn init(&self) -> &Self {
         init_repo(&self.path, self.home_dir);
         self
@@ -87,11 +112,7 @@ impl<'a> TestGit<'a> {
     }
 
     pub fn commit(&self, message: &str) -> &Self {
-        self.command()
-            .args(["commit", "-m", message])
-            .assert()
-            .success();
-        self
+        self.run(["commit", "-m", message])
     }
 
     pub fn tag(&self, tag: &str) -> &Self {
@@ -112,10 +133,7 @@ impl<'a> TestGit<'a> {
     }
 
     pub fn rm(&self, path: &str) -> &Self {
-        self.command()
-            .args(["rm", "--cached", path])
-            .assert()
-            .success();
+        self.run(["rm", "--cached", path]);
         let file_path = self.path.join(path);
         if file_path.exists() {
             fs_err::remove_file(file_path).unwrap();
@@ -124,24 +142,15 @@ impl<'a> TestGit<'a> {
     }
 
     pub fn clean(&self) -> &Self {
-        self.command().args(["clean", "-fdx"]).assert().success();
-        self
+        self.run(["clean", "-fdx"])
     }
 
     pub fn branch(&self, branch_name: &str) -> &Self {
-        self.command()
-            .args(["branch", branch_name])
-            .assert()
-            .success();
-        self
+        self.run(["branch", branch_name])
     }
 
     pub fn checkout(&self, branch_name: &str) -> &Self {
-        self.command()
-            .args(["checkout", branch_name])
-            .assert()
-            .success();
-        self
+        self.run(["checkout", branch_name])
     }
 }
 
@@ -160,6 +169,18 @@ impl TestRepo {
 
     pub fn path(&self) -> &ChildPath {
         &self.path
+    }
+
+    #[must_use]
+    pub fn with_file(self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) -> Self {
+        write_test_file(&self.path, file.as_ref(), content.as_ref());
+        self
+    }
+
+    #[must_use]
+    pub fn with_executable_file(self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) -> Self {
+        write_executable_test_file(&self.path, file.as_ref(), content.as_ref());
+        self
     }
 
     pub fn git(&self) -> TestGit<'_> {
@@ -314,17 +335,38 @@ impl TestEnv {
 
     /// Write or replace a file in the working directory.
     pub fn write_file(&self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) {
-        let file = file.as_ref();
-        self.work_dir
-            .child(file)
-            .write_binary(content.as_ref())
-            .unwrap_or_else(|err| panic!("Failed to write test file `{}`: {err}", file.display()));
+        write_test_file(&self.work_dir, file.as_ref(), content.as_ref());
     }
 
     /// Write a file in the working directory and return this environment.
     #[must_use]
     pub fn with_file(self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) -> Self {
         self.write_file(file, content);
+        self
+    }
+
+    /// Write files in the working directory and return this environment.
+    #[must_use]
+    pub fn with_files<P, C>(self, files: impl IntoIterator<Item = (P, C)>) -> Self
+    where
+        P: AsRef<Path>,
+        C: AsRef<[u8]>,
+    {
+        for (file, content) in files {
+            self.write_file(file, content);
+        }
+        self
+    }
+
+    /// Write or replace an executable file in the working directory.
+    pub fn write_executable_file(&self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) {
+        write_executable_test_file(&self.work_dir, file.as_ref(), content.as_ref());
+    }
+
+    /// Write an executable file in the working directory and return this environment.
+    #[must_use]
+    pub fn with_executable_file(self, file: impl AsRef<Path>, content: impl AsRef<[u8]>) -> Self {
+        self.write_executable_file(file, content);
         self
     }
 
@@ -465,6 +507,11 @@ impl TestEnv {
         &self.work_dir
     }
 
+    /// Get a path relative to the working directory.
+    pub fn child(&self, path: impl AsRef<Path>) -> ChildPath {
+        self.work_dir.child(path)
+    }
+
     /// Get the home directory for the test environment.
     pub fn home_dir(&self) -> &ChildPath {
         &self.home_dir
@@ -493,14 +540,49 @@ impl TestEnv {
             .expect("Failed to write pre-commit config");
     }
 
-    /// Setup a workspace with multiple projects, each with the same config.
-    /// This creates a tree-like directory structure for testing workspace functionality.
-    pub fn setup_workspace(&self, project_paths: &[&str], config: &str) {
+    /// Write a `.pre-commit-config.yaml` file for a nested project.
+    fn write_project_config(&self, project: impl AsRef<Path>, content: impl AsRef<str>) {
+        self.write_file(
+            project.as_ref().join(PRE_COMMIT_CONFIG_YAML),
+            content.as_ref(),
+        );
+    }
+
+    /// Write a nested project config and return this environment.
+    #[must_use]
+    pub fn with_project_config(self, project: impl AsRef<Path>, content: impl AsRef<str>) -> Self {
+        self.write_project_config(project, content);
+        self
+    }
+
+    /// Write the same config for the workspace root and each nested project.
+    pub fn write_workspace<P>(
+        &self,
+        project_paths: impl IntoIterator<Item = P>,
+        config: impl AsRef<str>,
+    ) where
+        P: AsRef<Path>,
+    {
+        let config = config.as_ref();
         self.write_config(config);
 
         for path in project_paths {
-            self.write_file(Path::new(path).join(PRE_COMMIT_CONFIG_YAML), config);
+            self.write_project_config(path, config);
         }
+    }
+
+    /// Write workspace configs and return this environment.
+    #[must_use]
+    pub fn with_workspace<P>(
+        self,
+        project_paths: impl IntoIterator<Item = P>,
+        config: impl AsRef<str>,
+    ) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        self.write_workspace(project_paths, config);
+        self
     }
 }
 

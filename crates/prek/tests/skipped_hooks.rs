@@ -25,7 +25,6 @@ fn hook_env_count(context: &TestEnv) -> Result<usize> {
 }
 
 fn remove_loose_blob(context: &TestEnv, filename: &str) -> Result<()> {
-    let cwd = context.work_dir();
     let output = context
         .git()
         .command()
@@ -35,7 +34,7 @@ fn remove_loose_blob(context: &TestEnv, filename: &str) -> Result<()> {
     assert!(output.status.success(), "git hash-object should succeed");
     let blob = String::from_utf8(output.stdout)?;
     let blob = blob.trim_ascii();
-    let object_path = cwd
+    let object_path = context
         .child(".git")
         .child("objects")
         .child(&blob[..2])
@@ -577,9 +576,8 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
 #[test]
 fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
     let context = TestEnv::new();
-    let cwd = context.work_dir();
     let status = context
-        .git_at(cwd)
+        .git()
         .command()
         .args(["init", "--object-format=sha1"])
         .status()?;
@@ -609,15 +607,13 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
         .with_file(".gitattributes", "binary.dat -diff\n")
         .with_file("binary.dat", "original\n");
 
-    let cwd = context.work_dir();
-
     // The two replacement blobs have distinct SHA-1s whose first seven
     // hexadecimal digits are both `4b8e34c`.
 
     context.git().add_all();
 
     let status = context
-        .git_at(cwd)
+        .git()
         .command()
         .args(["config", "core.abbrev", "7"])
         .status()?;
@@ -706,8 +702,6 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
     "#})
         .with_file("file.txt", "original\n");
 
-    let cwd = context.work_dir();
-
     context.git().add_all().commit("init");
 
     remove_loose_blob(&context, "file.txt")?;
@@ -717,7 +711,7 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
     // stdout is still a usable best-effort before/after snapshot.
     fs_err::OpenOptions::new()
         .write(true)
-        .open(cwd.child("file.txt").path())?
+        .open(context.child("file.txt").path())?
         .set_modified(SystemTime::now() + Duration::from_secs(10))?;
 
     let output = context

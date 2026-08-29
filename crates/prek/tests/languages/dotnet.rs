@@ -1,5 +1,5 @@
 #[cfg(feature = "ci")]
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::PathChild;
 #[cfg(feature = "ci")]
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
@@ -244,22 +244,22 @@ fn additional_dependencies_with_version() {
 /// Test that additional dependencies in a remote repo are installed correctly.
 #[cfg(feature = "ci")]
 #[test]
-fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
+fn additional_dependencies_in_remote_repo() {
     let context = TestEnv::new_git();
-    let repo = context.create_repo("dotnet-hook");
+    let repo = context.create_repo("dotnet-hook").with_file(
+        PRE_COMMIT_HOOKS_YAML,
+        indoc::indoc! {r#"
+            - id: dotnet-outdated
+              name: dotnet-outdated
+              language: dotnet
+              entry: dotnet-outdated --version
+              additional_dependencies: ["dotnet-outdated-tool:4.7.1"]
+        "#},
+    );
     let repo_path = repo.path();
-    repo_path
-        .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r#"
-        - id: dotnet-outdated
-          name: dotnet-outdated
-          language: dotnet
-          entry: dotnet-outdated --version
-          additional_dependencies: ["dotnet-outdated-tool:4.7.1"]
-    "#})?;
     repo.git().add_all().commit("Add manifest").tag("v0.1.0");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v0.1.0
@@ -286,8 +286,6 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Ensure that stderr from hooks is captured and shown to the user.

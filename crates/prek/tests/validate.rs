@@ -18,7 +18,7 @@ fn validate_config() {
     warning: No configs to check
     ");
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v5.0.0

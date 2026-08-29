@@ -5,10 +5,12 @@ use crate::common::{TestEnv, cmd_snapshot};
 #[test]
 fn meta_hooks() {
     let context = TestEnv::new_git()
-        .with_file("file.txt", "Hello, world!\n")
-        .with_file("valid.json", "{}")
-        .with_file("invalid.json", "{}")
-        .with_file("main.py", r#"print "abc"  "#)
+        .with_files([
+            ("file.txt", "Hello, world!\n"),
+            ("valid.json", "{}"),
+            ("invalid.json", "{}"),
+            ("main.py", r#"print "abc"  "#),
+        ])
         .with_config(indoc::indoc! {r"
         repos:
           - repo: meta
@@ -133,8 +135,8 @@ fn check_useless_excludes_remote() {
 #[test]
 fn meta_hooks_workspace() {
     let context = TestEnv::new_git()
-        .with_file(
-            "app/.pre-commit-config.yaml",
+        .with_project_config(
+            "app",
             indoc::indoc! {r"
         repos:
           - repo: meta
@@ -156,10 +158,12 @@ fn meta_hooks_workspace() {
                 exclude: $nonexistent^
     "},
         )
-        .with_file("app/file.txt", "Hello, world!\n")
-        .with_file("app/valid.json", "{}")
-        .with_file("app/invalid.json", "{x}")
-        .with_file("app/main.py", r#"print "abc"  "#)
+        .with_files([
+            ("app/file.txt", "Hello, world!\n"),
+            ("app/valid.json", "{}"),
+            ("app/invalid.json", "{x}"),
+            ("app/main.py", r#"print "abc"  "#),
+        ])
         .with_config("repos: []");
     context.git().add_all();
 

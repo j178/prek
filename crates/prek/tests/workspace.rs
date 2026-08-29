@@ -1,8 +1,6 @@
 mod common;
 
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
 use indoc::indoc;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
@@ -13,7 +11,6 @@ use crate::common::{TestEnv, cmd_snapshot};
 fn basic_discovery() {
     let context = TestEnv::new_git();
     let cwd = context.work_dir();
-
     let config = indoc! {r"
     repos:
       - repo: local
@@ -25,8 +22,8 @@ fn basic_discovery() {
           verbose: true
     "};
 
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "project2",
             "project3",
             "nested/project4",
@@ -326,8 +323,8 @@ fn config_not_staged() {
           entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
           verbose: true
     "};
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "project2",
             "project3",
             "nested/project4",
@@ -348,8 +345,8 @@ fn config_not_staged() {
           verbose: true
     "};
     // Setup again to modify files after git add
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "project2",
             "project3",
             "nested/project4",
@@ -410,8 +407,8 @@ fn run_with_selectors() {
           verbose: true
     "};
 
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "project2",
             "project3",
             "nested/project4",
@@ -726,8 +723,8 @@ fn run_with_mixed_project_and_hook_selectors() {
           language: system
           pass_filenames: false
     "})
-        .with_file(
-            "sub/.pre-commit-config.yaml",
+        .with_project_config(
+            "sub",
             indoc! {r"
     repos:
       - repo: local
@@ -740,8 +737,8 @@ fn run_with_mixed_project_and_hook_selectors() {
     "},
         )
         .with_file("sub/file.txt", "")
-        .with_file("empty/.pre-commit-config.yaml", "repos: []\n")
-        .with_file("unselected/.pre-commit-config.yaml", "invalid: config\n");
+        .with_project_config("empty", "repos: []\n")
+        .with_project_config("unselected", "invalid: config\n");
 
     context.git().add_all();
 
@@ -794,7 +791,7 @@ fn skips() {
           verbose: true
     "};
 
-    context.setup_workspace(&["project2", "project3", "project3/project4"], config);
+    context.write_workspace(["project2", "project3", "project3/project4"], config);
     context.git().add_all();
 
     // Test CLI skip
@@ -1039,8 +1036,8 @@ fn gitignore_respected() {
     "};
 
     // Create a project structure with directories that should be ignored
-    context.setup_workspace(
-        &[
+    context.write_workspace(
+        [
             "src",
             "node_modules/ignored", // Should be ignored by .gitignore
             "target/ignored",       // Should be ignored by .gitignore
@@ -1100,15 +1097,16 @@ fn nested_project_exclude_is_relative() {
     "#};
 
     // Workspace with a nested project.
-    context.setup_workspace(&["nested"], config);
+    context.write_workspace(["nested"], config);
 
     // A root-level file which should be excluded by the root project (path is `excluded_by_project`).
     // This keeps the snapshot focused on the nested files, while proving the regex is not
     // accidentally matching `nested/excluded_by_project`.
-    let context = context
-        .with_file("excluded_by_project", "")
-        .with_file("nested/include", "")
-        .with_file("nested/excluded_by_project", "");
+    let context = context.with_files([
+        ("excluded_by_project", ""),
+        ("nested/include", ""),
+        ("nested/excluded_by_project", ""),
+    ]);
 
     context.git().add_all();
 
@@ -1156,13 +1154,12 @@ fn reference_files_across_projects() {
     "};
 
     // Create a project structure with directories that should be ignored
-    context.setup_workspace(&["frontend", "backend"], config);
+    context.write_workspace(["frontend", "backend"], config);
 
     let context = context.with_file("backend/app.py", "print('Hello from backend')");
-    let cwd = context.work_dir();
     context.git().add_all();
     // Run with --files referencing a file in another project
-    cmd_snapshot!(context, context.run().current_dir(cwd.child("frontend")).arg("--files").arg("../backend/app.py").arg("../backend/non-exist.py"), @r"
+    cmd_snapshot!(context, context.run().current_dir(context.child("frontend")).arg("--files").arg("../backend/app.py").arg("../backend/non-exist.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1176,7 +1173,6 @@ fn reference_files_across_projects() {
 #[test]
 fn submodule_discovery() -> Result<()> {
     let context = TestEnv::new_git();
-    let cwd = context.work_dir();
 
     let config = indoc! {r"
     repos:
@@ -1189,20 +1185,15 @@ fn submodule_discovery() -> Result<()> {
           verbose: true
     "};
 
-    context.setup_workspace(&["project2"], config);
+    context.write_workspace(["project2"], config);
 
     // Create a submodule
-    let submodule_path = cwd.child("submodule");
+    let submodule_path = context.child("submodule");
     let submodule_context = TestEnv::new_git_at(&submodule_path).with_config(config);
     submodule_context.git().add_all().commit("Initial commit");
 
     // Add submodule to the main project
-    context
-        .git_at(cwd)
-        .command()
-        .args(["submodule", "add", "./submodule"])
-        .assert()
-        .success();
+    context.git().run(["submodule", "add", "./submodule"]);
     context.git().add_all();
 
     // 1. Test that workspace discovery does not recurse into git submodules
@@ -1277,7 +1268,7 @@ fn cookiecutter_template_directories_are_skipped() {
           verbose: true
     "};
 
-    context.setup_workspace(&["project2", "{{cookiecutter.project_slug}}"], config);
+    context.write_workspace(["project2", "{{cookiecutter.project_slug}}"], config);
 
     // Stage only the configs that should participate in discovery.
     context
@@ -1328,12 +1319,12 @@ fn orphan_projects() {
     "#};
 
     let context = context
-        .with_file("src/backend/.pre-commit-config.yaml", config)
-        .with_file("src/.pre-commit-config.yaml", config)
-        .with_file(".pre-commit-config.yaml", config)
-        .with_file("src/backend/test.py", "")
-        .with_file("src/test.py", "")
-        .with_file("test.py", "");
+        .with_workspace(["src/backend", "src"], config)
+        .with_files([
+            ("src/backend/test.py", ""),
+            ("src/test.py", ""),
+            ("test.py", ""),
+        ]);
     context.git().add_all();
 
     // Without `orphan`: files in subprojects are processed multiple times
@@ -1467,7 +1458,7 @@ fn setup_relative_repo_path_project() -> Result<TestEnv> {
           always_run: true
         "},
     );
-    let hook_repo = context.work_dir().child("hook-repo");
+    let hook_repo = context.child("hook-repo");
 
     let git = context.git_at(&hook_repo);
     git.init().add(".").commit("Initial commit");

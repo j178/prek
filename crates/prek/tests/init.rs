@@ -9,7 +9,7 @@ mod common;
 #[test]
 fn init_defaults_to_git_root() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
-    let child = context.work_dir().child("child");
+    let child = context.child("child");
     child.create_dir_all()?;
 
     cmd_snapshot!(context, context.command().arg("init").current_dir(&child), @r#"
@@ -22,7 +22,7 @@ fn init_defaults_to_git_root() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    assert!(context.work_dir().child(PREK_TOML).is_file());
+    assert!(context.child(PREK_TOML).is_file());
     assert!(!child.child(PREK_TOML).exists());
 
     Ok(())
@@ -33,7 +33,7 @@ fn init_child_project_refreshes_parent_workspace() -> anyhow::Result<()> {
     let context = TestEnv::new_git().with_config("repos: []\n");
     context.list().assert().success();
 
-    let child = context.work_dir().child("child");
+    let child = context.child("child");
     child.create_dir_all()?;
 
     cmd_snapshot!(context, context.command().arg("init").arg("child"), @r#"
@@ -77,7 +77,7 @@ fn init_preserves_existing_config() {
     "#);
 
     assert_eq!(context.read(PRE_COMMIT_CONFIG_YAML), config);
-    assert!(!context.work_dir().child(PREK_TOML).exists());
+    assert!(!context.child(PREK_TOML).exists());
 }
 
 #[test]
@@ -94,8 +94,8 @@ fn init_can_create_yaml_config() {
     ----- stderr -----
     "#);
 
-    assert!(context.work_dir().child(PRE_COMMIT_CONFIG_YAML).is_file());
-    assert!(!context.work_dir().child(PREK_TOML).exists());
+    assert!(context.child(PRE_COMMIT_CONFIG_YAML).is_file());
+    assert!(!context.child(PREK_TOML).exists());
 }
 
 #[test]
@@ -111,6 +111,6 @@ fn init_can_skip_hook_installation() {
     ----- stderr -----
     "#);
 
-    assert!(context.work_dir().child(PREK_TOML).is_file());
-    assert!(!context.work_dir().child(".git/hooks/pre-commit").exists());
+    assert!(context.child(PREK_TOML).is_file());
+    assert!(!context.child(".git/hooks/pre-commit").exists());
 }

@@ -1,5 +1,6 @@
 #[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
+#[cfg(feature = "ci")]
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
 
@@ -259,11 +260,11 @@ fn additional_dependencies_absolute_file() {
             console.log("Hello from local additional dependency!");
         "#},
     );
-    let tool = context.work_dir().child("tool.ts");
+    let tool = context.child("tool.ts");
     let dependency = serde_json::to_string(&format!("{}:echo-tool", tool.path().display()))
         .expect("Failed to serialize Deno dependency");
 
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:

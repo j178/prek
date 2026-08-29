@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 fn fail() {
     let context = TestEnv::new_git().with_file("changelog/changelog.md", "");
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

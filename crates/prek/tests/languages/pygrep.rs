@@ -13,7 +13,7 @@ fn basic_case_sensitive() {
         )
         .with_file("other.py", "print('No issues here')\n");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -66,7 +66,7 @@ fn case_insensitive() {
         )
         .with_file("other.py", "print('No issues here')\n");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -107,7 +107,7 @@ fn multiline_mode() {
                 pass"#},
     );
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -143,7 +143,7 @@ fn negate_mode() {
         .with_file("good.py", "print('Hello World')\n")
         .with_file("bad.py", "TODO: implement this\nprint('Hello World')\n");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -185,7 +185,7 @@ fn negate_multiline_mode() {
                     pass"#},
         );
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -252,7 +252,7 @@ fn python_regex_quirks() {
     );
 
     // Test lookbehind assertion - function with arguments
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -291,7 +291,7 @@ fn complex_regex_patterns() {
     );
 
     // Match import statements but not 'from' imports
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -330,7 +330,7 @@ fn case_insensitive_multiline() {
                 pass"},
     );
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -364,7 +364,7 @@ fn case_insensitive_multiline() {
 fn pattern_not_found() {
     let context = TestEnv::new_git().with_file("test.py", "print('Hello World')\n# All good here");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -390,7 +390,7 @@ fn pattern_not_found() {
 fn invalid_args() {
     let context = TestEnv::new_git().with_file("test.py", "print('Hello World')\n# All good here");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:

@@ -1,6 +1,8 @@
 use std::env::consts::EXE_EXTENSION;
 
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+#[cfg(all(feature = "ci", not(target_os = "windows")))]
+use assert_fs::fixture::PathChild;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -15,7 +17,7 @@ fn ruby_context() -> TestEnv {
 #[test]
 fn system_ruby() {
     let context = ruby_context();
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -59,7 +61,7 @@ fn system_ruby() {
 fn language_version_default() {
     let context = ruby_context();
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -91,7 +93,7 @@ fn language_version_default() {
 #[test]
 fn specific_ruby_available() {
     let context = ruby_context();
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -171,7 +173,7 @@ fn specific_ruby_available() {
 #[test]
 fn specific_ruby_unavailable() {
     let context = ruby_context();
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -226,7 +228,7 @@ fn additional_gem_dependencies() {
         "},
     );
 
-    let context = context.with_config(indoc::indoc! {r#"
+    context.write_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -334,7 +336,7 @@ fn gemspec_workflow() -> anyhow::Result<()> {
         "},
         );
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -541,13 +543,11 @@ fn environment_isolation() -> anyhow::Result<()> {
 #[test]
 fn local_hook_with_gemspec() -> anyhow::Result<()> {
     let context = TestEnv::new_git();
-    let hook_repo = context.create_repo("ruby-hook");
-
-    // Create the gemspec
-    hook_repo
-        .path()
-        .child("my_hook.gemspec")
-        .write_str(indoc::indoc! {r#"
+    let hook_repo = context
+        .create_repo("ruby-hook")
+        .with_file(
+            "my_hook.gemspec",
+            indoc::indoc! {r#"
             Gem::Specification.new do |spec|
               spec.name          = "my_hook"
               spec.version       = "0.1.0"
@@ -558,35 +558,31 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
               spec.executables   = ["my-hook"]
               spec.bindir        = "bin"
             end
-        "#})?;
-
-    // Create executable
-    hook_repo.path().child("bin").create_dir_all()?;
-    hook_repo
-        .path()
-        .child("bin/my-hook")
-        .write_str(indoc::indoc! {r#"
+        "#},
+        )
+        .with_file(
+            "bin/my-hook",
+            indoc::indoc! {r#"
         #!/usr/bin/env ruby
         puts "Hook executed from gem!"
-    "#})?;
-
-    // Create .pre-commit-hooks.yaml manifest
-    hook_repo
-        .path()
-        .child(".pre-commit-hooks.yaml")
-        .write_str(indoc::indoc! {r"
+    "#},
+        )
+        .with_file(
+            PRE_COMMIT_HOOKS_YAML,
+            indoc::indoc! {r"
             - id: my-hook
               name: My Hook
               entry: my-hook
               language: ruby
               pass_filenames: false
-        "})?;
+        "},
+        );
 
     hook_repo.git().add_all().commit("Initial commit");
     let rev = hook_repo.git().rev_parse("HEAD")?;
 
     // Configure prek to use this local repo
-    let context = context.with_config(indoc::formatdoc! {r"
+    context.write_config(indoc::formatdoc! {r"
             repos:
               - repo: {}
                 rev: {}
@@ -639,7 +635,7 @@ fn native_gem_dependency() {
         "#},
     );
 
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -728,7 +724,7 @@ fn auto_download() -> anyhow::Result<()> {
     use assert_fs::assert::PathAssert;
 
     let context = ruby_context();
-    let context = context.with_config(indoc::indoc! {r"
+    context.write_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
