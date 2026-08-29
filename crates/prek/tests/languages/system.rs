@@ -1,8 +1,6 @@
 #[cfg(unix)]
 use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(unix)]
-use assert_fs::fixture::{FileWriteStr, PathChild};
-
 #[cfg(unix)]
 #[test]
 fn multiline_entry_without_shell_uses_argv_semantics() {
@@ -71,8 +69,9 @@ fn shell_runs_multiline_entry_as_one_script() {
 
 #[cfg(unix)]
 #[test]
-fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+fn shell_entry_receives_hook_args_before_filenames() {
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -89,8 +88,9 @@ fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
             shell: sh
             args: [configured]
             verbose: true
-    "#});
-    context.work_dir().child("a.txt").write_str("a")?;
+    "#})
+        .with_file("a.txt", "a");
+
     context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r"
@@ -105,6 +105,4 @@ fn shell_entry_receives_hook_args_before_filenames() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }

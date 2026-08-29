@@ -495,20 +495,12 @@ impl TestEnv {
 
     /// Setup a workspace with multiple projects, each with the same config.
     /// This creates a tree-like directory structure for testing workspace functionality.
-    pub fn setup_workspace(&self, project_paths: &[&str], config: &str) -> anyhow::Result<()> {
-        self.work_dir
-            .child(PRE_COMMIT_CONFIG_YAML)
-            .write_str(config)?;
+    pub fn setup_workspace(&self, project_paths: &[&str], config: &str) {
+        self.write_config(config);
 
         for path in project_paths {
-            let project_dir = self.work_dir.child(path);
-            project_dir.create_dir_all()?;
-            project_dir
-                .child(PRE_COMMIT_CONFIG_YAML)
-                .write_str(config)?;
+            self.write_file(Path::new(path).join(PRE_COMMIT_CONFIG_YAML), config);
         }
-
-        Ok(())
     }
 }
 

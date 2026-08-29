@@ -2,9 +2,6 @@ mod common;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::PRE_COMMIT_CONFIG_YAML;
-
 #[test]
 fn meta_hooks() {
     let context = TestEnv::new_git()
@@ -92,9 +89,7 @@ fn meta_hooks_unknown_hook() {
 }
 
 #[test]
-fn check_useless_excludes_remote() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
+fn check_useless_excludes_remote() {
     // When checking useless excludes, remote hooks are not actually cloned,
     // so hook options defined from HookManifest are not used.
     // If applied, "types_or: [python, pyi]" from black-pre-commit-mirror
@@ -117,14 +112,9 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
         hooks:
             - id: check-useless-excludes
     "};
-    context.work_dir().child("html").create_dir_all()?;
-    context
-        .work_dir()
-        .child("html")
-        .child("file1.html")
-        .write_str("<!DOCTYPE html>")?;
-
-    let context = context.with_config(&pre_commit_config);
+    let context = TestEnv::new_git()
+        .with_file("html/file1.html", "<!DOCTYPE html>")
+        .with_config(&pre_commit_config);
     context.git().add_all();
     cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r"
     success: false
@@ -138,18 +128,14 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
-fn meta_hooks_workspace() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    let app = context.work_dir().child("app");
-    app.create_dir_all()?;
-    app.child(PRE_COMMIT_CONFIG_YAML)
-        .write_str(indoc::indoc! {r"
+fn meta_hooks_workspace() {
+    let context = TestEnv::new_git()
+        .with_file(
+            "app/.pre-commit-config.yaml",
+            indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -168,14 +154,13 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
                 language: system
                 entry: python3 -c 'import sys; sys.exit(0)'
                 exclude: $nonexistent^
-    "})?;
-
-    app.child("file.txt").write_str("Hello, world!\n")?;
-    app.child("valid.json").write_str("{}")?;
-    app.child("invalid.json").write_str("{x}")?;
-    app.child("main.py").write_str(r#"print "abc"  "#)?;
-
-    let context = context.with_config("repos: []");
+    "},
+        )
+        .with_file("app/file.txt", "Hello, world!\n")
+        .with_file("app/valid.json", "{}")
+        .with_file("app/invalid.json", "{x}")
+        .with_file("app/main.py", r#"print "abc"  "#)
+        .with_config("repos: []");
     context.git().add_all();
 
     cmd_snapshot!(context, context.run(), @r#"
@@ -207,24 +192,21 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[test]
-fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
+fn check_useless_excludes_workspace_paths_are_project_relative() {
     // Workspace layout:
     // - Root project has no hooks.
     // - Nested project `app/` runs `check-useless-excludes`.
     //
     // Regression: in workspace mode, `files`/`exclude` matching must use paths *relative to the
     // nested project root* (so anchored patterns like `^...$` work as expected).
-    let app = context.work_dir().child("app");
-    app.create_dir_all()?;
-    app.child(PRE_COMMIT_CONFIG_YAML)
-        .write_str(indoc::indoc! {r"
+    // The two sentinel files keep the anchored excludes from being reported as useless.
+    let context = TestEnv::new_git()
+        .with_file(
+            "app/.pre-commit-config.yaml",
+            indoc::indoc! {r"
         exclude: '^global_excluded$'
         repos:
           - repo: meta
@@ -237,14 +219,11 @@ fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Resu
                 language: system
                 entry: python3 -c 'import sys; sys.exit(0)'
                 exclude: '^hook_excluded$'
-        "})?;
-
-    // These files exist specifically so the anchored patterns above are NOT useless.
-    // If the meta hook mistakenly matches against `app/<name>` instead of `<name>`, it will fail.
-    app.child("global_excluded").write_str("ignored\n")?;
-    app.child("hook_excluded").write_str("ignored\n")?;
-
-    let context = context.with_config("repos: []");
+        "},
+        )
+        .with_file("app/global_excluded", "ignored\n")
+        .with_file("app/hook_excluded", "ignored\n")
+        .with_config("repos: []");
     context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r#"
@@ -256,6 +235,4 @@ fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Resu
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }

@@ -78,18 +78,14 @@ fn additional_dependencies() {
 }
 
 #[test]
-fn project_toml() -> anyhow::Result<()> {
-    use assert_fs::fixture::{FileWriteStr, PathChild};
-
-    let context = TestEnv::new_git();
-
-    context
-        .work_dir()
-        .child("Project.toml")
-        .write_str(indoc::indoc! {r#"
+fn project_toml() {
+    let context = TestEnv::new_git().with_file(
+        "Project.toml",
+        indoc::indoc! {r#"
             [deps]
             Example = "7876af07-990d-54b4-ab0e-23690620f79a"
-        "#})?;
+        "#},
+    );
 
     let context = context.with_config(indoc::indoc! {r#"
         repos:
@@ -118,20 +114,12 @@ fn project_toml() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
-fn script_file() -> anyhow::Result<()> {
-    use assert_fs::fixture::{FileWriteStr, PathChild};
-
-    let context = TestEnv::new_git();
-
-    context
-        .work_dir()
-        .child("my_script.jl")
-        .write_str(r#"println("Hello from script file!")"#)?;
+fn script_file() {
+    let context =
+        TestEnv::new_git().with_file("my_script.jl", r#"println("Hello from script file!")"#);
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -160,8 +148,6 @@ fn script_file() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]

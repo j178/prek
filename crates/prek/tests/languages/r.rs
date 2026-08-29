@@ -4,12 +4,11 @@ use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
-fn local_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-    context
-        .work_dir()
-        .child(".Rprofile")
-        .write_str(r#"stop("project .Rprofile should not be loaded")"#)?;
+fn local_hook() {
+    let context = TestEnv::new_git().with_file(
+        ".Rprofile",
+        r#"stop("project .Rprofile should not be loaded")"#,
+    );
 
     let context = context.with_config(indoc::indoc! {r#"
         repos:
@@ -52,8 +51,6 @@ fn local_hook() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]

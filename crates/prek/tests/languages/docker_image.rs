@@ -1,22 +1,21 @@
 use anyhow::Result;
 use assert_cmd::Command;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
 use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
-fn docker_image() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    let cwd = context.work_dir();
+fn docker_image() {
     // Test suite from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
-    cwd.child("gitleaks_bad_01.txt")
-        .write_str(indoc::indoc! {r"
+    let context = TestEnv::new_git().with_file(
+        "gitleaks_bad_01.txt",
+        indoc::indoc! {r"
         aws_access_key_id = AROA47DSWDEZA3RQASWB
         aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM
-    "})?;
+    "},
+    );
 
     // Use fully qualified image name for Podman/Docker compatibility
     Command::new("docker")
@@ -64,20 +63,17 @@ fn docker_image() -> Result<()> {
 
     ----- stderr -----
     "#);
-    Ok(())
 }
 
 /// Test that `docker_image` does not try to resolve entry in the host system PATH.
 #[test]
 fn docker_image_does_not_resolve_entry() -> Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new_git().with_file("bin/alpine", "#!/bin/sh\necho host\n");
 
     let cwd = context.work_dir();
     let bin_dir = cwd.child("bin");
-    bin_dir.create_dir_all()?;
 
     let alpine_stub = bin_dir.child("alpine");
-    alpine_stub.write_str("#!/bin/sh\necho host\n")?;
 
     make_executable(alpine_stub.path())?;
 

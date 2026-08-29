@@ -216,18 +216,15 @@ fn specific_ruby_unavailable() {
 
 /// Test Ruby hook with `additional_dependencies` and `require` statement
 #[test]
-fn additional_gem_dependencies() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    // Create a Ruby script that uses a gem from additional_dependencies
-    // Use 'rspec' - a gem that's NOT bundled with Ruby
-    context
-        .work_dir()
-        .child("test_script.rb")
-        .write_str(indoc::indoc! {r"
+fn additional_gem_dependencies() {
+    // Use a gem that is not bundled with Ruby.
+    let context = TestEnv::new_git().with_file(
+        "test_script.rb",
+        indoc::indoc! {r"
             require 'rspec'
             puts RSpec::Version::STRING
-        "})?;
+        "},
+    );
 
     let context = context.with_config(indoc::indoc! {r#"
         repos:
@@ -299,20 +296,15 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Test Ruby hook with gemspec
 #[test]
 fn gemspec_workflow() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    // Create a simple gemspec
-    context
-        .work_dir()
-        .child("test_gem.gemspec")
-        .write_str(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_file(
+            "test_gem.gemspec",
+            indoc::indoc! {r#"
             Gem::Specification.new do |spec|
               spec.name          = "test_gem"
               spec.version       = "0.1.0"
@@ -322,29 +314,25 @@ fn gemspec_workflow() -> anyhow::Result<()> {
               spec.files         = ["lib/test_gem.rb"]
               spec.require_paths = ["lib"]
             end
-        "#})?;
-
-    // Create lib directory and file
-    context.work_dir().child("lib").create_dir_all()?;
-    context
-        .work_dir()
-        .child("lib/test_gem.rb")
-        .write_str(indoc::indoc! {r#"
+        "#},
+        )
+        .with_file(
+            "lib/test_gem.rb",
+            indoc::indoc! {r#"
             module TestGem
               def self.hello
                 "Hello from TestGem"
               end
             end
-        "#})?;
-
-    // Create test script
-    context
-        .work_dir()
-        .child("test_script.rb")
-        .write_str(indoc::indoc! {r"
+        "#},
+        )
+        .with_file(
+            "test_script.rb",
+            indoc::indoc! {r"
             require 'test_gem'
             puts TestGem.hello
-        "})?;
+        "},
+        );
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -633,14 +621,11 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
 
 /// Test Ruby hook with native gem (C extension)
 #[test]
-fn native_gem_dependency() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    // Create a Ruby script that uses msgpack (small native gem that compiles quickly)
-    context
-        .work_dir()
-        .child("check_msgpack.rb")
-        .write_str(indoc::indoc! {r#"
+fn native_gem_dependency() {
+    // msgpack is a small native gem that compiles quickly.
+    let context = TestEnv::new_git().with_file(
+        "check_msgpack.rb",
+        indoc::indoc! {r#"
             #!/usr/bin/env ruby
             require 'msgpack'
 
@@ -651,7 +636,8 @@ fn native_gem_dependency() -> anyhow::Result<()> {
 
             puts "MessagePack native extension working!"
             puts "Packed size: #{packed.bytesize} bytes"
-        "#})?;
+        "#},
+    );
 
     let context = context.with_config(indoc::indoc! {r"
         repos:
@@ -680,20 +666,14 @@ fn native_gem_dependency() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Test Ruby hook that processes files
 #[test]
-fn process_files() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    // Create a Ruby script that validates file extensions
-    context
-        .work_dir()
-        .child("check_ruby.rb")
-        .write_str(indoc::indoc! {r#"
+fn process_files() {
+    let context = TestEnv::new_git().with_file(
+        "check_ruby.rb",
+        indoc::indoc! {r#"
             ARGV.sort.each do |file|
               unless file.end_with?('.rb')
                 puts "Error: #{file} is not a Ruby file"
@@ -701,9 +681,11 @@ fn process_files() -> anyhow::Result<()> {
               end
               puts "OK: #{file}"
             end
-        "#})?;
+        "#},
+    );
 
-    let context = context.with_config(indoc::indoc! {r"
+    let context = context
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -714,15 +696,9 @@ fn process_files() -> anyhow::Result<()> {
                 language_version: system
                 files: \.rb$
                 verbose: true
-    "});
-
-    // Create a Ruby file
-    context
-        .work_dir()
-        .child("test.rb")
-        .write_str("puts 'hello'")?;
-    // Create a text file
-    context.work_dir().child("test.txt").write_str("hello")?;
+    "})
+        .with_file("test.rb", "puts 'hello'")
+        .with_file("test.txt", "hello");
 
     context.git().add_all();
 
@@ -739,8 +715,6 @@ fn process_files() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Test that Ruby is auto-downloaded from rv-ruby when a specific version

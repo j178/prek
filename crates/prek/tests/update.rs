@@ -584,11 +584,11 @@ fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
     let repo1_path = create_local_git_repo(&context, "project-repo-1", &["v1.0.0", "v1.1.0"])?;
     let repo2_path = create_local_git_repo(&context, "project-repo-2", &["v1.0.0", "v1.1.0"])?;
 
-    context.setup_workspace(&["project-a", "project-b"], "repos: []")?;
-    context
-        .work_dir()
-        .child("project-a/.pre-commit-config.yaml")
-        .write_str(&indoc::formatdoc! {r#"
+    context.setup_workspace(&["project-a", "project-b"], "repos: []");
+    let context = context
+        .with_file(
+            "project-a/.pre-commit-config.yaml",
+            indoc::formatdoc! {r#"
         update:
           repos:
             "{}":
@@ -598,11 +598,11 @@ fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
             rev: v1.0.0
             hooks:
               - id: test-hook
-    "#, repo2_path, repo1_path})?;
-    context
-        .work_dir()
-        .child("project-b/.pre-commit-config.yaml")
-        .write_str(&indoc::formatdoc! {r#"
+    "#, repo2_path, repo1_path},
+        )
+        .with_file(
+            "project-b/.pre-commit-config.yaml",
+            indoc::formatdoc! {r#"
         update:
           repos:
             "{}":
@@ -612,7 +612,9 @@ fn update_warns_when_repo_override_matches_another_project() -> Result<()> {
             rev: v1.0.0
             hooks:
               - id: test-hook
-    "#, repo1_path, repo2_path})?;
+    "#, repo1_path, repo2_path},
+        );
+
     context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--jobs").arg("1"), @"
@@ -1822,17 +1824,17 @@ fn update_updates_mismatched_frozen_comment_toml() -> Result<()> {
 
     let commit_sha = context.git_at(&repo_path).rev_parse("v1.1.0^{}")?;
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .write_str(&indoc::formatdoc! {r#"
+    let context = context.with_file(
+        PREK_TOML,
+        indoc::formatdoc! {r#"
         [[repos]]
         repo = "{}"
         rev = "{}" # frozen: v1.0.0
         hooks = [
           {{ id = "test-hook" }},
         ]
-        "#, repo_path, commit_sha})?;
+        "#, repo_path, commit_sha},
+    );
 
     context.git().add_all();
 
@@ -1972,12 +1974,12 @@ fn update_workspace() -> Result<()> {
     context.setup_workspace(
         &["project-a", "project-b"],
         "repos: []", // Minimal valid config for root
-    )?;
+    );
 
-    context
-        .work_dir()
-        .child("project-a/.pre-commit-config.yaml")
-        .write_str(&indoc::formatdoc! {r"
+    let context = context
+        .with_file(
+            "project-a/.pre-commit-config.yaml",
+            indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -1987,12 +1989,11 @@ fn update_workspace() -> Result<()> {
             rev: v1.0.0
             hooks:
               - id: another-hook
-    ", repo1_path, repo2_path})?;
-
-    context
-        .work_dir()
-        .child("project-b/.pre-commit-config.yaml")
-        .write_str(&indoc::formatdoc! {r"
+    ", repo1_path, repo2_path},
+        )
+        .with_file(
+            "project-b/.pre-commit-config.yaml",
+            indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -2002,7 +2003,8 @@ fn update_workspace() -> Result<()> {
             rev: v2.0.0
             hooks:
               - id: test-hook
-    ", repo2_path, repo3_path})?;
+    ", repo2_path, repo3_path},
+        );
 
     context.git().add_all();
 
@@ -2075,12 +2077,12 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
     context.setup_workspace(
         &["project-a", "project-b"],
         "repos: []", // Minimal valid config for root
-    )?;
+    );
 
-    context
-        .work_dir()
-        .child("project-a/.pre-commit-config.yaml")
-        .write_str(&indoc::formatdoc! {r"
+    let context = context
+        .with_file(
+            "project-a/.pre-commit-config.yaml",
+            indoc::formatdoc! {r"
         update:
           cooldown_days: 0
         repos:
@@ -2088,18 +2090,18 @@ fn update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
             rev: v1.0.0
             hooks:
               - id: test-hook
-    ", repo_path})?;
-
-    context
-        .work_dir()
-        .child("project-b/.pre-commit-config.yaml")
-        .write_str(&indoc::formatdoc! {r"
+    ", repo_path},
+        )
+        .with_file(
+            "project-b/.pre-commit-config.yaml",
+            indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
             hooks:
               - id: test-hook
-    ", repo_path})?;
+    ", repo_path},
+        );
 
     context.git().add_all();
 
@@ -2484,14 +2486,9 @@ fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
 }
 
 #[test]
-fn update_with_invalid_config_file() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    // Write an invalid config file
-    context
-        .work_dir()
-        .child(PRE_COMMIT_CONFIG_YAML)
-        .write_str("invalid_yaml: [unclosed_list")?;
+fn update_with_invalid_config_file() {
+    let context =
+        TestEnv::new_git().with_file(PRE_COMMIT_CONFIG_YAML, "invalid_yaml: [unclosed_list");
 
     cmd_snapshot!(context, context.update(), @"
     success: false
@@ -2506,8 +2503,6 @@ fn update_with_invalid_config_file() -> Result<()> {
     1 | invalid_yaml: [unclosed_list
       |               ^ unclosed bracket '['
     ");
-
-    Ok(())
 }
 
 #[test]
@@ -2517,17 +2512,17 @@ fn update_toml() -> Result<()> {
     let repo_path =
         create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .write_str(&indoc::formatdoc! {r#"
+    let context = context.with_file(
+        PREK_TOML,
+        indoc::formatdoc! {r#"
         [[repos]]
         repo = "{}"
         rev = "v1.0.0"
         hooks = [
           {{ id = "test-hook" }},
         ]
-      "#, repo_path})?;
+      "#, repo_path},
+    );
     context.git().add_all();
 
     cmd_snapshot!(context, context.update().arg("--cooldown-days").arg("0"), @"
@@ -2559,17 +2554,17 @@ fn update_toml_with_comment() -> Result<()> {
     let repo_path =
         create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .write_str(&indoc::formatdoc! {r#"
+    let context = context.with_file(
+        PREK_TOML,
+        indoc::formatdoc! {r#"
         [[repos]]
         repo = "{}"
         rev = "v1.0.0" # This is a comment
         hooks = [
           {{ id = "test-hook" }},
         ]
-      "#, repo_path})?;
+      "#, repo_path},
+    );
 
     context.git().add_all();
 
@@ -2593,17 +2588,17 @@ fn update_toml_with_comment() -> Result<()> {
         "#);
 
     // "frozen: xx" comment should be removed
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .write_str(&indoc::formatdoc! {r#"
+    context.write_file(
+        PREK_TOML,
+        indoc::formatdoc! {r#"
         [[repos]]
         repo = "{}"
         rev = "v1.0.0" # frozen: v1.0.0
         hooks = [
           {{ id = "test-hook" }},
         ]
-      "#, repo_path})?;
+      "#, repo_path},
+    );
 
     context.git().add_all();
 
@@ -2650,17 +2645,17 @@ fn update_freeze_toml() -> Result<()> {
         .assert()
         .success();
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .write_str(&indoc::formatdoc! {r#"
+    let context = context.with_file(
+        PREK_TOML,
+        indoc::formatdoc! {r#"
         [[repos]]
         repo = "{}"
         rev = "v1.0.0"
         hooks = [
           {{ id = "test-hook" }},
         ]
-    "#, repo_path})?;
+    "#, repo_path},
+    );
 
     context.git().add_all();
 
@@ -2856,10 +2851,9 @@ fn update_freeze_toml_with_comment() -> Result<()> {
         .assert()
         .success();
 
-    context
-        .work_dir()
-        .child(PREK_TOML)
-        .write_str(&indoc::formatdoc! {r#"
+    let context = context.with_file(
+        PREK_TOML,
+        indoc::formatdoc! {r#"
         [[repos]]
         repo = "{}"
         # A comment above
@@ -2868,7 +2862,8 @@ fn update_freeze_toml_with_comment() -> Result<()> {
         hooks = [
           {{ id = "test-hook" }},
         ]
-    "#, repo_path})?;
+    "#, repo_path},
+    );
 
     context.git().add_all();
 

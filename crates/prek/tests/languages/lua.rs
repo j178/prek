@@ -1,5 +1,3 @@
-use assert_fs::fixture::{FileWriteStr, PathChild};
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
@@ -80,8 +78,9 @@ fn language_version() {
 
 /// Test that stderr from hooks is captured and shown to the user.
 #[test]
-fn hook_stderr() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+fn hook_stderr() {
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -89,12 +88,8 @@ fn hook_stderr() -> anyhow::Result<()> {
                 name: local
                 language: lua
                 entry: lua ./hook.lua
-    "});
-
-    context
-        .work_dir()
-        .child("hook.lua")
-        .write_str("io.stderr:write('How are you\\n'); os.exit(1)")?;
+    "})
+        .with_file("hook.lua", "io.stderr:write('How are you\\n'); os.exit(1)");
 
     context.git().add_all();
 
@@ -110,14 +105,13 @@ fn hook_stderr() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Test Lua script execution with file arguments.
 #[test]
-fn script_with_files() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+fn script_with_files() {
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -126,26 +120,17 @@ fn script_with_files() -> anyhow::Result<()> {
                 language: lua
                 entry: lua ./script.lua
                 verbose: true
-    "});
-
-    context
-        .work_dir()
-        .child("script.lua")
-        .write_str(indoc::indoc! {r#"
+    "})
+        .with_file(
+            "script.lua",
+            indoc::indoc! {r#"
         for i, arg in ipairs(arg) do
             print("Processing file:", arg)
         end
-    "#})?;
-
-    context
-        .work_dir()
-        .child("test1.lua")
-        .write_str("print('test1')")?;
-
-    context
-        .work_dir()
-        .child("test2.lua")
-        .write_str("print('test2')")?;
+    "#},
+        )
+        .with_file("test1.lua", "print('test1')")
+        .with_file("test2.lua", "print('test2')");
 
     context.git().add_all();
 
@@ -164,8 +149,6 @@ fn script_with_files() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 /// Test Lua environment variables (`LUA_PATH` and `LUA_CPATH`)

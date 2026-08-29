@@ -6,8 +6,9 @@ use prek_consts::env_vars::EnvVars;
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
-fn local_hook() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+fn local_hook() {
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -18,17 +19,16 @@ fn local_hook() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context
-        .work_dir()
-        .child("hello.pl")
-        .write_str(indoc::indoc! {r#"
+    "})
+        .with_file(
+            "hello.pl",
+            indoc::indoc! {r#"
             use strict;
             use warnings;
 
             print "Hello from Perl!\n";
-        "#})?;
+        "#},
+        );
 
     context.git().add_all();
 
@@ -44,8 +44,6 @@ fn local_hook() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
