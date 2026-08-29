@@ -683,6 +683,15 @@ impl TryFrom<RemoteHook> for ManifestHook {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(transparent)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(title = ".pre-commit-hooks.yaml"),
+    schemars(description = "The hook manifest for prek, a git hook manager written in Rust."),
+    schemars(extend(
+        "$id" = "https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json"
+    )),
+)]
 pub(crate) struct Manifest {
     pub hooks: Vec<ManifestHook>,
 }
