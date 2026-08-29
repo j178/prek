@@ -1,19 +1,15 @@
+#[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
 use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test `language_version` parsing and installation for golang hooks.
 /// We use `setup-go` action to install go 1.24 in CI, so go 1.23 will be auto downloaded.
+#[cfg(feature = "ci")]
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may have other go versions installed locally.
-        return Ok(());
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local

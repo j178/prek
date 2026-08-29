@@ -2,7 +2,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::env_vars::EnvVars;
 use url::Url;
 
 use crate::common::{TestEnv, cmd_snapshot, make_executable, remove_bin_from_path};
@@ -63,13 +63,9 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
 
 /// Test `language_version` parsing and auto downloading works correctly.
 /// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
+#[cfg(feature = "ci")]
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may have other node versions installed locally.
-        return Ok(());
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local

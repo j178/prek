@@ -1,15 +1,13 @@
+#[cfg(feature = "ci")]
 use assert_fs::fixture::{FileWriteStr, PathChild};
+#[cfg(feature = "ci")]
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestEnv, cmd_snapshot};
 
+#[cfg(feature = "ci")]
 #[test]
 fn language_version() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return;
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -120,12 +118,9 @@ fn invalid_language_version() {
 
 /// Test that multiple different SDK versions can coexist in the tool store.
 /// `net10.0` is preinstalled in the CI, `net8.0` will be installed by the test.
+#[cfg(feature = "ci")]
 #[test]
 fn multiple_sdk_versions() -> anyhow::Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return Ok(());
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -196,12 +191,9 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
 }
 
 /// Test installing a specific version of a dotnet tool.
+#[cfg(feature = "ci")]
 #[test]
 fn additional_dependencies_with_version() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return;
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -250,12 +242,9 @@ fn additional_dependencies_with_version() {
 }
 
 /// Test that additional dependencies in a remote repo are installed correctly.
+#[cfg(feature = "ci")]
 #[test]
 fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return Ok(());
-    }
-
     let context = TestEnv::new_git();
     let repo = context.create_repo("dotnet-hook");
     let repo_path = repo.path();
@@ -302,12 +291,9 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 }
 
 /// Ensure that stderr from hooks is captured and shown to the user.
+#[cfg(feature = "ci")]
 #[test]
 fn hook_stderr() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        return;
-    }
-
     let context = TestEnv::new_git()
         .with_config(indoc::indoc! {r"
         repos:

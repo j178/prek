@@ -1,20 +1,17 @@
+#[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test `language_version` parsing and downloading.
 /// We use `setup-python` action to install Python 3.12 in CI, when running tests uv can find them.
 /// Other versions may need to be downloaded while running the tests.
+#[cfg(feature = "ci")]
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may have other Python versions installed locally.
-        return Ok(());
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local

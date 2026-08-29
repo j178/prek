@@ -1,18 +1,17 @@
+#[cfg(feature = "ci")]
 use anyhow::Result;
+#[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
+#[cfg(feature = "ci")]
 use assert_fs::fixture::PathChild;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test `language_version` parsing and installation for Rust hooks.
+#[cfg(feature = "ci")]
 #[test]
 fn language_version() -> Result<()> {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may have other rust versions installed locally.
-        return Ok(());
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local

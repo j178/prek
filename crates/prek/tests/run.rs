@@ -6,7 +6,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::env_vars::EnvVars;
 use prek_consts::{
     PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
 };
@@ -4250,13 +4250,9 @@ fn run_log_file() {
 }
 
 /// Test `language_version: system` works and disables downloading.
+#[cfg(feature = "ci")]
 #[test]
 fn system_language_version() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may not have toolchains installed locally.
-        return;
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local

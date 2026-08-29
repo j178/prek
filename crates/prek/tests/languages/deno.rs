@@ -1,6 +1,7 @@
+#[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -294,13 +295,9 @@ fn additional_dependencies_absolute_file() {
 
 /// Test `language_version` specification and deno installation.
 /// In CI, we ensure deno 2.x is installed via setup-deno action.
+#[cfg(feature = "ci")]
 #[test]
 fn language_version() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may have other deno versions installed locally.
-        return;
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -452,13 +449,9 @@ fn checksum_policy() {
 }
 
 /// Test semver range version specification.
+#[cfg(feature = "ci")]
 #[test]
 fn version_range() {
-    if !EnvVars.is_set(EnvVars::CI) {
-        // Skip when not running in CI.
-        return;
-    }
-
     let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
         repos:
           - repo: local

@@ -430,7 +430,7 @@ jobs:
             --workspace \
             --cargo-profile no-debug \
             --profile ci-core \
-            --features schemars \
+            --features ci,schemars \
             -E "${CI_CORE_FILTER}"
 
       - name: "Upload coverage reports to Codecov"
@@ -501,7 +501,7 @@ jobs:
             --output-path lcov.info `
             --workspace `
             --cargo-profile no-debug `
-            --features schemars `
+            --features ci,schemars `
             --profile ci-core `
             -E $env:CI_CORE_FILTER
 
@@ -699,7 +699,7 @@ jobs:
             --output-path lcov.info \
             --workspace \
             --cargo-profile no-debug \
-            --features schemars \
+            --features ci,schemars \
             --profile ci-language \
             -E "$NEXTEST_FILTER"
 
@@ -719,7 +719,7 @@ jobs:
             --output-path lcov.info `
             --workspace `
             --cargo-profile no-debug `
-            --features schemars `
+            --features ci,schemars `
             --profile ci-language `
             -E $env:NEXTEST_FILTER
 

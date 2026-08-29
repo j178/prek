@@ -16,6 +16,7 @@ mod golang;
 mod haskell;
 mod julia;
 mod lua;
+#[cfg(feature = "ci")]
 mod mise;
 mod node;
 mod perl;
@@ -27,6 +28,7 @@ mod ruby;
 mod rust;
 mod script;
 mod shell;
+#[cfg(feature = "ci")]
 mod swift;
 mod system;
 mod unsupported;
