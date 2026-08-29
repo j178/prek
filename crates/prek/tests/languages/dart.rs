@@ -144,11 +144,10 @@ fn with_pubspec_and_dependencies() {
             dependencies:
               ansicolor: ^2.0.1
         "},
-        );
-
-    context.write_file(
-        "bin/hello-world-dart.dart",
-        indoc::indoc! {r#"
+        )
+        .with_file(
+            "bin/hello-world-dart.dart",
+            indoc::indoc! {r#"
             import 'package:ansicolor/ansicolor.dart';
 
             void main() {
@@ -156,7 +155,7 @@ fn with_pubspec_and_dependencies() {
                 print("hello hello " + pen("world"));
             }
         "#},
-    );
+        );
 
     context.git().add_all();
 
@@ -198,16 +197,15 @@ fn with_pubspec() {
             environment:
               sdk: '>=2.17.0 <4.0.0'
         "},
-        );
-
-    context.write_file(
-        "bin/hello.dart",
-        indoc::indoc! {r"
+        )
+        .with_file(
+            "bin/hello.dart",
+            indoc::indoc! {r"
             void main() {
               print('Hello from Dart package!');
             }
         "},
-    );
+        );
 
     context.git().add_all();
 
@@ -255,17 +253,16 @@ fn with_pubspec_and_additional_dependencies() {
             environment:
               sdk: '>=2.17.0 <4.0.0'
         "},
-        );
-
-    context.write_file(
-        "lib/greeting.dart",
-        indoc::indoc! {r"
+        )
+        .with_file(
+            "lib/greeting.dart",
+            indoc::indoc! {r"
             String greet(String subject) => 'Hello $subject!';
         "},
-    );
-    context.write_file(
-        "bin/hello.dart",
-        indoc::indoc! {r"
+        )
+        .with_file(
+            "bin/hello.dart",
+            indoc::indoc! {r"
             import 'package:path/path.dart' as p;
             import 'package:test_package/greeting.dart';
 
@@ -273,7 +270,7 @@ fn with_pubspec_and_additional_dependencies() {
               print(greet(p.posix.join('Dart', 'Hooks')));
             }
         "},
-    );
+        );
 
     context.git().add_all();
 
@@ -298,7 +295,8 @@ fn with_pubspec_and_additional_dependencies() {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -310,18 +308,17 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.write_file(
-        "test_path.dart",
-        indoc::indoc! {r"
+    "#})
+        .with_file(
+            "test_path.dart",
+            indoc::indoc! {r"
             import 'package:path/path.dart' as p;
             void main() {
               var joined = p.join('foo', 'bar', 'baz.txt');
               print('Joined path: $joined');
             }
         "},
-    );
+        );
 
     context.git().add_all();
 
@@ -341,7 +338,8 @@ fn additional_dependencies() {
 
 #[test]
 fn additional_dependencies_with_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -353,17 +351,16 @@ fn additional_dependencies_with_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.write_file(
-        "test_path.dart",
-        indoc::indoc! {r"
+    "#})
+        .with_file(
+            "test_path.dart",
+            indoc::indoc! {r"
             import 'package:path/path.dart' as p;
             void main() {
               print('Using path package');
             }
         "},
-    );
+        );
 
     context.git().add_all();
 
@@ -406,16 +403,15 @@ fn executable_alias() {
             executables:
               cli: hello
         "},
-        );
-
-    context.write_file(
-        "bin/hello.dart",
-        indoc::indoc! {r"
+        )
+        .with_file(
+            "bin/hello.dart",
+            indoc::indoc! {r"
             void main() {
               print('alias executable works');
             }
         "},
-    );
+        );
 
     context.git().add_all();
 
@@ -435,7 +431,8 @@ fn executable_alias() {
 
 #[test]
 fn dart_environment() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -446,11 +443,10 @@ fn dart_environment() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.write_file(
-        "env_test.dart",
-        indoc::indoc! {r"
+    "})
+        .with_file(
+            "env_test.dart",
+            indoc::indoc! {r"
             import 'dart:io';
             void main() {
               var pubCache = Platform.environment['PUB_CACHE'];
@@ -461,7 +457,7 @@ fn dart_environment() {
               }
             }
         "},
-    );
+        );
 
     context.git().add_all();
 

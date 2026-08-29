@@ -1351,7 +1351,8 @@ fn priority_fail_fast_stops_later_groups() {
 fn explicitly_skipped_hook_does_not_affect_priority_group_outcome() {
     let context = TestEnv::new_git().with_file("file.txt", "hello\n");
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let context = context
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -2196,13 +2197,9 @@ fn no_fail_fast_cli_flag() {
 /// Run from a subdirectory. File arguments should be fixed to be relative to the root.
 #[test]
 fn subdirectory() {
-    let context = TestEnv::new_git();
-
-    let cwd = context.work_dir();
-    let child = cwd.child("foo/bar/baz");
-    context.write_file("foo/bar/baz/file.txt", "Hello, world!\n");
-
-    let context = context.with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_file("foo/bar/baz/file.txt", "Hello, world!\n")
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -2212,6 +2209,8 @@ fn subdirectory() {
                 entry: python3 -c 'import sys; print(sys.argv[1]); exit(1)'
                 always_run: true
     "});
+    let cwd = context.work_dir();
+    let child = cwd.child("foo/bar/baz");
 
     context.git().add_all();
 
@@ -2272,11 +2271,7 @@ fn global_path_options_expand_tilde() -> Result<()> {
 /// Test hook `log_file` option.
 #[test]
 fn log_file() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    let config_dir = context.work_dir().child("config");
-    let config_file = config_dir.child(PRE_COMMIT_CONFIG_YAML);
-    context.write_file(
+    let context = TestEnv::new_git().with_file(
         "config/.pre-commit-config.yaml",
         indoc::indoc! {r#"
         repos:
@@ -2288,8 +2283,10 @@ fn log_file() -> Result<()> {
                 entry: python3 -c 'import sys; sys.stdout.buffer.write(b"\x1b[2Kraw\xff"); exit(1)'
                 always_run: true
                 log_file: log.txt
-    "#},
+        "#},
     );
+    let config_dir = context.work_dir().child("config");
+    let config_file = config_dir.child(PRE_COMMIT_CONFIG_YAML);
     context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("-c").arg(config_file.path()), @r#"
@@ -2454,7 +2451,8 @@ fn restore_on_interrupt() -> Result<()> {
                 entry: python3 -c 'import time; open("out.txt", "wt").write(open("file.txt", "rt").read()); time.sleep(10)'
                 verbose: true
                 types: [text]
-   "#}).with_file("file.txt", "Hello, world!");
+   "#})
+        .with_file("file.txt", "Hello, world!");
 
     context.git().add_all();
 
@@ -3368,10 +3366,9 @@ fn shebang_script() {
 /// Test `git commit -a` works without `.git/index.lock exists` error.
 #[test]
 fn git_commit_a() {
-    let context =
-        TestEnv::new_git().with_filter("7c8398204bbc95c33a6d2543f86a27621647cf78", "[HASH]");
-
-    let context = context.with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_filter("7c8398204bbc95c33a6d2543f86a27621647cf78", "[HASH]")
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -3380,10 +3377,8 @@ fn git_commit_a() {
                 language: system
                 entry: echo
                 verbose: true
-    "});
-
-    // Create a file and commit it.
-    context.write_file("file.txt", "Hello, world!\n");
+    "})
+        .with_file("file.txt", "Hello, world!\n");
 
     cmd_snapshot!(context, context.install(), @r#"
     success: true
@@ -3421,6 +3416,16 @@ fn git_commit_a() {
 #[cfg(unix)]
 #[test]
 fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() {
+    // Repro for #1786 documenting the current behavior. `git commit -a`
+    // exports `GIT_INDEX_FILE=.git/index.lock` to the hook process. If the
+    // hook inherits that env var and then runs a git command that writes to an
+    // index in a different repository, Git writes those entries into the
+    // parent repo's temporary index instead.
+    //
+    // The important detail is that the temp repo stages `file.txt`, matching a tracked
+    // path in the parent repo. `prek` treats the post-hook diff as a best-effort
+    // snapshot, so the commit continues until Git tries to build trees from the
+    // corrupted temporary index and fails with `invalid object ... for 'file.txt'`.
     let context = TestEnv::new_git()
         .with_filter(
             r"invalid object 100644 [0-9a-f]{40}",
@@ -3437,20 +3442,8 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() {
         printf 'hook version\n' > file.txt
         git add file.txt
     "#},
-        );
-
-    // Repro for #1786 documenting the current behavior. `git commit -a`
-    // exports `GIT_INDEX_FILE=.git/index.lock` to the hook process. If the
-    // hook inherits that env var and then runs a git command that writes to an
-    // index in a different repository, Git writes those entries into the
-    // parent repo's temporary index instead.
-    //
-    // The important detail is that the temp repo stages `file.txt`, matching a tracked
-    // path in the parent repo. `prek` treats the post-hook diff as a best-effort
-    // snapshot, so the commit continues until Git tries to build trees from the
-    // corrupted temporary index and fails with `invalid object ... for 'file.txt'`.
-
-    let context = context.with_config(indoc::indoc! {r"
+        )
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -3461,9 +3454,8 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() {
                 pass_filenames: false
                 always_run: true
                 verbose: true
-    "});
-
-    context.write_file("file.txt", "Hello, world!\n");
+    "})
+        .with_file("file.txt", "Hello, world!\n");
 
     cmd_snapshot!(context, context.install(), @r#"
     success: true
@@ -3701,12 +3693,10 @@ fn selectors_completion() -> Result<()> {
 /// Test reusing hook environments only when dependencies are exactly same. (ignore order)
 #[test]
 fn reuse_env() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    let pkg_dir = context.work_dir().child("local_pkg");
-    context.write_file(
-        "local_pkg/setup.py",
-        indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_file(
+            "local_pkg/setup.py",
+            indoc::indoc! {r#"
         from setuptools import setup
 
         setup(
@@ -3715,11 +3705,12 @@ fn reuse_env() -> Result<()> {
             py_modules=["local_pkg"],
         )
     "#},
-    );
-    context.write_file(
-        "local_pkg/local_pkg.py",
-        "def hello():\n     print('hello')\n",
-    );
+        )
+        .with_file(
+            "local_pkg/local_pkg.py",
+            "def hello():\n     print('hello')\n",
+        );
+    let pkg_dir = context.work_dir().child("local_pkg");
 
     let dependency = serde_json::to_string(&std::path::absolute(pkg_dir.path())?)?;
     let context = context.with_config(indoc::formatdoc! {r#"
@@ -4545,7 +4536,8 @@ fn pass_filenames_1_limits_batch_size() {
     let context = TestEnv::new_git();
 
     // Use a script that errors if it receives more than one filename argument.
-    let context = context.with_config(indoc::indoc! {r#"
+    let context = context
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -4556,7 +4548,10 @@ fn pass_filenames_1_limits_batch_size() {
                 pass_filenames: 1
                 require_serial: true
                 verbose: true
-    "#}).with_file("a.txt", "a").with_file("b.txt", "b").with_file("c.txt", "c");
+    "#})
+        .with_file("a.txt", "a")
+        .with_file("b.txt", "b")
+        .with_file("c.txt", "c");
 
     context.git().add_all();
 

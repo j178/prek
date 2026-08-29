@@ -276,10 +276,8 @@ fn local_additional_deps() -> anyhow::Result<()> {
     "})?;
     go_hook.git().add_all().commit("Initial commit").tag("v1.0");
 
-    let context = TestEnv::new_git();
-
     let hook_url = go_hook.work_dir().to_str().unwrap();
-    context.write_file(
+    let context = TestEnv::new_git().with_file(
         PRE_COMMIT_CONFIG_YAML,
         indoc::formatdoc! {r"
         repos:

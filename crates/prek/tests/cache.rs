@@ -107,14 +107,14 @@ fn cache_gc_verbose_shows_removed_entries() {
 
 #[test]
 fn cache_clean() {
-    let context = TestEnv::new().with_filter(
-        r"(?m)^Removed \d+ files? \([^)]+\)\n",
-        "Removed [N] file(s) ([SIZE])\n",
-    );
-
+    let context = TestEnv::new()
+        .with_filter(
+            r"(?m)^Removed \d+ files? \([^)]+\)\n",
+            "Removed [N] file(s) ([SIZE])\n",
+        )
+        .with_file("home/cache/data.bin", "hello")
+        .with_file("home/cache/nested/data.bin", "world!");
     let home = context.work_dir().child("home");
-    context.write_file("home/cache/data.bin", "hello");
-    context.write_file("home/cache/nested/data.bin", "world!");
 
     cmd_snapshot!(context, context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @"
     success: true
@@ -277,10 +277,7 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    let hook_repo = context.work_dir().child("hook-repo");
-    context.write_file(
+    let context = TestEnv::new_git().with_file(
         "hook-repo/.pre-commit-hooks.yaml",
         indoc::indoc! {r"
         - id: test-hook
@@ -290,6 +287,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
           always_run: true
     "},
     );
+    let hook_repo = context.work_dir().child("hook-repo");
     let git = context.git_at(&hook_repo);
     let revision = git
         .init()
@@ -297,7 +295,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
         .commit("Initial commit")
         .rev_parse("HEAD")?;
 
-    context.write_file(
+    let context = context.with_file(
         "subproject/.pre-commit-config.yaml",
         indoc::formatdoc! {r"
             repos:

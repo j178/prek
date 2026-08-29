@@ -253,7 +253,7 @@ fn same_depth_project_concurrency_has_stable_output() {
 
 #[test]
 fn fail_fast_stops_after_current_project_level() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let root_config = indoc::indoc! {r#"
     repos:
       - repo: local
         hooks:
@@ -262,7 +262,7 @@ fn fail_fast_stops_after_current_project_level() {
           language: system
           entry: python3 -c "print('root ran')"
           always_run: true
-    "#});
+    "#};
 
     let failing_config = indoc! {r#"
     repos:
@@ -286,9 +286,10 @@ fn fail_fast_stops_after_current_project_level() {
           always_run: true
     "#};
 
-    context.write_file("a/.pre-commit-config.yaml", failing_config);
-
-    context.write_file("b/.pre-commit-config.yaml", passing_config);
+    let context = TestEnv::new_git()
+        .with_config(root_config)
+        .with_file("a/.pre-commit-config.yaml", failing_config)
+        .with_file("b/.pre-commit-config.yaml", passing_config);
 
     context.git().add_all();
 
@@ -714,7 +715,8 @@ fn run_with_selectors() {
 
 #[test]
 fn run_with_mixed_project_and_hook_selectors() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -723,11 +725,10 @@ fn run_with_mixed_project_and_hook_selectors() {
           entry: echo root
           language: system
           pass_filenames: false
-    "});
-
-    context.write_file(
-        "sub/.pre-commit-config.yaml",
-        indoc! {r"
+    "})
+        .with_file(
+            "sub/.pre-commit-config.yaml",
+            indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -737,12 +738,10 @@ fn run_with_mixed_project_and_hook_selectors() {
           language: system
           pass_filenames: false
     "},
-    );
-    context.write_file("sub/file.txt", "");
-
-    context.write_file("empty/.pre-commit-config.yaml", "repos: []\n");
-
-    context.write_file("unselected/.pre-commit-config.yaml", "invalid: config\n");
+        )
+        .with_file("sub/file.txt", "")
+        .with_file("empty/.pre-commit-config.yaml", "repos: []\n")
+        .with_file("unselected/.pre-commit-config.yaml", "invalid: config\n");
 
     context.git().add_all();
 
@@ -1457,12 +1456,8 @@ fn orphan_projects() {
 }
 
 fn setup_relative_repo_path_project() -> Result<TestEnv> {
-    let context = TestEnv::new_git();
-
     // Create a local hook repository at the root level
-    let hook_repo = context.work_dir().child("hook-repo");
-
-    context.write_file(
+    let context = TestEnv::new_git().with_file(
         "hook-repo/.pre-commit-hooks.yaml",
         indoc! {r"
         - id: test-hook
@@ -1470,8 +1465,9 @@ fn setup_relative_repo_path_project() -> Result<TestEnv> {
           entry: echo test
           language: system
           always_run: true
-    "},
+        "},
     );
+    let hook_repo = context.work_dir().child("hook-repo");
 
     let git = context.git_at(&hook_repo);
     git.init().add(".").commit("Initial commit");
@@ -1481,9 +1477,10 @@ fn setup_relative_repo_path_project() -> Result<TestEnv> {
 
     // Create a subproject that references the hook repo with a relative path
     // From subproject/, ../hook-repo should resolve to the hook-repo at root
-    context.write_file(
-        "subproject/.pre-commit-config.yaml",
-        indoc::formatdoc! {r"
+    let context = context
+        .with_file(
+            "subproject/.pre-commit-config.yaml",
+            indoc::formatdoc! {r"
         repos:
           - repo: ../hook-repo
             rev: {commit_sha}
@@ -1491,12 +1488,9 @@ fn setup_relative_repo_path_project() -> Result<TestEnv> {
               - id: test-hook
                 always_run: true
     "},
-    );
-
-    context.write_file("subproject/test.txt", "test content");
-
-    // Root config so workspace discovery works
-    let context = context.with_config(indoc::indoc! {r"
+        )
+        .with_file("subproject/test.txt", "test content")
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:

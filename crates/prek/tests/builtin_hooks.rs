@@ -542,11 +542,11 @@ fn forbid_new_submodules_hook_in_workspace_project() {
         "},
     );
 
-    let cwd = context.work_dir();
     context.git().add_all().commit("Initial commit");
 
+    let context = context.with_file("project2/sub module/README.md", "submodule\n");
+    let cwd = context.work_dir();
     let submodule_path = cwd.child("project2/sub module");
-    context.write_file("project2/sub module/README.md", "submodule\n");
     context
         .git_at(&submodule_path)
         .init()
@@ -694,13 +694,15 @@ fn check_yaml_multiple_document() {
 
 #[test]
 fn check_vcs_permalinks_builtin() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-vcs-permalinks
                 args: [--additional-github-domain=github.example.com]
-    "}).with_file("links.md", indoc::indoc! {r"
+    "})
+        .with_file("links.md", indoc::indoc! {r"
         See https://github.com/owner/repo/blob/main/file.py#L10 and https://github.example.com/owner/repo/blob/master/src/lib.rs#L5 for context.
         https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/file.py#L10
     "});
@@ -1010,28 +1012,28 @@ fn check_added_large_files_hook() {
 
 #[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() {
-    let context = TestEnv::new_git().with_config("repos: []\n");
-
     // Regression: builtin hooks receive project-relative filenames even in workspace mode.
     // `check-added-large-files` must therefore resolve git-lfs attributes relative to the
     // nested project root, not the workspace root.
     // Use `--enforce-all` so this regression isolates git-lfs attribute lookup in workspace
     // mode instead of depending on the separate staged-file path filtering behavior.
-    context.write_file(
-        "app/.pre-commit-config.yaml",
-        indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config("repos: []\n")
+        .with_file(
+            "app/.pre-commit-config.yaml",
+            indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-added-large-files
                 args: ['--maxkb', '1', '--enforce-all']
     "},
-    );
-    context.write_file(
-        "app/.gitattributes",
-        "*.dat filter=lfs diff=lfs merge=lfs -text",
-    );
-    context.write_file("app/large.dat", [0; 2048]);
+        )
+        .with_file(
+            "app/.gitattributes",
+            "*.dat filter=lfs diff=lfs merge=lfs -text",
+        )
+        .with_file("app/large.dat", [0; 2048]);
 
     context.git().add_all();
 
@@ -1048,19 +1050,19 @@ fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() 
 
 #[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_added_files() {
-    let context = TestEnv::new_git().with_config("repos: []\n");
-
-    context.write_file(
-        "app/.pre-commit-config.yaml",
-        indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config("repos: []\n")
+        .with_file(
+            "app/.pre-commit-config.yaml",
+            indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-added-large-files
                 args: ['--maxkb', '1']
     "},
-    );
-    context.write_file("app/large.bin", [0; 2048]);
+        )
+        .with_file("app/large.bin", [0; 2048]);
 
     context.git().add_all();
 
@@ -1082,16 +1084,15 @@ fn check_added_large_files_workspace_mode_respects_project_relative_added_files(
 
 #[test]
 fn tracked_file_exceeds_large_file_limit() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-added-large-files
                 args: ['--maxkb', '1']
-    "});
-
-    // Create and commit a large file
-    context.write_file("large_file.txt", [0; 2048]); // 2KB file
+    "})
+        .with_file("large_file.txt", [0; 2048]); // 2KB file
     context.git().add_all().commit("Add large file");
     // Modify the large file
     context.write_file("large_file.txt", [0; 4096]); // 4KB file
@@ -1110,17 +1111,16 @@ fn tracked_file_exceeds_large_file_limit() {
 
 #[test]
 fn builtin_hooks_workspace_mode() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
               - id: identity
-    "});
-
-    // Subproject with built-in hooks.
-    context.write_file(
-        "app/.pre-commit-config.yaml",
-        indoc::indoc! {r"
+    "})
+        .with_file(
+            "app/.pre-commit-config.yaml",
+            indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -1135,24 +1135,19 @@ fn builtin_hooks_workspace_mode() {
               - id: check-added-large-files
                 args: ['--maxkb', '1']
     "},
-    );
-
-    context.write_file("app/eof_no_newline.txt", "No trailing newline");
-    context.write_file("app/eof_multiple_lf.txt", "Multiple\n\n");
-    context.write_file("app/mixed.txt", "line1\nline2\r\n");
-    context.write_file("app/trailing_ws.txt", "line with trailing space \n");
-    context.write_file("app/correct.txt", "All good here\n");
-
-    context.write_file("app/invalid.yaml", "a: b: c");
-    context.write_file("app/duplicate.yaml", "a: 1\na: 2");
-    context.write_file("app/empty.yaml", "");
-
-    context.write_file("app/invalid.json", r#"{"a": 1,}"#);
-    context.write_file("app/duplicate.json", r#"{"a": 1, "a": 2}"#);
-    context.write_file("app/empty.json", "");
-
-    // 2KB file to trigger check-added-large-files (1 KB threshold).
-    context.write_file("app/large.bin", [0u8; 2048]);
+        )
+        .with_file("app/eof_no_newline.txt", "No trailing newline")
+        .with_file("app/eof_multiple_lf.txt", "Multiple\n\n")
+        .with_file("app/mixed.txt", "line1\nline2\r\n")
+        .with_file("app/trailing_ws.txt", "line with trailing space \n")
+        .with_file("app/correct.txt", "All good here\n")
+        .with_file("app/invalid.yaml", "a: b: c")
+        .with_file("app/duplicate.yaml", "a: 1\na: 2")
+        .with_file("app/empty.yaml", "")
+        .with_file("app/invalid.json", r#"{"a": 1,}"#)
+        .with_file("app/duplicate.json", r#"{"a": 1, "a": 2}"#)
+        .with_file("app/empty.json", "")
+        .with_file("app/large.bin", [0u8; 2048]);
 
     context.git().add_all();
 
@@ -3075,8 +3070,9 @@ fn check_case_conflict_hook() -> Result<()> {
     }
 
     // Create initial files and commit
-    context.write_file("README.md", "Initial commit");
-    context.write_file("src/foo.txt", "existing file");
+    let context = context
+        .with_file("README.md", "Initial commit")
+        .with_file("src/foo.txt", "existing file");
     context.git().add_all().commit("Initial commit");
 
     let context = context
@@ -3136,7 +3132,7 @@ fn check_case_conflict_directory() -> Result<()> {
     }
 
     // Create directory with file
-    context.write_file("src/utils/helper.py", "helper");
+    let context = context.with_file("src/utils/helper.py", "helper");
     context.git().add_all().commit("Initial commit");
 
     let context = context
@@ -3220,10 +3216,10 @@ fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
         return Ok(());
     }
 
-    let context = context.with_config("repos: []\n");
-
-    context.write_file("app/foo.txt", "existing file");
-    context.write_file("app/trigger.txt", "tracked trigger");
+    let context = context
+        .with_config("repos: []\n")
+        .with_file("app/foo.txt", "existing file")
+        .with_file("app/trigger.txt", "tracked trigger");
     context.git().add_all().commit("Initial commit");
 
     context.write_file(

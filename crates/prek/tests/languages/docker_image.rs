@@ -68,13 +68,12 @@ fn docker_image() {
 /// Test that `docker_image` does not try to resolve entry in the host system PATH.
 #[test]
 fn docker_image_does_not_resolve_entry() -> Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new_git().with_file("bin/alpine", "#!/bin/sh\necho host\n");
 
     let cwd = context.work_dir();
     let bin_dir = cwd.child("bin");
 
     let alpine_stub = bin_dir.child("alpine");
-    context.write_file("bin/alpine", "#!/bin/sh\necho host\n");
 
     make_executable(alpine_stub.path())?;
 

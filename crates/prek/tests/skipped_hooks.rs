@@ -268,9 +268,8 @@ fn mixed_skipped_and_executed_hooks() {
 /// Skipped hooks in untouched workspace projects should not install environments.
 #[test]
 fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    let context = context.with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -279,10 +278,10 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
                 language: system
                 entry: echo root
                 files: \.root$
-    "});
-    context.write_file(
-        "proj-a/.pre-commit-config.yaml",
-        indoc::indoc! {r"
+    "})
+        .with_file(
+            "proj-a/.pre-commit-config.yaml",
+            indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -292,10 +291,10 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
                 entry: echo proj-a
                 files: \.txt$
     "},
-    );
-    context.write_file(
-        "proj-b/.pre-commit-config.yaml",
-        indoc::indoc! {r#"
+        )
+        .with_file(
+            "proj-b/.pre-commit-config.yaml",
+            indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -305,9 +304,8 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
                 entry: python -c "print('proj-b')"
                 files: \.py$
     "#},
-    );
-
-    context.write_file("proj-a/README.txt", "Hello");
+        )
+        .with_file("proj-a/README.txt", "Hello");
     context.git().add_all();
 
     let output = context.run().output()?;
@@ -323,9 +321,8 @@ fn skipped_workspace_project_installable_hook_does_not_install_env() -> Result<(
 
 #[test]
 fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    let context = context.with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -334,10 +331,10 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
                 language: pygrep
                 entry: ROOT_SHOULD_NOT_RUN
                 files: \.py$
-    "});
-    context.write_file(
-        "child/.pre-commit-config.yaml",
-        indoc::indoc! {r#"
+    "})
+        .with_file(
+            "child/.pre-commit-config.yaml",
+            indoc::indoc! {r#"
         orphan: true
         repos:
           - repo: local
@@ -349,9 +346,8 @@ fn orphan_project_early_match_still_hides_child_files_from_parent_install() -> R
                 always_run: true
                 pass_filenames: false
     "#},
-    );
-
-    context.write_file("child/child.py", "print('child')\n");
+        )
+        .with_file("child/child.py", "print('child')\n");
     context.git().add_all();
 
     cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
@@ -535,7 +531,8 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
 
 #[test]
 fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -544,7 +541,8 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
                 language: system
                 entry: python3 -c "from pathlib import Path; Path('file.txt').write_text('changed\n')"
                 pass_filenames: false
-    "#}).with_file("file.txt", "original\n");
+    "#})
+        .with_file("file.txt", "original\n");
 
     context.git().add_all();
 
@@ -590,7 +588,8 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
         "initializing SHA-1 repository should succeed"
     );
 
-    let context = context.with_config(indoc::indoc! {r#"
+    let context = context
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -606,7 +605,9 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
                 entry: python3 -c "from pathlib import Path; Path('binary.dat').write_bytes(b'variant-30375\n')"
                 pass_filenames: false
                 priority: 1
-    "#}).with_file(".gitattributes", "binary.dat -diff\n").with_file("binary.dat", "original\n");
+    "#})
+        .with_file(".gitattributes", "binary.dat -diff\n")
+        .with_file("binary.dat", "original\n");
 
     let cwd = context.work_dir();
 
@@ -641,7 +642,8 @@ fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
 
 #[test]
 fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -650,7 +652,9 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
                 language: system
                 entry: python3 -c "from pathlib import Path; Path('hook.txt').write_text('changed\n')"
                 pass_filenames: false
-    "#}).with_file("file.txt", "original\n").with_file("hook.txt", "original\n");
+    "#})
+        .with_file("file.txt", "original\n")
+        .with_file("hook.txt", "original\n");
 
     context.git().add_all();
     context.write_file("file.txt", "unstaged\n");
@@ -751,9 +755,8 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
 
 #[test]
 fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
-    let context = TestEnv::new_git();
-
-    let context = context.with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -763,8 +766,10 @@ fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
                 entry: python3 -c "pass"
                 always_run: true
                 pass_filenames: false
-    "#});
-    context.write_file("child/.pre-commit-config.yaml", indoc::indoc! {r#"
+    "#})
+        .with_file(
+            "child/.pre-commit-config.yaml",
+            indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -774,9 +779,9 @@ fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
                 entry: python3 -c "from pathlib import Path; Path('child.txt').write_text('changed\n')"
                 always_run: true
                 pass_filenames: false
-    "#});
-
-    context.write_file("child/child.txt", "original\n");
+    "#},
+        )
+        .with_file("child/child.txt", "original\n");
     context.git().add_all();
 
     let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;

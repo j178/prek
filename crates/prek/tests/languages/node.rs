@@ -9,12 +9,10 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable, remove_bin_from_path
 
 #[test]
 fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    let package = context.work_dir().child("node-env-tool");
-    context.write_file(
-        "node-env-tool/package.json",
-        indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_file(
+            "node-env-tool/package.json",
+            indoc::indoc! {r#"
         {
           "name": "node-env-tool",
           "version": "1.0.0",
@@ -23,15 +21,16 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
           }
         }
     "#},
-    );
-    let cli = package.child("cli.js");
-    context.write_file(
-        "node-env-tool/cli.js",
-        indoc::indoc! {r#"
+        )
+        .with_file(
+            "node-env-tool/cli.js",
+            indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("exec node env ok");
     "#},
-    );
+        );
+    let package = context.work_dir().child("node-env-tool");
+    let cli = package.child("cli.js");
     make_executable(cli.path())?;
 
     let dependency = serde_json::to_string(package.path())?;
@@ -430,12 +429,10 @@ fn remote_prepare_uses_dev_dependencies() -> anyhow::Result<()> {
 /// Test that lowercase npm config inherited from `npm exec` cannot redirect installs.
 #[test]
 fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    let package_dir = context.work_dir().child("prefix-fixture");
-    context.write_file(
-        "prefix-fixture/package.json",
-        indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_file(
+            "prefix-fixture/package.json",
+            indoc::indoc! {r#"
         {
           "name": "prek-prefix-fixture",
           "version": "1.0.0",
@@ -444,15 +441,16 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
           }
         }
     "#},
-    );
-    let cli = package_dir.child("cli.js");
-    context.write_file(
-        "prefix-fixture/cli.js",
-        indoc::indoc! {r#"
+        )
+        .with_file(
+            "prefix-fixture/cli.js",
+            indoc::indoc! {r#"
         #!/usr/bin/env node
         console.log("prefix fixture ok")
     "#},
-    );
+        );
+    let package_dir = context.work_dir().child("prefix-fixture");
+    let cli = package_dir.child("cli.js");
     make_executable(cli.path())?;
 
     let dependency = serde_json::to_string(package_dir.path())?;

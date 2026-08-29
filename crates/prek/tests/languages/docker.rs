@@ -36,7 +36,9 @@ fn docker() {
 
 #[test]
 fn workspace_docker() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new_git()
+        .with_file("project1/project1.txt", "")
+        .with_file("project2/project2.txt", "");
     let cwd = context.work_dir();
 
     let config = indoc::indoc! {r"
@@ -50,8 +52,6 @@ fn workspace_docker() {
     "};
 
     context.setup_workspace(&["project1", "project2"], config);
-    context.write_file("project1/project1.txt", "");
-    context.write_file("project2/project2.txt", "");
 
     context.git().add_all();
 

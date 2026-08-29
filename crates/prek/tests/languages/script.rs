@@ -50,8 +50,6 @@ mod unix {
 
     #[test]
     fn workspace_script_run() -> Result<()> {
-        let context = TestEnv::new_git();
-
         let config = indoc::indoc! {r#"
         repos:
           - repo: local
@@ -64,23 +62,24 @@ mod unix {
                   MESSAGE: "Hello, World"
                 verbose: true
         "#};
-        let context = context.with_config(config).with_file(
-            "script.sh",
-            indoc::indoc! {r#"
+        let context = TestEnv::new_git()
+            .with_config(config)
+            .with_file(
+                "script.sh",
+                indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "$MESSAGE!"
         "#},
-        );
-
-        let child = context.work_dir().child("child");
-        context.write_file("child/.pre-commit-config.yaml", config);
-        context.write_file(
-            "child/script.sh",
-            indoc::indoc! {r#"
+            )
+            .with_file("child/.pre-commit-config.yaml", config)
+            .with_file(
+                "child/script.sh",
+                indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "$MESSAGE from child!"
         "#},
-        );
+            );
+        let child = context.work_dir().child("child");
 
         make_executable(context.work_dir().child("script.sh"))?;
         make_executable(child.child("script.sh"))?;
@@ -124,7 +123,8 @@ mod unix {
 
     #[test]
     fn local_repo_bash_shebang() -> Result<()> {
-        let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+        let context = TestEnv::new_git()
+            .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -133,16 +133,15 @@ mod unix {
                 language: script
                 entry: ./echo.sh
                 verbose: true
-        "});
-
-        let script = context.work_dir().child("echo.sh");
-        context.write_file(
-            "echo.sh",
-            indoc::indoc! {r#"
+        "})
+            .with_file(
+                "echo.sh",
+                indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#},
-        );
+            );
+        let script = context.work_dir().child("echo.sh");
         make_executable(&script)?;
 
         context.git().add_all();
@@ -207,7 +206,8 @@ mod unix {
 /// The interpreter must exist in the PATH, the script is not needed to be executable.
 #[test]
 fn windows_script_run() -> Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r"
     repos:
       - repo: local
         hooks:
@@ -216,16 +216,15 @@ fn windows_script_run() -> Result<()> {
             language: script
             entry: ./echo.sh
             verbose: true
-    "});
-
-    let script = context.work_dir().child("echo.sh");
-    context.write_file(
-        "echo.sh",
-        indoc::indoc! {r#"
+    "})
+        .with_file(
+            "echo.sh",
+            indoc::indoc! {r#"
         #!/usr/bin/env python3
         print("Hello, World!")
     "#},
-    );
+        );
+    let script = context.work_dir().child("echo.sh");
     make_executable(&script)?;
 
     context.git().add_all();

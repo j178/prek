@@ -97,14 +97,10 @@ fn pre_commit_channel() -> anyhow::Result<()> {
 }
 
 #[test]
-fn local_pre_commit_channel_is_ignored() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
-
-    let channel_dir = context.work_dir().child(".pre-commit-channel");
-    channel_dir.create_dir_all()?;
-    context.write_file(".pre-commit-channel/scalafmt.json", "{}");
-
-    let context = context.with_config(indoc::indoc! {r"
+fn local_pre_commit_channel_is_ignored() {
+    let context = TestEnv::new_git()
+        .with_file(".pre-commit-channel/scalafmt.json", "{}")
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -127,6 +123,4 @@ fn local_pre_commit_channel_is_ignored() -> anyhow::Result<()> {
     error: Failed to install hook `scalafmt`
       caused by: expected `.pre-commit-channel` directory or `additional_dependencies`
     ");
-
-    Ok(())
 }

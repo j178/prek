@@ -54,7 +54,8 @@ fn hook_impl() {
 
 #[test]
 fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_config(indoc::indoc! {r#"
         repos:
         - repo: local
           hooks:
@@ -63,17 +64,16 @@ fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
              language: system
              entry: echo "hook ran successfully"
              always_run: true
-    "#});
-
-    let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
-    context.write_file(
-        ".git/hooks/pre-commit.legacy",
-        indoc::indoc! {r#"
+    "#})
+        .with_file(
+            ".git/hooks/pre-commit.legacy",
+            indoc::indoc! {r#"
         #!/bin/sh
         python3 -c 'print("legacy pre-commit ran")'
         exit 1
-    "#},
-    );
+        "#},
+        );
+    let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
     make_executable(legacy_hook.path())?;
 
     // Git 2.54+ config-based hooks can invoke `hook-impl` without
@@ -1007,11 +1007,12 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
 
 #[test]
 fn workspace_hook_impl_no_project_found() {
-    let context = TestEnv::new_git().with_filter("[a-f0-9]{7}", "1d5e501");
+    let context = TestEnv::new_git()
+        .with_filter("[a-f0-9]{7}", "1d5e501")
+        .with_file("empty/file.txt", "Some content");
 
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
-    context.write_file("empty/file.txt", "Some content");
     context.git().add_all();
 
     // Install hook that allows missing config

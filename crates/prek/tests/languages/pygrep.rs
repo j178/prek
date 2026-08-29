@@ -215,11 +215,9 @@ fn negate_multiline_mode() {
 /// Test invalid regex pattern
 #[test]
 fn invalid_regex() {
-    let context = TestEnv::new_git();
-
-    context.write_file("test.py", "print('Hello World')\n");
-
-    let context = context.with_config(indoc::indoc! {r#"
+    let context = TestEnv::new_git()
+        .with_file("test.py", "print('Hello World')\n")
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
