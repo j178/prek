@@ -47,7 +47,7 @@ each manifest hook:
 | `exclude_types` | No | No | list of strings | Exclude files with any listed file type tag. |
 | `additional_dependencies` | No | No | list of strings | Extra dependencies installed into managed hook environments. |
 | `args` | No | No | list of strings | Extra arguments appended to `entry` before filenames. |
-| `env` | No | Yes | map of strings | Runtime environment variables for the hook process. |
+| `env` | No | Yes | map of strings | Environment variables for hook environment creation and execution. |
 | `always_run` | No | No | boolean | Run even when no files match. |
 | `fail_fast` | No | No | boolean | Stop the run immediately if this hook fails. |
 | `pass_filenames` | No | No | boolean or positive integer | Control whether, or how many, matching filenames are passed. |

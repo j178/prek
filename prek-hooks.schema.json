@@ -79,7 +79,7 @@
           }
         },
         "env": {
-          "description": "Environment variables to set for the hook.",
+          "description": "Environment variables to set while preparing and running the hook.",
           "type": "object",
           "additionalProperties": {
             "type": "string"

@@ -124,7 +124,7 @@
       "uniqueItems": true
     },
     "default_env": {
-      "description": "Default runtime environment variables for hooks.",
+      "description": "Default environment variables for preparing and running hooks.",
       "type": "object",
       "additionalProperties": {
         "type": "string"
@@ -343,7 +343,7 @@
           }
         },
         "env": {
-          "description": "Environment variables to set for the hook.",
+          "description": "Environment variables to set while preparing and running the hook.",
           "type": "object",
           "additionalProperties": {
             "type": "string"
@@ -653,7 +653,7 @@
           }
         },
         "env": {
-          "description": "Environment variables to set for the hook.",
+          "description": "Environment variables to set while preparing and running the hook.",
           "type": "object",
           "additionalProperties": {
             "type": "string"
@@ -822,7 +822,7 @@
           }
         },
         "env": {
-          "description": "Environment variables to set for the hook.",
+          "description": "Environment variables to set while preparing and running the hook.",
           "type": "object",
           "additionalProperties": {
             "type": "string"
@@ -996,7 +996,7 @@
           }
         },
         "env": {
-          "description": "Environment variables to set for the hook.",
+          "description": "Environment variables to set while preparing and running the hook.",
           "type": "object",
           "additionalProperties": {
             "type": "string"

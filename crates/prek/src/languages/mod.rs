@@ -1,7 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::future::Future;
 use std::path::Path;
-use std::pin::Pin;
 use std::process::Stdio;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -19,7 +18,7 @@ use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
 use crate::hooks::{self, HookOutput};
-use crate::process::Cmd;
+use crate::process::{Cmd, with_command_env};
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
@@ -265,8 +264,6 @@ fn is_path_env(key: impl AsRef<OsStr>) -> bool {
         key == OsStr::new(EnvVars::PATH)
     }
 }
-
-type LanguageFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + 'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellSupport {
@@ -562,11 +559,20 @@ impl Language {
         hook: Arc<Hook>,
         install_cwd: &'a Path,
         reporter: &'a HookInstallReporter,
-    ) -> LanguageFuture<'a, InstalledHook> {
-        self.backend().install(store, hook, install_cwd, reporter)
+    ) -> impl Future<Output = Result<InstalledHook>> + 'a {
+        let env = hook
+            .env
+            .iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect();
+        let install = self.backend().install(store, hook, install_cwd, reporter);
+        with_command_env(env, install)
     }
 
-    pub(crate) fn check_health<'a>(&'a self, info: &'a InstallInfo) -> LanguageFuture<'a, ()> {
+    pub(crate) fn check_health<'a>(
+        &'a self,
+        info: &'a InstallInfo,
+    ) -> impl Future<Output = Result<()>> + 'a {
         self.backend().check_health(info)
     }
 

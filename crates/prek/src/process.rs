@@ -27,8 +27,9 @@
 //! Adapts [axoprocess](https://docs.rs/axoprocess) command helpers to use
 //! [`tokio::process::Command`] instead of [`std::process::Command`].
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
+use std::future::Future;
 use std::io::PipeReader;
 use std::ops::Range;
 use std::path::Path;
@@ -43,6 +44,21 @@ use tracing::{enabled, trace};
 use crate::run::HookRunOutput;
 #[cfg(not(windows))]
 use crate::terminal::USE_COLOR;
+
+tokio::task_local! {
+    static COMMAND_ENV: Vec<(OsString, OsString)>;
+}
+
+/// Apply environment variables to commands created while `future` is running.
+///
+/// The scope is task-local so concurrent installs remain isolated. A spawned task does not inherit
+/// it, so callers must keep command creation in the scoped future.
+pub(crate) fn with_command_env<T>(
+    env: Vec<(OsString, OsString)>,
+    future: impl Future<Output = T>,
+) -> impl Future<Output = T> {
+    COMMAND_ENV.scope(env, future)
+}
 
 /// An error from executing a command.
 #[derive(Debug, Error)]
@@ -178,7 +194,10 @@ impl AsyncPipeReader {
 impl Cmd {
     /// Create a new command.
     pub fn new(command: impl AsRef<OsStr>) -> Self {
-        let inner = tokio::process::Command::new(command);
+        let mut inner = tokio::process::Command::new(command);
+        let _ = COMMAND_ENV.try_with(|env| {
+            inner.envs(env.iter().map(|(key, value)| (key, value)));
+        });
         Self {
             inner,
             hidden_arg_ranges: Vec::new(),
