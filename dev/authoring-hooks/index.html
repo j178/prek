@@ -858,6 +858,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Manifest file: .pre-commit-hooks.yaml">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#editor-completion-and-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Editor completion and validation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1482,6 +1499,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Manifest file: .pre-commit-hooks.yaml">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#editor-completion-and-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Editor completion and validation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1644,14 +1678,14 @@ each manifest hook:</p>
 <td><code>files</code></td>
 <td>No</td>
 <td>No</td>
-<td>regex string</td>
+<td>regex string or glob map</td>
 <td>Include only matching files.</td>
 </tr>
 <tr>
 <td><code>exclude</code></td>
 <td>No</td>
 <td>No</td>
-<td>regex string</td>
+<td>regex string or glob map</td>
 <td>Exclude matching files.</td>
 </tr>
 <tr>
@@ -1781,6 +1815,9 @@ config define <code>env</code>, the maps are merged and end-user values override
 duplicate keys.</p>
 <p><code>pass_filenames: n</code> with a positive integer is also a <code>prek</code> extension.
 Upstream <code>pre-commit</code> only accepts a boolean value.</p>
+<p>The <code>{ glob: ... }</code> mapping form for <code>files</code> and <code>exclude</code> is a <code>prek</code>
+extension. Use the regex string form when a manifest must also work with
+upstream <code>pre-commit</code>.</p>
 <p>The <code>language_version</code> options map with <code>request</code> and <code>preference</code> fields is
 a <code>prek</code> extension. Use the string form when a manifest must also work with
 upstream <code>pre-commit</code>.</p>
@@ -1795,18 +1832,28 @@ the supported languages and exact shell adapter commands.</p>
 <p>Project configuration-only fields, such as <code>priority</code> and <code>groups</code>, are not
 manifest hook fields.</p>
 </div>
+<h3 id="editor-completion-and-validation">Editor completion and validation<a class="headerlink" href="#editor-completion-and-validation" title="Permanent link">&para;</a></h3>
+<p><code>prek</code> maintains a <a href="https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json"><code>prek-hooks.schema.json</code></a>
+schema for <code>.pre-commit-hooks.yaml</code>. The schema stays in the <code>prek</code> repository
+instead of being registered with SchemaStore, so editors must opt into it
+explicitly.</p>
+<p>With YAML Language Server, add this directive at the top of the manifest:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json</span>
+</span></code></pre></div>
+<p>This enables completion and validation for both upstream fields and <code>prek</code>
+extensions such as glob filters, <code>env</code>, and <code>shell</code>.</p>
 <p>Example:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">format-json</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">format json</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python3 -m tools.format_json</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\.json$&quot;</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint-shell</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shellcheck</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shellcheck</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">shell</span><span class="p p-Indicator">]</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">format-json</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">format json</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python3 -m tools.format_json</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\.json$&quot;</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint-shell</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shellcheck</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shellcheck</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">system</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">  </span><span class="nt">types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">shell</span><span class="p p-Indicator">]</span>
 </span></code></pre></div>
 <p>Prefer entries that invoke an executable directly. Do not assume a shell is
 present or that POSIX paths work on Windows unless the hook explicitly declares
@@ -1823,26 +1870,26 @@ when a user explicitly runs <code>prek run --hook-stage manual &lt;hook-id&gt;</
 <p>For what each stage means and whether it operates on repository files, see
 <a href="../reference/configuration/#supported-git-hook-stages">Supported Git Hook Stages</a>.</p>
 <p>Example:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-lint</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">stages</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pre-commit</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">pre-merge-commit</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">pre-push</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">manual</span><span class="p p-Indicator">]</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lint</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-lint</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">stages</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pre-commit</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">pre-merge-commit</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">pre-push</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">manual</span><span class="p p-Indicator">]</span>
 </span></code></pre></div>
 <h2 id="passing-arguments-to-hooks">Passing arguments to hooks<a class="headerlink" href="#passing-arguments-to-hooks" title="Permanent link">&para;</a></h2>
 <p>When users configure a hook with <code>args</code>, <code>prek</code> passes those arguments before
 the list of file paths. If <code>args</code> is empty or omitted, only file paths are
 provided.</p>
 <p>Example end-user config:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">repos</span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/example/hook-repo</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.0.0</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-hook</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--max-line-length=120</span><span class="p p-Indicator">]</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">repos</span><span class="p">:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/example/hook-repo</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.0.0</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-hook</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--max-line-length=120</span><span class="p p-Indicator">]</span>
 </span></code></pre></div>
 <p>Invocation shape:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>my-hook --max-line-length=120 path/to/file1 path/to/file2
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-hook --max-line-length=120 path/to/file1 path/to/file2
 </span></code></pre></div>
 <p>Hook processes also receive stage-specific <code>PRE_COMMIT_*</code> variables. See
 <a href="../reference/environment-variables/#variables-exposed-to-hooks">Variables exposed to hooks</a>
@@ -1862,8 +1909,8 @@ SHAs into <code>rev</code> instead of tag names.</p>
 <h2 id="develop-locally-with-prek-try-repo">Develop locally with <code>prek try-repo</code><a class="headerlink" href="#develop-locally-with-prek-try-repo" title="Permanent link">&para;</a></h2>
 <p><a href="../reference/cli/#prek-try-repo"><code>prek try-repo</code></a> runs hooks from a repository without publishing a release. This
 is handy while iterating on a hook.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># In another repository where you want to test the hook</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>prek<span class="w"> </span>try-repo<span class="w"> </span>../path/to/hook-repo<span class="w"> </span>my-hook-id<span class="w"> </span>--verbose
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># In another repository where you want to test the hook</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>prek<span class="w"> </span>try-repo<span class="w"> </span>../path/to/hook-repo<span class="w"> </span>my-hook-id<span class="w"> </span>--verbose
 </span></code></pre></div>
 <p>Notes:</p>
 <ul>
@@ -1873,7 +1920,7 @@ is handy while iterating on a hook.</p>
 </ul>
 <h2 id="validation-and-ci">Validation and CI<a class="headerlink" href="#validation-and-ci" title="Permanent link">&para;</a></h2>
 <p>Validate your manifest locally with <a href="../reference/cli/#prek-validate-manifest"><code>prek validate-manifest</code></a>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>prek<span class="w"> </span>validate-manifest<span class="w"> </span>.pre-commit-hooks.yaml
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>prek<span class="w"> </span>validate-manifest<span class="w"> </span>.pre-commit-hooks.yaml
 </span></code></pre></div>
 <p>This ensures the manifest is well-formed before publishing a release tag.</p>
 <p>Run that command in CI, then exercise the hook against a small fixture
