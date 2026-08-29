@@ -76,22 +76,6 @@ function isMusl() {
   return false;
 }
 
-function armVersion() {
-  const version = Number(process.config.variables.arm_version ?? 0);
-  return Number.isFinite(version) ? version : 0;
-}
-
-function matchesArmVersion(spec) {
-  const version = armVersion();
-  if (spec.armVersionMin != null && version < spec.armVersionMin) {
-    return false;
-  }
-  if (spec.armVersionMax != null && version > spec.armVersionMax) {
-    return false;
-  }
-  return true;
-}
-
 function currentLibc() {
   if (process.platform !== "linux") {
     return null;
@@ -102,11 +86,10 @@ function currentLibc() {
 function pickPlatformPackage() {
   const libc = currentLibc();
   debug(
-    `selecting package for platform=${process.platform} arch=${process.arch}` +
-      `${libc ? ` libc=${libc}` : ""} armVersion=${armVersion()}`,
+    `selecting package for platform=${process.platform} arch=${process.arch}${libc ? ` libc=${libc}` : ""}`,
   );
 
-  const candidates = PLATFORMS.filter((spec) => {
+  const candidate = PLATFORMS.find((spec) => {
     if (!spec.os.includes(process.platform)) {
       return false;
     }
@@ -116,24 +99,17 @@ function pickPlatformPackage() {
     if (spec.libc && spec.libc !== libc) {
       return false;
     }
-    if (!matchesArmVersion(spec)) {
-      return false;
-    }
     return true;
-  }).sort((left, right) => {
-    const leftSpecificity = left.armVersionMin ?? 0;
-    const rightSpecificity = right.armVersionMin ?? 0;
-    return rightSpecificity - leftSpecificity;
   });
 
-  if (candidates.length === 0) {
+  if (candidate == null) {
     const libcSuffix = libc ? ` (${libc})` : "";
     throw new Error(
       `Unsupported platform: ${process.platform} ${process.arch}${libcSuffix}`,
     );
   }
 
-  return candidates[0];
+  return candidate;
 }
 
 function resolvePackageJson(packageName) {
