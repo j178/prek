@@ -371,7 +371,7 @@ async fn ensure_hooks_installed<'paths>(
 
         for hook in runnable_env_hooks {
             if let Some(installed_hook) = install_cache.installed_hook(store, hook.clone()).await {
-                installed_by_hook.insert(hook_key(&hook), installed_hook);
+                installed_by_hook.insert(hook.key(), installed_hook);
             } else {
                 missing_env_hooks.push(hook.clone());
             }
@@ -384,7 +384,7 @@ async fn ensure_hooks_installed<'paths>(
             reporter.on_complete();
 
             for installed_hook in installed_hooks {
-                installed_by_hook.insert(hook_key(&installed_hook), installed_hook);
+                installed_by_hook.insert(installed_hook.key(), installed_hook);
             }
         }
     }
@@ -394,7 +394,7 @@ async fn ensure_hooks_installed<'paths>(
         .map(|hook| match hook {
             HookPlan::Run(hook) => HookPlan::Run(
                 installed_by_hook
-                    .remove(&hook_key(&hook))
+                    .remove(&hook.key())
                     .unwrap_or_else(|| InstalledHook::NoNeedInstall(hook)),
             ),
             HookPlan::Skip(hook) => HookPlan::Skip(hook),
@@ -457,11 +457,6 @@ fn select_runnable_env_hooks<'paths>(
     }
 
     Ok(runnable_env_hooks)
-}
-
-fn hook_key(hook: &Hook) -> (usize, usize) {
-    // Hook indexes are scoped to a project config, so workspace runs need the project index too.
-    (hook.project().idx(), hook.idx)
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
