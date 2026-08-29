@@ -325,4 +325,7 @@ If you want IDE completion / validation, prek publishes a JSON Schema through th
 
 That schema tracks what `prek` accepts today, but `prek` also intentionally tolerates unknown keys for forward compatibility.
 
+Hook authors can opt into the separate schema for `.pre-commit-hooks.yaml` described in
+[Editor completion and validation](authoring-hooks.md#editor-completion-and-validation).
+
 For every accepted configuration key and hook option, see the [Configuration Reference](reference/configuration.md). For process environment controls, see the [Environment Variable Reference](reference/environment-variables.md).

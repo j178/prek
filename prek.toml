@@ -48,7 +48,7 @@ rev = "12e63946db2c5cfcc9030fac21c3883ba88c6ed8"  # frozen: 0.38.0
 hooks = [
   {
     id = "check-metaschema",
-    files = { glob = "prek.schema.json" },
+    files = { glob = ["prek.schema.json", "prek-hooks.schema.json"] },
   },
   { id = "check-github-workflows" },
   {

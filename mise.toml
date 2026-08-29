@@ -48,12 +48,12 @@ run = "cargo test --bin prek cli::_gen::generate_cli_reference -- --exact"
 env = { PREK_GENERATE = "1" }
 
 [tasks.generate-json-schema]
-description = "Generate JSON schema"
+description = "Generate JSON schemas"
 run = "cargo test --bin prek --features schemars schema::_gen::generate_json_schema -- --exact"
 env = { PREK_GENERATE = "1" }
 
 [tasks.generate]
-description = "Generate CLI reference and JSON schema"
+description = "Generate CLI reference and JSON schemas"
 run = [{ task = "generate-cli-reference" }, { task = "generate-json-schema" }]
 
 [tasks.preview-docs]

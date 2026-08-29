@@ -421,7 +421,7 @@ impl schemars::JsonSchema for Repo {
 #[cfg(unix)]
 #[cfg(all(test, feature = "schemars"))]
 mod _gen {
-    use crate::config::Config;
+    use crate::config::{Config, Manifest};
     use anyhow::bail;
     use prek_consts::env_vars::{EnvVars, EnvVarsRead};
     use pretty_assertions::StrComparison;
@@ -429,6 +429,7 @@ mod _gen {
 
     const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 
+    #[derive(Clone, Copy)]
     enum Mode {
         /// Update the content.
         Write,
@@ -440,12 +441,12 @@ mod _gen {
         DryRun,
     }
 
-    fn generate() -> String {
+    fn generate<T: schemars::JsonSchema>() -> String {
         let settings = schemars::generate::SchemaSettings::draft07()
             .with_transform(schemars::transform::RestrictFormats::default())
             .with_transform(super::RemoveNullTypes);
         let generator = schemars::SchemaGenerator::new(settings);
-        let schema = generator.into_root_schema_for::<Config>();
+        let schema = generator.into_root_schema_for::<T>();
         serde_json::to_string_pretty(&schema).unwrap() + "\n"
     }
 
@@ -457,49 +458,58 @@ mod _gen {
             Mode::Check
         };
 
-        let schema_string = generate();
-        let filename = "prek.schema.json";
-        let schema_path = PathBuf::from(ROOT_DIR).join(filename);
+        let schemas = [
+            ("prek.schema.json", generate::<Config>()),
+            ("prek-hooks.schema.json", generate::<Manifest>()),
+        ];
 
-        match mode {
-            Mode::DryRun => {
-                anstream::println!("{schema_string}");
-            }
-            Mode::Check => match fs_err::read_to_string(schema_path) {
-                Ok(current) => {
-                    if current == schema_string {
-                        anstream::println!("Up-to-date: {filename}");
-                    } else {
-                        let comparison = StrComparison::new(&current, &schema_string);
+        for (filename, schema_string) in schemas {
+            let schema_path = PathBuf::from(ROOT_DIR).join(filename);
+
+            match mode {
+                Mode::DryRun => {
+                    anstream::println!("{schema_string}");
+                }
+                Mode::Check => match fs_err::read_to_string(schema_path) {
+                    Ok(current) => {
+                        if current == schema_string {
+                            anstream::println!("Up-to-date: {filename}");
+                        } else {
+                            let comparison = StrComparison::new(&current, &schema_string);
+                            bail!(
+                                "{filename} changed, please run `mise run generate` to update:\n{comparison}"
+                            );
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("{filename} not found, please run `mise run generate` to generate");
+                    }
+                    Err(err) => {
                         bail!(
-                            "{filename} changed, please run `mise run generate` to update:\n{comparison}"
+                            "{filename} changed, please run `mise run generate` to update:\n{err}"
                         );
                     }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate` to generate");
-                }
-                Err(err) => {
-                    bail!("{filename} changed, please run `mise run generate` to update:\n{err}");
-                }
-            },
-            Mode::Write => match fs_err::read_to_string(&schema_path) {
-                Ok(current) => {
-                    if current == schema_string {
-                        anstream::println!("Up-to-date: {filename}");
-                    } else {
+                },
+                Mode::Write => match fs_err::read_to_string(&schema_path) {
+                    Ok(current) => {
+                        if current == schema_string {
+                            anstream::println!("Up-to-date: {filename}");
+                        } else {
+                            anstream::println!("Updating: {filename}");
+                            fs_err::write(schema_path, schema_string.as_bytes())?;
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                         anstream::println!("Updating: {filename}");
                         fs_err::write(schema_path, schema_string.as_bytes())?;
                     }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    anstream::println!("Updating: {filename}");
-                    fs_err::write(schema_path, schema_string.as_bytes())?;
-                }
-                Err(err) => {
-                    bail!("{filename} changed, please run `mise run generate` to update:\n{err}");
-                }
-            },
+                    Err(err) => {
+                        bail!(
+                            "{filename} changed, please run `mise run generate` to update:\n{err}"
+                        );
+                    }
+                },
+            }
         }
 
         Ok(())

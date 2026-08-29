@@ -40,8 +40,8 @@ each manifest hook:
 | `shell` | No | Yes | string enum | Run `entry` through a predefined shell adapter (`sh`, `bash`, `pwsh`, `powershell`, or `cmd`). |
 | `language` | Yes | No | string | Execution environment, for example `python`, `node`, or `system`. |
 | `alias` | No | No | string | Alternate identifier accepted by `prek run`. |
-| `files` | No | No | regex string | Include only matching files. |
-| `exclude` | No | No | regex string | Exclude matching files. |
+| `files` | No | No | regex string or glob map | Include only matching files. |
+| `exclude` | No | No | regex string or glob map | Exclude matching files. |
 | `types` | No | No | list of strings | Require all listed file type tags. |
 | `types_or` | No | No | list of strings | Require at least one listed file type tag. |
 | `exclude_types` | No | No | list of strings | Exclude files with any listed file type tag. |
@@ -76,6 +76,10 @@ manifest semantics. For the upstream reference, see:
     `pass_filenames: n` with a positive integer is also a `prek` extension.
     Upstream `pre-commit` only accepts a boolean value.
 
+    The `{ glob: ... }` mapping form for `files` and `exclude` is a `prek`
+    extension. Use the regex string form when a manifest must also work with
+    upstream `pre-commit`.
+
     The `language_version` options map with `request` and `preference` fields is
     a `prek` extension. Use the string form when a manifest must also work with
     upstream `pre-commit`.
@@ -90,6 +94,22 @@ manifest semantics. For the upstream reference, see:
 
     Project configuration-only fields, such as `priority` and `groups`, are not
     manifest hook fields.
+
+### Editor completion and validation
+
+`prek` maintains a [`prek-hooks.schema.json`](https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json)
+schema for `.pre-commit-hooks.yaml`. The schema stays in the `prek` repository
+instead of being registered with SchemaStore, so editors must opt into it
+explicitly.
+
+With YAML Language Server, add this directive at the top of the manifest:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json
+```
+
+This enables completion and validation for both upstream fields and `prek`
+extensions such as glob filters, `env`, and `shell`.
 
 Example:
 
