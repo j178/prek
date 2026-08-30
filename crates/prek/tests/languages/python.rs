@@ -1,7 +1,6 @@
 #[cfg(feature = "ci")]
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -254,10 +253,9 @@ fn additional_dependencies() {
 #[test]
 fn additional_dependencies_in_remote_repo() {
     let context = TestEnv::new().init_git();
-    let repo = context
-        .create_repo("python-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+    let hook_repo = context
+        .create_hook_repo(
+            "python-hook",
             indoc::indoc! {r#"
             - id: hello
               name: hello
@@ -287,19 +285,18 @@ fn additional_dependencies_in_remote_repo() {
                 }
             )
         "#},
-        );
-    let repo_path = repo.path();
-    repo.git().add(".").commit("Add manifest").tag("v0.1.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
-            rev: v0.1.0
+            rev: v1.0.0
             hooks:
               - id: hello
                 name: hello
                 verbose: true
-    ", repo_path.display()});
+    ", hook_repo});
 
     context.git().add(".");
     cmd_snapshot!(context, context.run(), @r"

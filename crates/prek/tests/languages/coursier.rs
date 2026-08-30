@@ -1,5 +1,3 @@
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
@@ -38,9 +36,8 @@ fn additional_dependencies() {
 fn pre_commit_channel() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("coursier-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "coursier-hook",
             indoc::indoc! {r"
             - id: echo-java
               name: echo-java
@@ -56,13 +53,8 @@ fn pre_commit_channel() {
               "dependencies": ["io.get-coursier:echo:latest.stable"]
             }
         "#},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add coursier hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -73,7 +65,7 @@ fn pre_commit_channel() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
 
     context.git().add(".");
 

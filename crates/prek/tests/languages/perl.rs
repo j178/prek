@@ -1,5 +1,4 @@
 use assert_cmd::assert::OutputAssertExt;
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -48,9 +47,8 @@ fn local_hook() {
 fn remote_repo_install() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("perl-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "perl-hook",
             indoc::indoc! {r"
             - id: hello
               name: hello
@@ -87,13 +85,8 @@ fn remote_repo_install() {
 
             1;
         "#},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add perl hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -104,7 +97,7 @@ fn remote_repo_install() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
 
     context.git().add(".");
 

@@ -1,5 +1,3 @@
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 /// Test that a local Swift hook with a system command works.
@@ -114,8 +112,17 @@ fn health_check() {
 /// Test that a Swift Package.swift is built and the executable is available.
 #[test]
 fn local_package_build() {
-    // Create a minimal Swift package
-    let swift_hook = TestEnv::new()
+    let context = TestEnv::new().init_git();
+    let hook_repo = context
+        .create_hook_repo(
+            "swift-hook",
+            indoc::indoc! {r"
+                - id: swift-package-test
+                  name: swift-package-test
+                  entry: prek-swift-test
+                  language: swift
+            "},
+        )
         .with_file(
             "Package.swift",
             indoc::indoc! {r#"
@@ -136,31 +143,17 @@ fn local_package_build() {
                 print("Hello from Swift package!")
             "#},
         )
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
-            indoc::indoc! {r"
-                - id: swift-package-test
-                  name: swift-package-test
-                  entry: prek-swift-test
-                  language: swift
-            "},
-        )
-        .init_git();
-    swift_hook.git().commit("Initial commit").tag("v1.0");
-
-    let context = TestEnv::new().init_git();
-
-    let hook_url = swift_hook.work_dir().to_str().unwrap();
+        .build();
     context.write_config(indoc::formatdoc! {r"
         repos:
-          - repo: {hook_url}
-            rev: v1.0
+          - repo: {hook_repo}
+            rev: v1.0.0
             hooks:
               - id: swift-package-test
                 verbose: true
                 always_run: true
                 pass_filenames: false
-    ", hook_url = hook_url});
+    "});
     context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"

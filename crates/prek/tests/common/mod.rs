@@ -10,8 +10,8 @@ use assert_fs::fixture::{ChildPath, FileWriteBin, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
-use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
 #[cfg(unix)]
 pub(crate) fn make_executable(path: impl AsRef<Path>) -> std::io::Result<()> {
@@ -169,6 +169,12 @@ impl TestRepo {
 
     pub(crate) fn git(&self) -> TestGit<'_> {
         TestGit::new(&self.path, &self.home_dir)
+    }
+
+    /// Commit the fixture at `v1.0.0` and return its config-ready path.
+    pub(crate) fn build(self) -> String {
+        self.git().add(".").commit("Initial commit").tag("v1.0.0");
+        self.path().to_string_lossy().replace('\\', "/")
     }
 }
 
@@ -478,7 +484,17 @@ impl TestEnv {
         &self.home_dir
     }
 
-    /// Create a Git repository that can be used as a local remote.
+    /// Create a local hook repository from its manifest definition.
+    pub(crate) fn create_hook_repo(
+        &self,
+        name: impl AsRef<Path>,
+        manifest: impl AsRef<str>,
+    ) -> TestRepo {
+        self.create_repo(name)
+            .with_file(PRE_COMMIT_HOOKS_YAML, manifest.as_ref())
+    }
+
+    /// Create an uncommitted Git repository for non-hook fixtures or custom history.
     pub(crate) fn create_repo(&self, name: impl AsRef<Path>) -> TestRepo {
         TestRepo::new(
             self.home_dir.child("test-repos").child(name),

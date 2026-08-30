@@ -1,5 +1,4 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -53,7 +52,15 @@ fn local_hook() {
 fn remote_repo_install() -> anyhow::Result<()> {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("php-hook")
+        .create_hook_repo(
+            "php-hook",
+            indoc::indoc! {r"
+                - id: php-hook
+                  name: php-hook
+                  language: php
+                  entry: php-hook
+            "},
+        )
         .with_file(
             COMPOSER_JSON,
             indoc::indoc! {r#"
@@ -63,28 +70,14 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 }
             "#},
         )
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
-            indoc::indoc! {r"
-                - id: php-hook
-                  name: php-hook
-                  language: php
-                  entry: php-hook
-            "},
-        )
         .with_executable_file(
             "bin/php-hook",
             indoc::indoc! {r#"
         #!/usr/bin/env php
         <?php echo "Hello from remote PHP!\n";
     "#},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add PHP hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -95,7 +88,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
     context.git().add(".");
 
     let composer_home = context.home_dir().child("composer");

@@ -84,9 +84,8 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         .init_git();
 
     let hook_repo = context
-        .create_repo("mise-system-hook")
-        .with_file(
-            ".pre-commit-hooks.yaml",
+        .create_hook_repo(
+            "mise-system-hook",
             indoc::indoc! {r#"
             - id: mise-system
               name: mise system
@@ -100,9 +99,8 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         "#},
         )
         // Provisioning must not read configuration from the hook repository.
-        .with_file("mise.toml", "not valid = [");
-    hook_repo.git().add(".").commit("Add mise hook");
-    let rev = hook_repo.git().rev_parse("HEAD")?;
+        .with_file("mise.toml", "not valid = [")
+        .build();
 
     // Keep a conflicting executable beside the real system mise. Activating the private tool must
     // not move this whole directory ahead of the PATH returned by `mise env`.
@@ -123,10 +121,10 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: '{}'
-            rev: {}
+            rev: v1.0.0
             hooks:
               - id: mise-system
-    ", hook_repo.path().display(), rev});
+    ", hook_repo});
     context.git().add(".");
 
     let ambient_data = context.work_dir().join("ambient-mise-data");

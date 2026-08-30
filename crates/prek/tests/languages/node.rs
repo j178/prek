@@ -1,7 +1,6 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 use url::Url;
 
@@ -251,9 +250,8 @@ fn additional_dependencies() {
 fn remote_package_is_installed_from_git() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("remote-node-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "remote-node-hook",
             indoc::indoc! {r"
                 - id: remote-node-hook
                   name: remote-node-hook
@@ -286,13 +284,8 @@ fn remote_package_is_installed_from_git() {
         if (!isNumber(42)) process.exit(1);
         console.log("remote hook ok");
     "#},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add remote Node hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -301,7 +294,7 @@ fn remote_package_is_installed_from_git() {
             hooks:
               - id: remote-node-hook
                 verbose: true
-    ", hook_repo.path().display()});
+    ", hook_repo});
     context.git().add(".");
 
     cmd_snapshot!(context, context.run().env(EnvVars::PREK_HOME, ".prek-cache"), @r"
@@ -329,9 +322,8 @@ fn remote_package_is_installed_from_git() {
 fn remote_prepare_uses_dev_dependencies() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("prepared-node-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "prepared-node-hook",
             indoc::indoc! {r"
                 - id: prepared-node-hook
                   name: prepared-node-hook
@@ -383,14 +375,9 @@ fn remote_prepare_uses_dev_dependencies() {
             indoc::indoc! {r#"
                 #!/usr/bin/env node
                 console.log("prepared hook ok");
-            "#},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add source-built Node hook")
-        .tag("v1.0.0");
+        "#},
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -399,7 +386,7 @@ fn remote_prepare_uses_dev_dependencies() {
             hooks:
               - id: prepared-node-hook
                 verbose: true
-    ", hook_repo.path().display()});
+    ", hook_repo});
     context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
@@ -584,7 +571,17 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
         .commit("Add sentinel Node dependency");
 
     let hook_repo = context
-        .create_repo("sentinel-node-hook")
+        .create_hook_repo(
+            "sentinel-node-hook",
+            indoc::indoc! {r"
+        - id: sentinel-node
+          name: sentinel-node
+          entry: sentinel-node-tool
+          language: node
+          always_run: true
+          pass_filenames: false
+    "},
+        )
         .with_file(
             "package.json",
             indoc::indoc! {r#"
@@ -604,23 +601,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
         console.log("sentinel node ok");
     "#},
         )
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
-            indoc::indoc! {r"
-        - id: sentinel-node
-          name: sentinel-node
-          entry: sentinel-node-tool
-          language: node
-          always_run: true
-          pass_filenames: false
-    "},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add sentinel Node hook")
-        .tag("v1.0.0");
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -630,7 +611,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
               - id: sentinel-node
                 additional_dependencies:
                   - git+file:///prek-node-git-dependency
-    ", repo = hook_repo.path().display()});
+    ", repo = hook_repo});
     context.git().add(".");
 
     // The regression corrupts the calling repository's index, so capture it before npm runs.
