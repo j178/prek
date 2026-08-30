@@ -617,6 +617,10 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
 
+Set [`PREK_USE_CARGO_BINSTALL=1`](reference/environment-variables.md#prek_use_cargo_binstall) to use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) for remote hook packages and crates.io `cli:` dependencies. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
+
+Hooks with library `additional_dependencies` still use the source build path because prek must modify their manifest. Git `cli:` dependencies also continue to use `cargo install` so their configured tag and package selection keep the existing semantics.
+
 !!! note "Using `--locked` flag"
 
     prek uses the `--locked` flag when installing Rust packages to ensure exact dependency versions from `Cargo.lock` are used. This prevents breaking changes from new dependency releases.

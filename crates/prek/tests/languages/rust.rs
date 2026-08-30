@@ -5,8 +5,56 @@ use assert_fs::assert::PathAssert;
 #[cfg(feature = "ci")]
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
+#[cfg(unix)]
+use prek_consts::prepend_paths;
 
 use crate::common::{TestEnv, cmd_snapshot};
+
+#[cfg(unix)]
+fn fake_cargo_binstall() -> &'static str {
+    indoc::indoc! {r#"
+        #!/bin/sh
+        set -eu
+
+        args_file="${PREK_TEST_BINSTALL_ARGS:?}"
+        root=
+        manifest=
+        package=
+        version=
+        no_confirm=false
+        locked=false
+        while [ "$#" -gt 0 ]; do
+            case "$1" in
+                --no-confirm) no_confirm=true ;;
+                --root) shift; root="$1" ;;
+                --manifest-path) shift; manifest="$1" ;;
+                --version) shift; version="$1" ;;
+                --locked) locked=true ;;
+                *) package="$1" ;;
+            esac
+            shift
+        done
+
+        test -n "$root"
+        test "$no_confirm" = true
+        test "$locked" = true
+        if [ -n "$manifest" ]; then
+            test -f "$manifest"
+            test "$package" = fake-rust-hook
+            printf 'hook\n' >> "$args_file"
+        else
+            test "$package" = fake-rust-tool
+            test "$version" = 1.2.3
+            printf 'cli\n' >> "$args_file"
+        fi
+
+        mkdir -p "$root/bin"
+        for executable in fake-rust-hook fake-rust-tool; do
+            printf '%s\n' '#!/bin/sh' 'echo "installed with cargo-binstall"' > "$root/bin/$executable"
+            chmod +x "$root/bin/$executable"
+        done
+    "#}
+}
 
 /// Test `language_version` parsing and installation for Rust hooks.
 #[cfg(feature = "ci")]
@@ -161,6 +209,77 @@ fn additional_dependencies_cli() {
 
     ----- stderr -----
     ");
+}
+
+/// Test cargo-binstall for a remote hook and its crates.io CLI dependency.
+#[cfg(unix)]
+#[test]
+fn cargo_binstall_installs_hook_and_cli_dependency() -> anyhow::Result<()> {
+    let context = TestEnv::new()
+        .with_executable_file("bin/cargo-binstall", fake_cargo_binstall())
+        .init_git();
+    let hook_repo = context
+        .create_hook_repo(
+            "rust-binstall-hook",
+            indoc::indoc! {r#"
+                - id: binstall
+                  name: binstall
+                  language: rust
+                  entry: fake-rust-hook
+                  additional_dependencies: ["cli:fake-rust-tool:1.2.3"]
+            "#},
+        )
+        .with_file(
+            "Cargo.toml",
+            indoc::indoc! {r#"
+                [package]
+                name = "fake-rust-hook"
+                version = "1.2.3"
+                edition = "2021"
+            "#},
+        )
+        .with_file("src/main.rs", "fn main() {}\n")
+        .build();
+
+    context.write_config(indoc::formatdoc! {r"
+        repos:
+          - repo: {hook_repo}
+            rev: v1.0.0
+            hooks:
+              - id: binstall
+                language_version: system
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+    context.git().add(".");
+
+    let bin_dir = context.child("bin");
+    let args_file = context.child("binstall-args");
+    let path = prepend_paths(&[bin_dir.path()])?;
+
+    cmd_snapshot!(context, context.run()
+        .env(EnvVars::PREK_USE_CARGO_BINSTALL, "1")
+        .env(EnvVars::PATH, path)
+        .env("PREK_TEST_BINSTALL_ARGS", args_file.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    binstall.................................................................Passed
+    - hook id: binstall
+    - duration: [TIME]
+
+      installed with cargo-binstall
+
+    ----- stderr -----
+    "#);
+
+    insta::assert_snapshot!(context.read("binstall-args"), @r#"
+    hook
+    cli
+    "#);
+
+    Ok(())
 }
 
 /// Test that remote Rust hooks are installed and run correctly.

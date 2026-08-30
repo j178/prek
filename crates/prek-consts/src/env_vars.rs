@@ -192,6 +192,7 @@ impl EnvVars {
 
     // Rust related
     pub const PREK_RUST_PROFILE: &'static str = "PREK_RUST_PROFILE";
+    pub const PREK_USE_CARGO_BINSTALL: &'static str = "PREK_USE_CARGO_BINSTALL";
     pub const RUSTUP_TOOLCHAIN: &'static str = "RUSTUP_TOOLCHAIN";
     pub const RUSTUP_AUTO_INSTALL: &'static str = "RUSTUP_AUTO_INSTALL";
     pub const CARGO_HOME: &'static str = "CARGO_HOME";

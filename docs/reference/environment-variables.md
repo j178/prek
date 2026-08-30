@@ -114,6 +114,11 @@ See [Ruby language support](../languages.md#ruby) for details.
 Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`.
 See [Rust language support](../languages.md#rust) for details.
 
+### `PREK_USE_CARGO_BINSTALL`
+
+Use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) for supported `language: rust` package installations.
+prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](../languages.md#rust) for the source-build fallbacks.
+
 ## Compatibility fallbacks
 
 ### `PRE_COMMIT_ALLOW_NO_CONFIG`
