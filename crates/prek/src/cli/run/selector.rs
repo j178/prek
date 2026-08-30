@@ -193,20 +193,9 @@ pub(crate) struct RepoFilter {
     matched: AtomicBool,
 }
 
-fn canonical_github_url(value: &str) -> Option<String> {
+fn canonical_github_path(path: &str) -> Option<String> {
     const GITHUB_URL_PREFIX: &str = "https://github.com/";
-    const GITHUB_SSH_URL_PREFIX: &str = "ssh://git@github.com/";
-    const GITHUB_SCP_PREFIX: &str = "git@github.com:";
 
-    let path = if let Some(path) = value.strip_prefix(GITHUB_URL_PREFIX) {
-        path
-    } else if let Some(path) = value.strip_prefix(GITHUB_SSH_URL_PREFIX) {
-        path
-    } else if let Some(path) = value.strip_prefix(GITHUB_SCP_PREFIX) {
-        path
-    } else {
-        value
-    };
     let mut components = path.split('/');
     let (Some(owner), Some(repository), None) =
         (components.next(), components.next(), components.next())
@@ -221,9 +210,33 @@ fn canonical_github_url(value: &str) -> Option<String> {
     Some(format!("{GITHUB_URL_PREFIX}{owner}/{repository}"))
 }
 
+fn canonical_github_url(value: &str) -> Option<String> {
+    const GITHUB_URL_PREFIX: &str = "https://github.com/";
+    const GITHUB_SSH_URL_PREFIX: &str = "ssh://git@github.com/";
+    const GITHUB_SCP_PREFIX: &str = "git@github.com:";
+
+    let path = if let Some(path) = value.strip_prefix(GITHUB_URL_PREFIX) {
+        path
+    } else if let Some(path) = value.strip_prefix(GITHUB_SSH_URL_PREFIX) {
+        path
+    } else {
+        value.strip_prefix(GITHUB_SCP_PREFIX)?
+    };
+
+    canonical_github_path(path)
+}
+
+fn canonical_github_selector(value: &str) -> Option<String> {
+    if let Some(url) = canonical_github_url(value) {
+        return Some(url);
+    }
+
+    canonical_github_path(value)
+}
+
 impl RepoFilter {
     pub(crate) fn new(original: String) -> Self {
-        let github_url = canonical_github_url(&original);
+        let github_url = canonical_github_selector(&original);
 
         Self {
             original,
@@ -974,7 +987,15 @@ mod tests {
         const GITHUB_SSH_URL: &str = "ssh://git@github.com/OWNER/REPOSITORY";
         const GITHUB_SSH_URL_DOT_GIT: &str = "ssh://git@github.com/OWNER/REPOSITORY.git";
         const GITHUB_SHORTHAND: &str = "OWNER/REPOSITORY";
-        const GITHUB_EQUIVALENTS: [&str; 7] = [
+        const GITHUB_CONFIGURED_URLS: [&str; 6] = [
+            GITHUB_REPO,
+            GITHUB_REPO_DOT_GIT,
+            GITHUB_SSH_REPO,
+            GITHUB_SSH_REPO_DOT_GIT,
+            GITHUB_SSH_URL,
+            GITHUB_SSH_URL_DOT_GIT,
+        ];
+        const GITHUB_SELECTORS: [&str; 7] = [
             GITHUB_REPO,
             GITHUB_REPO_DOT_GIT,
             GITHUB_SSH_REPO,
@@ -984,10 +1005,10 @@ mod tests {
             GITHUB_SHORTHAND,
         ];
 
-        for configured in GITHUB_EQUIVALENTS {
+        for configured in GITHUB_CONFIGURED_URLS {
             let remote =
                 config::RemoteRepo::new(configured.to_string(), "v1.0.0".to_string(), Vec::new());
-            for selector in GITHUB_EQUIVALENTS {
+            for selector in GITHUB_SELECTORS {
                 assert!(
                     RepoFilter::new(selector.to_string())
                         .matches_repo(&config::Repo::Remote(remote.clone()))
@@ -1027,12 +1048,25 @@ mod tests {
                     .matches_repo(&config::Repo::Remote(remote))
             );
         }
+    }
 
-        const UNUSUAL_REPO: &str = GITHUB_SHORTHAND;
-        let remote =
-            config::RemoteRepo::new(UNUSUAL_REPO.to_string(), "v3.0.0".to_string(), Vec::new());
+    #[test]
+    fn repo_filter_does_not_canonicalize_configured_relative_repo() {
+        const RELATIVE_REPO: &str = "vendor/hooks";
+        let mut remote =
+            config::RemoteRepo::new(RELATIVE_REPO.to_string(), "v3.0.0".to_string(), Vec::new());
+        remote.set_resolved_source("/workspace/vendor/hooks".to_string());
         assert!(
-            RepoFilter::new(UNUSUAL_REPO.to_string()).matches_repo(&config::Repo::Remote(remote))
+            RepoFilter::new(RELATIVE_REPO.to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("https://github.com/vendor/hooks".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("git@github.com:vendor/hooks.git".to_string())
+                .matches_repo(&config::Repo::Remote(remote))
         );
     }
 

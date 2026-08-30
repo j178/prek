@@ -707,8 +707,9 @@ pub(crate) struct RunArgs {
     /// Select hooks by their configured repository.
     ///
     /// Accepts `local`, `meta`, `builtin`, a complete remote repository URL, or
-    /// GitHub shorthand in `OWNER/REPOSITORY` form. GitHub HTTPS and SSH clone forms
-    /// are equivalent to shorthand, with an optional `.git` suffix. Remote matching
+    /// GitHub shorthand in `OWNER/REPOSITORY` form. As selectors, GitHub HTTPS and
+    /// SSH clone forms and shorthand are equivalent, with an optional `.git` suffix.
+    /// Configured relative repository paths still match exactly. Remote matching
     /// ignores `rev`. Can be specified multiple times; a repository may match any
     /// specified value. In workspace mode, this applies across discovered projects
     /// that remain after project selection and composes with other hook, stage, and
