@@ -1451,7 +1451,7 @@ fn repo_filter_matches_remote_repositories_across_workspace_projects() {
     let context = TestEnv::new_git()
         .with_config(indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
+          - repo: https://github.com/pre-commit/pre-commit-hooks.git
             rev: v5.0.0
             hooks:
               - id: trailing-whitespace

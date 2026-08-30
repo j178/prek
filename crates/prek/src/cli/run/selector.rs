@@ -193,17 +193,27 @@ pub(crate) struct RepoFilter {
     matched: AtomicBool,
 }
 
+fn canonical_github_url(value: &str) -> Option<String> {
+    const GITHUB_URL_PREFIX: &str = "https://github.com/";
+
+    let path = value.strip_prefix(GITHUB_URL_PREFIX).unwrap_or(value);
+    let mut components = path.split('/');
+    let (Some(owner), Some(repository), None) =
+        (components.next(), components.next(), components.next())
+    else {
+        return None;
+    };
+    let repository = repository.strip_suffix(".git").unwrap_or(repository);
+    if owner.is_empty() || repository.is_empty() {
+        return None;
+    }
+
+    Some(format!("{GITHUB_URL_PREFIX}{owner}/{repository}"))
+}
+
 impl RepoFilter {
     pub(crate) fn new(original: String) -> Self {
-        let mut components = original.split('/');
-        let github_url = match (components.next(), components.next(), components.next()) {
-            (Some(owner), Some(repository), None)
-                if !owner.is_empty() && !repository.is_empty() =>
-            {
-                Some(format!("https://github.com/{owner}/{repository}"))
-            }
-            _ => None,
-        };
+        let github_url = canonical_github_url(&original);
 
         Self {
             original,
@@ -219,10 +229,9 @@ impl RepoFilter {
             config::Repo::Builtin(_) => self.original == "builtin",
             config::Repo::Remote(repo) => {
                 repo.repo() == self.original
-                    || self
-                        .github_url
-                        .as_deref()
-                        .is_some_and(|github_url| repo.repo() == github_url)
+                    || self.github_url.as_deref().is_some_and(|github_url| {
+                        canonical_github_url(repo.repo()).as_deref() == Some(github_url)
+                    })
             }
         };
 
@@ -949,27 +958,51 @@ mod tests {
     #[test]
     fn repo_filter_matches_configured_remote_value_and_github_shorthand() {
         const GITHUB_REPO: &str = "https://github.com/OWNER/REPOSITORY";
+        const GITHUB_REPO_DOT_GIT: &str = "https://github.com/OWNER/REPOSITORY.git";
+        const GITHUB_SHORTHAND: &str = "OWNER/REPOSITORY";
 
         let mut remote =
             config::RemoteRepo::new(GITHUB_REPO.to_string(), "v1.0.0".to_string(), Vec::new());
 
-        assert!(
-            RepoFilter::new(GITHUB_REPO.to_string())
-                .matches_repo(&config::Repo::Remote(remote.clone()))
-        );
-        assert!(
-            RepoFilter::new("OWNER/REPOSITORY".to_string())
-                .matches_repo(&config::Repo::Remote(remote.clone()))
-        );
+        for selector in [GITHUB_REPO, GITHUB_REPO_DOT_GIT, GITHUB_SHORTHAND] {
+            assert!(
+                RepoFilter::new(selector.to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+        }
         assert!(
             !RepoFilter::new("https://github.com/OTHER/REPOSITORY".to_string())
                 .matches_repo(&config::Repo::Remote(remote.clone()))
         );
 
+        let remote_with_dot_git = config::RemoteRepo::new(
+            GITHUB_REPO_DOT_GIT.to_string(),
+            "v1.0.0".to_string(),
+            Vec::new(),
+        );
+        for selector in [GITHUB_REPO, GITHUB_SHORTHAND] {
+            assert!(
+                RepoFilter::new(selector.to_string())
+                    .matches_repo(&config::Repo::Remote(remote_with_dot_git.clone()))
+            );
+        }
+
+        let shorthand_remote = config::RemoteRepo::new(
+            GITHUB_SHORTHAND.to_string(),
+            "v1.0.0".to_string(),
+            Vec::new(),
+        );
+        for selector in [GITHUB_REPO, GITHUB_REPO_DOT_GIT] {
+            assert!(
+                RepoFilter::new(selector.to_string())
+                    .matches_repo(&config::Repo::Remote(shorthand_remote.clone()))
+            );
+        }
+
         remote.rev = "different-revision".to_string();
         remote.set_resolved_source("https://mirror.example.com/OWNER/REPOSITORY".to_string());
         assert!(
-            RepoFilter::new("OWNER/REPOSITORY".to_string())
+            RepoFilter::new(GITHUB_SHORTHAND.to_string())
                 .matches_repo(&config::Repo::Remote(remote.clone()))
         );
         assert!(
@@ -977,14 +1010,19 @@ mod tests {
                 .matches_repo(&config::Repo::Remote(remote))
         );
 
-        const GITLAB_REPO: &str = "https://gitlab.com/OWNER/REPOSITORY";
+        const GITLAB_REPO: &str = "https://gitlab.com/OWNER/REPOSITORY.git";
         let remote =
             config::RemoteRepo::new(GITLAB_REPO.to_string(), "v2.0.0".to_string(), Vec::new());
         assert!(
-            RepoFilter::new(GITLAB_REPO.to_string()).matches_repo(&config::Repo::Remote(remote))
+            RepoFilter::new(GITLAB_REPO.to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("https://gitlab.com/OWNER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote))
         );
 
-        const UNUSUAL_REPO: &str = "OWNER/REPOSITORY";
+        const UNUSUAL_REPO: &str = GITHUB_SHORTHAND;
         let remote =
             config::RemoteRepo::new(UNUSUAL_REPO.to_string(), "v3.0.0".to_string(), Vec::new());
         assert!(

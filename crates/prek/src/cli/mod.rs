@@ -707,10 +707,11 @@ pub(crate) struct RunArgs {
     /// Select hooks by their configured repository.
     ///
     /// Accepts `local`, `meta`, `builtin`, a complete remote repository URL, or
-    /// GitHub shorthand in `OWNER/REPOSITORY` form. Remote matching ignores `rev`.
+    /// GitHub shorthand in `OWNER/REPOSITORY` form. GitHub URLs and shorthand are
+    /// equivalent, with an optional `.git` suffix. Remote matching ignores `rev`.
     /// Can be specified multiple times; a repository may match any specified value.
-    /// In workspace mode, this applies across discovered projects that remain
-    /// after project selection and composes with other hook, stage, and file filters.
+    /// In workspace mode, this applies across discovered projects that remain after
+    /// project selection and composes with other hook, stage, and file filters.
     #[arg(
         long,
         value_name = "REPO",

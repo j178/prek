@@ -174,12 +174,13 @@ prek run --all-files --repo pre-commit/pre-commit-hooks
 ```
 
 `--repo` accepts `local`, `meta`, `builtin`, a complete remote repository URL,
-or GitHub shorthand in `OWNER/REPOSITORY` form. Remote matching ignores `rev`,
-and the option can be repeated to select more than one repository. Repository
-selection narrows the same hook set as positional selectors, groups, stage
-selection, `--skip`, and file selection. It does not replace those filters.
-Each unmatched value emits a warning. If the final filter set leaves no hooks,
-the command then follows the normal no-hooks-selected failure.
+or GitHub shorthand in `OWNER/REPOSITORY` form. GitHub URLs and shorthand are
+equivalent, and an optional `.git` suffix does not affect matching. Remote
+matching ignores `rev`, and the option can be repeated to select more than one
+repository. Repository selection narrows the same hook set as positional
+selectors, groups, stage selection, `--skip`, and file selection. It does not
+replace those filters. Each unmatched value emits a warning. If the final filter
+set leaves no hooks, the command then follows the normal no-hooks-selected failure.
 
 Inspect what would run without executing hooks or changing files:
 

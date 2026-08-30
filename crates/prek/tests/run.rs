@@ -3735,7 +3735,7 @@ fn selectors_completion() -> Result<()> {
     // Unrelated non-project dir should not appear in subdir suggestions
     context.child("scratch").create_dir_all()?;
 
-    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
+    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3760,6 +3760,7 @@ fn selectors_completion() -> Result<()> {
     :lint:ruff	Ruff Lint
     root-hook	Root Hook
     --skip	Skip the specified hooks or projects
+    --repo	Select hooks by their configured repository
     --stage	The stage during which the hook is fired
     --group	Run hooks belonging to the specified group
     --require-group	Run hooks belonging to every specified group
@@ -3787,7 +3788,7 @@ fn selectors_completion() -> Result<()> {
     --version	Display the prek version
 
     ----- stderr -----
-    "#);
+    ");
 
     cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("."), @r"
     success: true

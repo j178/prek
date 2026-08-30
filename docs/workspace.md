@@ -267,8 +267,9 @@ prek run --repo pre-commit/pre-commit-hooks
 ```
 
 Remote matching ignores `rev`, so projects using different revisions of the
-same repository all match. Repeat `--repo` to select hooks from more than one
-configured repository.
+same repository all match. GitHub URL and shorthand forms are equivalent, and
+an optional `.git` suffix does not affect matching. Repeat `--repo` to select
+hooks from more than one configured repository.
 
 Repository selection intersects with project paths, hook IDs, `--skip`, group
 filters, stages, and file selection. For example, this runs matching hooks only
