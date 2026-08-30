@@ -228,17 +228,17 @@ fn parse_github_path(path: &str) -> Option<(&str, &str)> {
 }
 
 fn parse_github_url(value: &str) -> Option<(&str, &str)> {
-    const GITHUB_URL_PREFIX: &str = "https://github.com/";
-    const GITHUB_SSH_URL_PREFIX: &str = "ssh://git@github.com/";
-    const GITHUB_SCP_PREFIX: &str = "git@github.com:";
-
-    let path = if let Some(path) = value.strip_prefix(GITHUB_URL_PREFIX) {
-        path
-    } else if let Some(path) = value.strip_prefix(GITHUB_SSH_URL_PREFIX) {
-        path
-    } else {
-        value.strip_prefix(GITHUB_SCP_PREFIX)?
+    let (host, path) = match value.split_once("://") {
+        Some((scheme, rest)) if scheme.eq_ignore_ascii_case("https") => rest.split_once('/')?,
+        Some((scheme, rest)) if scheme.eq_ignore_ascii_case("ssh") => {
+            rest.strip_prefix("git@")?.split_once('/')?
+        }
+        Some(_) => return None,
+        None => value.strip_prefix("git@")?.split_once(':')?,
     };
+    if !host.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
 
     parse_github_path(path)
 }
@@ -1092,11 +1092,11 @@ mod tests {
     }
 
     #[test]
-    fn repo_filter_matches_github_owner_and_repository_case_insensitively() {
+    fn repo_filter_matches_github_components_case_insensitively() {
         const GITHUB_CONFIGURED_URLS: [&str; 3] = [
-            "https://github.com/Pre-Commit/Pre-Commit-Hooks.git",
-            "git@github.com:Pre-Commit/Pre-Commit-Hooks.git",
-            "ssh://git@github.com/Pre-Commit/Pre-Commit-Hooks.git",
+            "HTTPS://GitHub.com/Pre-Commit/Pre-Commit-Hooks.git",
+            "git@GitHub.com:Pre-Commit/Pre-Commit-Hooks.git",
+            "SSH://git@GitHub.com/Pre-Commit/Pre-Commit-Hooks.git",
         ];
         const GITHUB_SELECTORS: [&str; 4] = [
             "pre-commit/pre-commit-hooks",

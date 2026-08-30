@@ -176,8 +176,8 @@ prek run --all-files --repo pre-commit/pre-commit-hooks
 `--repo` accepts `local`, `meta`, `builtin`, a complete remote repository URL,
 or GitHub shorthand in `OWNER/REPOSITORY` form. As selectors, GitHub HTTPS and
 SSH clone forms and shorthand are equivalent, and an optional `.git` suffix does
-not affect matching. GitHub owner and repository components match
-case-insensitively. Other configured values, including relative repository
+not affect matching. GitHub URL schemes, hostnames, owners, and repository names
+match case-insensitively. Other configured values, including relative repository
 paths, still match exactly. Remote matching ignores `rev`, and the option can be
 repeated to select more than one repository. Repository selection narrows the
 same hook set as positional selectors, groups, stage selection, `--skip`, and
