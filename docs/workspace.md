@@ -271,8 +271,9 @@ prek run --repo pre-commit/pre-commit-hooks
 Remote matching ignores `rev`, so projects using different revisions of the
 same repository all match. As selectors, GitHub HTTPS and SSH clone forms and
 shorthand are equivalent, and an optional `.git` suffix does not affect
-matching. Configured relative repository paths still match exactly. Repeat
-`--repo` to select hooks from more than one configured repository.
+matching. GitHub owner and repository components match case-insensitively. Other
+configured values, including relative repository paths, still match exactly.
+Repeat `--repo` to select hooks from more than one configured repository.
 
 Repository selection intersects with project paths, hook IDs, `--skip`, group
 filters, stages, and file selection. For example, this runs matching hooks only

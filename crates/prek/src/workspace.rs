@@ -55,7 +55,7 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Default)]
 pub(crate) struct HookInitFilters<'a> {
     selectors: Option<&'a Selectors>,
     group_filters: Option<&'a GroupFilters>,
@@ -83,7 +83,7 @@ impl<'a> HookInitFilters<'a> {
         Self::default()
     }
 
-    fn keeps_repo(self, repo: &config::Repo) -> bool {
+    fn keeps_repo(&self, repo: &config::Repo) -> bool {
         if self.repo_filters.is_empty() {
             return true;
         }
@@ -97,7 +97,7 @@ impl<'a> HookInitFilters<'a> {
         matches
     }
 
-    fn keeps_remote_repo(self, project: &Project, repo: &config::RemoteRepo) -> bool {
+    fn keeps_remote_repo(&self, project: &Project, repo: &config::RemoteRepo) -> bool {
         repo.hooks.iter().any(|hook| {
             let hook = ConfiguredHook::new(
                 project.relative_path(),
@@ -110,7 +110,7 @@ impl<'a> HookInitFilters<'a> {
     }
 
     /// Return whether a configured remote hook can survive filters that are known before cloning.
-    fn keeps_configured_hook(self, hook: &ConfiguredHook<'_>) -> bool {
+    fn keeps_configured_hook(&self, hook: &ConfiguredHook<'_>) -> bool {
         if self
             .selectors
             .is_some_and(|selectors| selectors.excludes_configured_hook(hook))
@@ -133,7 +133,7 @@ struct ProjectInitPlan<'a> {
 }
 
 impl<'a> ProjectInitPlan<'a> {
-    fn new(project: &'a Arc<Project>, filters: HookInitFilters<'_>) -> Self {
+    fn new(project: &'a Arc<Project>, filters: &HookInitFilters<'_>) -> Self {
         let mut repo_configs = Vec::with_capacity(project.config.repos.len());
 
         for repo_config in &project.config.repos {
@@ -387,7 +387,7 @@ impl Project {
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<Vec<Hook>, Error> {
         let project = Arc::new(self);
-        let plan = ProjectInitPlan::new(&project, filters);
+        let plan = ProjectInitPlan::new(&project, &filters);
         let remote_configs = remote_configs_to_clone(std::slice::from_ref(&plan));
         let remote_repos = init_remote_repos(store, remote_configs, reporter).await?;
 
@@ -908,7 +908,7 @@ impl Workspace {
         let plans = self
             .projects
             .iter()
-            .map(|project| ProjectInitPlan::new(project, filters))
+            .map(|project| ProjectInitPlan::new(project, &filters))
             .collect::<Vec<_>>();
         let remote_configs = remote_configs_to_clone(&plans);
         let remote_repos = init_remote_repos(store, remote_configs, reporter).await?;

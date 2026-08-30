@@ -189,13 +189,30 @@ impl Selector {
 #[derive(Debug)]
 pub(crate) struct RepoFilter {
     original: String,
-    github_url: Option<String>,
+    github_repo: Option<GitHubRepo>,
     matched: AtomicBool,
 }
 
-fn canonical_github_path(path: &str) -> Option<String> {
-    const GITHUB_URL_PREFIX: &str = "https://github.com/";
+#[derive(Debug)]
+struct GitHubRepo {
+    owner: String,
+    repository: String,
+}
 
+impl GitHubRepo {
+    fn new(owner: &str, repository: &str) -> Self {
+        Self {
+            owner: owner.to_ascii_lowercase(),
+            repository: repository.to_ascii_lowercase(),
+        }
+    }
+
+    fn matches(&self, owner: &str, repository: &str) -> bool {
+        self.owner.eq_ignore_ascii_case(owner) && self.repository.eq_ignore_ascii_case(repository)
+    }
+}
+
+fn parse_github_path(path: &str) -> Option<(&str, &str)> {
     let mut components = path.split('/');
     let (Some(owner), Some(repository), None) =
         (components.next(), components.next(), components.next())
@@ -207,10 +224,10 @@ fn canonical_github_path(path: &str) -> Option<String> {
         return None;
     }
 
-    Some(format!("{GITHUB_URL_PREFIX}{owner}/{repository}"))
+    Some((owner, repository))
 }
 
-fn canonical_github_url(value: &str) -> Option<String> {
+fn parse_github_url(value: &str) -> Option<(&str, &str)> {
     const GITHUB_URL_PREFIX: &str = "https://github.com/";
     const GITHUB_SSH_URL_PREFIX: &str = "ssh://git@github.com/";
     const GITHUB_SCP_PREFIX: &str = "git@github.com:";
@@ -223,26 +240,45 @@ fn canonical_github_url(value: &str) -> Option<String> {
         value.strip_prefix(GITHUB_SCP_PREFIX)?
     };
 
-    canonical_github_path(path)
+    parse_github_path(path)
 }
 
-fn canonical_github_selector(value: &str) -> Option<String> {
-    if let Some(url) = canonical_github_url(value) {
-        return Some(url);
+fn parse_github_selector(value: &str) -> Option<(&str, &str)> {
+    if let Some(repo) = parse_github_url(value) {
+        return Some(repo);
     }
 
-    canonical_github_path(value)
+    parse_github_path(value)
 }
 
 impl RepoFilter {
     pub(crate) fn new(original: String) -> Self {
-        let github_url = canonical_github_selector(&original);
+        let github_repo = if let Some((owner, repository)) = parse_github_selector(&original) {
+            Some(GitHubRepo::new(owner, repository))
+        } else {
+            None
+        };
 
         Self {
             original,
-            github_url,
+            github_repo,
             matched: AtomicBool::new(false),
         }
+    }
+
+    fn matches_remote_repo(&self, repo: &config::RemoteRepo) -> bool {
+        if repo.repo() == self.original {
+            return true;
+        }
+
+        let Some(github_repo) = &self.github_repo else {
+            return false;
+        };
+        let Some((owner, repository)) = parse_github_url(repo.repo()) else {
+            return false;
+        };
+
+        github_repo.matches(owner, repository)
     }
 
     pub(crate) fn matches_repo(&self, repo: &config::Repo) -> bool {
@@ -250,12 +286,7 @@ impl RepoFilter {
             config::Repo::Local(_) => self.original == "local",
             config::Repo::Meta(_) => self.original == "meta",
             config::Repo::Builtin(_) => self.original == "builtin",
-            config::Repo::Remote(repo) => {
-                repo.repo() == self.original
-                    || self.github_url.as_deref().is_some_and(|github_url| {
-                        canonical_github_url(repo.repo()).as_deref() == Some(github_url)
-                    })
-            }
+            config::Repo::Remote(repo) => self.matches_remote_repo(repo),
         };
 
         if matches {
@@ -1045,8 +1076,38 @@ mod tests {
             );
             assert!(
                 !RepoFilter::new("OWNER/REPOSITORY".to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+            assert!(
+                !RepoFilter::new(configured.to_ascii_lowercase())
                     .matches_repo(&config::Repo::Remote(remote))
             );
+        }
+    }
+
+    #[test]
+    fn repo_filter_matches_github_owner_and_repository_case_insensitively() {
+        const GITHUB_CONFIGURED_URLS: [&str; 3] = [
+            "https://github.com/Pre-Commit/Pre-Commit-Hooks.git",
+            "git@github.com:Pre-Commit/Pre-Commit-Hooks.git",
+            "ssh://git@github.com/Pre-Commit/Pre-Commit-Hooks.git",
+        ];
+        const GITHUB_SELECTORS: [&str; 4] = [
+            "pre-commit/pre-commit-hooks",
+            "https://github.com/pre-commit/pre-commit-hooks",
+            "git@github.com:pre-commit/pre-commit-hooks.git",
+            "ssh://git@github.com/pre-commit/pre-commit-hooks.git",
+        ];
+
+        for configured in GITHUB_CONFIGURED_URLS {
+            let remote =
+                config::RemoteRepo::new(configured.to_string(), "v1.0.0".to_string(), Vec::new());
+            for selector in GITHUB_SELECTORS {
+                assert!(
+                    RepoFilter::new(selector.to_string())
+                        .matches_repo(&config::Repo::Remote(remote.clone()))
+                );
+            }
         }
     }
 
@@ -1066,6 +1127,10 @@ mod tests {
         );
         assert!(
             !RepoFilter::new("git@github.com:vendor/hooks.git".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("VENDOR/HOOKS".to_string())
                 .matches_repo(&config::Repo::Remote(remote))
         );
     }
