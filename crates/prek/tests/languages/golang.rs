@@ -11,7 +11,8 @@ use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(feature = "ci")]
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -57,8 +58,8 @@ fn language_version() -> anyhow::Result<()> {
                 language_version: '<1.25'
                 always_run: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let go_dir = context.home_dir().child("tools").child("go");
     go_dir.assert(predicates::path::missing());
@@ -136,7 +137,7 @@ fn language_version() -> anyhow::Result<()> {
 /// Test a remote go hook.
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     // Run hooks with system found go.
     context.write_config(indoc::indoc! {r"
@@ -147,7 +148,7 @@ fn remote_hook() {
               - id: echo
                 verbose: true
         "});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -177,7 +178,7 @@ fn remote_hook() {
                 language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -212,7 +213,7 @@ fn remote_hook() {
                 verbose: true
                 language_version: '1.23.11' # will auto download
         "});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -232,7 +233,7 @@ fn remote_hook() {
 #[test]
 fn local_additional_deps() {
     // Create a local go hook with additional_dependencies.
-    let go_hook = TestEnv::new_git()
+    let go_hook = TestEnv::new()
         .with_file(
             "go.mod",
             indoc::indoc! {r"
@@ -268,22 +269,24 @@ fn local_additional_deps() {
                   language: golang
                   additional_dependencies: [ ./cmd ]
             "},
-        );
-    go_hook.git().add_all().commit("Initial commit").tag("v1.0");
+        )
+        .init_git();
+    go_hook.git().commit("Initial commit").tag("v1.0");
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
-    let context = TestEnv::new_git().with_file(
-        PRE_COMMIT_CONFIG_YAML,
-        indoc::formatdoc! {r"
+    let context = TestEnv::new()
+        .with_file(
+            PRE_COMMIT_CONFIG_YAML,
+            indoc::formatdoc! {r"
         repos:
           - repo: {hook_url}
             rev: v1.0
             hooks:
               - id: go-hook
                 verbose: true
-   ", hook_url = hook_url},
-    );
-    context.git().add_all();
+       ", hook_url = hook_url},
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -304,7 +307,7 @@ fn local_additional_deps() {
 #[test]
 fn remote_go_mod_metadata_sets_language_version() {
     // Create a remote repo containing a golang hook.
-    let go_hook = TestEnv::new_git()
+    let go_hook = TestEnv::new()
         .with_file(
             "go.mod",
             indoc::indoc! {r"
@@ -322,12 +325,13 @@ fn remote_go_mod_metadata_sets_language_version() {
                   language: golang
                   verbose: true
             "},
-        );
+        )
+        .init_git();
 
-    go_hook.git().add_all().commit("Initial commit").tag("v1.0");
+    go_hook.git().commit("Initial commit").tag("v1.0");
 
     // Use it as a remote repo in a separate project.
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
     context.write_config(indoc::formatdoc! {r"
@@ -338,7 +342,7 @@ fn remote_go_mod_metadata_sets_language_version() {
             - id: echo
               verbose: true
       ", hook_url = hook_url});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @"
     success: false

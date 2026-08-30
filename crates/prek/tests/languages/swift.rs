@@ -5,7 +5,8 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// Test that a local Swift hook with a system command works.
 #[test]
 fn local_hook_system_command() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -16,9 +17,8 @@ fn local_hook_system_command() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -37,7 +37,8 @@ fn local_hook_system_command() {
 /// Test that `language_version` is rejected for Swift.
 #[test]
 fn language_version_rejected() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -48,9 +49,8 @@ fn language_version_rejected() {
                 language_version: '6.0'
                 always_run: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -67,7 +67,8 @@ fn language_version_rejected() {
 /// Test that health check works after install.
 #[test]
 fn health_check() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -78,9 +79,8 @@ fn health_check() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     // First run - installs
     cmd_snapshot!(context, context.run(), @r"
@@ -115,7 +115,7 @@ fn health_check() {
 #[test]
 fn local_package_build() {
     // Create a minimal Swift package
-    let swift_hook = TestEnv::new_git()
+    let swift_hook = TestEnv::new()
         .with_file(
             "Package.swift",
             indoc::indoc! {r#"
@@ -144,14 +144,11 @@ fn local_package_build() {
                   entry: prek-swift-test
                   language: swift
             "},
-        );
-    swift_hook
-        .git()
-        .add_all()
-        .commit("Initial commit")
-        .tag("v1.0");
+        )
+        .init_git();
+    swift_hook.git().commit("Initial commit").tag("v1.0");
 
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     let hook_url = swift_hook.work_dir().to_str().unwrap();
     context.write_config(indoc::formatdoc! {r"
@@ -164,7 +161,7 @@ fn local_package_build() {
                 always_run: true
                 pass_filenames: false
     ", hook_url = hook_url});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

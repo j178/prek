@@ -35,7 +35,7 @@ fn create_hook_repo(context: &TestEnv, repo_name: &str) -> PathBuf {
             "from setuptools import setup; setup(name='dummy-pkg', version='0.0.1')",
         );
 
-    repo.git().add_all().commit("Initial commit");
+    repo.git().add(".").commit("Initial commit");
 
     repo.path().to_path_buf()
 }
@@ -52,15 +52,14 @@ fn create_failing_hook_repo(context: &TestEnv, repo_name: &str) -> PathBuf {
         "#},
     );
 
-    repo.git().add_all().commit("Initial commit");
+    repo.git().add(".").commit("Initial commit");
 
     repo.path().to_path_buf()
 }
 
 #[test]
 fn try_repo_basic() {
-    let context = TestEnv::new_git().with_file("test.txt", "test");
-    context.git().add_all();
+    let context = TestEnv::new().with_file("test.txt", "test").init_git();
 
     let repo_path = create_hook_repo(&context, "try-repo-basic");
 
@@ -86,8 +85,7 @@ fn try_repo_basic() {
 
 #[test]
 fn try_repo_failing_hook() {
-    let context = TestEnv::new_git().with_file("test.txt", "test");
-    context.git().add_all();
+    let context = TestEnv::new().with_file("test.txt", "test").init_git();
 
     let repo_path = create_failing_hook_repo(&context, "try-repo-failing");
 
@@ -115,11 +113,11 @@ fn try_repo_failing_hook() {
 
 #[test]
 fn try_repo_specific_hook() {
-    let context = TestEnv::new_git().with_file("test.txt", "test");
+    let context = TestEnv::new().with_file("test.txt", "test").init_git();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook");
 
-    context.git().add_all();
+    context.git().add(".");
 
     let context = with_try_repo_filters(context);
 
@@ -143,8 +141,7 @@ fn try_repo_specific_hook() {
 
 #[test]
 fn try_repo_specific_rev() -> Result<()> {
-    let context = TestEnv::new_git().with_file("test.txt", "test");
-    context.git().add_all();
+    let context = TestEnv::new().with_file("test.txt", "test").init_git();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-rev");
     let git = context.git_at(&repo_path);
@@ -189,7 +186,7 @@ fn try_repo_specific_rev() -> Result<()> {
 
 #[test]
 fn try_repo_uncommitted_changes() -> Result<()> {
-    let context = TestEnv::new_git().with_file("test.txt", "test");
+    let context = TestEnv::new().with_file("test.txt", "test").init_git();
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted");
 
@@ -207,7 +204,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
         .write_str("new")?;
     context.git_at(&repo_path).add("new-file.txt");
 
-    context.git().add_all();
+    context.git().add(".");
 
     let context = context.with_filters([
         (r"try-repo-[^/\\]+", "[REPO]"),
@@ -238,8 +235,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
 #[test]
 fn try_repo_relative_path() {
-    let context = TestEnv::new_git().with_file("test.txt", "test");
-    context.git().add_all();
+    let context = TestEnv::new().with_file("test.txt", "test").init_git();
 
     let _repo_path = create_hook_repo(&context, "try-repo-relative");
     let relative_path = "../home/test-repos/try-repo-relative".to_string();
@@ -302,8 +298,7 @@ fn try_repo_dot_path() -> Result<()> {
 
 #[test]
 fn try_repo_builtin_hook() {
-    let context = TestEnv::new_git().with_file("test.txt", "test\n");
-    context.git().add_all();
+    let context = TestEnv::new().with_file("test.txt", "test\n").init_git();
 
     cmd_snapshot!(context, context.try_repo().arg("builtin").arg("check-merge-conflict").arg("--all-files"), @r#"
     success: true
@@ -324,8 +319,7 @@ fn try_repo_builtin_hook() {
 
 #[test]
 fn try_repo_meta_hook() {
-    let context = TestEnv::new_git().with_file("test.txt", "test\n");
-    context.git().add_all();
+    let context = TestEnv::new().with_file("test.txt", "test\n").init_git();
 
     cmd_snapshot!(context, context.try_repo().arg("meta").arg("identity").arg("--all-files"), @r#"
     success: true

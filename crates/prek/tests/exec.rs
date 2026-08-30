@@ -22,7 +22,7 @@ fn config() -> &'static str {
 }
 
 fn context_with_config() -> TestEnv {
-    TestEnv::new_git().with_config(config())
+    TestEnv::new().with_config(config()).init_git()
 }
 
 #[test]
@@ -105,7 +105,9 @@ fn exec_propagates_child_exit_status() {
 
 #[test]
 fn exec_rejects_ambiguous_hook_selector() {
-    let context = TestEnv::new_git().with_workspace(["frontend"], config());
+    let context = TestEnv::new()
+        .with_workspace(["frontend"], config())
+        .init_git();
 
     cmd_snapshot!(context, context.exec().args([
         "exec-test",
@@ -128,7 +130,9 @@ fn exec_rejects_ambiguous_hook_selector() {
 
 #[test]
 fn exec_keeps_current_working_directory() {
-    let context = TestEnv::new_git().with_workspace(["frontend"], config());
+    let context = TestEnv::new()
+        .with_workspace(["frontend"], config())
+        .init_git();
 
     cmd_snapshot!(context, context.exec().args([
             "frontend:exec-test",
@@ -149,9 +153,10 @@ fn exec_keeps_current_working_directory() {
 #[cfg(unix)]
 #[test]
 fn exec_resolves_relative_command_from_current_working_directory() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_workspace(["frontend"], config())
-        .with_executable_file("exec-tool", "#!/bin/sh\necho relative command ok\n");
+        .with_executable_file("exec-tool", "#!/bin/sh\necho relative command ok\n")
+        .init_git();
 
     cmd_snapshot!(context, context.exec().args([
         "frontend:exec-test",
@@ -169,7 +174,8 @@ fn exec_resolves_relative_command_from_current_working_directory() {
 
 #[test]
 fn exec_rejects_unsupported_language_before_install() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -177,7 +183,8 @@ fn exec_rejects_unsupported_language_before_install() {
                 name: Julia hook
                 entry: hook.jl
                 language: julia
-    "});
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.exec().args([
         "julia-hook",

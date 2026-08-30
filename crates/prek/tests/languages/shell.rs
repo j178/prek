@@ -3,7 +3,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(unix)]
 #[test]
 fn bash_shell_adapter_runs_entry() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -19,9 +19,8 @@ fn bash_shell_adapter_runs_entry() {
                 args: [configured]
                 verbose: true
     "#})
-        .with_file("input.txt", "input");
-
-    context.git().add_all();
+        .with_file("input.txt", "input")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -43,7 +42,7 @@ fn pwsh_shell_adapter_runs_entry() {
         return;
     }
 
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -58,9 +57,8 @@ fn pwsh_shell_adapter_runs_entry() {
                 args: [configured]
                 verbose: true
     "#})
-        .with_file("input.txt", "input");
-
-    context.git().add_all();
+        .with_file("input.txt", "input")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -79,7 +77,7 @@ fn pwsh_shell_adapter_runs_entry() {
 #[cfg(windows)]
 #[test]
 fn powershell_shell_adapter_runs_entry() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -94,9 +92,8 @@ fn powershell_shell_adapter_runs_entry() {
                 args: [configured]
                 verbose: true
     "#})
-        .with_file("input.txt", "input");
-
-    context.git().add_all();
+        .with_file("input.txt", "input")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -115,7 +112,7 @@ fn powershell_shell_adapter_runs_entry() {
 #[cfg(windows)]
 #[test]
 fn cmd_shell_adapter_runs_entry() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -131,9 +128,8 @@ fn cmd_shell_adapter_runs_entry() {
                 args: [configured]
                 verbose: true
     "})
-        .with_file("input.txt", "input");
-
-    context.git().add_all();
+        .with_file("input.txt", "input")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -151,7 +147,8 @@ fn cmd_shell_adapter_runs_entry() {
 
 #[test]
 fn shell_rejected_for_pygrep() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -162,8 +159,8 @@ fn shell_rejected_for_pygrep() {
                 shell: sh
                 always_run: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

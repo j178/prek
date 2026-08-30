@@ -3,7 +3,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// Test basic pygrep functionality - case-sensitive matching
 #[test]
 fn basic_case_sensitive() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(
             "test.py",
             indoc::indoc! {r"
@@ -11,7 +11,8 @@ fn basic_case_sensitive() {
                 print('Hello World')
                 # todo: fix later"},
         )
-        .with_file("other.py", "print('No issues here')\n");
+        .with_file("other.py", "print('No issues here')\n")
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -23,7 +24,7 @@ fn basic_case_sensitive() {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -56,7 +57,7 @@ fn basic_case_sensitive() {
 /// Test case-insensitive matching
 #[test]
 fn case_insensitive() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(
             "test.py",
             indoc::indoc! {r"
@@ -64,7 +65,8 @@ fn case_insensitive() {
                 print('Hello World')
                 # todo: fix later"},
         )
-        .with_file("other.py", "print('No issues here')\n");
+        .with_file("other.py", "print('No issues here')\n")
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -77,7 +79,7 @@ fn case_insensitive() {
                 args: ["--ignore-case"]
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -97,15 +99,17 @@ fn case_insensitive() {
 /// Test multiline mode
 #[test]
 fn multiline_mode() {
-    let context = TestEnv::new_git().with_file(
-        "test.py",
-        indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_file(
+            "test.py",
+            indoc::indoc! {r#"
             def function():
                 """A function
                 with multiline docstring
                 """
                 pass"#},
-    );
+        )
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -118,7 +122,7 @@ fn multiline_mode() {
                 args: ["--multiline"]
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -139,9 +143,10 @@ fn multiline_mode() {
 /// Test negate mode - passes when pattern is NOT found
 #[test]
 fn negate_mode() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file("good.py", "print('Hello World')\n")
-        .with_file("bad.py", "TODO: implement this\nprint('Hello World')\n");
+        .with_file("bad.py", "TODO: implement this\nprint('Hello World')\n")
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -154,7 +159,7 @@ fn negate_mode() {
                 args: ["--negate"]
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -173,7 +178,7 @@ fn negate_mode() {
 /// Test negate mode with multiline - should output filename if pattern not found
 #[test]
 fn negate_multiline_mode() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file("no_pattern.py", "print('Hello World')\n")
         .with_file(
             "has_pattern.py",
@@ -183,7 +188,8 @@ fn negate_multiline_mode() {
                     with multiline docstring
                     """
                     pass"#},
-        );
+        )
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -196,7 +202,7 @@ fn negate_multiline_mode() {
                 args: ["--multiline", "--negate"]
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -215,7 +221,7 @@ fn negate_multiline_mode() {
 /// Test invalid regex pattern
 #[test]
 fn invalid_regex() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file("test.py", "print('Hello World')\n")
         .with_config(indoc::indoc! {r#"
         repos:
@@ -226,8 +232,8 @@ fn invalid_regex() {
                 language: pygrep
                 entry: "[unclosed"
                 files: "\\.py$"
-        "#});
-    context.git().add_all();
+        "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -242,14 +248,16 @@ fn invalid_regex() {
 
 #[test]
 fn python_regex_quirks() {
-    let context = TestEnv::new_git().with_file(
-        "test.py",
-        indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_file(
+            "test.py",
+            indoc::indoc! {r"
             def function(arg1, arg2):
                 pass
             def bad_function():
                 pass"},
-    );
+        )
+        .init_git();
 
     // Test lookbehind assertion - function with arguments
     context.write_config(indoc::indoc! {r#"
@@ -262,7 +270,7 @@ fn python_regex_quirks() {
                 entry: "def\\s+\\w+\\([^)]*\\w[^)]*\\):"
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -281,14 +289,16 @@ fn python_regex_quirks() {
 /// Test complex regex with word boundaries and character classes
 #[test]
 fn complex_regex_patterns() {
-    let context = TestEnv::new_git().with_file(
-        "test.py",
-        indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_file(
+            "test.py",
+            indoc::indoc! {r"
             import sys
             from os import path
             import json
             from typing import Dict"},
-    );
+        )
+        .init_git();
 
     // Match import statements but not 'from' imports
     context.write_config(indoc::indoc! {r#"
@@ -301,7 +311,7 @@ fn complex_regex_patterns() {
                 entry: "^import\\s+[a-zA-Z_][a-zA-Z0-9_]*$"
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -321,14 +331,16 @@ fn complex_regex_patterns() {
 /// Test combination of case insensitive and multiline
 #[test]
 fn case_insensitive_multiline() {
-    let context = TestEnv::new_git().with_file(
-        "test.py",
-        indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_file(
+            "test.py",
+            indoc::indoc! {r"
             # TODO: fix this
             def function():
                 # todo: implement
                 pass"},
-    );
+        )
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -341,7 +353,7 @@ fn case_insensitive_multiline() {
                 args: ["--ignore-case", "--multiline"]
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -362,7 +374,9 @@ fn case_insensitive_multiline() {
 /// Test successful case where pattern is not found
 #[test]
 fn pattern_not_found() {
-    let context = TestEnv::new_git().with_file("test.py", "print('Hello World')\n# All good here");
+    let context = TestEnv::new()
+        .with_file("test.py", "print('Hello World')\n# All good here")
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -374,7 +388,7 @@ fn pattern_not_found() {
                 entry: "TODO"
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -388,7 +402,9 @@ fn pattern_not_found() {
 
 #[test]
 fn invalid_args() {
-    let context = TestEnv::new_git().with_file("test.py", "print('Hello World')\n# All good here");
+    let context = TestEnv::new()
+        .with_file("test.py", "print('Hello World')\n# All good here")
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -401,7 +417,7 @@ fn invalid_args() {
                 args: ["--hello"]
                 files: "\\.py$"
         "#});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

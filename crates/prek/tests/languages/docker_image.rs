@@ -8,13 +8,15 @@ use crate::common::{TestEnv, cmd_snapshot};
 #[test]
 fn docker_image() {
     // Test suite from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
-    let context = TestEnv::new_git().with_file(
-        "gitleaks_bad_01.txt",
-        indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_file(
+            "gitleaks_bad_01.txt",
+            indoc::indoc! {r"
         aws_access_key_id = AROA47DSWDEZA3RQASWB
         aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM
     "},
-    );
+        )
+        .init_git();
 
     // Use fully qualified image name for Podman/Docker compatibility
     Command::new("docker")
@@ -34,7 +36,7 @@ fn docker_image() {
                 entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose --no-banner --log-level=error
                 pass_filenames: false
     "});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -67,7 +69,9 @@ fn docker_image() {
 /// Test that `docker_image` does not try to resolve entry in the host system PATH.
 #[test]
 fn docker_image_does_not_resolve_entry() -> Result<()> {
-    let context = TestEnv::new_git().with_executable_file("bin/alpine", "#!/bin/sh\necho host\n");
+    let context = TestEnv::new()
+        .with_executable_file("bin/alpine", "#!/bin/sh\necho host\n")
+        .init_git();
 
     let bin_dir = context.child("bin");
 
@@ -88,7 +92,7 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
                 always_run: true
                 verbose: true
     "});
-    context.git().add_all();
+    context.git().add(".");
 
     let mut cmd = context.run();
     cmd.env(EnvVars::PATH, prepend_paths(&[bin_dir.path()])?);
