@@ -263,13 +263,15 @@ complete remote URL, or GitHub shorthand in `OWNER/REPOSITORY` form:
 
 ```bash
 prek run --repo https://github.com/pre-commit/pre-commit-hooks
+prek run --repo git@github.com:pre-commit/pre-commit-hooks.git
+prek run --repo ssh://git@github.com/pre-commit/pre-commit-hooks.git
 prek run --repo pre-commit/pre-commit-hooks
 ```
 
 Remote matching ignores `rev`, so projects using different revisions of the
-same repository all match. GitHub URL and shorthand forms are equivalent, and
-an optional `.git` suffix does not affect matching. Repeat `--repo` to select
-hooks from more than one configured repository.
+same repository all match. GitHub HTTPS and SSH clone forms are equivalent to
+shorthand, and an optional `.git` suffix does not affect matching. Repeat
+`--repo` to select hooks from more than one configured repository.
 
 Repository selection intersects with project paths, hook IDs, `--skip`, group
 filters, stages, and file selection. For example, this runs matching hooks only

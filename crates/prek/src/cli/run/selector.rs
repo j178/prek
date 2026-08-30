@@ -195,8 +195,18 @@ pub(crate) struct RepoFilter {
 
 fn canonical_github_url(value: &str) -> Option<String> {
     const GITHUB_URL_PREFIX: &str = "https://github.com/";
+    const GITHUB_SSH_URL_PREFIX: &str = "ssh://git@github.com/";
+    const GITHUB_SCP_PREFIX: &str = "git@github.com:";
 
-    let path = value.strip_prefix(GITHUB_URL_PREFIX).unwrap_or(value);
+    let path = if let Some(path) = value.strip_prefix(GITHUB_URL_PREFIX) {
+        path
+    } else if let Some(path) = value.strip_prefix(GITHUB_SSH_URL_PREFIX) {
+        path
+    } else if let Some(path) = value.strip_prefix(GITHUB_SCP_PREFIX) {
+        path
+    } else {
+        value
+    };
     let mut components = path.split('/');
     let (Some(owner), Some(repository), None) =
         (components.next(), components.next(), components.next())
@@ -959,45 +969,38 @@ mod tests {
     fn repo_filter_matches_configured_remote_value_and_github_shorthand() {
         const GITHUB_REPO: &str = "https://github.com/OWNER/REPOSITORY";
         const GITHUB_REPO_DOT_GIT: &str = "https://github.com/OWNER/REPOSITORY.git";
+        const GITHUB_SSH_REPO: &str = "git@github.com:OWNER/REPOSITORY";
+        const GITHUB_SSH_REPO_DOT_GIT: &str = "git@github.com:OWNER/REPOSITORY.git";
+        const GITHUB_SSH_URL: &str = "ssh://git@github.com/OWNER/REPOSITORY";
+        const GITHUB_SSH_URL_DOT_GIT: &str = "ssh://git@github.com/OWNER/REPOSITORY.git";
         const GITHUB_SHORTHAND: &str = "OWNER/REPOSITORY";
+        const GITHUB_EQUIVALENTS: [&str; 7] = [
+            GITHUB_REPO,
+            GITHUB_REPO_DOT_GIT,
+            GITHUB_SSH_REPO,
+            GITHUB_SSH_REPO_DOT_GIT,
+            GITHUB_SSH_URL,
+            GITHUB_SSH_URL_DOT_GIT,
+            GITHUB_SHORTHAND,
+        ];
+
+        for configured in GITHUB_EQUIVALENTS {
+            let remote =
+                config::RemoteRepo::new(configured.to_string(), "v1.0.0".to_string(), Vec::new());
+            for selector in GITHUB_EQUIVALENTS {
+                assert!(
+                    RepoFilter::new(selector.to_string())
+                        .matches_repo(&config::Repo::Remote(remote.clone()))
+                );
+            }
+        }
 
         let mut remote =
             config::RemoteRepo::new(GITHUB_REPO.to_string(), "v1.0.0".to_string(), Vec::new());
-
-        for selector in [GITHUB_REPO, GITHUB_REPO_DOT_GIT, GITHUB_SHORTHAND] {
-            assert!(
-                RepoFilter::new(selector.to_string())
-                    .matches_repo(&config::Repo::Remote(remote.clone()))
-            );
-        }
         assert!(
             !RepoFilter::new("https://github.com/OTHER/REPOSITORY".to_string())
                 .matches_repo(&config::Repo::Remote(remote.clone()))
         );
-
-        let remote_with_dot_git = config::RemoteRepo::new(
-            GITHUB_REPO_DOT_GIT.to_string(),
-            "v1.0.0".to_string(),
-            Vec::new(),
-        );
-        for selector in [GITHUB_REPO, GITHUB_SHORTHAND] {
-            assert!(
-                RepoFilter::new(selector.to_string())
-                    .matches_repo(&config::Repo::Remote(remote_with_dot_git.clone()))
-            );
-        }
-
-        let shorthand_remote = config::RemoteRepo::new(
-            GITHUB_SHORTHAND.to_string(),
-            "v1.0.0".to_string(),
-            Vec::new(),
-        );
-        for selector in [GITHUB_REPO, GITHUB_REPO_DOT_GIT] {
-            assert!(
-                RepoFilter::new(selector.to_string())
-                    .matches_repo(&config::Repo::Remote(shorthand_remote.clone()))
-            );
-        }
 
         remote.rev = "different-revision".to_string();
         remote.set_resolved_source("https://mirror.example.com/OWNER/REPOSITORY".to_string());
@@ -1010,17 +1013,20 @@ mod tests {
                 .matches_repo(&config::Repo::Remote(remote))
         );
 
-        const GITLAB_REPO: &str = "https://gitlab.com/OWNER/REPOSITORY.git";
-        let remote =
-            config::RemoteRepo::new(GITLAB_REPO.to_string(), "v2.0.0".to_string(), Vec::new());
-        assert!(
-            RepoFilter::new(GITLAB_REPO.to_string())
-                .matches_repo(&config::Repo::Remote(remote.clone()))
-        );
-        assert!(
-            !RepoFilter::new("https://gitlab.com/OWNER/REPOSITORY".to_string())
-                .matches_repo(&config::Repo::Remote(remote))
-        );
+        const GITLAB_URL: &str = "https://gitlab.com/OWNER/REPOSITORY.git";
+        const GITLAB_SSH_REPO: &str = "git@gitlab.com:OWNER/REPOSITORY.git";
+        for configured in [GITLAB_URL, GITLAB_SSH_REPO] {
+            let remote =
+                config::RemoteRepo::new(configured.to_string(), "v2.0.0".to_string(), Vec::new());
+            assert!(
+                RepoFilter::new(configured.to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+            assert!(
+                !RepoFilter::new("OWNER/REPOSITORY".to_string())
+                    .matches_repo(&config::Repo::Remote(remote))
+            );
+        }
 
         const UNUSUAL_REPO: &str = GITHUB_SHORTHAND;
         let remote =
