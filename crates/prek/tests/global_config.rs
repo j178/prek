@@ -4,7 +4,7 @@ mod common;
 
 #[test]
 fn global_config_missing_file_is_optional() {
-    let context = TestEnv::new_git().with_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []").init_git();
 
     cmd_snapshot!(context, context.update(), @"
     success: true
@@ -17,7 +17,7 @@ fn global_config_missing_file_is_optional() {
 
 #[test]
 fn global_config_ignores_unknown_options() {
-    let context = TestEnv::new_git().with_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []").init_git();
     context.write_user_config(indoc::indoc! {r#"
         future_option = true
 
@@ -37,7 +37,7 @@ fn global_config_ignores_unknown_options() {
 
 #[test]
 fn update_command_accepts_upstream_alias() {
-    let context = TestEnv::new_git().with_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []").init_git();
 
     cmd_snapshot!(context, context.command().arg("autoupdate"), @"
     success: true
@@ -50,7 +50,7 @@ fn update_command_accepts_upstream_alias() {
 
 #[test]
 fn global_config_invalid_file_reports_parse_error() {
-    let context = TestEnv::new_git().with_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []").init_git();
     context.write_user_config(indoc::indoc! {r#"
         [update]
         cooldown_days = "soon"

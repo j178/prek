@@ -3,7 +3,9 @@ use crate::common::{TestEnv, cmd_snapshot};
 /// GitHub Action only has docker for linux hosted runners.
 #[test]
 fn fail() {
-    let context = TestEnv::new_git().with_file("changelog/changelog.md", "");
+    let context = TestEnv::new()
+        .with_file("changelog/changelog.md", "")
+        .init_git();
 
     context.write_config(indoc::indoc! {r"
         repos:
@@ -16,7 +18,7 @@ fn fail() {
               files: 'changelog/.*(?<!\.rst)$'
     "});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

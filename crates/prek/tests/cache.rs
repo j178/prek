@@ -181,7 +181,7 @@ fn cache_size_output_formats() {
 
 #[test]
 fn cache_size_with_populated_cache() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_filter(r"(?m)^\d+\n", "[BYTES]\n")
         .with_config(indoc::indoc! {r"
         repos:
@@ -190,9 +190,8 @@ fn cache_size_with_populated_cache() {
             hooks:
               - id: end-of-file-fixer
     "})
-        .with_file("file.txt", "Hello, world!\n");
-
-    context.git().add_all();
+        .with_file("file.txt", "Hello, world!\n")
+        .init_git();
 
     context.run();
 
@@ -217,7 +216,7 @@ fn cache_size_with_populated_cache() {
 
 #[test]
 fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -231,9 +230,8 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
                 entry: python -c "print('Hello from Python')"
                 language: python
     "#})
-        .with_file("valid.yaml", "a: 1\n");
-
-    context.git().add_all();
+        .with_file("valid.yaml", "a: 1\n")
+        .init_git();
 
     let home = context.home_dir();
     // Populate store + config tracking.
@@ -288,16 +286,18 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_file(
-        "hook-repo/.pre-commit-hooks.yaml",
-        indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_file(
+            "hook-repo/.pre-commit-hooks.yaml",
+            indoc::indoc! {r"
         - id: test-hook
           name: Test Hook
           entry: echo test
           language: system
           always_run: true
     "},
-    );
+        )
+        .init_git();
     let hook_repo = context.child("hook-repo");
     let git = context.git_at(&hook_repo);
     let revision = git
@@ -316,7 +316,7 @@ fn cache_gc_keeps_relative_remote_repo() -> anyhow::Result<()> {
                   - id: test-hook
         "},
     );
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run()
         .arg("--config")
@@ -583,7 +583,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
 
 #[test]
 fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -593,9 +593,8 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
                 entry: python -c "print('hello')"
                 language: python
     "#})
-        .with_file("file.txt", "Hello\n");
-
-    context.git().add_all();
+        .with_file("file.txt", "Hello\n")
+        .init_git();
 
     // Install + run the local hook so it creates a hook env under PREK_HOME/hooks.
     cmd_snapshot!(context, context.run(), @r"
@@ -730,9 +729,7 @@ fn write_patch_file(path: &ChildPath, content: &str, modified: SystemTime) -> an
 
 #[test]
 fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config("repos: []\n");
-
-    context.git().add_all();
+    let context = TestEnv::new().with_config("repos: []\n").init_git();
 
     let home = context.home_dir();
     let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
@@ -778,9 +775,9 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
 #[test]
 fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
     // Keep the tracked config intentionally invalid while exercising GC.
-    let context = TestEnv::new_git().with_file(PRE_COMMIT_CONFIG_YAML, "repos: [\n");
-
-    context.git().add_all();
+    let context = TestEnv::new()
+        .with_file(PRE_COMMIT_CONFIG_YAML, "repos: [\n")
+        .init_git();
 
     let home = context.home_dir();
     let config_path = context.child(PRE_COMMIT_CONFIG_YAML);
@@ -816,9 +813,7 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
 
 #[test]
 fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config("repos: []\n");
-
-    context.git().add_all();
+    let context = TestEnv::new().with_config("repos: []\n").init_git();
 
     let home = context.home_dir();
     // Seed tracking with a missing config to force sweeping everything.

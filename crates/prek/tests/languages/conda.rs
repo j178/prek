@@ -1,10 +1,9 @@
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -16,9 +15,8 @@ fn language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -34,7 +32,8 @@ fn language_version() {
 
 #[test]
 fn local_hook_with_additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -46,9 +45,8 @@ fn local_hook_with_additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     let context = context.with_filter(r"OpenSSL [^\n]+", "OpenSSL [VERSION]");
 
@@ -68,11 +66,10 @@ fn local_hook_with_additional_dependencies() {
 
 #[test]
 fn remote_repo_install() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("conda-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "conda-hook",
             indoc::indoc! {r"
             - id: conda-remote
               name: conda-remote
@@ -88,13 +85,8 @@ fn remote_repo_install() {
             dependencies:
               - openssl
         "},
-        );
-
-    hook_repo
-        .git()
-        .add_all()
-        .commit("Add conda hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -105,9 +97,9 @@ fn remote_repo_install() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
 
-    context.git().add_all();
+    context.git().add(".");
 
     let context = context.with_filter(r"OpenSSL [^\n]+", "OpenSSL [VERSION]");
 

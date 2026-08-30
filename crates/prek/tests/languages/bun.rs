@@ -9,7 +9,8 @@ use assert_fs::fixture::PathChild;
 /// Test basic Bun hook execution.
 #[test]
 fn basic_bun() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -20,9 +21,8 @@ fn basic_bun() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -41,7 +41,8 @@ fn basic_bun() {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -53,9 +54,8 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -104,7 +104,8 @@ fn additional_dependencies() {
 #[cfg(feature = "ci")]
 #[test]
 fn language_version() -> Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -141,9 +142,8 @@ fn language_version() -> Result<()> {
                 verbose: true
                 pass_filenames: false
                 additional_dependencies: ["cowsay"] # different dep to force create separate env
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     let bun_dir = context.home_dir().child("tools").child("bun");
     bun_dir.assert(predicates::path::missing());

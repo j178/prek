@@ -1,11 +1,10 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -18,9 +17,8 @@ fn local_hook() {
                 verbose: true
                 pass_filenames: false
     "})
-        .with_file("hello.php", "<?php echo \"Hello from PHP!\\n\";\n");
-
-    context.git().add_all();
+        .with_file("hello.php", "<?php echo \"Hello from PHP!\\n\";\n")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -52,9 +50,17 @@ fn local_hook() {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("php-hook")
+        .create_hook_repo(
+            "php-hook",
+            indoc::indoc! {r"
+                - id: php-hook
+                  name: php-hook
+                  language: php
+                  entry: php-hook
+            "},
+        )
         .with_file(
             COMPOSER_JSON,
             indoc::indoc! {r#"
@@ -64,28 +70,14 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 }
             "#},
         )
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
-            indoc::indoc! {r"
-                - id: php-hook
-                  name: php-hook
-                  language: php
-                  entry: php-hook
-            "},
-        )
         .with_executable_file(
             "bin/php-hook",
             indoc::indoc! {r#"
         #!/usr/bin/env php
         <?php echo "Hello from remote PHP!\n";
     "#},
-        );
-
-    hook_repo
-        .git()
-        .add_all()
-        .commit("Add PHP hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -96,8 +88,8 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
-    context.git().add_all();
+    ", hook_repo});
+    context.git().add(".");
 
     let composer_home = context.home_dir().child("composer");
     composer_home.create_dir_all()?;
@@ -140,7 +132,8 @@ fn additional_dependencies() -> anyhow::Result<()> {
             "#},
         );
 
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -152,8 +145,8 @@ fn additional_dependencies() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let composer_home = context.home_dir().child("composer");
     composer_home.create_dir_all()?;
@@ -193,7 +186,8 @@ fn additional_dependencies() -> anyhow::Result<()> {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -204,8 +198,8 @@ fn language_version() {
                 language_version: '8.4'
                 always_run: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

@@ -1,14 +1,13 @@
 #[cfg(feature = "ci")]
 use assert_fs::fixture::PathChild;
-#[cfg(feature = "ci")]
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[cfg(feature = "ci")]
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -50,9 +49,8 @@ fn language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     let context = context.with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
 
@@ -88,7 +86,8 @@ fn language_version() {
 /// Test invalid `language_version` format is rejected.
 #[test]
 fn invalid_language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -100,9 +99,8 @@ fn invalid_language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -121,7 +119,8 @@ fn invalid_language_version() {
 #[cfg(feature = "ci")]
 #[test]
 fn multiple_sdk_versions() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -141,8 +140,8 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
                 verbose: true
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let context = context.with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
 
@@ -194,7 +193,8 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
 #[cfg(feature = "ci")]
 #[test]
 fn additional_dependencies_with_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -206,8 +206,8 @@ fn additional_dependencies_with_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-    context.git().add_all();
+    "#})
+        .init_git();
 
     let context = context.with_filter(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]");
 
@@ -245,31 +245,31 @@ fn additional_dependencies_with_version() {
 #[cfg(feature = "ci")]
 #[test]
 fn additional_dependencies_in_remote_repo() {
-    let context = TestEnv::new_git();
-    let repo = context.create_repo("dotnet-hook").with_file(
-        PRE_COMMIT_HOOKS_YAML,
-        indoc::indoc! {r#"
+    let context = TestEnv::new().init_git();
+    let hook_repo = context
+        .create_hook_repo(
+            "dotnet-hook",
+            indoc::indoc! {r#"
             - id: dotnet-outdated
               name: dotnet-outdated
               language: dotnet
               entry: dotnet-outdated --version
               additional_dependencies: ["dotnet-outdated-tool:4.7.1"]
         "#},
-    );
-    let repo_path = repo.path();
-    repo.git().add_all().commit("Add manifest").tag("v0.1.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: {}
-            rev: v0.1.0
+            rev: v1.0.0
             hooks:
               - id: dotnet-outdated
                 verbose: true
                 pass_filenames: false
-    ", repo_path.display()});
+    ", hook_repo});
 
-    context.git().add_all();
+    context.git().add(".");
 
     let context = context.with_filter(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]");
 
@@ -292,7 +292,7 @@ fn additional_dependencies_in_remote_repo() {
 #[cfg(feature = "ci")]
 #[test]
 fn hook_stderr() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -322,9 +322,8 @@ fn hook_stderr() {
         Console.Error.Flush();
         Environment.Exit(1);
     "#},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @"
     success: false

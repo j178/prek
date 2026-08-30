@@ -8,7 +8,8 @@ use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
 #[test]
 fn reuses_managed_mise() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -21,8 +22,8 @@ fn reuses_managed_mise() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-    context.git().add_all();
+    "#})
+        .init_git();
 
     let context = context.with_filter(
         r"2026\.7\.18 [^\r\n]+ \(\d{4}-\d{2}-\d{2}\)",
@@ -58,7 +59,7 @@ fn reuses_managed_mise() {
                 verbose: true
                 pass_filenames: false
     "});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
@@ -78,12 +79,13 @@ fn reuses_managed_mise() {
 #[test]
 fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     // Early miserc discovery must not read configuration from the calling project.
-    let context = TestEnv::new_git().with_file(".miserc.toml", "not valid = [");
+    let context = TestEnv::new()
+        .with_file(".miserc.toml", "not valid = [")
+        .init_git();
 
     let hook_repo = context
-        .create_repo("mise-system-hook")
-        .with_file(
-            ".pre-commit-hooks.yaml",
+        .create_hook_repo(
+            "mise-system-hook",
             indoc::indoc! {r#"
             - id: mise-system
               name: mise system
@@ -97,9 +99,8 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
         "#},
         )
         // Provisioning must not read configuration from the hook repository.
-        .with_file("mise.toml", "not valid = [");
-    hook_repo.git().add_all().commit("Add mise hook");
-    let rev = hook_repo.git().rev_parse("HEAD")?;
+        .with_file("mise.toml", "not valid = [")
+        .build();
 
     // Keep a conflicting executable beside the real system mise. Activating the private tool must
     // not move this whole directory ahead of the PATH returned by `mise env`.
@@ -120,11 +121,11 @@ fn system_mise_installs_and_activates_dependencies() -> Result<()> {
     context.write_config(indoc::formatdoc! {r"
         repos:
           - repo: '{}'
-            rev: {}
+            rev: v1.0.0
             hooks:
               - id: mise-system
-    ", hook_repo.path().display(), rev});
-    context.git().add_all();
+    ", hook_repo});
+    context.git().add(".");
 
     let ambient_data = context.work_dir().join("ambient-mise-data");
     let path = std::env::join_paths(

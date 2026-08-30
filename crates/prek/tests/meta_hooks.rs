@@ -4,7 +4,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn meta_hooks() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_files([
             ("file.txt", "Hello, world!\n"),
             ("valid.json", "{}"),
@@ -30,8 +30,8 @@ fn meta_hooks() {
                 language: system
                 entry: python3 -c 'import sys; sys.exit(0)'
                 exclude: $nonexistent^
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -65,13 +65,14 @@ fn meta_hooks() {
 
 #[test]
 fn meta_hooks_unknown_hook() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
               - id: this-hook-does-not-exist
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @"
     success: false
@@ -114,10 +115,11 @@ fn check_useless_excludes_remote() {
         hooks:
             - id: check-useless-excludes
     "};
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file("html/file1.html", "<!DOCTYPE html>")
-        .with_config(&pre_commit_config);
-    context.git().add_all();
+        .with_config(&pre_commit_config)
+        .init_git();
+
     cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r"
     success: false
     exit_code: 1
@@ -134,7 +136,7 @@ fn check_useless_excludes_remote() {
 
 #[test]
 fn meta_hooks_workspace() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_project_config(
             "app",
             indoc::indoc! {r"
@@ -164,8 +166,8 @@ fn meta_hooks_workspace() {
             ("app/invalid.json", "{x}"),
             ("app/main.py", r#"print "abc"  "#),
         ])
-        .with_config("repos: []");
-    context.git().add_all();
+        .with_config("repos: []")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: false
@@ -207,7 +209,7 @@ fn check_useless_excludes_workspace_paths_are_project_relative() {
     // Regression: in workspace mode, `files`/`exclude` matching must use paths *relative to the
     // nested project root* (so anchored patterns like `^...$` work as expected).
     // The two sentinel files keep the anchored excludes from being reported as useless.
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(
             "app/.pre-commit-config.yaml",
             indoc::indoc! {r"
@@ -227,8 +229,8 @@ fn check_useless_excludes_workspace_paths_are_project_relative() {
         )
         .with_file("app/global_excluded", "ignored\n")
         .with_file("app/hook_excluded", "ignored\n")
-        .with_config("repos: []");
-    context.git().add_all();
+        .with_config("repos: []")
+        .init_git();
 
     cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @r#"
     success: true

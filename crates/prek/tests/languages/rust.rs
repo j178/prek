@@ -12,7 +12,8 @@ use crate::common::{TestEnv, cmd_snapshot};
 #[cfg(feature = "ci")]
 #[test]
 fn language_version() -> Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -37,8 +38,8 @@ fn language_version() -> Result<()> {
                 language_version: '1.70'
                 always_run: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let rust_dir = context.home_dir().child("tools/rustup/toolchains");
     rust_dir.assert(predicates::path::missing());
@@ -101,7 +102,8 @@ fn language_version() -> Result<()> {
 /// Test `rustup` installer.
 #[test]
 fn rustup_installer() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -109,8 +111,9 @@ fn rustup_installer() {
                 name: rustup-test
                 language: rust
                 entry: rustc --version
-   "});
-    context.git().add_all();
+       "})
+        .init_git();
+
     let context = context.with_filter(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X");
 
     cmd_snapshot!(context, context.run().arg("-v").env(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME, "non-exist-rustup"), @r#"
@@ -130,7 +133,8 @@ fn rustup_installer() {
 /// Test that `additional_dependencies` with cli: prefix are installed correctly.
 #[test]
 fn additional_dependencies_cli() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -142,9 +146,8 @@ fn additional_dependencies_cli() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -163,7 +166,8 @@ fn additional_dependencies_cli() {
 /// Test that remote Rust hooks are installed and run correctly.
 #[test]
 fn remote_hooks() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/rust-hooks
             rev: v1.0.0
@@ -173,8 +177,8 @@ fn remote_hooks() {
                 pass_filenames: false
                 always_run: true
                 args: ["Hello World"]
-    "#});
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -194,7 +198,8 @@ fn remote_hooks() {
 /// Test that remote Rust hooks from non-workspace repos are installed and run correctly.
 #[test]
 fn remote_hook_non_workspace() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/rust-hooks-non-workspace
             rev: v1.0.0
@@ -203,8 +208,8 @@ fn remote_hook_non_workspace() {
                 verbose: true
                 pass_filenames: false
                 always_run: true
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -225,7 +230,8 @@ fn remote_hook_non_workspace() {
 /// This verifies that the shared repo is not modified when adding dependencies.
 #[test]
 fn remote_hooks_with_lib_deps() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-ci/rust-hooks
             rev: v1.0.0
@@ -235,8 +241,8 @@ fn remote_hooks_with_lib_deps() {
                 verbose: true
                 pass_filenames: false
                 always_run: true
-    "#});
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

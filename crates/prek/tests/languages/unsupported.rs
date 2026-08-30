@@ -4,7 +4,7 @@
 fn unsupported_language() {
     use crate::common::{TestEnv, cmd_snapshot};
 
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -26,9 +26,8 @@ fn unsupported_language() {
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true

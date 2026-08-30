@@ -1,10 +1,9 @@
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -16,9 +15,8 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -36,11 +34,10 @@ fn additional_dependencies() {
 
 #[test]
 fn pre_commit_channel() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("coursier-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "coursier-hook",
             indoc::indoc! {r"
             - id: echo-java
               name: echo-java
@@ -56,13 +53,8 @@ fn pre_commit_channel() {
               "dependencies": ["io.get-coursier:echo:latest.stable"]
             }
         "#},
-        );
-
-    hook_repo
-        .git()
-        .add_all()
-        .commit("Add coursier hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -73,9 +65,9 @@ fn pre_commit_channel() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -93,7 +85,7 @@ fn pre_commit_channel() {
 
 #[test]
 fn local_pre_commit_channel_is_ignored() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(".pre-commit-channel/scalafmt.json", "{}")
         .with_config(indoc::indoc! {r"
         repos:
@@ -105,9 +97,8 @@ fn local_pre_commit_channel_is_ignored() {
                 entry: scalafmt --version
                 always_run: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @"
     success: false

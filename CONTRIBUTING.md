@@ -41,7 +41,9 @@ In integration tests, you can use `cmd_snapshot!` macro to simplify creating sna
 ```rust
 #[test]
 fn test_run() {
-    let env = TestEnv::new_git();
+    let env = TestEnv::new()
+        .with_config("repos: []")
+        .init_git();
 
     cmd_snapshot!(env, env.run(), @"");
 }
