@@ -1482,7 +1482,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() {
 
 #[test]
 fn repo_filter_selects_special_repositories_without_cloning_unrelated_remote() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -1506,8 +1506,8 @@ fn repo_filter_selects_special_repositories_without_cloning_unrelated_remote() {
             hooks:
               - id: unreachable-hook
     "})
-        .with_file("valid.toml", "[tool]\nname = \"valid\"\n");
-    context.git().add_all();
+        .with_file("valid.toml", "[tool]\nname = \"valid\"\n")
+        .init_git();
 
     cmd_snapshot!(context, context.run().args(["--all-files", "--dry-run", "--repo", "local"]), @"
     success: true
@@ -1562,7 +1562,7 @@ fn repo_filter_selects_special_repositories_without_cloning_unrelated_remote() {
 
 #[test]
 fn repo_filter_composes_with_run_filters() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -1597,8 +1597,8 @@ fn repo_filter_composes_with_run_filters() {
                 stages: [pre-commit]
                 groups: [ci]
     "#})
-        .with_files([("selected.txt", "selected\n"), ("ignored.txt", "ignored\n")]);
-    context.git().add_all();
+        .with_files([("selected.txt", "selected\n"), ("ignored.txt", "ignored\n")])
+        .init_git();
 
     cmd_snapshot!(context, context.run().args([
         "selected",
@@ -1655,7 +1655,8 @@ fn repo_filter_composes_with_run_filters() {
 
 #[test]
 fn repo_filter_warns_when_unmatched() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -1664,8 +1665,8 @@ fn repo_filter_warns_when_unmatched() {
                 entry: echo local
                 language: system
                 always_run: true
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run().args([
         "--all-files",

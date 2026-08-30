@@ -1439,7 +1439,7 @@ fn orphan_projects() {
 
 #[test]
 fn repo_filter_matches_remote_repositories_across_workspace_projects() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks.git
@@ -1477,8 +1477,8 @@ fn repo_filter_matches_remote_repositories_across_workspace_projects() {
             ("root.txt", "root   \n"),
             ("nested/nested.txt", "nested"),
             ("nested/valid.toml", "[tool]\nname = \"valid\"\n"),
-        ]);
-    context.git().add_all();
+        ])
+        .init_git();
 
     cmd_snapshot!(context, context.run().args([
         "--all-files",
