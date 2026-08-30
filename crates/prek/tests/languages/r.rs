@@ -1,5 +1,4 @@
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -99,9 +98,8 @@ fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
 fn remote_repo_install() -> anyhow::Result<()> {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("r-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "r-hook",
             indoc::indoc! {r"
             - id: r-remote
               name: r-remote
@@ -113,7 +111,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
     write_local_r_package(hook_repo.path(), "localdep")?;
     write_renv_project(hook_repo.path())?;
 
-    hook_repo.git().add(".").commit("Add R hook").tag("v1.0.0");
+    let hook_repo = hook_repo.build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -125,7 +123,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
 
     context.git().add(".");
 

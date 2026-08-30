@@ -1,5 +1,3 @@
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
-
 use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
@@ -70,9 +68,8 @@ fn local_hook_with_additional_dependencies() {
 fn remote_repo_install() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("conda-hook")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "conda-hook",
             indoc::indoc! {r"
             - id: conda-remote
               name: conda-remote
@@ -88,13 +85,8 @@ fn remote_repo_install() {
             dependencies:
               - openssl
         "},
-        );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add conda hook")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -105,7 +97,7 @@ fn remote_repo_install() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    ", hook_repo.path().display()});
+    ", hook_repo});
 
     context.git().add(".");
 

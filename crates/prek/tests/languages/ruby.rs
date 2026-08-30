@@ -2,7 +2,6 @@ use std::env::consts::EXE_EXTENSION;
 
 #[cfg(all(feature = "ci", not(target_os = "windows")))]
 use assert_fs::fixture::PathChild;
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -547,10 +546,19 @@ fn environment_isolation() -> anyhow::Result<()> {
 
 /// Test local Ruby hook repository with gemspec build and install
 #[test]
-fn local_hook_with_gemspec() -> anyhow::Result<()> {
+fn local_hook_with_gemspec() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("ruby-hook")
+        .create_hook_repo(
+            "ruby-hook",
+            indoc::indoc! {r"
+            - id: my-hook
+              name: My Hook
+              entry: my-hook
+              language: ruby
+              pass_filenames: false
+        "},
+        )
         .with_file(
             "my_hook.gemspec",
             indoc::indoc! {r#"
@@ -573,25 +581,13 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
         puts "Hook executed from gem!"
     "#},
         )
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
-            indoc::indoc! {r"
-            - id: my-hook
-              name: My Hook
-              entry: my-hook
-              language: ruby
-              pass_filenames: false
-        "},
-        );
-
-    hook_repo.git().add(".").commit("Initial commit");
-    let rev = hook_repo.git().rev_parse("HEAD")?;
+        .build();
 
     // Configure prek to use this local repo
     context.write_config(indoc::formatdoc! {r"
             repos:
               - repo: {}
-                rev: {}
+                rev: v1.0.0
                 hooks:
                   - id: my-hook
                     name: my-hook
@@ -600,8 +596,7 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
                     pass_filenames: false
                     always_run: true
         ",
-        hook_repo.path().display(),
-        rev
+        hook_repo
     });
     context.git().add(".pre-commit-config.yaml");
 
@@ -617,8 +612,6 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 /// Test Ruby hook with native gem (C extension)

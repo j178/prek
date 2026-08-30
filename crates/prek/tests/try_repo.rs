@@ -1,22 +1,20 @@
 mod common;
 
 use anyhow::Result;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use std::path::PathBuf;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 use crate::common::{TestEnv, cmd_snapshot};
-use assert_fs::fixture::ChildPath;
-use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 fn with_try_repo_filters(context: TestEnv) -> TestEnv {
     context.with_filters([(r"[a-f0-9]{40}", "[COMMIT_SHA]"), ("'", "\"")])
 }
 
-fn create_hook_repo(context: &TestEnv, repo_name: &str) -> PathBuf {
-    let repo = context
-        .create_repo(repo_name)
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+fn create_hook_repo(context: &TestEnv, repo_name: &str) -> String {
+    context
+        .create_hook_repo(
+            repo_name,
             indoc::indoc! {r#"
         - id: test-hook
           name: Test Hook
@@ -33,28 +31,23 @@ fn create_hook_repo(context: &TestEnv, repo_name: &str) -> PathBuf {
         .with_file(
             "setup.py",
             "from setuptools import setup; setup(name='dummy-pkg', version='0.0.1')",
-        );
-
-    repo.git().add(".").commit("Initial commit");
-
-    repo.path().to_path_buf()
+        )
+        .build()
 }
 
 // Helper for a repo with a hook that is designed to fail
-fn create_failing_hook_repo(context: &TestEnv, repo_name: &str) -> PathBuf {
-    let repo = context.create_repo(repo_name).with_file(
-        PRE_COMMIT_HOOKS_YAML,
-        indoc::indoc! {r#"
+fn create_failing_hook_repo(context: &TestEnv, repo_name: &str) -> String {
+    context
+        .create_hook_repo(
+            repo_name,
+            indoc::indoc! {r#"
         - id: failing-hook
           name: Always Fail
           entry: "false"
           language: system
         "#},
-    );
-
-    repo.git().add(".").commit("Initial commit");
-
-    repo.path().to_path_buf()
+        )
+        .build()
 }
 
 #[test]

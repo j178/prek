@@ -7,9 +7,7 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{
-    PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PRE_COMMIT_HOOKS_YAML, PREK_TOML,
-};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -582,9 +580,8 @@ fn hook_repo_placeholder_expands_to_local_project() {
 fn hook_repo_placeholder_expands_to_remote_checkout() {
     let context = TestEnv::new().init_git();
     let hook_repo = context
-        .create_repo("hook-repo-placeholder")
-        .with_file(
-            PRE_COMMIT_HOOKS_YAML,
+        .create_hook_repo(
+            "hook-repo-placeholder",
             indoc::indoc! {r#"
             - id: hook-repo-remote
               name: remote
@@ -594,12 +591,8 @@ fn hook_repo_placeholder_expands_to_remote_checkout() {
               pass_filenames: false
         "#},
         )
-        .with_file("hook-repo-marker", "");
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Add remote hook")
-        .tag("v1.0.0");
+        .with_file("hook-repo-marker", "")
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -607,7 +600,7 @@ fn hook_repo_placeholder_expands_to_remote_checkout() {
             rev: v1.0.0
             hooks:
               - id: hook-repo-remote
-    ", hook_repo.path().display()});
+    ", hook_repo});
     context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r#"
@@ -2683,22 +2676,18 @@ fn skipped_remote_repo_is_not_cloned() {
 #[test]
 fn skipped_same_key_remote_repo_entry_is_not_initialized() {
     let context = TestEnv::new().init_git();
-    let hook_repo = context.create_repo("duplicate-key-hook").with_file(
-        PRE_COMMIT_HOOKS_YAML,
-        indoc::indoc! {r"
+    let hook_repo = context
+        .create_hook_repo(
+            "duplicate-key-hook",
+            indoc::indoc! {r"
         - id: test-hook
           name: Test Hook
           entry: echo ok
           language: system
           always_run: true
     "},
-    );
-
-    hook_repo
-        .git()
-        .add(".")
-        .commit("Initial commit")
-        .tag("v1.0.0");
+        )
+        .build();
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -2711,7 +2700,7 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() {
             rev: v1.0.0
             hooks:
               - id: test-hook
-    ", repo = hook_repo.path().display()});
+    ", repo = hook_repo});
     context.git().add(".");
 
     context
