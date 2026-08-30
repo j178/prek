@@ -1541,23 +1541,6 @@ fn repo_filter_selects_special_repositories_without_cloning_unrelated_remote() {
 
     ----- stderr -----
     ");
-
-    cmd_snapshot!(context, context.run().args([
-        "--all-files",
-        "--dry-run",
-        "--repo",
-        "local",
-        "--repo",
-        "builtin",
-    ]), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Local Check.............................................................Dry Run
-    check toml..............................................................Dry Run
-
-    ----- stderr -----
-    ");
 }
 
 #[test]

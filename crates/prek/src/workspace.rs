@@ -55,7 +55,7 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub(crate) struct HookInitFilters<'a> {
     selectors: Option<&'a Selectors>,
     group_filters: Option<&'a GroupFilters>,
