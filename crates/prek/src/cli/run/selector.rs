@@ -1049,6 +1049,12 @@ mod tests {
 
         let mut remote =
             config::RemoteRepo::new(GITHUB_REPO.to_string(), "v1.0.0".to_string(), Vec::new());
+        for selector in ["OWNER/", "/REPOSITORY"] {
+            assert!(
+                !RepoFilter::new(selector.to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+        }
         assert!(
             !RepoFilter::new("https://github.com/OTHER/REPOSITORY".to_string())
                 .matches_repo(&config::Repo::Remote(remote.clone()))
