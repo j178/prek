@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::config::validate_group_name;
+use crate::config::{self, validate_group_name};
 use crate::hook::Hook;
 use crate::warn_user;
 
@@ -181,6 +182,62 @@ impl Selector {
                 project_path.as_path() == hook.project_relative_path
                     && matches_hook_id(selector_hook_id)
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct RepoFilter {
+    original: String,
+    github_url: Option<String>,
+    matched: AtomicBool,
+}
+
+impl RepoFilter {
+    pub(crate) fn new(original: String) -> Self {
+        let mut components = original.split('/');
+        let github_url = match (components.next(), components.next(), components.next()) {
+            (Some(owner), Some(repository), None)
+                if !owner.is_empty() && !repository.is_empty() =>
+            {
+                Some(format!("https://github.com/{owner}/{repository}"))
+            }
+            _ => None,
+        };
+
+        Self {
+            original,
+            github_url,
+            matched: AtomicBool::new(false),
+        }
+    }
+
+    pub(crate) fn matches_repo(&self, repo: &config::Repo) -> bool {
+        let matches = match repo {
+            config::Repo::Local(_) => self.original == "local",
+            config::Repo::Meta(_) => self.original == "meta",
+            config::Repo::Builtin(_) => self.original == "builtin",
+            config::Repo::Remote(repo) => {
+                repo.repo() == self.original
+                    || self
+                        .github_url
+                        .as_deref()
+                        .is_some_and(|github_url| repo.repo() == github_url)
+            }
+        };
+
+        if matches {
+            self.matched.store(true, Ordering::Relaxed);
+        }
+        matches
+    }
+
+    pub(crate) fn report_unused(&self) {
+        if !self.matched.load(Ordering::Relaxed) {
+            warn_user!(
+                "repository selector `--repo={}` did not match any configured repositories",
+                self.original
+            );
         }
     }
 }
@@ -887,6 +944,52 @@ mod tests {
         Ok(MockFileSystem {
             current_dir: temp_dir,
         })
+    }
+
+    #[test]
+    fn repo_filter_matches_configured_remote_value_and_github_shorthand() {
+        const GITHUB_REPO: &str = "https://github.com/OWNER/REPOSITORY";
+
+        let mut remote =
+            config::RemoteRepo::new(GITHUB_REPO.to_string(), "v1.0.0".to_string(), Vec::new());
+
+        assert!(
+            RepoFilter::new(GITHUB_REPO.to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            RepoFilter::new("OWNER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("https://github.com/OTHER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+
+        remote.rev = "different-revision".to_string();
+        remote.set_resolved_source("https://mirror.example.com/OWNER/REPOSITORY".to_string());
+        assert!(
+            RepoFilter::new("OWNER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("https://mirror.example.com/OWNER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote))
+        );
+
+        const GITLAB_REPO: &str = "https://gitlab.com/OWNER/REPOSITORY";
+        let remote =
+            config::RemoteRepo::new(GITLAB_REPO.to_string(), "v2.0.0".to_string(), Vec::new());
+        assert!(
+            RepoFilter::new(GITLAB_REPO.to_string()).matches_repo(&config::Repo::Remote(remote))
+        );
+
+        const UNUSUAL_REPO: &str = "OWNER/REPOSITORY";
+        let remote =
+            config::RemoteRepo::new(UNUSUAL_REPO.to_string(), "v3.0.0".to_string(), Vec::new());
+        assert!(
+            RepoFilter::new(UNUSUAL_REPO.to_string()).matches_repo(&config::Repo::Remote(remote))
+        );
     }
 
     #[test]

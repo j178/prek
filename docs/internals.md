@@ -29,10 +29,14 @@ the project that uses them.
 prek first locates the workspace and its configured projects, including nested
 projects. It combines the command-line selection, configured groups, and the
 current Git hook stage to determine which hook definitions are relevant.
+Parsed repository entries excluded by `--repo` are removed before remote
+repository deduplication and resolution. This prevents nonmatching remote
+repositories from being fetched or initialized.
 
-Remote repositories are deduplicated and resolved once. Existing versioned
-checkouts are reused, while missing ones can be fetched concurrently. Local and
-built-in hooks do not need a separate checkout.
+Matching remote repositories are deduplicated and resolved once by their source
+and configured revision. Existing versioned checkouts are reused, while missing
+ones can be fetched concurrently. Local and built-in hooks do not need a
+separate checkout.
 
 Once every source is available, prek combines each manifest with the project's
 overrides. The result is a run plan grouped by project, together with the kind

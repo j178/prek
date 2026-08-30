@@ -704,6 +704,21 @@ pub(crate) struct RunArgs {
     #[command(flatten)]
     pub(crate) options: RunOptions,
 
+    /// Select hooks by their configured repository.
+    ///
+    /// Accepts `local`, `meta`, `builtin`, a complete remote repository URL, or
+    /// GitHub shorthand in `OWNER/REPOSITORY` form. Remote matching ignores `rev`.
+    /// Can be specified multiple times; a repository may match any specified value.
+    /// In workspace mode, this applies across discovered projects that remain
+    /// after project selection and composes with other hook, stage, and file filters.
+    #[arg(
+        long,
+        value_name = "REPO",
+        value_hint = ValueHint::Other,
+        help_heading = "Hook selection"
+    )]
+    pub(crate) repo: Vec<String>,
+
     /// The stage during which the hook is fired.
     ///
     /// When specified, only hooks configured for that stage (for example `manual`,

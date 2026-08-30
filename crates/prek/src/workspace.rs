@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error, instrument, trace};
 
-use crate::cli::run::{ConfiguredHook, GroupFilters, Selectors};
+use crate::cli::run::{ConfiguredHook, GroupFilters, RepoFilter, Selectors};
 use crate::config::{self, Config, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
@@ -59,6 +59,7 @@ pub(crate) trait HookInitReporter {
 pub(crate) struct HookInitFilters<'a> {
     selectors: Option<&'a Selectors>,
     group_filters: Option<&'a GroupFilters>,
+    repo_filters: &'a [RepoFilter],
 }
 
 impl<'a> HookInitFilters<'a> {
@@ -69,11 +70,31 @@ impl<'a> HookInitFilters<'a> {
         Self {
             selectors,
             group_filters,
+            repo_filters: &[],
         }
+    }
+
+    pub(crate) fn with_repo_filter(mut self, repo_filters: &'a [RepoFilter]) -> Self {
+        self.repo_filters = repo_filters;
+        self
     }
 
     pub(crate) fn none() -> Self {
         Self::default()
+    }
+
+    fn keeps_repo(self, repo: &config::Repo) -> bool {
+        if self.repo_filters.is_empty() {
+            return true;
+        }
+
+        let mut matches = false;
+        for repo_filter in self.repo_filters {
+            if repo_filter.matches_repo(repo) {
+                matches = true;
+            }
+        }
+        matches
     }
 
     fn keeps_remote_repo(self, project: &Project, repo: &config::RemoteRepo) -> bool {
@@ -116,6 +137,9 @@ impl<'a> ProjectInitPlan<'a> {
         let mut repo_configs = Vec::with_capacity(project.config.repos.len());
 
         for repo_config in &project.config.repos {
+            if !filters.keeps_repo(repo_config) {
+                continue;
+            }
             if let config::Repo::Remote(repo) = repo_config {
                 if !filters.keeps_remote_repo(project, repo) {
                     continue;
