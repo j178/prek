@@ -2,7 +2,8 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn health_check() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -13,9 +14,8 @@ fn health_check() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -48,7 +48,8 @@ fn health_check() {
 /// Test specifying `language_version` for Lua hooks which is not supported for now.
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -60,9 +61,8 @@ fn language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -79,7 +79,7 @@ fn language_version() {
 /// Test that stderr from hooks is captured and shown to the user.
 #[test]
 fn hook_stderr() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -89,9 +89,8 @@ fn hook_stderr() {
                 language: lua
                 entry: lua ./hook.lua
     "})
-        .with_file("hook.lua", "io.stderr:write('How are you\\n'); os.exit(1)");
-
-    context.git().add_all();
+        .with_file("hook.lua", "io.stderr:write('How are you\\n'); os.exit(1)")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -110,7 +109,7 @@ fn hook_stderr() {
 /// Test Lua script execution with file arguments.
 #[test]
 fn script_with_files() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -130,9 +129,8 @@ fn script_with_files() {
     "#},
         )
         .with_file("test1.lua", "print('test1')")
-        .with_file("test2.lua", "print('test2')");
-
-    context.git().add_all();
+        .with_file("test2.lua", "print('test2')")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r#"
     success: true
@@ -154,7 +152,7 @@ fn script_with_files() {
 /// Test Lua environment variables (`LUA_PATH` and `LUA_CPATH`)
 #[test]
 fn lua_environment() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new().with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -165,9 +163,7 @@ fn lua_environment() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#}).init_git();
 
     let context = context.with_filter(r"lua-[A-Za-z0-9]+", "lua-[HASH]");
 
@@ -205,7 +201,8 @@ fn lua_environment() {
 /// Test Lua hook with additional dependencies.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -217,9 +214,8 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -238,7 +234,8 @@ fn additional_dependencies() {
 /// Test remote Lua hook from GitHub repository.
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/lua-hooks
             rev: v1.0.0
@@ -246,9 +243,8 @@ fn remote_hook() {
               - id: lua-hooks
                 always_run: true
                 verbose: true
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

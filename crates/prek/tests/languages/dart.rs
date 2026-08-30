@@ -2,7 +2,8 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -14,9 +15,8 @@ fn language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -32,7 +32,7 @@ fn language_version() {
 
 #[test]
 fn hook_stderr() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -51,9 +51,8 @@ fn hook_stderr() {
               exit(1);
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false
@@ -71,7 +70,7 @@ fn hook_stderr() {
 
 #[test]
 fn script_with_files() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -94,9 +93,8 @@ fn script_with_files() {
         "},
         )
         .with_file("test1.dart", "void main() { print('test1'); }")
-        .with_file("test2.dart", "void main() { print('test2'); }");
-
-    context.git().add_all();
+        .with_file("test2.dart", "void main() { print('test2'); }")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -117,7 +115,7 @@ fn script_with_files() {
 
 #[test]
 fn with_pubspec_and_dependencies() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -155,9 +153,8 @@ fn with_pubspec_and_dependencies() {
                 print("hello hello " + pen("world"));
             }
         "#},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -175,7 +172,7 @@ fn with_pubspec_and_dependencies() {
 
 #[test]
 fn with_pubspec() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -205,9 +202,8 @@ fn with_pubspec() {
               print('Hello from Dart package!');
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -230,7 +226,7 @@ fn with_pubspec() {
 
 #[test]
 fn with_pubspec_and_additional_dependencies() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -270,9 +266,8 @@ fn with_pubspec_and_additional_dependencies() {
               print(greet(p.posix.join('Dart', 'Hooks')));
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -295,7 +290,7 @@ fn with_pubspec_and_additional_dependencies() {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -318,9 +313,8 @@ fn additional_dependencies() {
               print('Joined path: $joined');
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -338,7 +332,7 @@ fn additional_dependencies() {
 
 #[test]
 fn additional_dependencies_with_version() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -360,9 +354,8 @@ fn additional_dependencies_with_version() {
               print('Using path package');
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -380,7 +373,7 @@ fn additional_dependencies_with_version() {
 
 #[test]
 fn executable_alias() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -411,9 +404,8 @@ fn executable_alias() {
               print('alias executable works');
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -431,7 +423,7 @@ fn executable_alias() {
 
 #[test]
 fn dart_environment() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -457,9 +449,8 @@ fn dart_environment() {
               }
             }
         "},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -477,7 +468,8 @@ fn dart_environment() {
 
 #[test]
 fn remote_hook() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/dart-hooks
             rev: v1.1.0
@@ -485,9 +477,8 @@ fn remote_hook() {
               - id: dart-hooks
                 always_run: true
                 verbose: true
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true

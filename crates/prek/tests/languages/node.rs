@@ -9,7 +9,7 @@ use crate::common::{TestEnv, cmd_snapshot, remove_bin_from_path};
 
 #[test]
 fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(
             "node-env-tool/package.json",
             indoc::indoc! {r#"
@@ -28,7 +28,8 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
         #!/usr/bin/env node
         console.log("exec node env ok");
     "#},
-        );
+        )
+        .init_git();
     let package = context.child("node-env-tool");
 
     let dependency = serde_json::to_string(package.path())?;
@@ -64,7 +65,8 @@ fn exec_uses_installed_node_environment() -> anyhow::Result<()> {
 #[cfg(feature = "ci")]
 #[test]
 fn language_version() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -104,8 +106,8 @@ fn language_version() -> anyhow::Result<()> {
                 entry: node -p 'process.version'
                 language_version: 'lts/iron' # node 20
                 always_run: true
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let node_dir = context.home_dir().child("tools").child("node");
     node_dir.assert(predicates::path::missing());
@@ -180,7 +182,8 @@ fn language_version() -> anyhow::Result<()> {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -192,9 +195,8 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -247,7 +249,7 @@ fn additional_dependencies() {
 /// <https://github.com/npm/cli/issues/9189>
 #[test]
 fn remote_package_is_installed_from_git() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_repo("remote-node-hook")
         .with_file(
@@ -288,7 +290,7 @@ fn remote_package_is_installed_from_git() {
 
     hook_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add remote Node hook")
         .tag("v1.0.0");
 
@@ -300,7 +302,7 @@ fn remote_package_is_installed_from_git() {
               - id: remote-node-hook
                 verbose: true
     ", hook_repo.path().display()});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run().env(EnvVars::PREK_HOME, ".prek-cache"), @r"
     success: true
@@ -325,7 +327,7 @@ fn remote_package_is_installed_from_git() {
 /// its development dependencies.
 #[test]
 fn remote_prepare_uses_dev_dependencies() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_repo("prepared-node-hook")
         .with_file(
@@ -386,7 +388,7 @@ fn remote_prepare_uses_dev_dependencies() {
 
     hook_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add source-built Node hook")
         .tag("v1.0.0");
 
@@ -398,7 +400,7 @@ fn remote_prepare_uses_dev_dependencies() {
               - id: prepared-node-hook
                 verbose: true
     ", hook_repo.path().display()});
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -417,7 +419,7 @@ fn remote_prepare_uses_dev_dependencies() {
 /// Test that lowercase npm config inherited from `npm exec` cannot redirect installs.
 #[test]
 fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Result<()> {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(
             "prefix-fixture/package.json",
             indoc::indoc! {r#"
@@ -436,7 +438,8 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
         #!/usr/bin/env node
         console.log("prefix fixture ok")
     "#},
-        );
+        )
+        .init_git();
     let package_dir = context.child("prefix-fixture");
 
     let dependency = serde_json::to_string(package_dir.path())?;
@@ -454,7 +457,7 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
                 pass_filenames: false
     "});
 
-    context.git().add_all();
+    context.git().add(".");
 
     let fake_prefix = context.home_dir().child("fake-prefix");
     fake_prefix.create_dir_all()?;
@@ -498,7 +501,8 @@ fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Resul
 /// Regression test for #1492: `install()` must use the provisioned toolchain.
 #[test]
 fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -509,9 +513,8 @@ fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
                 additional_dependencies: ["cowsay"]
                 always_run: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     let new_path = remove_bin_from_path("node", None)?;
 
@@ -530,7 +533,8 @@ fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
 /// Test that `npm.cmd` can be found on Windows.
 #[test]
 fn npm_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -541,8 +545,8 @@ fn npm_version() {
                 always_run: true
                 pass_filenames: false
                 verbose: true
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let context = context.with_filter(r"\d+\.\d+\.\d+", "[NPM_VERSION]");
 
@@ -562,7 +566,7 @@ fn npm_version() {
 
 #[test]
 fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     // Installing this additional dependency forces npm to invoke Git during environment setup.
     let dependency_repo = context.create_repo("sentinel-node-dependency").with_file(
@@ -576,7 +580,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
     );
     dependency_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add sentinel Node dependency");
 
     let hook_repo = context
@@ -614,7 +618,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
 
     hook_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add sentinel Node hook")
         .tag("v1.0.0");
 
@@ -627,7 +631,7 @@ fn node_install_preserves_global_git_config_and_isolates_repository() -> anyhow:
                 additional_dependencies:
                   - git+file:///prek-node-git-dependency
     ", repo = hook_repo.path().display()});
-    context.git().add_all();
+    context.git().add(".");
 
     // The regression corrupts the calling repository's index, so capture it before npm runs.
     let staged_before = context

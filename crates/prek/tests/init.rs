@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn init_defaults_to_git_root() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let child = context.child("child");
     child.create_dir_all()?;
 
@@ -30,7 +30,7 @@ fn init_defaults_to_git_root() -> anyhow::Result<()> {
 
 #[test]
 fn init_child_project_refreshes_parent_workspace() -> anyhow::Result<()> {
-    let context = TestEnv::new_git().with_config("repos: []\n");
+    let context = TestEnv::new().with_config("repos: []\n").init_git();
     context.list().assert().success();
 
     let child = context.child("child");
@@ -64,7 +64,7 @@ fn init_child_project_refreshes_parent_workspace() -> anyhow::Result<()> {
 #[test]
 fn init_preserves_existing_config() {
     let config = "repos: []\n";
-    let context = TestEnv::new_git().with_config(config);
+    let context = TestEnv::new().with_config(config).init_git();
 
     cmd_snapshot!(context, context.command().arg("init"), @r#"
     success: true
@@ -82,7 +82,7 @@ fn init_preserves_existing_config() {
 
 #[test]
 fn init_can_create_yaml_config() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     cmd_snapshot!(context, context.command().args(["init", "--format", "yaml"]), @r#"
     success: true
@@ -100,7 +100,7 @@ fn init_can_create_yaml_config() {
 
 #[test]
 fn init_can_skip_hook_installation() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     cmd_snapshot!(context, context.command().args(["init", "--no-install"]), @r#"
     success: true

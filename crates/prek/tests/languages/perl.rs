@@ -6,7 +6,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -27,9 +27,8 @@ fn local_hook() {
 
             print "Hello from Perl!\n";
         "#},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
     success: true
@@ -47,7 +46,7 @@ fn local_hook() {
 
 #[test]
 fn remote_repo_install() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_repo("perl-hook")
         .with_file(
@@ -92,7 +91,7 @@ fn remote_repo_install() {
 
     hook_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add perl hook")
         .tag("v1.0.0");
 
@@ -107,7 +106,7 @@ fn remote_repo_install() {
                 pass_filenames: false
     ", hook_repo.path().display()});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run().env(EnvVars::HOME, &**context.home_dir()), @r"
     success: true
@@ -125,7 +124,8 @@ fn remote_repo_install() {
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -137,9 +137,8 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     context
         .run()
@@ -150,7 +149,8 @@ fn additional_dependencies() {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -162,9 +162,8 @@ fn language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

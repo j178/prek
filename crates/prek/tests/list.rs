@@ -5,7 +5,8 @@ mod common;
 
 #[test]
 fn list_basic() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -20,7 +21,8 @@ fn list_basic() {
                 language: system
                 types: [json]
                 description: Validate JSON files
-    "});
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.list(), @r"
     success: true
@@ -35,7 +37,8 @@ fn list_basic() {
 
 #[test]
 fn list_verbose() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -52,7 +55,8 @@ fn list_verbose() {
                 description: Validate JSON files
                 fail_fast: true
                 verbose: true
-    "});
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.list().arg("--verbose"), @r"
     success: true
@@ -118,7 +122,8 @@ fn list_verbose() {
 
 #[test]
 fn list_with_hook_ids_filter() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -137,7 +142,8 @@ fn list_with_hook_ids_filter() {
                 entry: check-toml
                 language: system
                 types: [toml]
-    "});
+    "})
+        .init_git();
 
     // Test filtering by specific hook ID
     cmd_snapshot!(context, context.list().arg("check-yaml"), @r"
@@ -163,7 +169,8 @@ fn list_with_hook_ids_filter() {
 
 #[test]
 fn list_with_language_filter() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -182,7 +189,8 @@ fn list_with_language_filter() {
                 entry: clippy
                 language: rust
                 types: [rust]
-    "});
+    "})
+        .init_git();
 
     // Test filtering by language
     cmd_snapshot!(context, context.list().arg("--language").arg("system"), @r"
@@ -206,7 +214,8 @@ fn list_with_language_filter() {
 
 #[test]
 fn list_with_stage_filter() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -227,7 +236,8 @@ fn list_with_stage_filter() {
                 language: system
                 types: [toml]
                 stages: [pre-commit, pre-push]
-    "});
+    "})
+        .init_git();
 
     // Test filtering by stage
     cmd_snapshot!(context, context.list().arg("--hook-stage").arg("pre-commit"), @r"
@@ -254,7 +264,8 @@ fn list_with_stage_filter() {
 
 #[test]
 fn list_with_group_filter() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -281,7 +292,8 @@ fn list_with_group_filter() {
                 entry: ungrouped
                 language: system
                 types: [text]
-    "});
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.list().arg("--group").arg("ci"), @r"
     success: true
@@ -364,7 +376,8 @@ fn list_with_group_filter() {
 
 #[test]
 fn list_group_excluded_remote_repo_is_not_cloned() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
@@ -376,8 +389,8 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
             hooks:
               - id: ruff-check
                 groups: [local]
-        "});
-    context.git().add_all();
+        "})
+        .init_git();
 
     cmd_snapshot!(context,
         context.list().arg("--group").arg("ci"),
@@ -394,7 +407,8 @@ fn list_group_excluded_remote_repo_is_not_cloned() {
 
 #[test]
 fn list_with_aliases() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -409,7 +423,8 @@ fn list_with_aliases() {
                 entry: check-json
                 language: system
                 types: [json]
-    "});
+    "})
+        .init_git();
 
     // Test that aliases are recognized
     cmd_snapshot!(context, context.list().arg("yaml-check"), @r"
@@ -440,7 +455,7 @@ fn list_with_aliases() {
 
 #[test]
 fn list_empty_config() {
-    let context = TestEnv::new_git().with_config("repos: []");
+    let context = TestEnv::new().with_config("repos: []").init_git();
 
     cmd_snapshot!(context, context.list(), @r#"
     success: true
@@ -461,7 +476,7 @@ fn list_empty_config() {
 
 #[test]
 fn list_no_config_file() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     // No config file exists
     cmd_snapshot!(context, context.list(), @r"
@@ -478,7 +493,8 @@ fn list_no_config_file() {
 
 #[test]
 fn list_json_output() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -494,7 +510,8 @@ fn list_json_output() {
                 language: system
                 types: [json]
                 description: Validate JSON files
-    "});
+    "})
+        .init_git();
 
     // Test JSON output for all hooks
     cmd_snapshot!(context, context.list().arg("--output-format=json"), @r#"
@@ -584,7 +601,7 @@ fn list_json_output() {
 
 #[test]
 fn workspace_list() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let cwd = context.work_dir().to_path_buf();
 
     let config = indoc! {r"
@@ -607,7 +624,7 @@ fn workspace_list() {
         ],
         config,
     );
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.list(), @r"
     success: true
@@ -771,7 +788,7 @@ fn workspace_list() {
 
 #[test]
 fn list_with_selectors() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     let config = indoc! {r"
     repos:
@@ -793,7 +810,7 @@ fn list_with_selectors() {
         ],
         config,
     );
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.list().arg("project2/"), @r"
     success: true

@@ -4,7 +4,8 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn additional_dependencies() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r#"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -16,9 +17,8 @@ fn additional_dependencies() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
-
-    context.git().add_all();
+    "#})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -36,7 +36,7 @@ fn additional_dependencies() {
 
 #[test]
 fn pre_commit_channel() {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_repo("coursier-hook")
         .with_file(
@@ -60,7 +60,7 @@ fn pre_commit_channel() {
 
     hook_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add coursier hook")
         .tag("v1.0.0");
 
@@ -75,7 +75,7 @@ fn pre_commit_channel() {
                 pass_filenames: false
     ", hook_repo.path().display()});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -93,7 +93,7 @@ fn pre_commit_channel() {
 
 #[test]
 fn local_pre_commit_channel_is_ignored() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_file(".pre-commit-channel/scalafmt.json", "{}")
         .with_config(indoc::indoc! {r"
         repos:
@@ -105,9 +105,8 @@ fn local_pre_commit_channel_is_ignored() {
                 entry: scalafmt --version
                 always_run: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @"
     success: false

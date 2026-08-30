@@ -5,7 +5,7 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -18,9 +18,8 @@ fn local_hook() {
                 verbose: true
                 pass_filenames: false
     "})
-        .with_file("hello.php", "<?php echo \"Hello from PHP!\\n\";\n");
-
-    context.git().add_all();
+        .with_file("hello.php", "<?php echo \"Hello from PHP!\\n\";\n")
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -52,7 +51,7 @@ fn local_hook() {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_repo("php-hook")
         .with_file(
@@ -83,7 +82,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
     hook_repo
         .git()
-        .add_all()
+        .add(".")
         .commit("Add PHP hook")
         .tag("v1.0.0");
 
@@ -97,7 +96,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 verbose: true
                 pass_filenames: false
     ", hook_repo.path().display()});
-    context.git().add_all();
+    context.git().add(".");
 
     let composer_home = context.home_dir().child("composer");
     composer_home.create_dir_all()?;
@@ -140,7 +139,8 @@ fn additional_dependencies() -> anyhow::Result<()> {
             "#},
         );
 
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -152,8 +152,8 @@ fn additional_dependencies() -> anyhow::Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     let composer_home = context.home_dir().child("composer");
     composer_home.create_dir_all()?;
@@ -193,7 +193,8 @@ fn additional_dependencies() -> anyhow::Result<()> {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -204,8 +205,8 @@ fn language_version() {
                 language_version: '8.4'
                 always_run: true
                 pass_filenames: false
-    "});
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

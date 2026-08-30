@@ -5,10 +5,12 @@ use crate::common::{TestEnv, cmd_snapshot};
 
 #[test]
 fn local_hook() {
-    let context = TestEnv::new_git().with_file(
-        ".Rprofile",
-        r#"stop("project .Rprofile should not be loaded")"#,
-    );
+    let context = TestEnv::new()
+        .with_file(
+            ".Rprofile",
+            r#"stop("project .Rprofile should not be loaded")"#,
+        )
+        .init_git();
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -23,7 +25,7 @@ fn local_hook() {
                 pass_filenames: false
     "#});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -55,7 +57,7 @@ fn local_hook() {
 
 #[test]
 fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
 
     write_local_r_package(context.work_dir(), "localdep")?;
     let dependency_path = std::path::absolute(context.child("localdep").path())?;
@@ -75,7 +77,7 @@ fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
                 pass_filenames: false
     "});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -95,7 +97,7 @@ fn local_hook_with_absolute_additional_dependency() -> anyhow::Result<()> {
 
 #[test]
 fn remote_repo_install() -> anyhow::Result<()> {
-    let context = TestEnv::new_git();
+    let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_repo("r-hook")
         .with_file(
@@ -111,7 +113,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
     write_local_r_package(hook_repo.path(), "localdep")?;
     write_renv_project(hook_repo.path())?;
 
-    hook_repo.git().add_all().commit("Add R hook").tag("v1.0.0");
+    hook_repo.git().add(".").commit("Add R hook").tag("v1.0.0");
 
     context.write_config(indoc::formatdoc! {r"
         repos:
@@ -125,7 +127,7 @@ fn remote_repo_install() -> anyhow::Result<()> {
                 pass_filenames: false
     ", hook_repo.path().display()});
 
-    context.git().add_all();
+    context.git().add(".");
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
@@ -145,7 +147,8 @@ fn remote_repo_install() -> anyhow::Result<()> {
 
 #[test]
 fn language_version() {
-    let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -157,9 +160,8 @@ fn language_version() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "});
-
-    context.git().add_all();
+    "})
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: false

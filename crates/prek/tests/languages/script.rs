@@ -6,7 +6,8 @@ mod unix {
 
     #[test]
     fn script_run() {
-        let context = TestEnv::new_git().with_config(indoc::indoc! {r"
+        let context = TestEnv::new()
+            .with_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-ci/script-hooks
             rev: v1.0.0
@@ -20,8 +21,8 @@ mod unix {
                   VAR1: everyone
                   VAR2: galaxy
                 verbose: true
-        "});
-        context.git().add_all();
+        "})
+            .init_git();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -56,7 +57,7 @@ mod unix {
                   MESSAGE: "Hello, World"
                 verbose: true
         "#};
-        let context = TestEnv::new_git()
+        let context = TestEnv::new()
             .with_config(config)
             .with_executable_file(
                 "script.sh",
@@ -72,10 +73,11 @@ mod unix {
             #!/usr/bin/env bash
             echo "$MESSAGE from child!"
         "#},
-            );
+            )
+            .init_git();
         let child = context.child("child");
 
-        context.git().add_all();
+        context.git().add(".");
 
         cmd_snapshot!(context, context.run(), @r#"
         success: true
@@ -113,7 +115,7 @@ mod unix {
 
     #[test]
     fn local_repo_bash_shebang() {
-        let context = TestEnv::new_git()
+        let context = TestEnv::new()
             .with_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -130,9 +132,8 @@ mod unix {
             #!/usr/bin/env bash
             echo "Hello, World!"
         "#},
-            );
-
-        context.git().add_all();
+            )
+            .init_git();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -150,7 +151,7 @@ mod unix {
 
     #[test]
     fn script_shell_runs_entry_as_shell_source() {
-        let context = TestEnv::new_git()
+        let context = TestEnv::new()
             .with_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -169,9 +170,8 @@ mod unix {
                 args: [configured]
                 verbose: true
         "#})
-            .with_file("a.txt", "a");
-
-        context.git().add_all();
+            .with_file("a.txt", "a")
+            .init_git();
 
         cmd_snapshot!(context, context.run(), @r"
         success: true
@@ -192,7 +192,7 @@ mod unix {
 /// The interpreter must exist in the PATH, the script is not needed to be executable.
 #[test]
 fn windows_script_run() {
-    let context = TestEnv::new_git()
+    let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
     repos:
       - repo: local
@@ -209,9 +209,8 @@ fn windows_script_run() {
         #!/usr/bin/env python3
         print("Hello, World!")
     "#},
-        );
-
-    context.git().add_all();
+        )
+        .init_git();
 
     cmd_snapshot!(context, context.run(), @r"
     success: true
