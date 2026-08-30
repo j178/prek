@@ -381,7 +381,7 @@ mod tests {
             ),
             (
                 r#"["ci\tslow"]"#,
-                "group name `ci\tslow` cannot contain whitespace",
+                "group name `ci\\tslow` cannot contain whitespace",
             ),
             (
                 r#"["@custom"]"#,
