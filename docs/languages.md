@@ -619,6 +619,10 @@ prek installs binaries via `cargo install --bins --locked` and runs the specifie
 
 Set [`PREK_USE_CARGO_BINSTALL=1`](reference/environment-variables.md#prek_use_cargo_binstall) to use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) for remote hook packages and crates.io `cli:` dependencies. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
 
+!!! warning "Remote hook revisions"
+
+    cargo-binstall resolves remote hooks by Cargo package name and version, not by the configured Git `rev`. It reads the version and installation metadata from the checked-out `Cargo.toml`, but installs a release artifact when available. Its `compile` fallback installs that package and version from the registry instead of building the checked-out repository. The version is preserved, but the installed code is not guaranteed to match `rev`, and the fallback fails if that package or version is unpublished. Leave `PREK_USE_CARGO_BINSTALL` unset when the exact repository revision must be built.
+
 Hooks with library `additional_dependencies` still use the source build path because prek must modify their manifest. Git `cli:` dependencies also continue to use `cargo install` so their configured tag and package selection keep the existing semantics.
 
 !!! note "Using `--locked` flag"

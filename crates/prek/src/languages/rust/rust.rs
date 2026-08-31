@@ -334,8 +334,7 @@ async fn install_local_project(
             .sanitize_git_repo_env()
             .check(true)
             .output()
-            .await
-            .context("Failed to install Rust hook")?;
+            .await?;
     } else {
         // For packages with lib deps, copy manifest, modify, build and copy binaries
         let manifest_dir = info.env_path.join("manifest");
