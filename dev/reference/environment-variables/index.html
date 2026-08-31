@@ -1187,6 +1187,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#prek_use_cargo_binstall" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>PREK_USE_CARGO_BINSTALL</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1860,6 +1871,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#prek_use_cargo_binstall" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>PREK_USE_CARGO_BINSTALL</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2043,6 +2065,9 @@ See <a href="../../languages/#ruby">Ruby language support</a> for details.</p>
 <h3 id="prek_rust_profile"><code>PREK_RUST_PROFILE</code><a class="headerlink" href="#prek_rust_profile" title="Permanent link">&para;</a></h3>
 <p>Override the <code>rustup</code> profile used when installing managed Rust toolchains (<code>minimal</code>, <code>default</code>, or <code>complete</code>). Defaults to <code>minimal</code>. Set to <code>default</code> to include <code>rustfmt</code> and <code>clippy</code>.
 See <a href="../../languages/#rust">Rust language support</a> for details.</p>
+<h3 id="prek_use_cargo_binstall"><code>PREK_USE_CARGO_BINSTALL</code><a class="headerlink" href="#prek_use_cargo_binstall" title="Permanent link">&para;</a></h3>
+<p>Use a preinstalled <a href="https://github.com/cargo-bins/cargo-binstall"><code>cargo-binstall</code></a> for crates.io <code>cli:</code> dependencies of <code>language: rust</code> hooks.
+prek does not install cargo-binstall or override its telemetry and strategy settings. See <a href="../../languages/#rust">Rust language support</a> for installations that continue to use Cargo.</p>
 <h2 id="compatibility-fallbacks">Compatibility fallbacks<a class="headerlink" href="#compatibility-fallbacks" title="Permanent link">&para;</a></h2>
 <h3 id="pre_commit_allow_no_config"><code>PRE_COMMIT_ALLOW_NO_CONFIG</code><a class="headerlink" href="#pre_commit_allow_no_config" title="Permanent link">&para;</a></h3>
 <p>Fallback for <code>PREK_ALLOW_NO_CONFIG</code>.</p>

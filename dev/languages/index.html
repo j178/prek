@@ -3434,6 +3434,7 @@ environment.</p>
 <p>Gems specified in hook gemspec files and <code>additional_dependencies</code> are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.</p>
 <h3 id="rust">rust<a class="headerlink" href="#rust" title="Permanent link">&para;</a></h3>
 <p>prek installs binaries via <code>cargo install --bins --locked</code> and runs the specified executable. The repository should contain a <code>Cargo.toml</code> that produces the binary referenced by <code>entry</code>. <code>additional_dependencies</code> and <code>language_version</code> are supported.</p>
+<p>Only crates.io <code>cli:</code> dependencies use a preinstalled <a href="https://github.com/cargo-bins/cargo-binstall"><code>cargo-binstall</code></a> when <a href="../reference/environment-variables/#prek_use_cargo_binstall"><code>PREK_USE_CARGO_BINSTALL=1</code></a> is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its <code>compile</code> strategy.</p>
 <div class="admonition note">
 <p class="admonition-title">Using <code>--locked</code> flag</p>
 <p>prek uses the <code>--locked</code> flag when installing Rust packages to ensure exact dependency versions from <code>Cargo.lock</code> are used. This prevents breaking changes from new dependency releases.</p>
