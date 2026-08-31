@@ -550,6 +550,12 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
+      - name: "Install cargo-binstall"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' rust ') }}
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-binstall
+
       # LuaRocks may compile native Lua modules, such as luafilesystem, on Windows.
       - name: "Setup MSVC"
         if: ${{ matrix.os == 'windows-latest' && contains(format(' {0} ', matrix.languages), ' lua ') }}

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, bail};
 use itertools::{Either, Itertools};
-use prek_consts::env_vars::EnvVars;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use tracing::debug;
 
@@ -124,6 +124,46 @@ impl CargoCliDependency {
 
         args
     }
+}
+
+enum CargoInstaller<'a> {
+    Cargo(&'a Path),
+    Binstall(&'a Path),
+}
+
+impl CargoInstaller<'_> {
+    fn command(&self, install_root: &Path) -> Cmd {
+        let (executable, args): (&Path, &[&str]) = match self {
+            Self::Cargo(cargo) => (cargo, &["install", "--bins"]),
+            Self::Binstall(cargo_binstall) => (cargo_binstall, &["--no-confirm"]),
+        };
+        let mut cmd = Cmd::new(executable);
+        cmd.args(args).arg("--root").arg(install_root);
+        cmd
+    }
+}
+
+fn cargo_binstall_executable() -> anyhow::Result<Option<PathBuf>> {
+    let enabled = match EnvVars.var_as_bool(EnvVars::PREK_USE_CARGO_BINSTALL) {
+        Ok(enabled) => enabled.unwrap_or(false),
+        Err(value) => {
+            bail!(
+                "Invalid value for {}: {value:?}. Expected a boolean value",
+                EnvVars::PREK_USE_CARGO_BINSTALL,
+            );
+        }
+    };
+    if !enabled {
+        return Ok(None);
+    }
+
+    let executable = which::which("cargo-binstall").with_context(|| {
+        format!(
+            "{} is enabled, but `cargo-binstall` was not found on PATH",
+            EnvVars::PREK_USE_CARGO_BINSTALL,
+        )
+    })?;
+    Ok(Some(executable))
 }
 
 /// Find the package directory that produces the given binary.
@@ -264,10 +304,8 @@ async fn install_local_project(
     };
 
     if lib_deps.is_empty() {
-        // For packages without lib deps, use `cargo install` directly
-        Cmd::new(cargo)
-            .args(["install", "--bins", "--root"])
-            .arg(&info.env_path)
+        CargoInstaller::Cargo(cargo)
+            .command(&info.env_path)
             .args(["--path", ".", "--locked"])
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
@@ -364,25 +402,36 @@ async fn install_cli_dependency(
     cli_dep: &str,
     info: &InstallInfo,
     cargo: &Path,
+    cargo_binstall: Option<&Path>,
     cargo_home: &Path,
     new_path: &OsStr,
     install_cwd: &Path,
 ) -> anyhow::Result<()> {
     let dep = CargoCliDependency::from_str(cli_dep)?;
 
-    let mut cmd = Cmd::new(cargo);
-    cmd.current_dir(install_cwd)
-        .args(["install", "--bins", "--root"])
-        .arg(&info.env_path)
-        .args(dep.to_cargo_args())
-        .arg("--locked");
+    let installer = match (cargo_binstall, &dep) {
+        (Some(cargo_binstall), CargoCliDependency::Crate { .. }) => {
+            debug!(
+                dependency = cli_dep,
+                "Installing CLI dependency with cargo-binstall"
+            );
+            CargoInstaller::Binstall(cargo_binstall)
+        }
+        _ => CargoInstaller::Cargo(cargo),
+    };
 
-    cmd.env(EnvVars::PATH, new_path)
+    installer
+        .command(&info.env_path)
+        .args(dep.to_cargo_args())
+        .arg("--locked")
+        .current_dir(install_cwd)
+        .env(EnvVars::PATH, new_path)
         .env(EnvVars::CARGO_HOME, cargo_home)
         .sanitize_git_repo_env()
         .check(true)
         .output()
-        .await?;
+        .await
+        .context("Failed to install Rust CLI dependency")?;
 
     Ok(())
 }
@@ -400,6 +449,7 @@ impl LanguageBackend for Rust {
         reporter: &HookInstallReporter,
     ) -> anyhow::Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
+        let cargo_binstall = cargo_binstall_executable()?;
 
         // 1. Install Rust
         let cargo_home = store.cache_path(CacheBucket::Cargo);
@@ -470,8 +520,16 @@ impl LanguageBackend for Rust {
 
         // Install CLI dependencies
         for cli_dep in cli_deps {
-            install_cli_dependency(cli_dep, &info, &cargo, &cargo_home, &new_path, install_cwd)
-                .await?;
+            install_cli_dependency(
+                cli_dep,
+                &info,
+                &cargo,
+                cargo_binstall.as_deref(),
+                &cargo_home,
+                &new_path,
+                install_cwd,
+            )
+            .await?;
         }
 
         info.persist_env_path();
