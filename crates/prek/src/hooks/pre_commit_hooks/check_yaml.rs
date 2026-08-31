@@ -75,6 +75,8 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
         emit_comments: false,
         // Do not require `!!binary` scalars to decode as UTF-8. See #1102.
         ignore_binary_tag_for_string: true,
+        // `%TAG` directives map tag handles to prefixes. The predefined `!!`
+        // handle expands to `tag:yaml.org,2002:`, while `!` is the local tag handle.
         // Match ruamel.yaml's safe loader by rejecting tags without constructors. See #2604.
         reject_unsupported_tags: true,
         // The scalar values are discarded, so only validate whether they are
