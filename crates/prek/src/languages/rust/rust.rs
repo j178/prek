@@ -270,7 +270,6 @@ async fn install_local_project(
     info: &InstallInfo,
     lib_deps: &[&String],
     cargo: &Path,
-    cargo_binstall: Option<&Path>,
     cargo_home: &Path,
     new_path: &OsStr,
 ) -> anyhow::Result<()> {
@@ -305,29 +304,9 @@ async fn install_local_project(
     };
 
     if lib_deps.is_empty() {
-        let installer = if let Some(cargo_binstall) = cargo_binstall {
-            CargoInstaller::Binstall(cargo_binstall)
-        } else {
-            CargoInstaller::Cargo(cargo)
-        };
-        let mut cmd = installer.command(&info.env_path);
-        match installer {
-            CargoInstaller::Cargo(_) => {
-                cmd.args(["--path", "."]);
-            }
-            CargoInstaller::Binstall(_) => {
-                let package = if package_name.is_empty() {
-                    hook_binary
-                } else {
-                    &package_name
-                };
-                debug!(%package, "Installing Rust hook with cargo-binstall");
-                cmd.arg("--manifest-path")
-                    .arg(package_dir.join("Cargo.toml"))
-                    .arg(package);
-            }
-        }
-        cmd.arg("--locked")
+        CargoInstaller::Cargo(cargo)
+            .command(&info.env_path)
+            .args(["--path", ".", "--locked"])
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
@@ -533,7 +512,6 @@ impl LanguageBackend for Rust {
                 &info,
                 &lib_deps,
                 &cargo,
-                cargo_binstall.as_deref(),
                 &cargo_home,
                 &new_path,
             )

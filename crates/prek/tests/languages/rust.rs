@@ -163,10 +163,10 @@ fn additional_dependencies_cli() {
     ");
 }
 
-/// Test cargo-binstall for a remote hook and a crates.io CLI dependency.
+/// Test cargo-binstall is used only for crates.io CLI dependencies.
 #[cfg(feature = "ci")]
 #[test]
-fn cargo_binstall_installs_hook_and_cli_dependency() {
+fn cargo_binstall_is_used_only_for_crates_io_cli_dependencies() {
     let context = TestEnv::new()
         .with_file(
             "Cargo.toml",
@@ -180,20 +180,20 @@ fn cargo_binstall_installs_hook_and_cli_dependency() {
         .init_git();
     let hook_repo = context
         .create_hook_repo(
-            "rust-binstall-hook",
+            "rust-cargo-hook",
             indoc::indoc! {r"
-                - id: binstall-hook
-                  name: binstall-hook
+                - id: cargo-hook
+                  name: cargo-hook
                   language: rust
-                  entry: prek-rust-echo installed with cargo-binstall
+                  entry: prek-cargo-hook
             "},
         )
         .with_file(
             "Cargo.toml",
             indoc::indoc! {r#"
                 [package]
-                name = "prek-rust-echo"
-                version = "0.1.1"
+                name = "prek-cargo-hook"
+                version = "0.1.0"
                 edition = "2021"
             "#},
         )
@@ -205,15 +205,15 @@ fn cargo_binstall_installs_hook_and_cli_dependency() {
                 version = 4
 
                 [[package]]
-                name = "prek-rust-echo"
-                version = "0.1.1"
+                name = "prek-cargo-hook"
+                version = "0.1.0"
             "#},
         )
         .with_file(
             "src/main.rs",
             indoc::indoc! {r#"
                 fn main() {
-                    println!("{}", std::env::args().skip(1).collect::<Vec<_>>().join(" "));
+                    println!("installed from checkout");
                 }
             "#},
         )
@@ -224,7 +224,7 @@ fn cargo_binstall_installs_hook_and_cli_dependency() {
           - repo: {hook_repo}
             rev: v1.0.0
             hooks:
-              - id: binstall-hook
+              - id: cargo-hook
                 language_version: system
                 always_run: true
                 verbose: true
@@ -248,11 +248,11 @@ fn cargo_binstall_installs_hook_and_cli_dependency() {
     success: true
     exit_code: 0
     ----- stdout -----
-    binstall-hook............................................................Passed
-    - hook id: binstall-hook
+    cargo-hook...............................................................Passed
+    - hook id: cargo-hook
     - duration: [TIME]
 
-      installed with cargo-binstall
+      installed from checkout
     binstall-cli.............................................................Passed
     - hook id: binstall-cli
     - duration: [TIME]

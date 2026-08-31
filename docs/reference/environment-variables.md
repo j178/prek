@@ -116,8 +116,8 @@ See [Rust language support](../languages.md#rust) for details.
 
 ### `PREK_USE_CARGO_BINSTALL`
 
-Use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) for supported `language: rust` package installations.
-prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](../languages.md#rust) for the source-build fallbacks.
+Use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) for crates.io `cli:` dependencies of `language: rust` hooks.
+prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](../languages.md#rust) for installations that continue to use Cargo.
 
 ## Compatibility fallbacks
 
