@@ -599,7 +599,7 @@ fn check_yaml_hook() {
         .init_git();
 
     // First run: hooks should fail
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -608,20 +608,11 @@ fn check_yaml_hook() {
     - description: Checks YAML files for parseable syntax
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
-       --> <input>:2:1
-        |
-      1 | a: 1
-      2 | a: 2
-        | ^ duplicate mapping key: a not allowed here)
-      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
-       --> <input>:1:5
-        |
-      1 | a: b: c
-        |     ^ mapping values are not allowed in this context)
+      duplicate.yaml: Failed to yaml decode (duplicate mapping key: a not allowed here at line 2, column 1)
+      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1, column 5)
 
     ----- stderr -----
-    ");
+    "#);
 
     // Fix the files
     context.write_file("invalid.yaml", "a:\n  b: c");
@@ -665,7 +656,7 @@ fn check_yaml_multiple_document() {
         )
         .init_git();
 
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -675,16 +666,10 @@ fn check_yaml_multiple_document() {
     - description: Checks YAML files for parseable syntax
     - exit code: 1
 
-      multiple.yaml: Failed to yaml decode (error: line 4 column 1: only single YAML document expected but multiple found
-       --> <input>:4:1
-        |
-      2 | a: 1
-      3 | ---
-      4 | b: 2
-        | ^ only single YAML document expected but multiple found)
+      multiple.yaml: Failed to yaml decode (only single YAML document expected but multiple found at line 4, column 1)
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]

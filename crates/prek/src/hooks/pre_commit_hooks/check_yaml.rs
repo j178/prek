@@ -89,7 +89,11 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
     match result {
         Ok(()) => HookOutput::unchanged(0, Vec::new()),
         Err(e) => {
-            let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
+            let formatter = &serde_saphyr::UserMessageFormatter;
+            let err = e.render_with_options(serde_saphyr::render_options! {
+                snippets: serde_saphyr::SnippetMode::Off,
+                formatter: formatter,
+            });
             let error_message = format!("{}: Failed to yaml decode ({err})\n", filename.display());
             HookOutput::unchanged(1, error_message.into_bytes())
         }
@@ -316,13 +320,7 @@ key2: value2
 
         let result = check_loaded(filename, content, false);
         assert_eq!(result.exit_status, 1);
-        insta::assert_snapshot!(String::from_utf8_lossy(&result.output), @r#"
-        tagged.yaml: Failed to yaml decode (error: line 1 column 17: unsupported tag `!reference`
-         --> <input>:1:17
-          |
-        1 | foo: !reference [.bar, script]
-          |                 ^ unsupported tag `!reference`)
-        "#);
+        insta::assert_snapshot!(String::from_utf8_lossy(&result.output), @"tagged.yaml: Failed to yaml decode (unsupported tag `!reference` at line 1, column 17)");
 
         let result = check_syntax(filename, content);
         assert_eq!((result.exit_status, result.output), (0, Vec::new()));
