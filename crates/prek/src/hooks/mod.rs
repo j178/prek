@@ -20,6 +20,13 @@ mod pre_commit_hooks;
 // Erase hook implementation futures before awaiting them so dispatchers have one suspension point.
 type HookFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<HookOutput>> + 'a>>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DiffMode {
+    Staged,
+    Range { from: String, to: String },
+    None,
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum FileChanges {
     Unchanged,

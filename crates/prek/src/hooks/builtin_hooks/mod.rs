@@ -18,7 +18,7 @@ use crate::hooks::pre_commit_hooks::{
 };
 use crate::store::Store;
 
-use super::{HookFuture, HookOutput};
+use super::{DiffMode, HookFuture, HookOutput};
 
 mod check_json5;
 mod pattern;
@@ -78,7 +78,8 @@ impl BuiltinHooks {
             Self::DenyFilenamePattern | Self::RequireFilenamePattern => {
                 pattern::FilenameArgs::command()
             }
-            Self::DenyPattern | Self::RequirePattern => pattern::Args::command(),
+            Self::DenyPattern => pattern::DenyArgs::command(),
+            Self::RequirePattern => pattern::Args::command(),
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
@@ -100,6 +101,7 @@ impl BuiltinHooks {
         hook: &Hook,
         filenames: &[&Path],
         reporter: &HookRunReporter,
+        diff_mode: &DiffMode,
     ) -> Result<HookOutput> {
         let progress = reporter.on_run_start(hook, filenames.len());
         let future: HookFuture<'_> = match self {
@@ -125,7 +127,7 @@ impl BuiltinHooks {
             Self::DenyFilenamePattern => Box::pin(std::future::ready(
                 pattern::deny_filename_pattern(hook, filenames),
             )),
-            Self::DenyPattern => Box::pin(pattern::deny_pattern(hook, filenames)),
+            Self::DenyPattern => Box::pin(pattern::deny_pattern(hook, filenames, diff_mode)),
             Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
             Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
             Self::EndOfFileFixer => Box::pin(fix_end_of_file::run(hook, filenames)),

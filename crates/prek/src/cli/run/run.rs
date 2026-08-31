@@ -218,6 +218,14 @@ pub(crate) async fn run(
     }
 
     let (from_ref, to_ref) = selection.refs();
+    let diff_mode = match (&selection, from_ref, to_ref) {
+        (_, Some(from), Some(to)) => hooks::DiffMode::Range {
+            from: from.to_string(),
+            to: to.to_string(),
+        },
+        (FileSelection::All { .. }, _, _) => hooks::DiffMode::None,
+        _ => hooks::DiffMode::Staged,
+    };
     set_env_vars(from_ref, to_ref, &extra_args);
 
     let input = collect_run_input(
@@ -263,6 +271,7 @@ pub(crate) async fn run(
         should_stash,
         verbose,
         printer,
+        diff_mode,
     )
     .await
 }
@@ -473,6 +482,7 @@ async fn run_hooks<'paths>(
     worktree_cleaned: bool,
     verbose: bool,
     printer: Printer,
+    diff_mode: hooks::DiffMode,
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
@@ -497,6 +507,7 @@ async fn run_hooks<'paths>(
         verbose,
         show_project_headers,
         printer,
+        diff_mode,
     );
 
     for projects in ProjectDepthGroups::new(workspace.all_projects()) {
@@ -697,6 +708,7 @@ struct HookRunSession<'a> {
     verbose: bool,
     failed: bool,
     modified_files: bool,
+    diff_mode: hooks::DiffMode,
 }
 
 impl<'a> HookRunSession<'a> {
@@ -708,6 +720,7 @@ impl<'a> HookRunSession<'a> {
         verbose: bool,
         show_project_headers: bool,
         printer: Printer,
+        diff_mode: hooks::DiffMode,
     ) -> Self {
         let status_printer = StatusPrinter::for_hooks(hooks, printer);
         let reporter =
@@ -723,6 +736,7 @@ impl<'a> HookRunSession<'a> {
             verbose,
             failed: false,
             modified_files: false,
+            diff_mode,
         }
     }
 
@@ -882,6 +896,7 @@ impl<'a> HookRunSession<'a> {
                 self.dry_run,
                 &self.reporter,
                 Rc::clone(&semaphore),
+                &self.diff_mode,
             ));
         }
 
@@ -1501,6 +1516,7 @@ async fn run_hook(
     dry_run: bool,
     reporter: &HookRunReporter,
     semaphore: Rc<Semaphore>,
+    diff_mode: &hooks::DiffMode,
 ) -> Result<HookRunResult> {
     let installed_hook = match &hook {
         HookPlan::Run(hook) => hook,
@@ -1536,19 +1552,25 @@ async fn run_hook(
             HookRunInput::Filenames(filenames) => {
                 installed_hook
                     .language
-                    .run(store, installed_hook, filenames, reporter)
+                    .run(store, installed_hook, filenames, reporter, diff_mode)
                     .await
             }
             HookRunInput::Filename(filename) => {
                 installed_hook
                     .language
-                    .run(store, installed_hook, slice::from_ref(filename), reporter)
+                    .run(
+                        store,
+                        installed_hook,
+                        slice::from_ref(filename),
+                        reporter,
+                        diff_mode,
+                    )
                     .await
             }
             HookRunInput::WithoutFilenames { .. } => {
                 installed_hook
                     .language
-                    .run(store, installed_hook, &[], reporter)
+                    .run(store, installed_hook, &[], reporter, diff_mode)
                     .await
             }
         }
