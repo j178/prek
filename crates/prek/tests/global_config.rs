@@ -16,14 +16,15 @@ fn global_config_missing_file_is_optional() {
 }
 
 #[test]
-fn global_config_ignores_unknown_options() {
+fn global_config_warns_about_unknown_options() {
     let context = TestEnv::new().with_config("repos: []").init_git();
     context.write_user_config(indoc::indoc! {r#"
-        future_option = true
+        future_date = 1979-05-27T07:32:00Z
+        future_option = { nested = [true, { value = 1 }] }
 
         [update]
         cooldown_days = 3
-        future_option = "ignored"
+        future_option = ["ignored", { nested = true }]
     "#});
 
     cmd_snapshot!(context, context.update(), @"
@@ -32,6 +33,7 @@ fn global_config_ignores_unknown_options() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Ignored unexpected keys in `[HOME]/config/prek/prek.toml`: `future_date`, `future_option`, `update.future_option`
     ");
 }
 

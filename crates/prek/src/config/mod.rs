@@ -28,6 +28,7 @@ pub(crate) use update::{StringOrList, UpdateOptions};
 
 use crate::fs::Simplified;
 use crate::install_source::InstallSource;
+use crate::settings::{push_unused_paths, warn_unused_paths};
 use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
@@ -157,24 +158,6 @@ impl Error {
 /// Keys that prek does not use.
 const EXPECTED_UNUSED: &[&str] = &["minimum_pre_commit_version", "ci"];
 
-fn push_unused_paths<'a, I>(acc: &mut Vec<String>, prefix: &str, keys: I)
-where
-    I: Iterator<Item = &'a str>,
-{
-    for key in keys {
-        // Silently ignore extension keys starting with 'x-' (used for YAML anchors and custom metadata).
-        if key.starts_with("x-") {
-            continue;
-        }
-        let path = if prefix.is_empty() {
-            key.to_string()
-        } else {
-            format!("{prefix}.{key}")
-        };
-        acc.push(path);
-    }
-}
-
 fn collect_unused_paths(config: &Config) -> Vec<String> {
     let mut paths = Vec::new();
 
@@ -218,32 +201,6 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
     }
 
     paths
-}
-
-fn warn_unused_paths(path: &Path, entries: &[String]) {
-    if entries.is_empty() {
-        return;
-    }
-
-    if entries.len() < 4 {
-        let inline = entries
-            .iter()
-            .map(|entry| format!("`{}`", entry.yellow()))
-            .join(", ");
-        warn_user!(
-            "Ignored unexpected keys in `{}`: {inline}",
-            path.user_display().cyan()
-        );
-    } else {
-        let list = entries
-            .iter()
-            .map(|entry| format!("  - `{}`", entry.yellow()))
-            .join("\n");
-        warn_user!(
-            "Ignored unexpected keys in `{}`:\n{list}",
-            path.user_display().cyan()
-        );
-    }
 }
 
 /// Read the configuration file from the given path.

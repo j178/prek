@@ -6,10 +6,58 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use etcetera::BaseStrategy;
 use globset::Glob;
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use serde::Deserialize;
 
 use crate::config::{StringOrList, UpdateOptions as ProjectUpdateOptions};
+use crate::fs::Simplified;
+use crate::warn_user;
+
+pub(crate) fn push_unused_paths<'a, I>(acc: &mut Vec<String>, prefix: &str, keys: I)
+where
+    I: Iterator<Item = &'a str>,
+{
+    for key in keys {
+        // Silently ignore extension keys starting with 'x-' (used for YAML anchors and custom metadata).
+        if key.starts_with("x-") {
+            continue;
+        }
+        let path = if prefix.is_empty() {
+            key.to_string()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        acc.push(path);
+    }
+}
+
+pub(crate) fn warn_unused_paths(path: &Path, entries: &[String]) {
+    if entries.is_empty() {
+        return;
+    }
+
+    if entries.len() < 4 {
+        let inline = entries
+            .iter()
+            .map(|entry| format!("`{}`", entry.yellow()))
+            .join(", ");
+        warn_user!(
+            "Ignored unexpected keys in `{}`: {inline}",
+            path.user_display().cyan()
+        );
+    } else {
+        let list = entries
+            .iter()
+            .map(|entry| format!("  - `{}`", entry.yellow()))
+            .join("\n");
+        warn_user!(
+            "Ignored unexpected keys in `{}`:\n{list}",
+            path.user_display().cyan()
+        );
+    }
+}
 
 fn user_config_path() -> Option<PathBuf> {
     if let Some(path) = EnvVars.var_os(EnvVars::PREK_INTERNAL__USER_CONFIG_PATH) {
@@ -63,10 +111,11 @@ impl FilesystemOptions {
             }
         };
 
-        toml::from_str(&content)
-            .map(Self)
-            .map(Some)
-            .with_context(|| format!("Failed to parse global config `{}`", path.display()))
+        let options: Options = toml::from_str(&content)
+            .with_context(|| format!("Failed to parse global config `{}`", path.display()))?;
+        warn_unused_paths(path, &options.unused_paths());
+
+        Ok(Some(Self(options)))
     }
 }
 
@@ -83,6 +132,24 @@ impl Deref for FilesystemOptions {
 #[serde(default, rename_all = "snake_case")]
 pub(crate) struct Options {
     update: Option<GlobalUpdateOptions>,
+
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
+}
+
+impl Options {
+    fn unused_paths(&self) -> Vec<String> {
+        let mut paths = Vec::new();
+        push_unused_paths(&mut paths, "", self._unused_keys.keys().map(String::as_str));
+        if let Some(update) = &self.update {
+            push_unused_paths(
+                &mut paths,
+                "update",
+                update._unused_keys.keys().map(String::as_str),
+            );
+        }
+        paths
+    }
 }
 
 /// Default update options represented in the global `prek.toml` file.
@@ -93,6 +160,9 @@ struct GlobalUpdateOptions {
     freeze: Option<bool>,
     include_tags: Option<StringOrList>,
     exclude_tags: Option<StringOrList>,
+
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 /// Tag filters supplied on the command line.
