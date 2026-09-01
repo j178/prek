@@ -1,17 +1,5 @@
 # Changelog
 
-## 0.5.2
-
-Released on 2026-09-01.
-
-### Bug fixes
-
-- Revert unsupported YAML tag rejection in `check-yaml`, fixing validation failures for MkDocs configurations that use application-specific tags such as `!!python/object/apply:pymdownx.slugs.slugify` ([#2670](https://github.com/j178/prek/pull/2670))
-
-### Contributors
-
-- @j178
-
 ## 0.5.1
 
 Released on 2026-09-01.
