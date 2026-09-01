@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.1
+
+Released on 2026-09-01.
+
+### Enhancements
+
+- Add `--hide-status <passed|failed|skipped>` for hook reports ([#2644](https://github.com/j178/prek/pull/2644))
+- Add `prek init` for repository setup ([#2636](https://github.com/j178/prek/pull/2636))
+- Apply hook `env` during environment creation ([#2650](https://github.com/j178/prek/pull/2650))
+- Disable error snippets in `check-yaml` diagnostics ([#2664](https://github.com/j178/prek/pull/2664))
+- Show hooks excluded by skip selectors ([#2645](https://github.com/j178/prek/pull/2645))
+- Support Pixi for Conda environments ([#2667](https://github.com/j178/prek/pull/2667))
+- Support `cargo-binstall` for Rust CLI dependencies ([#2658](https://github.com/j178/prek/pull/2658))
+- Warn about unused keys in user settings ([#2665](https://github.com/j178/prek/pull/2665))
+
+### Bug fixes
+
+- Reject unsupported YAML tags in check-yaml ([#2656](https://github.com/j178/prek/pull/2656))
+
+### Documentation
+
+- Clarify local hook documentation ([#2640](https://github.com/j178/prek/pull/2640))
+- Clarify pre-commit command compatibility ([#2635](https://github.com/j178/prek/pull/2635))
+- Document automatic PR fixes with autofix.ci ([#2643](https://github.com/j178/prek/pull/2643))
+- Document check-yaml unsafe support ([#2632](https://github.com/j178/prek/pull/2632))
+- Improve setup and workflow documentation ([#2637](https://github.com/j178/prek/pull/2637))
+
+### Other changes
+
+- Drop low-usage release targets ([#2651](https://github.com/j178/prek/pull/2651))
+- Generate a prek manifest JSON schema ([#2648](https://github.com/j178/prek/pull/2648))
+
+### Contributors
+
+- @j178
+
 ## 0.5.0
 
 Released on 2026-08-27.
