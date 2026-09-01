@@ -1177,6 +1177,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#prek_conda_installer" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>PREK_CONDA_INSTALLER</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prek_rust_profile" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1861,6 +1872,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#prek_conda_installer" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>PREK_CONDA_INSTALLER</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prek_rust_profile" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2062,6 +2084,14 @@ Disabling <code>--init</code> can leave containers running after Ctrl-C if the c
 Mirrors should provide release-compatible Ruby archive assets and a <code>SHA256SUMS</code> asset in the same release download location.
 Only exact HTTPS GitHub repository mirrors (<code>https://github.com/owner/repo</code>, optionally with port <code>443</code>) receive <code>GITHUB_TOKEN</code>; other mirrors are used without GitHub authentication.
 See <a href="../../languages/#ruby">Ruby language support</a> for details.</p>
+<h3 id="prek_conda_installer"><code>PREK_CONDA_INSTALLER</code><a class="headerlink" href="#prek_conda_installer" title="Permanent link">&para;</a></h3>
+<p>Select the preinstalled tool used to create environments for <code>language: conda</code>
+hooks. Supported values are <code>auto</code>, <code>pixi</code>, <code>micromamba</code>, <code>mamba</code>, and <code>conda</code>.
+The default is <code>auto</code>, which searches for <code>pixi</code>, <code>micromamba</code>, <code>mamba</code>, then
+<code>conda</code>. This setting only affects newly created environments; existing matching
+environments are reused without requiring the selected installer to remain
+available. prek does not install these tools. See
+<a href="../../languages/#conda">Conda language support</a> for details.</p>
 <h3 id="prek_rust_profile"><code>PREK_RUST_PROFILE</code><a class="headerlink" href="#prek_rust_profile" title="Permanent link">&para;</a></h3>
 <p>Override the <code>rustup</code> profile used when installing managed Rust toolchains (<code>minimal</code>, <code>default</code>, or <code>complete</code>). Defaults to <code>minimal</code>. Set to <code>default</code> to include <code>rustfmt</code> and <code>clippy</code>.
 See <a href="../../languages/#rust">Rust language support</a> for details.</p>
@@ -2148,10 +2178,6 @@ that value.</p>
 <tr>
 <td><code>GITHUB_TOKEN</code></td>
 <td>Authenticate supported GitHub API requests, including self-update and an exact GitHub Ruby mirror</td>
-</tr>
-<tr>
-<td><code>PRE_COMMIT_USE_MAMBA</code>, <code>PRE_COMMIT_USE_MICROMAMBA</code></td>
-<td>Select a system Conda-compatible executable</td>
 </tr>
 <tr>
 <td><code>HTTP_PROXY</code>, <code>HTTPS_PROXY</code>, <code>NO_PROXY</code> and lowercase forms</td>

@@ -3078,11 +3078,21 @@ created. It does not affect reuse of an existing compatible hook environment.</p
 <code>environment.yml</code> and runs the configured entry from that environment. For
 <code>repo: local</code> hooks, prek creates a minimal Conda environment and installs only
 the hook's <code>additional_dependencies</code>.</p>
-<p>By default, prek uses a system-installed <code>conda</code> executable. For compatibility
-with pre-commit, setting <code>PRE_COMMIT_USE_MAMBA</code> uses <code>mamba</code>, and setting
-<code>PRE_COMMIT_USE_MICROMAMBA</code> uses <code>micromamba</code>.</p>
+<p>By default, prek automatically selects the first available system installer in
+this order: <a href="https://pixi.prefix.dev/">Pixi</a>, Micromamba, Mamba, then Conda. Set
+<code>PREK_CONDA_INSTALLER</code> to <code>pixi</code>, <code>micromamba</code>, <code>mamba</code>, or <code>conda</code> to select one
+explicitly, or to <code>auto</code> to request automatic selection. prek does not install
+these tools.</p>
+<p>When Pixi is selected, prek imports a remote hook's <code>environment.yml</code> into an
+isolated Pixi workspace. For <code>repo: local</code> hooks, it initializes an empty
+workspace using Pixi's configured default channels. Pixi's user and system
+configuration is honored, except that environments are always kept inside
+prek's hook store. The selected installer only affects newly created
+environments. An existing matching environment remains reusable regardless of
+the current setting or which installers are available on <code>PATH</code>.</p>
 <p><code>additional_dependencies</code> are installed into the created environment with
-<code>conda install -p &lt;env&gt; ...</code> using the selected Conda-compatible executable.</p>
+<code>conda install -p &lt;env&gt; ...</code> using the selected Conda-compatible executable, or
+with <code>pixi add ...</code> when Pixi is selected.</p>
 <p>Example:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">repos</span><span class="p">:</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
