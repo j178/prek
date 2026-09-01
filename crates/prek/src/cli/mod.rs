@@ -645,6 +645,7 @@ pub(crate) struct RunOptions {
     #[arg(
         value_name = "HOOK|PROJECT",
         value_hint = ValueHint::Other,
+        display_order = 0,
         add = ArgValueCompleter::new(selector_completer)
     )]
     pub(crate) includes: Vec<String>,
@@ -660,7 +661,12 @@ pub(crate) struct RunOptions {
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
-    #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
+    #[arg(
+        long = "skip",
+        value_name = "HOOK|PROJECT",
+        display_order = 1,
+        add = ArgValueCompleter::new(selector_completer)
+    )]
     pub(crate) skips: Vec<String>,
 
     #[command(flatten)]
