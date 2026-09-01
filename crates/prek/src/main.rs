@@ -387,9 +387,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Command::Util(UtilNamespace { command }) => match command {
             UtilCommand::Identify(args) => cli::identify(&args.paths, args.output_format, printer),
-            UtilCommand::ListBuiltins(args) => {
-                cli::list_builtins(args.output_format, cli.globals.verbose > 0, printer)
-            }
+            UtilCommand::ListBuiltins(args) => cli::list_builtins(args.output_format, printer),
             UtilCommand::InitTemplateDir(args) => {
                 cli::init_template_dir(
                     &store,

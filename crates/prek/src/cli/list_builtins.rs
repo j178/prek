@@ -19,7 +19,6 @@ struct SerializableBuiltinHook {
 /// List all builtin hooks.
 pub(crate) fn list_builtins(
     output_format: ListOutputFormat,
-    verbose: bool,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let hooks = BuiltinHooks::iter().map(|variant| {
@@ -31,24 +30,18 @@ pub(crate) fn list_builtins(
     let mut stdout = printer.stdout_important();
     match output_format {
         ListOutputFormat::Text => {
-            if verbose {
-                for (variant, hook) in hooks {
-                    writeln!(stdout, "{}", hook.id.bold())?;
-                    if let Some(description) = &hook.options.description {
-                        writeln!(stdout, "  {description}")?;
-                    }
-                    if let Some(flags_help) = variant.flags_help() {
-                        writeln!(stdout, "  flags:")?;
-                        for line in flags_help.lines() {
-                            writeln!(stdout, "  {line}")?;
-                        }
-                    }
-                    writeln!(stdout)?;
+            for (variant, hook) in hooks {
+                writeln!(stdout, "{}", hook.id.bold())?;
+                if let Some(description) = &hook.options.description {
+                    writeln!(stdout, "  {description}")?;
                 }
-            } else {
-                for (_, hook) in hooks {
-                    writeln!(stdout, "{}", hook.id)?;
+                if let Some(flags_help) = variant.flags_help() {
+                    writeln!(stdout, "  flags:")?;
+                    for line in flags_help.lines() {
+                        writeln!(stdout, "  {line}")?;
+                    }
                 }
+                writeln!(stdout)?;
             }
         }
         ListOutputFormat::Json => {

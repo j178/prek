@@ -136,7 +136,7 @@ This mode has significant benefits:
 List the builtins bundled with your installed prek version using:
 
 ```bash
-prek util list-builtins -v
+prek util list-builtins
 ```
 
 ### Supported Hooks
