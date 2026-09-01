@@ -98,6 +98,7 @@ fn list_builtins_verbose() {
       Checks YAML files for parseable syntax.
       flags:
         -m, --allow-multiple-documents  Allow multiple YAML documents [alias: --multi]
+            --allow-unknown-tags        Allow unrecognized YAML tags
             --unsafe                    Parse YAML syntax without loading it. Implies
                                         `--allow-multiple-documents`
 

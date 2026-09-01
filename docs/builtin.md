@@ -452,6 +452,8 @@ Attempts to load all YAML files to verify syntax.
 
 - `-m`, `--allow-multiple-documents` (alias: `--multi`)
     - Allow YAML multi-document syntax (`---`).
+- `--allow-unknown-tags`
+    - Allow unrecognized YAML tags.
 - `--unsafe`
     - Parse YAML syntax without loading it. Implies `--allow-multiple-documents`.
 
