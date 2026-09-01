@@ -673,6 +673,38 @@ fn check_yaml_multiple_document() {
 }
 
 #[test]
+fn check_yaml_allow_unknown_tags() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-yaml
+                name: reject unknown tags
+              - id: check-yaml
+                name: allow unknown tags
+                args: [ --allow-unknown-tags ]
+    "})
+        .with_file("tagged.yaml", "foo: !reference [.bar, script]\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    reject unknown tags......................................................Failed
+    - hook id: check-yaml
+    - description: Checks YAML files for parseable syntax
+    - exit code: 1
+
+      tagged.yaml: Failed to yaml decode (unsupported tag `!reference` at line 1, column 17)
+    allow unknown tags.......................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn check_vcs_permalinks_builtin() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"

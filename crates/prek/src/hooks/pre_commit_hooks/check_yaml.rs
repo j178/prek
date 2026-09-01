@@ -18,6 +18,9 @@ pub(crate) struct Args {
     /// Allow multiple YAML documents.
     #[arg(long, short = 'm', visible_alias = "multi")]
     allow_multiple_documents: bool,
+    /// Allow unrecognized YAML tags.
+    #[arg(long)]
+    allow_unknown_tags: bool,
     /// Parse YAML syntax without loading it. Implies `--allow-multiple-documents`.
     #[arg(long)]
     r#unsafe: bool,
@@ -27,7 +30,10 @@ pub(crate) struct Args {
 
 #[derive(Clone, Copy)]
 enum CheckMode {
-    Load { multiple: bool },
+    Load {
+        multiple: bool,
+        allow_unknown_tags: bool,
+    },
     SyntaxOnly,
 }
 
@@ -39,6 +45,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     } else {
         CheckMode::Load {
             multiple: args.allow_multiple_documents,
+            allow_unknown_tags: args.allow_unknown_tags,
         }
     };
 
@@ -57,13 +64,21 @@ async fn check_file(file_base: &Path, filename: &Path, mode: CheckMode) -> Resul
     }
 
     let output = match mode {
-        CheckMode::Load { multiple } => check_loaded(filename, &content, multiple),
+        CheckMode::Load {
+            multiple,
+            allow_unknown_tags,
+        } => check_loaded(filename, &content, multiple, allow_unknown_tags),
         CheckMode::SyntaxOnly => check_syntax(filename, &content),
     };
     Ok(output)
 }
 
-fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> HookOutput {
+fn check_loaded(
+    filename: &Path,
+    content: &[u8],
+    allow_multi_docs: bool,
+    allow_unknown_tags: bool,
+) -> HookOutput {
     let options = serde_saphyr::options! {
         budget: serde_saphyr::budget! {
             // `check-yaml` is a syntax/structure validator, not a service parsing
@@ -78,8 +93,9 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
         // A YAML tag identifies a node's type or application-specific semantics.
         // `%TAG` directives map tag handles to prefixes. The predefined `!!`
         // handle expands to `tag:yaml.org,2002:`, while `!` is the local tag handle.
-        // Match ruamel.yaml's safe loader by rejecting tags without constructors. See #2604.
-        reject_unsupported_tags: true,
+        // Match ruamel.yaml's safe loader by rejecting tags without constructors unless
+        // the user explicitly opts into application-specific tags. See #2604 and #2674.
+        reject_unsupported_tags: !allow_unknown_tags,
         // The scalar values are discarded, so only validate whether they are
         // legal YAML, not whether an untyped data model can represent them. See #2544.
         reject_non_finite_typeless_float: false,
@@ -138,8 +154,14 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    const LOAD_SINGLE_DOCUMENT: CheckMode = CheckMode::Load { multiple: false };
-    const LOAD_MULTIPLE_DOCUMENTS: CheckMode = CheckMode::Load { multiple: true };
+    const LOAD_SINGLE_DOCUMENT: CheckMode = CheckMode::Load {
+        multiple: false,
+        allow_unknown_tags: false,
+    };
+    const LOAD_MULTIPLE_DOCUMENTS: CheckMode = CheckMode::Load {
+        multiple: true,
+        allow_unknown_tags: false,
+    };
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
@@ -316,13 +338,19 @@ key2: value2
     }
 
     #[test]
-    fn test_unknown_yaml_tag_requires_unsafe() {
+    fn test_unknown_yaml_tag_is_rejected_by_default() {
         let filename = Path::new("tagged.yaml");
         let content = b"foo: !reference [.bar, script]\n";
 
-        let result = check_loaded(filename, content, false);
+        let result = check_loaded(filename, content, false, false);
         assert_eq!(result.exit_status, 1);
         insta::assert_snapshot!(String::from_utf8_lossy(&result.output), @"tagged.yaml: Failed to yaml decode (unsupported tag `!reference` at line 1, column 17)");
+    }
+
+    #[test]
+    fn test_unsafe_allows_unknown_yaml_tag() {
+        let filename = Path::new("tagged.yaml");
+        let content = b"foo: !reference [.bar, script]\n";
 
         let result = check_syntax(filename, content);
         assert_eq!((result.exit_status, result.output), (0, Vec::new()));
