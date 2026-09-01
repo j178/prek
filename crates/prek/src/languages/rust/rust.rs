@@ -141,29 +141,29 @@ impl CargoInstaller<'_> {
         cmd.args(args).arg("--root").arg(install_root);
         cmd
     }
-}
 
-fn cargo_binstall_executable() -> anyhow::Result<Option<PathBuf>> {
-    let enabled = match EnvVars.var_as_bool(EnvVars::PREK_USE_CARGO_BINSTALL) {
-        Ok(enabled) => enabled.unwrap_or(false),
-        Err(value) => {
-            bail!(
-                "Invalid value for {}: {value:?}. Expected a boolean value",
-                EnvVars::PREK_USE_CARGO_BINSTALL,
-            );
+    fn binstall_executable() -> anyhow::Result<Option<PathBuf>> {
+        let enabled = match EnvVars.var_as_bool(EnvVars::PREK_USE_CARGO_BINSTALL) {
+            Ok(enabled) => enabled.unwrap_or(false),
+            Err(value) => {
+                bail!(
+                    "Invalid value for {}: {value:?}. Expected a boolean value",
+                    EnvVars::PREK_USE_CARGO_BINSTALL,
+                );
+            }
+        };
+        if !enabled {
+            return Ok(None);
         }
-    };
-    if !enabled {
-        return Ok(None);
-    }
 
-    let executable = which::which("cargo-binstall").with_context(|| {
-        format!(
-            "{} is enabled, but `cargo-binstall` was not found on PATH",
-            EnvVars::PREK_USE_CARGO_BINSTALL,
-        )
-    })?;
-    Ok(Some(executable))
+        let executable = which::which("cargo-binstall").with_context(|| {
+            format!(
+                "{} is enabled, but `cargo-binstall` was not found on PATH",
+                EnvVars::PREK_USE_CARGO_BINSTALL,
+            )
+        })?;
+        Ok(Some(executable))
+    }
 }
 
 /// Find the package directory that produces the given binary.
@@ -449,7 +449,7 @@ impl LanguageBackend for Rust {
         reporter: &HookInstallReporter,
     ) -> anyhow::Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
-        let cargo_binstall = cargo_binstall_executable()?;
+        let cargo_binstall = CargoInstaller::binstall_executable()?;
 
         // 1. Install Rust
         let cargo_home = store.cache_path(CacheBucket::Cargo);
