@@ -109,6 +109,16 @@ Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS`
 Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication.
 See [Ruby language support](../languages.md#ruby) for details.
 
+### `PREK_CONDA_INSTALLER`
+
+Select the preinstalled tool used to create environments for `language: conda`
+hooks. Supported values are `auto`, `pixi`, `micromamba`, `mamba`, and `conda`.
+The default is `auto`, which searches for `pixi`, `micromamba`, `mamba`, then
+`conda`. This setting only affects newly created environments; existing matching
+environments are reused without requiring the selected installer to remain
+available. prek does not install these tools. See
+[Conda language support](../languages.md#conda) for details.
+
 ### `PREK_RUST_PROFILE`
 
 Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`.
@@ -163,7 +173,6 @@ prek also honors variables owned by Git, ecosystem tools, or its HTTP stack:
 | -- | -- |
 | `SSL_CERT_FILE`, `SSL_CERT_DIR` | Add certificate locations used by HTTPS requests |
 | `GITHUB_TOKEN` | Authenticate supported GitHub API requests, including self-update and an exact GitHub Ruby mirror |
-| `PRE_COMMIT_USE_MAMBA`, `PRE_COMMIT_USE_MICROMAMBA` | Select a system Conda-compatible executable |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and lowercase forms | Configure inherited network proxy behavior |
 
 Language installers also inherit relevant ecosystem variables, such as `UV_*`

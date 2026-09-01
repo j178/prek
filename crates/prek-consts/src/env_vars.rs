@@ -174,6 +174,7 @@ impl EnvVars {
 
     // Conda related
     pub const CONDA_PREFIX: &'static str = "CONDA_PREFIX";
+    pub const PREK_CONDA_INSTALLER: &'static str = "PREK_CONDA_INSTALLER";
     pub const PRE_COMMIT_USE_MAMBA: &'static str = "PRE_COMMIT_USE_MAMBA";
     pub const PRE_COMMIT_USE_MICROMAMBA: &'static str = "PRE_COMMIT_USE_MICROMAMBA";
 
