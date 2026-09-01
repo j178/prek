@@ -92,10 +92,9 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
     match result {
         Ok(()) => HookOutput::unchanged(0, Vec::new()),
         Err(e) => {
-            let formatter = &serde_saphyr::UserMessageFormatter;
             let err = e.render_with_options(serde_saphyr::render_options! {
                 snippets: serde_saphyr::SnippetMode::Off,
-                formatter: formatter,
+                formatter: &serde_saphyr::UserMessageFormatter,
             });
             let error_message = format!("{}: Failed to yaml decode ({err})\n", filename.display());
             HookOutput::unchanged(1, error_message.into_bytes())
