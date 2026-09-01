@@ -75,6 +75,11 @@ fn check_loaded(filename: &Path, content: &[u8], allow_multi_docs: bool) -> Hook
         emit_comments: false,
         // Do not require `!!binary` scalars to decode as UTF-8. See #1102.
         ignore_binary_tag_for_string: true,
+        // A YAML tag identifies a node's type or application-specific semantics.
+        // `%TAG` directives map tag handles to prefixes. The predefined `!!`
+        // handle expands to `tag:yaml.org,2002:`, while `!` is the local tag handle.
+        // Match ruamel.yaml's safe loader by rejecting tags without constructors. See #2604.
+        reject_unsupported_tags: true,
         // The scalar values are discarded, so only validate whether they are
         // legal YAML, not whether an untyped data model can represent them. See #2544.
         reject_non_finite_typeless_float: false,
@@ -309,6 +314,19 @@ key2: value2
         assert_eq!(result.exit_status, 1);
         assert!(String::from_utf8_lossy(&result.output).contains("Failed to decode UTF-8"));
         Ok(())
+    }
+
+    #[test]
+    fn test_unknown_yaml_tag_requires_unsafe() {
+        let filename = Path::new("tagged.yaml");
+        let content = b"foo: !reference [.bar, script]\n";
+
+        let result = check_loaded(filename, content, false);
+        assert_eq!(result.exit_status, 1);
+        insta::assert_snapshot!(String::from_utf8_lossy(&result.output), @"tagged.yaml: Failed to yaml decode (unsupported tag `!reference` at line 1, column 17)");
+
+        let result = check_syntax(filename, content);
+        assert_eq!((result.exit_status, result.output), (0, Vec::new()));
     }
 
     #[tokio::test]
