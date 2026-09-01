@@ -3,7 +3,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
@@ -115,26 +114,13 @@ fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
         .context("Failed to find Docker container id in cgroup v2 mount info")
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
+#[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 enum RuntimeKind {
-    Auto,
+    #[strum(serialize = "container")]
     AppleContainer,
     Docker,
     Podman,
-}
-
-impl FromStr for RuntimeKind {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
-            "container" => Ok(RuntimeKind::AppleContainer),
-            "docker" => Ok(RuntimeKind::Docker),
-            "podman" => Ok(RuntimeKind::Podman),
-            "auto" => Ok(RuntimeKind::Auto),
-            _ => Err(format!("Invalid container runtime: {s}")),
-        }
-    }
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -146,21 +132,53 @@ struct Mount {
 }
 
 impl RuntimeKind {
-    fn cmd(&self) -> &str {
-        match self {
-            RuntimeKind::AppleContainer => "container",
-            RuntimeKind::Docker => "docker",
-            RuntimeKind::Podman => "podman",
-            RuntimeKind::Auto => unreachable!("Auto should be resolved before use"),
+    const AUTO_ORDER: [Self; 3] = [Self::Docker, Self::Podman, Self::AppleContainer];
+
+    /// Detect a container runtime, prioritising Docker over Podman and Apple Container.
+    fn resolve(env_vars: &impl EnvVarsRead, is_available: impl Fn(&str) -> bool) -> Self {
+        let requested = match env_vars.var(EnvVars::PREK_CONTAINER_RUNTIME) {
+            Ok(value) if value.eq_ignore_ascii_case("auto") => None,
+            Ok(value) => {
+                if let Ok(runtime) = value.parse::<Self>() {
+                    Some(runtime)
+                } else {
+                    warn_user!(
+                        "Invalid value for {}: {:?}. Expected container, docker, podman, or auto; using default ({:?})",
+                        EnvVars::PREK_CONTAINER_RUNTIME,
+                        value,
+                        "auto",
+                    );
+                    None
+                }
+            }
+            Err(_) => None,
+        };
+
+        if let Some(runtime) = requested {
+            trace!(
+                "Container runtime overridden by {}={}",
+                EnvVars::PREK_CONTAINER_RUNTIME,
+                runtime.as_ref(),
+            );
+            return runtime;
         }
+
+        for runtime in Self::AUTO_ORDER {
+            if is_available(runtime.as_ref()) {
+                return runtime;
+            }
+        }
+
+        trace!("No container runtime found on PATH, defaulting to docker");
+        Self::Docker
     }
 
     /// Detect if the current runtime is rootless.
     fn detect_rootless(self) -> Result<bool> {
         match self {
-            RuntimeKind::AppleContainer => Ok(false),
-            RuntimeKind::Docker => {
-                let output = Command::new(self.cmd())
+            Self::AppleContainer => Ok(false),
+            Self::Docker => {
+                let output = Command::new(self.as_ref())
                     .arg("info")
                     .arg("--format")
                     .arg("'{{ .SecurityOptions }}'")
@@ -169,8 +187,8 @@ impl RuntimeKind {
                 let stdout = str::from_utf8(&output.stdout)?;
                 Ok(stdout.contains("name=rootless"))
             }
-            RuntimeKind::Podman => {
-                let output = Command::new(self.cmd())
+            Self::Podman => {
+                let output = Command::new(self.as_ref())
                     .arg("info")
                     .arg("--format")
                     .arg("{{ .Host.Security.Rootless -}}")
@@ -179,7 +197,6 @@ impl RuntimeKind {
                 let stdout = str::from_utf8(&output.stdout)?;
                 Ok(stdout.eq_ignore_ascii_case("true"))
             }
-            RuntimeKind::Auto => unreachable!("Auto should be resolved before use"),
         }
     }
 
@@ -192,7 +209,7 @@ impl RuntimeKind {
         let container_id = current_container_id()?;
         trace!(?container_id, "In Docker container");
 
-        let output = Command::new(self.cmd())
+        let output = Command::new(self.as_ref())
             .arg("inspect")
             .arg("--format")
             .arg("'{{json .Mounts}}'")
@@ -215,60 +232,8 @@ struct ContainerRuntimeInfo {
 }
 
 impl ContainerRuntimeInfo {
-    /// Detect container runtime provider, prioritise docker over podman if
-    /// both are on the path, unless `PREK_CONTAINER_RUNTIME` is set to override detection.
-    fn resolve_runtime_kind<DF, PF, CF>(
-        env_vars: &impl EnvVarsRead,
-        docker_available: DF,
-        podman_available: PF,
-        apple_container_available: CF,
-    ) -> RuntimeKind
-    where
-        DF: Fn() -> bool,
-        PF: Fn() -> bool,
-        CF: Fn() -> bool,
-    {
-        if let Ok(val) = env_vars.var(EnvVars::PREK_CONTAINER_RUNTIME) {
-            if let Ok(runtime) = RuntimeKind::from_str(&val) {
-                if runtime != RuntimeKind::Auto {
-                    trace!(
-                        "Container runtime overridden by {}={}",
-                        EnvVars::PREK_CONTAINER_RUNTIME,
-                        val
-                    );
-                    return runtime;
-                }
-            } else {
-                warn_user!(
-                    "Invalid value for {}: {:?}. Expected container, docker, podman, or auto; using default ({:?})",
-                    EnvVars::PREK_CONTAINER_RUNTIME,
-                    val,
-                    "auto",
-                );
-            }
-        }
-
-        if docker_available() {
-            return RuntimeKind::Docker;
-        }
-        if podman_available() {
-            return RuntimeKind::Podman;
-        }
-        if apple_container_available() {
-            return RuntimeKind::AppleContainer;
-        }
-
-        trace!("No container runtime found on PATH, defaulting to docker");
-        RuntimeKind::Docker
-    }
-
     fn detect_runtime() -> Self {
-        let runtime = Self::resolve_runtime_kind(
-            &EnvVars,
-            || which::which("docker").is_ok(),
-            || which::which("podman").is_ok(),
-            || which::which("container").is_ok(),
-        );
+        let runtime = RuntimeKind::resolve(&EnvVars, |name| which::which(name).is_ok());
         let rootless = runtime.detect_rootless().unwrap_or_else(|e| {
             warn!("Failed to detect if container runtime is rootless: {e}, defaulting to rootful");
             false
@@ -287,7 +252,7 @@ impl ContainerRuntimeInfo {
 
     /// Get the command name of the container runtime.
     fn cmd(&self) -> &str {
-        self.runtime.cmd()
+        self.runtime.as_ref()
     }
 
     fn is_rootless(&self) -> bool {
@@ -701,12 +666,12 @@ mod tests {
             podman_available: bool,
             apple_container_available: bool,
         ) -> RuntimeKind {
-            ContainerRuntimeInfo::resolve_runtime_kind(
-                &EnvVars::from_map(env_vars),
-                || docker_available,
-                || podman_available,
-                || apple_container_available,
-            )
+            RuntimeKind::resolve(&EnvVars::from_map(env_vars), |name| match name {
+                "docker" => docker_available,
+                "podman" => podman_available,
+                "container" => apple_container_available,
+                _ => false,
+            })
         }
 
         fn runtime_with_override(
