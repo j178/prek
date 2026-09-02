@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.2
+
+Released on 2026-09-03.
+
+### Enhancements
+
+- Allow unknown tags by default in `check-yaml` ([#2678](https://github.com/j178/prek/pull/2678))
+
+### Contributors
+
+- @j178
+
 ## 0.5.1
 
 Released on 2026-09-01.
