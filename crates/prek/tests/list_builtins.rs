@@ -57,7 +57,7 @@ fn list_builtins_defaults_to_verbose_output() {
       Checks YAML files for parseable syntax.
       flags:
         -m, --allow-multiple-documents  Allow multiple YAML documents [alias: --multi]
-            --allow-unknown-tags        Allow unrecognized YAML tags
+            --disallow-unknown-tags     Reject unrecognized YAML tags
             --unsafe                    Parse YAML syntax without loading it. Implies
                                         `--allow-multiple-documents`
 

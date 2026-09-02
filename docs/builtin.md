@@ -452,10 +452,14 @@ Attempts to load all YAML files to verify syntax.
 
 - `-m`, `--allow-multiple-documents` (alias: `--multi`)
     - Allow YAML multi-document syntax (`---`).
-- `--allow-unknown-tags`
-    - Allow unrecognized YAML tags.
+- `--disallow-unknown-tags`
+    - Reject unrecognized YAML tags.
 - `--unsafe`
     - Parse YAML syntax without loading it. Implies `--allow-multiple-documents`.
+
+**Behavior / caveats**
+
+- Unrecognized YAML tags are allowed by default. This differs from the pinned `pre-commit-hooks` implementation, which rejects them while loading. Use `--disallow-unknown-tags` to match that behavior.
 
 ---
 
