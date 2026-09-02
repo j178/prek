@@ -1617,14 +1617,14 @@ and credentials, see <a href="../ci/">Continuous Integration</a>.</p>
 <p>The image is based on <code>scratch</code> (no shell, no package manager). It contains the prek binary at <code>/prek</code>.</p>
 <p>A common pattern is to copy the binary into your own image:</p>
 <div class="language-dockerfile highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">FROM</span><span class="w"> </span><span class="s">debian:bookworm-slim</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/j178/prek:0.5.1<span class="w"> </span>/prek<span class="w"> </span>/usr/local/bin/prek
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/j178/prek:0.5.2<span class="w"> </span>/prek<span class="w"> </span>/usr/local/bin/prek
 </span></code></pre></div>
 <p>If you prefer, you can also run the distroless image directly:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/j178/prek:0.5.1<span class="w"> </span>--version
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/j178/prek:0.5.2<span class="w"> </span>--version
 </span></code></pre></div>
 <h3 id="alpine">Alpine<a class="headerlink" href="#alpine" title="Permanent link">&para;</a></h3>
 <p>The Alpine variant includes <code>prek</code>, Git, CA certificates, a shell, and the Alpine package manager.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/j178/prek:0.5.1-alpine<span class="w"> </span>--version
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/j178/prek:0.5.2-alpine<span class="w"> </span>--version
 </span></code></pre></div>
 <p>Use <code>X.Y.Z-alpine3.24</code> to pin both the prek and Alpine versions, or <code>alpine3.24</code> to pin only the
 Alpine version while tracking the latest prek release. Tags without the numbered Alpine suffix,
@@ -1645,7 +1645,7 @@ to verify they were built by official prek workflows. Verify using the
 </span></code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>Use a specific version tag (e.g., <code>ghcr.io/j178/prek:0.5.1</code>) or image
+<p>Use a specific version tag (e.g., <code>ghcr.io/j178/prek:0.5.2</code>) or image
 digest rather than <code>latest</code> for verification.</p>
 </div>
 <h2 id="github-actions">GitHub Actions<a class="headerlink" href="#github-actions" title="Permanent link">&para;</a></h2>
