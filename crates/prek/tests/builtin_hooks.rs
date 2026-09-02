@@ -293,6 +293,334 @@ fn require_pattern_hook_reports_files_without_any_match() {
 }
 
 #[test]
+fn deny_pattern_hook_delta_only_staged() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, --ignore-case, '\btodo\b']
+                files: '\.txt$'
+    "})
+        .with_file("legacy.txt", "legacy TODO: do not touch\nline 2\n")
+        .init_git();
+    context.git().commit("Initial commit");
+
+    // 1. Modifying legacy.txt with a clean line passes (legacy TODO untouched)
+    context.write_file(
+        "legacy.txt",
+        "legacy TODO: do not touch\nline 2\nclean line 3\n",
+    );
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deny patterns............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // 2. Adding a new line with TODO fails
+    context.write_file(
+        "legacy.txt",
+        "legacy TODO: do not touch\nline 2\nclean line 3\nnew TODO added\n",
+    );
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - description: Fails if any file contains a matching regular expression
+    - exit code: 1
+
+      legacy.txt:4:new TODO added
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn deny_pattern_hook_delta_only_ref_range() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, 'banned_func\(\)']
+                files: '\.py$'
+    "})
+        .with_file("app.py", "def run():\n    pass\n")
+        .init_git();
+    context.git().commit("Initial commit");
+
+    context.write_file("app.py", "def run():\n    banned_func()\n    pass\n");
+    context.git().add(".");
+    context.git().commit("Second commit with banned call");
+
+    let mut cmd = context.run();
+    cmd.arg("--from-ref")
+        .arg("HEAD~1")
+        .arg("--to-ref")
+        .arg("HEAD");
+
+    cmd_snapshot!(context, cmd, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - description: Fails if any file contains a matching regular expression
+    - exit code: 1
+
+      app.py:2:    banned_func()
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn deny_pattern_hook_delta_only_all_files_noop() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, 'TODO']
+                files: '\.txt$'
+    "})
+        .with_file("legacy.txt", "line 1\nlegacy TODO here\nline 3\n")
+        .init_git();
+
+    // Running with --all-files has no diff context, so delta-only passes without scanning legacy files
+    let mut cmd = context.run();
+    cmd.arg("--all-files");
+
+    cmd_snapshot!(context, cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deny patterns............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn deny_pattern_hook_delta_only_multiline() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, -m, 'BEGIN(?s:.*?)END']
+                files: '\.txt$'
+    "})
+        .with_file("block.txt", "line 1\nBEGIN\nlegacy\nEND\nline 5\n")
+        .init_git();
+    context.git().commit("Initial commit");
+
+    // 1. Modifying a line outside the multiline block passes
+    context.write_file("block.txt", "line 1 modified\nBEGIN\nlegacy\nEND\nline 5\n");
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deny patterns............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // 2. Modifying a line inside the legacy multiline block does not falsely trigger
+    context.write_file(
+        "block.txt",
+        "line 1 modified\nBEGIN\nlegacy touched\nEND\nline 5\n",
+    );
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deny patterns............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // 3. Adding a new multiline block in the diff triggers failure
+    context.write_file(
+        "block.txt",
+        "line 1 modified\nBEGIN\nlegacy touched\nEND\nline 5\n\nBEGIN\nnew banned block\nEND\n",
+    );
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - description: Fails if any file contains a matching regular expression
+    - exit code: 1
+
+      block.txt:7:BEGIN
+      new banned block
+      END
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn deny_pattern_hook_delta_only_explicit_files() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, --ignore-case, '\btodo\b']
+                files: '\.txt$'
+    "})
+        .with_file("legacy.txt", "legacy TODO: do not touch\nline 2\n")
+        .init_git();
+    context.git().commit("Initial commit");
+
+    // Modifying legacy.txt with a clean line and running with --files passes
+    context.write_file(
+        "legacy.txt",
+        "legacy TODO: do not touch\nline 2\nclean line 3\n",
+    );
+    context.git().add(".");
+
+    let mut cmd = context.run();
+    cmd.arg("--files").arg("legacy.txt");
+
+    cmd_snapshot!(context, cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deny patterns............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn deny_pattern_hook_delta_only_multiline_trailing_newline() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, -m, 'BANNED\n']
+                files: '\.txt$'
+    "})
+        .with_file("file.txt", "line 1\nBANNED\nline 3\n")
+        .init_git();
+    context.git().commit("Initial commit");
+
+    // Modifying line 3 does not trigger false intersection with BANNED\n on line 2
+    context.write_file("file.txt", "line 1\nBANNED\nline 3 modified\n");
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deny patterns............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn deny_pattern_hook_delta_only_multiline_formatted_call() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: [--delta-only, -m, 'FooFuncNotAllowedWithSpecificArg\([\s\S]*?specificArg']
+                files: '\.py$'
+    "})
+        .with_file("legacy.py", "def existing():\n    good_call()\n")
+        .init_git();
+    context.git().commit("Initial commit");
+
+    // Adding the banned function call formatted across lines fails the hook
+    context.write_file(
+        "legacy.py",
+        indoc::indoc! {r"
+        def existing():
+            good_call()
+
+        def new_func():
+            FooFuncNotAllowedWithSpecificArg(
+                specificArg,
+                goodArg,
+            )
+    "},
+    );
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - description: Fails if any file contains a matching regular expression
+    - exit code: 1
+
+      legacy.py:5:FooFuncNotAllowedWithSpecificArg(
+              specificArg
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn require_pattern_hook_rejects_delta_only() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: require-pattern
+                args: [--delta-only, 'copyright']
+    "})
+        .with_file("file.txt", "content\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `require-pattern`
+      caused by: error: unexpected argument '--delta-only' found
+
+      tip: to pass '--delta-only' as a value, use '-- --delta-only'
+
+    Usage: require-pattern [OPTIONS] <PATTERN>...
+    ");
+}
+
+#[test]
 fn end_of_file_fixer_hook() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"

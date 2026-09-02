@@ -521,6 +521,12 @@ When multiple patterns are provided, matching any one of them is sufficient.
 - `-m`, `--multiline`
     - Search each file as a whole, with `^` and `$` matching line boundaries and `.` matching newlines.
     - Reads each selected file into memory.
+- `--delta-only` (alias: `--check-delta`)
+    - Evaluate patterns only against newly added or modified lines in git diffs rather than entire files. Useful for ratcheting bans in legacy codebases without breaking on pre-existing lines.
+    - In staged runs (`prek run`), evaluates only lines added in the staged diff (`git diff --cached`).
+    - In revision-range runs (`prek run --from-ref <FROM> [--to-ref <TO>]`), evaluates only lines added within the diff range.
+    - When no diff context applies (such as `prek run --all-files`), passes without scanning full files so ratcheting checks never break on untouched legacy files.
+    - When combined with `-m` / `--multiline`, matches are evaluated in memory against contiguous added hunk blocks in the diff.
 
 By default, each matching line is reported as `path:line:contents`. A line matching more than one pattern is reported only once. With `--multiline`, the earliest match in each file is reported as `path:start-line:matched-block`.
 
