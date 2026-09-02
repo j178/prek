@@ -2723,14 +2723,18 @@ declared by that hook:</p>
 <li>Allow YAML multi-document syntax (<code>---</code>).</li>
 </ul>
 </li>
-<li><code>--allow-unknown-tags</code><ul>
-<li>Allow unrecognized YAML tags.</li>
+<li><code>--disallow-unknown-tags</code><ul>
+<li>Reject unrecognized YAML tags.</li>
 </ul>
 </li>
 <li><code>--unsafe</code><ul>
 <li>Parse YAML syntax without loading it. Implies <code>--allow-multiple-documents</code>.</li>
 </ul>
 </li>
+</ul>
+<p><strong>Behavior / caveats</strong></p>
+<ul>
+<li>Unrecognized YAML tags are allowed by default. This differs from the pinned <code>pre-commit-hooks</code> implementation, which rejects them while loading. Use <code>--disallow-unknown-tags</code> to match that behavior.</li>
 </ul>
 <hr />
 <h4 id="check-xml"><code>check-xml</code><a class="headerlink" href="#check-xml" title="Permanent link">&para;</a></h4>
