@@ -99,6 +99,7 @@ walkdir = { workspace = true }
 webpki-root-certs = { workspace = true }
 which = { workspace = true }
 xml = { workspace = true }
+jsonc-parser = { version = "0.33.1", features = ["serde"] }
 
 [target."cfg(unix)".dependencies]
 prek-pty = { workspace = true }
