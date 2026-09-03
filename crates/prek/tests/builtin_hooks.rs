@@ -3288,6 +3288,7 @@ fn check_jsonc() {
     context.write_file(
         "invalid_trailing_comma.jsonc",
         indoc::indoc! {"
+        // single line
         {
           \"key\": \"value\"
         }
@@ -3297,6 +3298,38 @@ fn check_jsonc() {
 
     // Second run: hooks should now pass
     cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check jsonc..............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn check_jsonc_allow_trailing_commas() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+                args: ['--allow-trailing-commas']
+    "})
+        .with_file(
+            "trailing_comma.jsonc",
+            indoc::indoc! {"
+        // single line
+        {
+            \"key\": \"value\",
+        }
+    "},
+        )
+        .init_git();
+
+    // First run: hooks should fail
+    cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
     ----- stdout -----
