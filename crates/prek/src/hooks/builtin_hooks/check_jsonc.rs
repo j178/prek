@@ -147,13 +147,14 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_jsonc() -> anyhow::Result<()> {
         let dir = tempdir()?;
-        let file_path = create_test_file(&dir, "invalid.json5", b"{ key: 'value' ").await?;
+        let file_path = create_test_file(&dir, "invalid.jsonc", b"{ key: 'value' ").await?;
         let result = check_file(dir.path(), &file_path, true).await?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
 
         Ok(())
     }
+
     #[tokio::test]
     async fn test_invalid_jsonc_trailing_comma() -> anyhow::Result<()> {
         let dir = tempdir()?;
