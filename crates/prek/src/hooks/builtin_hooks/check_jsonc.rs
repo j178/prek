@@ -8,14 +8,6 @@ use crate::hooks::run_concurrent_file_checks;
 use crate::run::INTERNAL_CONCURRENCY;
 use clap::Parser;
 
-// allow_comments: false,
-//   allow_loose_object_property_names: false,
-//   allow_trailing_commas: false,
-//   allow_missing_commas: false,
-//   allow_single_quoted_strings: false,
-//   allow_hexadecimal_numbers: false,
-//   allow_unary_plus_numbers: false,
-
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
