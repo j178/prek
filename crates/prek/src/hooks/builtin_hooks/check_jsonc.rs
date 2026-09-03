@@ -13,6 +13,7 @@ use clap::Parser;
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
 pub(crate) struct Args {
+    /// Allow trailing commas in objects and arrays.
     #[arg(short = 't', long)]
     allow_trailing_commas: bool,
 }

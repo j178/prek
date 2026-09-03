@@ -33,6 +33,8 @@ fn list_builtins_defaults_to_verbose_output() {
 
     check-jsonc
       Checks JSONC files for parseable syntax.
+      flags:
+        -t, --allow-trailing-commas  Allow trailing commas in objects and arrays.
 
     check-merge-conflict
       Checks for files that contain merge conflict strings.
