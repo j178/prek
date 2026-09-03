@@ -3248,28 +3248,29 @@ fn check_jsonc() {
         .with_file(
             "valid.jsonc",
             indoc::indoc! {"
-        // This is a comment
+        // single-line
         {
             /*
-
+              multi
+              line
+              comment
             */
-            \"unquotedKey\": \"value\"  // and a trailing comment
+            \"key\": /* inline comment */ \"value\"  // trailing comment
         }
     "},
         )
         .with_file(
-            "invalid_missing_comma.json5",
-            indoc::indoc! {r"
+            "invalid_trailing_comma.jsonc",
+            indoc::indoc! {"
         {
-            key1: 'value1'
-            key2: 'value2', // Missing comma between key-value pairs
+            \"key\": \"value\",
         }
     "},
         )
         .init_git();
 
     // First run: hooks should fail
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3278,18 +3279,17 @@ fn check_jsonc() {
     - description: Checks JSONC files for parseable syntax
     - exit code: 1
 
-      invalid_missing_comma.jsonc: Failed to json5 decode (expected comma at line 3 column 5)
+      invalid_trailing_comma.jsonc: Failed to jsonc decode (Trailing commas are not allowed on line 2 column 19)
 
     ----- stderr -----
     ");
 
     // Fix the files
     context.write_file(
-        "invalid_missing_comma.json5",
-        indoc::indoc! {r"
+        "invalid_trailing_comma.jsonc",
+        indoc::indoc! {"
         {
-            key1: 'value1',
-            key2: 'value2',
+          \"key\": \"value\"
         }
     "},
     );
@@ -3300,7 +3300,7 @@ fn check_jsonc() {
     success: true
     exit_code: 0
     ----- stdout -----
-    check json5..............................................................Passed
+    check jsonc..............................................................Passed
 
     ----- stderr -----
     ");
