@@ -26,6 +26,7 @@ Released on 2026-09-01.
 - Support Pixi for Conda environments ([#2667](https://github.com/j178/prek/pull/2667))
 - Support `cargo-binstall` for Rust CLI dependencies ([#2658](https://github.com/j178/prek/pull/2658))
 - Warn about unused keys in user settings ([#2665](https://github.com/j178/prek/pull/2665))
+- Add `check-jsonc` hook for JSON-with-comments ([#2682](https://github.com/j178/prek/pull/2682))
 
 ### Bug fixes
 
