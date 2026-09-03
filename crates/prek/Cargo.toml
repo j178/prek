@@ -57,6 +57,7 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
+jsonc-parser = { workspace = true }
 globset = { workspace = true }
 granit-parser = { workspace = true }
 # Enable static linking for liblzma
@@ -99,7 +100,6 @@ walkdir = { workspace = true }
 webpki-root-certs = { workspace = true }
 which = { workspace = true }
 xml = { workspace = true }
-jsonc-parser = { version = "0.33.1", features = ["serde"] }
 
 [target."cfg(unix)".dependencies]
 prek-pty = { workspace = true }
