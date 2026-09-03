@@ -3328,7 +3328,7 @@ fn check_jsonc_allow_trailing_commas() {
         )
         .init_git();
 
-    // First run: hooks should fail
+    // This example fails in the check_jsonc test where --allow-trailing-commas is not given
     cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
