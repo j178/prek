@@ -1064,6 +1064,7 @@
         "check-illegal-windows-names",
         "check-json",
         "check-json5",
+        "check-jsonc",
         "check-merge-conflict",
         "check-shebang-scripts-are-executable",
         "check-symlinks",

@@ -64,7 +64,7 @@ async fn check_file(
     match jsonc_parser::parse_to_serde_value::<JsonDuplicateKeyChecker>(&content, &options) {
         Ok(_) => Ok(HookOutput::unchanged(0, Vec::new())),
         Err(e) => {
-            let error_message = format!("{}: Failed to json5 decode ({})\n", filename.display(), e);
+            let error_message = format!("{}: Failed to jsonc decode ({})\n", filename.display(), e);
             Ok(HookOutput::unchanged(1, error_message.into_bytes()))
         }
     }

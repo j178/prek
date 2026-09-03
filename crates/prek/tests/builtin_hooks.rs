@@ -3236,6 +3236,76 @@ fn check_json5() {
     ");
 }
 
+#[test]
+fn check_jsonc() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+    "})
+        .with_file(
+            "valid.jsonc",
+            indoc::indoc! {"
+        // This is a comment
+        {
+            /*
+
+            */
+            \"unquotedKey\": \"value\"  // and a trailing comment
+        }
+    "},
+        )
+        .with_file(
+            "invalid_missing_comma.json5",
+            indoc::indoc! {r"
+        {
+            key1: 'value1'
+            key2: 'value2', // Missing comma between key-value pairs
+        }
+    "},
+        )
+        .init_git();
+
+    // First run: hooks should fail
+    cmd_snapshot!(context, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check jsonc..............................................................Failed
+    - hook id: check-jsonc
+    - description: Checks JSONC files for parseable syntax
+    - exit code: 1
+
+      invalid_missing_comma.jsonc: Failed to json5 decode (expected comma at line 3 column 5)
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    context.write_file(
+        "invalid_missing_comma.json5",
+        indoc::indoc! {r"
+        {
+            key1: 'value1',
+            key2: 'value2',
+        }
+    "},
+    );
+    context.git().add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check json5..............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
 #[cfg(unix)]
 #[test]
 fn check_illegal_windows_names() {

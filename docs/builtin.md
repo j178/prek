@@ -154,7 +154,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`forbid-new-submodules`](#forbid-new-submodules) (Prevents the addition of new Git submodules.)
 - [`check-json`](#check-json) (Checks JSON files for parseable syntax.)
 - [`check-json5`](#check-json5) (Checks JSON5 files for parseable syntax.)
-- [`check-json5`](#check-jsonc) (Checks JSONC files for parseable syntax.)
+- [`check-jsonc`](#check-jsonc) (Checks JSONC files for parseable syntax.)
 - [`pretty-format-json`](#pretty-format-json) (Checks that JSON files are pretty-formatted.)
 - [`check-toml`](#check-toml) (Checks TOML files for parseable syntax.)
 - [`check-vcs-permalinks`](#check-vcs-permalinks) (Ensures that links to VCS websites are permalinks.)
