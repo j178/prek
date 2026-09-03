@@ -85,6 +85,7 @@ impl BuiltinHooks {
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
             Self::PrettyFormatJson => pretty_format_json::Args::command(),
+            Self::CheckJsonc => check_jsonc::Args::command(),
             Self::TrailingWhitespace => fix_trailing_whitespace::Args::command(),
             _ => return None,
         })
