@@ -59,13 +59,14 @@ use std::collections::hash_map::Entry;
 use std::debug_assert_matches;
 use std::fmt::Write as _;
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use anstyle_parse::{DefaultCharAccumulator, Parser, Perform};
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashMap;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -453,7 +454,17 @@ const HOOK_OUTPUT_PREVIEW_PREFIX: &str = "    => ";
 ///
 /// Only used when no live progress is drawn, so a slow hook does not look
 /// like a hang. Fast hooks never trigger the notice.
-const HOOK_RUNNING_NOTICE_DELAY: Duration = Duration::from_secs(1);
+///
+/// Overridable via `PREK_INTERNAL__HOOK_RUNNING_NOTICE_DELAY_MS` so tests can
+/// make the notice deterministic instead of racing real wall-clock time.
+static HOOK_RUNNING_NOTICE_DELAY: LazyLock<Duration> = LazyLock::new(|| {
+    EnvVars
+        .var(EnvVars::PREK_INTERNAL__HOOK_RUNNING_NOTICE_DELAY_MS)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .map(Duration::from_millis)
+        .unwrap_or(Duration::from_secs(1))
+});
 
 fn truncate_to_width(input: &str, width: usize) -> Cow<'_, str> {
     if input.width() <= width {
@@ -561,7 +572,7 @@ impl HookRunReporter {
         }
 
         let mut run = std::pin::pin!(run);
-        if let Ok(output) = tokio::time::timeout(HOOK_RUNNING_NOTICE_DELAY, &mut run).await {
+        if let Ok(output) = tokio::time::timeout(*HOOK_RUNNING_NOTICE_DELAY, &mut run).await {
             return output;
         }
 

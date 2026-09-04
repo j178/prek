@@ -1310,12 +1310,19 @@ fn slow_hook_prints_running_notice_on_piped_stderr() {
               - id: slow
                 name: Slow Hook
                 language: system
-                entry: python3 -c "import time; time.sleep(2)"
+                entry: python3 -c "print('done')"
                 always_run: true
     "#})
         .init_git();
 
-    cmd_snapshot!(context, context.run(), @r"
+    // A real wall-clock delay would make this test either slow or flaky under CI
+    // load, so the notice threshold is forced down to make it fire deterministically.
+    cmd_snapshot!(
+        context,
+        context
+            .run()
+            .env(EnvVars::PREK_INTERNAL__HOOK_RUNNING_NOTICE_DELAY_MS, "0"),
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1323,7 +1330,8 @@ fn slow_hook_prints_running_notice_on_piped_stderr() {
 
     ----- stderr -----
     Running Slow Hook...
-    ");
+    "
+    );
 }
 
 #[test]
