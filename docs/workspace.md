@@ -255,6 +255,38 @@ prek run frontend:lint
 prek run frontend:lint src/backend:black
 ```
 
+### Repository Selection
+
+`--repo` evaluates the configured `repo` entry in every project selected for the
+run. It accepts special repositories such as `local`, `meta`, and `builtin`, a
+complete remote URL, or GitHub shorthand in `OWNER/REPOSITORY` form:
+
+```bash
+prek run --repo https://github.com/pre-commit/pre-commit-hooks
+prek run --repo git@github.com:pre-commit/pre-commit-hooks.git
+prek run --repo ssh://git@github.com/pre-commit/pre-commit-hooks.git
+prek run --repo pre-commit/pre-commit-hooks
+```
+
+Remote matching ignores `rev`, so projects using different revisions of the
+same repository all match. As selectors, GitHub HTTPS and SSH clone forms and
+shorthand are equivalent, and an optional `.git` suffix does not affect
+matching. GitHub URL schemes, hostnames, owners, and repository names match
+case-insensitively. Other configured values, including relative repository
+paths, still match exactly. Repeat `--repo` to select hooks from more than one
+configured repository.
+
+Repository selection intersects with project paths, hook IDs, `--skip`, group
+filters, stages, and file selection. For example, this runs matching hooks only
+from the `frontend` project:
+
+```bash
+prek run frontend/ --all-files --repo pre-commit/pre-commit-hooks
+```
+
+Nonmatching remote entries are excluded before repository initialization, so
+prek does not fetch or initialize them for the run.
+
 ### Skipping Projects or Hooks
 
 You can skip specific projects or hooks using the `--skip` option, with the same syntax as for selecting projects or hooks.

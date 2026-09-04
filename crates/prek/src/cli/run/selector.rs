@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::config::validate_group_name;
+use crate::config::{self, validate_group_name};
 use crate::hook::Hook;
 use crate::warn_user;
 
@@ -181,6 +182,125 @@ impl Selector {
                 project_path.as_path() == hook.project_relative_path
                     && matches_hook_id(selector_hook_id)
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct RepoFilter {
+    original: String,
+    github_repo: Option<GitHubRepo>,
+    matched: AtomicBool,
+}
+
+#[derive(Debug)]
+struct GitHubRepo {
+    owner: String,
+    repository: String,
+}
+
+impl GitHubRepo {
+    fn new(owner: &str, repository: &str) -> Self {
+        Self {
+            owner: owner.to_ascii_lowercase(),
+            repository: repository.to_ascii_lowercase(),
+        }
+    }
+
+    fn matches(&self, owner: &str, repository: &str) -> bool {
+        self.owner.eq_ignore_ascii_case(owner) && self.repository.eq_ignore_ascii_case(repository)
+    }
+}
+
+fn parse_github_path(path: &str) -> Option<(&str, &str)> {
+    let mut components = path.split('/');
+    let (Some(owner), Some(repository), None) =
+        (components.next(), components.next(), components.next())
+    else {
+        return None;
+    };
+    let repository = repository.strip_suffix(".git").unwrap_or(repository);
+    if owner.is_empty() || repository.is_empty() {
+        return None;
+    }
+
+    Some((owner, repository))
+}
+
+fn parse_github_url(value: &str) -> Option<(&str, &str)> {
+    let (host, path) = match value.split_once("://") {
+        Some((scheme, rest)) if scheme.eq_ignore_ascii_case("https") => rest.split_once('/')?,
+        Some((scheme, rest)) if scheme.eq_ignore_ascii_case("ssh") => {
+            rest.strip_prefix("git@")?.split_once('/')?
+        }
+        Some(_) => return None,
+        None => value.strip_prefix("git@")?.split_once(':')?,
+    };
+    if !host.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
+
+    parse_github_path(path)
+}
+
+fn parse_github_selector(value: &str) -> Option<(&str, &str)> {
+    if let Some(repo) = parse_github_url(value) {
+        return Some(repo);
+    }
+
+    parse_github_path(value)
+}
+
+impl RepoFilter {
+    pub(crate) fn new(original: String) -> Self {
+        let github_repo = if let Some((owner, repository)) = parse_github_selector(&original) {
+            Some(GitHubRepo::new(owner, repository))
+        } else {
+            None
+        };
+
+        Self {
+            original,
+            github_repo,
+            matched: AtomicBool::new(false),
+        }
+    }
+
+    fn matches_remote_repo(&self, repo: &config::RemoteRepo) -> bool {
+        if repo.repo() == self.original {
+            return true;
+        }
+
+        let Some(github_repo) = &self.github_repo else {
+            return false;
+        };
+        let Some((owner, repository)) = parse_github_url(repo.repo()) else {
+            return false;
+        };
+
+        github_repo.matches(owner, repository)
+    }
+
+    pub(crate) fn matches_repo(&self, repo: &config::Repo) -> bool {
+        let matches = match repo {
+            config::Repo::Local(_) => self.original == "local",
+            config::Repo::Meta(_) => self.original == "meta",
+            config::Repo::Builtin(_) => self.original == "builtin",
+            config::Repo::Remote(repo) => self.matches_remote_repo(repo),
+        };
+
+        if matches {
+            self.matched.store(true, Ordering::Relaxed);
+        }
+        matches
+    }
+
+    pub(crate) fn report_unused(&self) {
+        if !self.matched.load(Ordering::Relaxed) {
+            warn_user!(
+                "repository selector `--repo={}` did not match any configured repositories",
+                self.original
+            );
         }
     }
 }
@@ -887,6 +1007,138 @@ mod tests {
         Ok(MockFileSystem {
             current_dir: temp_dir,
         })
+    }
+
+    #[test]
+    fn repo_filter_matches_configured_remote_value_and_github_shorthand() {
+        const GITHUB_REPO: &str = "https://github.com/OWNER/REPOSITORY";
+        const GITHUB_REPO_DOT_GIT: &str = "https://github.com/OWNER/REPOSITORY.git";
+        const GITHUB_SSH_REPO: &str = "git@github.com:OWNER/REPOSITORY";
+        const GITHUB_SSH_REPO_DOT_GIT: &str = "git@github.com:OWNER/REPOSITORY.git";
+        const GITHUB_SSH_URL: &str = "ssh://git@github.com/OWNER/REPOSITORY";
+        const GITHUB_SSH_URL_DOT_GIT: &str = "ssh://git@github.com/OWNER/REPOSITORY.git";
+        const GITHUB_SHORTHAND: &str = "OWNER/REPOSITORY";
+        const GITHUB_CONFIGURED_URLS: [&str; 6] = [
+            GITHUB_REPO,
+            GITHUB_REPO_DOT_GIT,
+            GITHUB_SSH_REPO,
+            GITHUB_SSH_REPO_DOT_GIT,
+            GITHUB_SSH_URL,
+            GITHUB_SSH_URL_DOT_GIT,
+        ];
+        const GITHUB_SELECTORS: [&str; 7] = [
+            GITHUB_REPO,
+            GITHUB_REPO_DOT_GIT,
+            GITHUB_SSH_REPO,
+            GITHUB_SSH_REPO_DOT_GIT,
+            GITHUB_SSH_URL,
+            GITHUB_SSH_URL_DOT_GIT,
+            GITHUB_SHORTHAND,
+        ];
+
+        for configured in GITHUB_CONFIGURED_URLS {
+            let remote =
+                config::RemoteRepo::new(configured.to_string(), "v1.0.0".to_string(), Vec::new());
+            for selector in GITHUB_SELECTORS {
+                assert!(
+                    RepoFilter::new(selector.to_string())
+                        .matches_repo(&config::Repo::Remote(remote.clone()))
+                );
+            }
+        }
+
+        let mut remote =
+            config::RemoteRepo::new(GITHUB_REPO.to_string(), "v1.0.0".to_string(), Vec::new());
+        for selector in ["OWNER/", "/REPOSITORY"] {
+            assert!(
+                !RepoFilter::new(selector.to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+        }
+        assert!(
+            !RepoFilter::new("https://github.com/OTHER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+
+        remote.rev = "different-revision".to_string();
+        remote.set_resolved_source("https://mirror.example.com/OWNER/REPOSITORY".to_string());
+        assert!(
+            RepoFilter::new(GITHUB_SHORTHAND.to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("https://mirror.example.com/OWNER/REPOSITORY".to_string())
+                .matches_repo(&config::Repo::Remote(remote))
+        );
+
+        const GITLAB_URL: &str = "https://gitlab.com/OWNER/REPOSITORY.git";
+        const GITLAB_SSH_REPO: &str = "git@gitlab.com:OWNER/REPOSITORY.git";
+        for configured in [GITLAB_URL, GITLAB_SSH_REPO] {
+            let remote =
+                config::RemoteRepo::new(configured.to_string(), "v2.0.0".to_string(), Vec::new());
+            assert!(
+                RepoFilter::new(configured.to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+            assert!(
+                !RepoFilter::new("OWNER/REPOSITORY".to_string())
+                    .matches_repo(&config::Repo::Remote(remote.clone()))
+            );
+            assert!(
+                !RepoFilter::new(configured.to_ascii_lowercase())
+                    .matches_repo(&config::Repo::Remote(remote))
+            );
+        }
+    }
+
+    #[test]
+    fn repo_filter_matches_github_components_case_insensitively() {
+        const GITHUB_CONFIGURED_URLS: [&str; 3] = [
+            "HTTPS://GitHub.com/Pre-Commit/Pre-Commit-Hooks.git",
+            "git@GitHub.com:Pre-Commit/Pre-Commit-Hooks.git",
+            "SSH://git@GitHub.com/Pre-Commit/Pre-Commit-Hooks.git",
+        ];
+        const GITHUB_SELECTORS: [&str; 4] = [
+            "pre-commit/pre-commit-hooks",
+            "https://github.com/pre-commit/pre-commit-hooks",
+            "git@github.com:pre-commit/pre-commit-hooks.git",
+            "ssh://git@github.com/pre-commit/pre-commit-hooks.git",
+        ];
+
+        for configured in GITHUB_CONFIGURED_URLS {
+            let remote =
+                config::RemoteRepo::new(configured.to_string(), "v1.0.0".to_string(), Vec::new());
+            for selector in GITHUB_SELECTORS {
+                assert!(
+                    RepoFilter::new(selector.to_string())
+                        .matches_repo(&config::Repo::Remote(remote.clone()))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn repo_filter_does_not_canonicalize_configured_relative_repo() {
+        const RELATIVE_REPO: &str = "vendor/hooks";
+        let mut remote =
+            config::RemoteRepo::new(RELATIVE_REPO.to_string(), "v3.0.0".to_string(), Vec::new());
+        remote.set_resolved_source("/workspace/vendor/hooks".to_string());
+        assert!(
+            RepoFilter::new(RELATIVE_REPO.to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("https://github.com/vendor/hooks".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("git@github.com:vendor/hooks.git".to_string())
+                .matches_repo(&config::Repo::Remote(remote.clone()))
+        );
+        assert!(
+            !RepoFilter::new("VENDOR/HOOKS".to_string())
+                .matches_repo(&config::Repo::Remote(remote))
+        );
     }
 
     #[test]

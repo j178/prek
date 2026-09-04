@@ -52,6 +52,7 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 ### `prek run`
 
 - `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](workspace.md#running-specific-hooks-or-projects) for details.
+- `prek run --repo <REPO>` selects hooks by configured repository across workspace projects, including special repositories, complete URLs, and GitHub shorthand. Repeat the option to select multiple repositories.
 - `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](./reference/configuration.md#priority) may run concurrently), instead of strictly serial execution.
 - In workspace mode, `prek run` can execute independent projects at the same directory depth concurrently, while still running child projects before their parents.
 - `prek` provides dynamic completion for hook ids.
