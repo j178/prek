@@ -338,6 +338,12 @@ impl TestEnv {
         cmd.current_dir(self.work_dir())
             .env(EnvVars::PREK_HOME, &**self.home_dir())
             .env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1")
+            // Real hook execution time in CI varies a lot, so disable the running
+            // notice by default; tests that exercise it override this explicitly.
+            .env(
+                EnvVars::PREK_INTERNAL__HOOK_RUNNING_NOTICE_DELAY_MS,
+                "3600000",
+            )
             // Git commands spawned by prek do not inherit `TestGit::command`'s `-c` arguments.
             .envs([
                 ("GIT_CONFIG_COUNT", "1"),

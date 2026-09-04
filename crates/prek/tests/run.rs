@@ -1301,6 +1301,40 @@ fn run_required_group_and_stage_filters_intersect() {
 }
 
 #[test]
+fn slow_hook_prints_running_notice_on_piped_stderr() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: slow
+                name: Slow Hook
+                language: system
+                entry: python3 -c "print('done')"
+                always_run: true
+    "#})
+        .init_git();
+
+    // A real wall-clock delay would make this test either slow or flaky under CI
+    // load, so the notice threshold is forced down to make it fire deterministically.
+    cmd_snapshot!(
+        context,
+        context
+            .run()
+            .env(EnvVars::PREK_INTERNAL__HOOK_RUNNING_NOTICE_DELAY_MS, "0"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Slow Hook................................................................Passed
+
+    ----- stderr -----
+    Running Slow Hook...
+    "
+    );
+}
+
+#[test]
 fn priority_fail_fast_stops_later_groups() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
