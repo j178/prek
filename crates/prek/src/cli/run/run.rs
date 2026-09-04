@@ -1,7 +1,9 @@
 use std::fmt::Write as _;
+use std::future::Future;
 use std::io::Write as _;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::rc::Rc;
 use std::slice;
 use std::sync::{Arc, LazyLock};
@@ -1532,27 +1534,30 @@ async fn run_hook(
         hooks::HookOutput::unchanged(0, dry_run_hook(installed_hook, &input)?)
     } else {
         input.shuffle();
-        match &input {
-            HookRunInput::Filenames(filenames) => {
-                installed_hook
-                    .language
-                    .run(store, installed_hook, filenames, reporter)
-                    .await
-            }
-            HookRunInput::Filename(filename) => {
-                installed_hook
-                    .language
-                    .run(store, installed_hook, slice::from_ref(filename), reporter)
-                    .await
-            }
-            HookRunInput::WithoutFilenames { .. } => {
-                installed_hook
-                    .language
-                    .run(store, installed_hook, &[], reporter)
-                    .await
-            }
-        }
-        .with_context(|| format!("Failed to run hook `{installed_hook}`"))?
+        let run: Pin<Box<dyn Future<Output = _> + '_>> = match &input {
+            HookRunInput::Filenames(filenames) => Box::pin(installed_hook.language.run(
+                store,
+                installed_hook,
+                filenames,
+                reporter,
+            )),
+            HookRunInput::Filename(filename) => Box::pin(installed_hook.language.run(
+                store,
+                installed_hook,
+                slice::from_ref(filename),
+                reporter,
+            )),
+            HookRunInput::WithoutFilenames { .. } => Box::pin(installed_hook.language.run(
+                store,
+                installed_hook,
+                &[],
+                reporter,
+            )),
+        };
+        reporter
+            .with_running_notice(installed_hook, run)
+            .await
+            .with_context(|| format!("Failed to run hook `{installed_hook}`"))?
     };
     let hooks::HookOutput {
         exit_status,
