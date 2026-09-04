@@ -24,6 +24,7 @@ anyhow = { version = "1.0.86" }
 async-trait = { version = "0.1.89" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async_zip = { version = "0.0.20", package = "astral_async_zip", features = ["deflate", "tokio"] }
+asyncband = { version = "0.7", features = ["once-cell", "once-map", "semaphore"] }
 axoupdater = { version = "0.10.0", default-features = false, features = ["github_releases"] }
 bstr = { version = "1.11.0", default-features = false, features = ["std"] }
 cargo_metadata = { version = "0.23.1" }
@@ -48,7 +49,6 @@ libc = { version = "0.2.182" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "0.4.5", features = ["static"] }
-asyncband = { version = "0.6.7" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.14.0", default-features = false, features = ["macros"] }
