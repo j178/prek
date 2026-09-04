@@ -3236,6 +3236,109 @@ fn check_json5() {
     ");
 }
 
+#[test]
+fn check_jsonc() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+    "})
+        .with_file(
+            "valid.jsonc",
+            indoc::indoc! {"
+        // single-line
+        {
+            /*
+              multi
+              line
+              comment
+            */
+            \"key\": /* inline comment */ \"value\"  // trailing comment
+        }
+    "},
+        )
+        .with_file(
+            "invalid_trailing_comma.jsonc",
+            indoc::indoc! {"
+        {
+            \"key\": \"value\",
+        }
+    "},
+        )
+        .init_git();
+
+    // First run: hooks should fail
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check jsonc..............................................................Failed
+    - hook id: check-jsonc
+    - description: Checks JSONC files for parseable syntax
+    - exit code: 1
+
+      invalid_trailing_comma.jsonc: Failed to jsonc decode (Trailing commas are not allowed on line 2 column 19)
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    context.write_file(
+        "invalid_trailing_comma.jsonc",
+        indoc::indoc! {"
+        // single line
+        {
+          \"key\": \"value\"
+        }
+    "},
+    );
+    context.git().add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check jsonc..............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn check_jsonc_allow_trailing_commas() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+                args: ['--allow-trailing-commas']
+    "})
+        .with_file(
+            "trailing_comma.jsonc",
+            indoc::indoc! {"
+        // single line
+        {
+            \"key\": \"value\",
+        }
+    "},
+        )
+        .init_git();
+
+    // This example fails in the check_jsonc test where --allow-trailing-commas is not given
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check jsonc..............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
 #[cfg(unix)]
 #[test]
 fn check_illegal_windows_names() {

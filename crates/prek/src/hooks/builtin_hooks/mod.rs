@@ -21,6 +21,7 @@ use crate::store::Store;
 use super::{HookFuture, HookOutput};
 
 mod check_json5;
+mod check_jsonc;
 mod pattern;
 
 #[derive(
@@ -44,6 +45,7 @@ pub(crate) enum BuiltinHooks {
     CheckIllegalWindowsNames,
     CheckJson,
     CheckJson5,
+    CheckJsonc,
     CheckMergeConflict,
     CheckShebangScriptsAreExecutable,
     CheckSymlinks,
@@ -83,6 +85,7 @@ impl BuiltinHooks {
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
             Self::PrettyFormatJson => pretty_format_json::Args::command(),
+            Self::CheckJsonc => check_jsonc::Args::command(),
             Self::TrailingWhitespace => fix_trailing_whitespace::Args::command(),
             _ => return None,
         })
@@ -113,6 +116,7 @@ impl BuiltinHooks {
             }
             Self::CheckJson => Box::pin(check_json::run(hook, filenames)),
             Self::CheckJson5 => Box::pin(check_json5::check_json5(hook, filenames)),
+            Self::CheckJsonc => Box::pin(check_jsonc::check_jsonc(hook, filenames)),
             Self::CheckMergeConflict => Box::pin(check_merge_conflict::run(hook, filenames)),
             Self::CheckShebangScriptsAreExecutable => {
                 Box::pin(check_shebang_scripts_are_executable::run(hook, filenames))
@@ -233,6 +237,18 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("Checks JSON5 files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_JSON5),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckJsonc => BuiltinHook {
+                id: "check-jsonc".to_string(),
+                name: "check jsonc".to_string(),
+                entry: "check-jsonc".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some("Checks JSONC files for parseable syntax.".to_string()),
+                    types: Some(tags::TAG_SET_JSONC),
                     ..Default::default()
                 },
             },

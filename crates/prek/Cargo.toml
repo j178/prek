@@ -57,6 +57,7 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
+jsonc-parser = { workspace = true }
 globset = { workspace = true }
 granit-parser = { workspace = true }
 # Enable static linking for liblzma

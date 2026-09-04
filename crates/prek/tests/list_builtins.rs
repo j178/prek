@@ -31,6 +31,11 @@ fn list_builtins_defaults_to_verbose_output() {
     check-json5
       Checks JSON5 files for parseable syntax.
 
+    check-jsonc
+      Checks JSONC files for parseable syntax.
+      flags:
+        -t, --allow-trailing-commas  Allow trailing commas in objects and arrays
+
     check-merge-conflict
       Checks for files that contain merge conflict strings.
       flags:
@@ -177,6 +182,11 @@ fn list_builtins_json() {
         "id": "check-json5",
         "name": "check json5",
         "description": "Checks JSON5 files for parseable syntax."
+      },
+      {
+        "id": "check-jsonc",
+        "name": "check jsonc",
+        "description": "Checks JSONC files for parseable syntax."
       },
       {
         "id": "check-merge-conflict",

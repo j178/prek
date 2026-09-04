@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Enhancements
+
+- Add `check-jsonc` hook for JSON-with-comments ([#2682](https://github.com/j178/prek/pull/2682))
+
+### Contributors
+
+- @clbarnes
+
 ## 0.5.2
 
 Released on 2026-09-03.
