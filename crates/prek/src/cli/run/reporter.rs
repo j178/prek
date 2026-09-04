@@ -57,6 +57,8 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
 use std::debug_assert_matches;
+use std::fmt::Write as _;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -447,6 +449,12 @@ const HOOK_OUTPUT_PREVIEW_LINES: usize = 3;
 const HOOK_OUTPUT_PREVIEW_DELAY: Duration = Duration::from_millis(500);
 const HOOK_OUTPUT_PREVIEW_PREFIX: &str = "    => ";
 
+/// How long a hook may run before it is announced with a plain-text notice.
+///
+/// Only used when no live progress is drawn, so a slow hook does not look
+/// like a hang. Fast hooks never trigger the notice.
+const HOOK_RUNNING_NOTICE_DELAY: Duration = Duration::from_secs(1);
+
 fn truncate_to_width(input: &str, width: usize) -> Cow<'_, str> {
     if input.width() <= width {
         return Cow::Borrowed(input);
@@ -481,6 +489,12 @@ pub(crate) struct HookRunReporter {
     reporter: Arc<ProgressReporter>,
     dots: usize,
     show_project_headers: bool,
+    /// Whether no live progress is drawn, so plain-text running notices are needed.
+    ///
+    /// True for non-interactive stderr, `--no-progress`, and `-vv`; false for
+    /// `Silent`/`Quiet`, which stay silent by design, and for an interactive
+    /// terminal, where the progress bar already shows activity.
+    plain_notices: bool,
     /// Active hooks keyed by the id returned from `on_run_start`.
     running: Mutex<FxHashMap<usize, HookBar>>,
     /// Per-project layout and completed-hook state.
@@ -497,10 +511,14 @@ impl HookRunReporter {
         reporter.set_root_prefix("Running hooks...");
         set_current_reporter(Some(&reporter));
 
+        let plain_notices =
+            reporter.root.is_hidden() && !matches!(printer, Printer::Silent | Printer::Quiet);
+
         Self {
             reporter,
             dots,
             show_project_headers,
+            plain_notices,
             running: Mutex::default(),
             groups: Mutex::default(),
         }
@@ -532,6 +550,38 @@ impl HookRunReporter {
 
         running.insert(id, HookBar::new(hook, id, progress));
         id
+    }
+
+    /// Runs `run` to completion. If no live progress is drawn and `run` has not
+    /// finished within `HOOK_RUNNING_NOTICE_DELAY`, prints a one-line notice
+    /// first, so a slow hook does not look like a hang.
+    pub async fn with_running_notice<T>(&self, hook: &Hook, run: impl Future<Output = T>) -> T {
+        if !self.plain_notices {
+            return run.await;
+        }
+
+        let mut run = std::pin::pin!(run);
+        if let Ok(output) = tokio::time::timeout(HOOK_RUNNING_NOTICE_DELAY, &mut run).await {
+            return output;
+        }
+
+        self.write_running_notice(hook);
+        run.await
+    }
+
+    fn write_running_notice(&self, hook: &Hook) {
+        let label = if self.show_project_headers {
+            format!("{}: {}", hook.project().display_name(), hook.name)
+        } else {
+            hook.name.clone()
+        };
+        self.suspend(|| {
+            let _ = writeln!(
+                self.reporter.printer.stderr(),
+                "{}",
+                format!("Running {label}...").dimmed()
+            );
+        });
     }
 
     fn project_header(&self, hook: &Hook) -> Option<ProgressBar> {
