@@ -1301,6 +1301,32 @@ fn run_required_group_and_stage_filters_intersect() {
 }
 
 #[test]
+fn slow_hook_prints_running_notice_on_piped_stderr() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: slow
+                name: Slow Hook
+                language: system
+                entry: python3 -c "import time; time.sleep(2)"
+                always_run: true
+    "#})
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Slow Hook................................................................Passed
+
+    ----- stderr -----
+    Running Slow Hook...
+    ");
+}
+
+#[test]
 fn priority_fail_fast_stops_later_groups() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
