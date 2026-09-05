@@ -15,6 +15,12 @@ use crate::fs::PathClean;
 use crate::process;
 use crate::process::{Cmd, StatusError};
 
+#[cfg(unix)]
+mod discover;
+
+#[cfg(all(test, unix))]
+mod root_tests;
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error(transparent)]
@@ -497,6 +503,12 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 /// Return the path of the top-level directory of the working tree.
 #[instrument(level = "trace")]
 pub(crate) fn root() -> Result<PathBuf, Error> {
+    #[cfg(unix)]
+    match discover::root(git_work_tree()) {
+        Ok(root) => return Ok(root),
+        Err(err) => debug!(%err, "Falling back to Git to find the work tree"),
+    }
+
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
     let mut cmd = Command::new(git);
     let output = apply_git_work_tree(&mut cmd)
