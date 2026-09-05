@@ -7,6 +7,8 @@
 Build both binaries with identical toolchains and release flags. The fixtures use
 only a builtin hook, so listing requires no hook downloads or execution. Results
 measure total command latency, including the process launcher, not just root().
+
+When sharing a Cargo target directory, clean the prek package between builds.
 """
 
 import argparse
@@ -70,6 +72,8 @@ def main():
         },
         "results": [],
     }
+    if report["binaries"]["base"]["sha256"] == report["binaries"]["head"]["sha256"]:
+        parser.error("binaries are identical; clean the prek package before rebuilding")
     with tempfile.TemporaryDirectory(prefix="prek-root-bench-") as directory:
         root = Path(directory)
         repo = root / "repo"
