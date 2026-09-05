@@ -38,7 +38,6 @@ fancy-regex = { version = "0.19.0" }
 fastrand = { version = "2.4.1", default-features = false }
 fs-err = { version = "3.3.0", features = ["tokio"] }
 futures-util = { version = "0.3.31", default-features = false, features = ["alloc"] }
-git2 = { version = "0.21.0", default-features = false }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
 ignore = { version = "0.4.23" }

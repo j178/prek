@@ -15,6 +15,7 @@ use crate::fs::PathClean;
 use crate::process;
 use crate::process::{Cmd, StatusError};
 
+#[cfg(unix)]
 mod discover;
 
 #[cfg(all(test, unix))]
@@ -502,6 +503,7 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 /// Return the path of the top-level directory of the working tree.
 #[instrument(level = "trace")]
 pub(crate) fn root() -> Result<PathBuf, Error> {
+    #[cfg(unix)]
     match discover::root(git_work_tree()) {
         Ok(root) => return Ok(root),
         Err(err) => debug!(%err, "Falling back to Git to find the work tree"),
@@ -523,7 +525,10 @@ pub(crate) fn root() -> Result<PathBuf, Error> {
         }));
     }
 
-    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
+    let path = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+    #[cfg(windows)]
+    let path = path.strip_suffix(b"\r").unwrap_or(path);
+    path_from_git_bytes(path).map_err(Error::from)
 }
 
 pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {

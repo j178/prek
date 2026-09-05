@@ -4,28 +4,34 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use super::{discover, git_work_tree, init_git_work_tree, path_from_git_bytes, root};
 
 const PROBE: &str = "PREK_TEST_GIT_ROOT_PROBE";
 const EXPECTED: &str = "PREK_TEST_GIT_ROOT_EXPECTED";
 const GIT_CALLED: &str = "PREK_TEST_GIT_ROOT_CALLED";
+const CHDIR: &str = "PREK_TEST_GIT_ROOT_CHDIR";
 
 // Each probe gets its own cwd, environment, and OnceLocks without mutating the
 // test runner's process state. Normal test discovery leaves this probe idle.
 #[test]
 fn root_probe() -> Result<()> {
-    let Some(mode) = std::env::var_os(PROBE) else {
+    let Some(mode) = EnvVars.var_os(PROBE) else {
         return Ok(());
     };
     init_git_work_tree()?;
+    if let Some(cwd) = EnvVars.var_os(CHDIR) {
+        std::env::set_current_dir(cwd)?;
+    }
     if mode == "error" {
         assert!(root().is_err());
     } else {
         if mode == "fallback" {
             assert!(discover::root(git_work_tree()).is_err());
         }
-        let expected = std::env::var_os(EXPECTED)
+        let expected = EnvVars
+            .var_os(EXPECTED)
             .ok_or_else(|| anyhow::anyhow!("Missing expected root"))?;
         assert_eq!(root()?, PathBuf::from(expected));
     }
@@ -49,7 +55,7 @@ impl Fixture {
         self.dir.path().join(name)
     }
 
-    fn command(&self, executable: impl AsRef<OsStr>, cwd: &Path) -> Command {
+    fn command(executable: impl AsRef<OsStr>, cwd: &Path) -> Command {
         let mut command = Command::new(executable);
         command.current_dir(cwd);
         for (name, _) in std::env::vars_os() {
@@ -65,7 +71,7 @@ impl Fixture {
     }
 
     fn git(&self, cwd: &Path) -> Command {
-        self.command(&self.git, cwd)
+        Self::command(&self.git, cwd)
     }
 
     fn init(&self, name: &str) -> Result<PathBuf> {
@@ -95,6 +101,9 @@ impl Fixture {
         let mut git = self.git(cwd);
         git.args(["rev-parse", "--show-toplevel"])
             .envs(env.iter().cloned());
+        if let Some((_, cwd)) = env.iter().find(|(key, _)| *key == CHDIR) {
+            git.current_dir(cwd);
+        }
         // Match the GIT_WORK_TREE synthesized by prek at startup.
         if env.iter().any(|(key, _)| *key == "GIT_DIR")
             && !env.iter().any(|(key, _)| *key == "GIT_WORK_TREE")
@@ -102,7 +111,7 @@ impl Fixture {
             git.env("GIT_WORK_TREE", cwd);
         }
         let output = git.output()?;
-        let mut probe = self.command(std::env::current_exe()?, cwd);
+        let mut probe = Self::command(std::env::current_exe()?, cwd);
         probe
             .args(["--exact", "git::root_tests::root_probe", "--nocapture"])
             .envs(env.iter().cloned())
@@ -168,11 +177,7 @@ fn root_without_subprocess_in_linked_worktrees() -> Result<()> {
     fs_err::create_dir_all(&nested)?;
     fixture.compare(&nested, &[], "fast")?;
     let git_dir = repo.join(".git/worktrees/linked");
-    fixture.compare(
-        &worktree,
-        &[("GIT_DIR", git_dir.into_os_string())],
-        "fast",
-    )
+    fixture.compare(&worktree, &[("GIT_DIR", git_dir.into_os_string())], "fast")
 }
 
 #[test]
@@ -199,11 +204,7 @@ fn root_respects_worktree_overrides() -> Result<()> {
     let repo = fixture.init("repo")?;
     let external = fixture.path("external");
     fs_err::create_dir_all(&external)?;
-    fixture.compare(
-        &repo,
-        &[("GIT_DIR", OsString::from(".git"))],
-        "fast",
-    )?;
+    fixture.compare(&repo, &[("GIT_DIR", OsString::from(".git"))], "fast")?;
     fixture.compare(
         &repo,
         &[("GIT_WORK_TREE", OsString::from("../external"))],
@@ -219,12 +220,8 @@ fn root_respects_worktree_overrides() -> Result<()> {
         .args(["config", "core.worktree", "../../external"])
         .assert()
         .success();
-    fixture.compare(&repo, &[], "fast")?;
-    fixture.compare(
-        &repo,
-        &[("GIT_DIR", OsString::from(".git"))],
-        "fallback",
-    )?;
+    fixture.compare(&repo, &[], "fallback")?;
+    fixture.compare(&repo, &[("GIT_DIR", OsString::from(".git"))], "fallback")?;
     fixture.compare(
         &repo,
         &[
@@ -236,9 +233,17 @@ fn root_respects_worktree_overrides() -> Result<()> {
 }
 
 #[test]
-fn root_without_subprocess_respects_worktree_config() -> Result<()> {
+fn root_falls_back_for_worktree_config() -> Result<()> {
     let fixture = Fixture::new()?;
     let repo = fixture.init("repo")?;
+    fixture.commit(&repo);
+    let linked = fixture.path("linked");
+    fixture
+        .git(&repo)
+        .args(["worktree", "add", "--detach"])
+        .arg(&linked)
+        .assert()
+        .success();
     let external = fixture.path("external");
     fs_err::create_dir_all(&external)?;
     fixture
@@ -252,11 +257,18 @@ fn root_without_subprocess_respects_worktree_config() -> Result<()> {
         .arg(&external)
         .assert()
         .success();
-    fixture.compare(&repo, &[], "fast")
+    fixture.compare(&repo, &[], "fallback")?;
+    fixture
+        .git(&linked)
+        .args(["config", "--worktree", "core.worktree"])
+        .arg(&external)
+        .assert()
+        .success();
+    fixture.compare(&linked, &[], "fallback")
 }
 
 #[test]
-fn root_matches_git_for_quoted_config_and_duplicate_sections() -> Result<()> {
+fn root_falls_back_for_quoted_config_and_duplicate_sections() -> Result<()> {
     let fixture = Fixture::new()?;
     let repo = fixture.init("repo")?;
     let external = fixture.path("external # \"quoted\" \\ directory ");
@@ -267,7 +279,7 @@ fn root_matches_git_for_quoted_config_and_duplicate_sections() -> Result<()> {
         .arg(&external)
         .assert()
         .success();
-    fixture.compare(&repo, &[], "fast")?;
+    fixture.compare(&repo, &[], "fallback")?;
 
     let config = repo.join(".git/config");
     let contents = fs_err::read_to_string(&config)?;
@@ -278,7 +290,68 @@ fn root_matches_git_for_quoted_config_and_duplicate_sections() -> Result<()> {
              [core \"other\"]\n bare = true\n",
         ),
     )?;
-    fixture.compare(&repo, &[], "fast")
+    fixture.compare(&repo, &[], "fallback")
+}
+
+#[test]
+fn root_falls_back_for_includes_and_complex_config() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let repo = fixture.init("repo")?;
+    let config = repo.join(".git/config");
+    let contents = fs_err::read_to_string(&config)?;
+    let included = fixture.path("included");
+    fs_err::write(&included, "[core]\nworktree = ..\n")?;
+    fixture
+        .git(&repo)
+        .args(["config", "include.path"])
+        .arg(&included)
+        .assert()
+        .success();
+    fixture.compare(&repo, &[], "fallback")?;
+
+    for (extra, mode) in [
+        ("[core]\nworktree\n", "error"),
+        ("[core]\nbare = true\nbare = false\n", "fallback"),
+        ("[core]\nbare = off\n", "fallback"),
+        ("[core] worktree = ..\n", "fallback"),
+        ("[alias]\nexample = foo\\\n bar\n", "fallback"),
+        ("[core]\nworktree = \"unterminated\n", "error"),
+    ] {
+        fs_err::write(&config, format!("{contents}\n{extra}"))?;
+        fixture.compare(&repo, &[], mode)?;
+    }
+    fs_err::write(&config, format!("{contents}\n# {}\n", "x".repeat(65536)))?;
+    fixture.compare(&repo, &[], "fallback")?;
+
+    fs_err::write(&config, contents)?;
+    fixture.compare(
+        &repo,
+        &[("GIT_CONFIG_GLOBAL", included.into_os_string())],
+        "fast",
+    )
+}
+
+#[test]
+fn root_preserves_the_initial_work_tree_after_chdir() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let repo = fixture.init("repo")?;
+    let nested = repo.join("nested");
+    fs_err::create_dir_all(&nested)?;
+    let git_dir = repo.join(".git").into_os_string();
+    fixture.compare(
+        &repo,
+        &[
+            ("GIT_DIR", git_dir.clone()),
+            (CHDIR, nested.into_os_string()),
+        ],
+        "fast",
+    )?;
+    let other = fixture.init("other")?;
+    fixture.compare(
+        &repo,
+        &[("GIT_DIR", git_dir), (CHDIR, other.into_os_string())],
+        "fallback",
+    )
 }
 
 #[test]
@@ -295,6 +368,18 @@ fn root_falls_back_for_unsupported_overrides_and_errors() -> Result<()> {
         &[("GIT_WORK_TREE", OsString::from("missing"))],
         "fallback",
     )?;
+    fixture.compare(
+        &repo,
+        &[
+            ("GIT_CONFIG_COUNT", OsString::from("1")),
+            ("GIT_CONFIG_KEY_0", OsString::from("core.worktree")),
+            (
+                "GIT_CONFIG_VALUE_0",
+                fixture.path("external").into_os_string(),
+            ),
+        ],
+        "fallback",
+    )?;
     fixture.compare(&repo, &[("GIT_DIR", OsString::new())], "error")?;
     fixture.compare(
         &repo,
@@ -302,12 +387,36 @@ fn root_falls_back_for_unsupported_overrides_and_errors() -> Result<()> {
         "error",
     )?;
     fixture.compare(fixture.dir.path(), &[], "error")?;
+    fixture.compare(&repo.join(".git"), &[], "error")?;
     fixture
         .git(&repo)
         .args(["config", "core.bare", "true"])
         .assert()
         .success();
     fixture.compare(&repo, &[], "error")
+}
+
+#[test]
+fn root_falls_back_at_nonstandard_repository_markers() -> Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Fixture::new()?;
+    let repo = fixture.init("repo")?;
+    let nested = repo.join("nested");
+    fs_err::create_dir_all(&nested)?;
+    let marker = nested.join(".git");
+    symlink(fixture.path("missing"), &marker)?;
+    fixture.compare(&nested, &[], "fallback")?;
+    fs_err::remove_file(&marker)?;
+    fs_err::write(&marker, "not a git file\n")?;
+    fixture.compare(&nested, &[], "error")?;
+    fs_err::remove_file(marker)?;
+    fixture
+        .git(&nested)
+        .args(["init", "--bare", "-q"])
+        .assert()
+        .success();
+    fixture.compare(&nested, &[], "error")
 }
 
 #[test]
