@@ -8,11 +8,11 @@ use anyhow::{Context, Result};
 use globset::Glob;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags_from_path};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
-use crate::config::{FilePattern, GlobPatterns, Stage};
+use crate::config::{FilePattern, GlobPatterns, PassFilenames, Stage};
 use crate::fs::PathClean;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
@@ -152,15 +152,19 @@ impl FileTagCache {
     pub(crate) fn from_paths(paths: &[PathBuf]) -> Self {
         let tags_by_file = paths
             .par_iter()
-            .map(|path| match tags_from_path(path) {
-                Ok(tags) => Some(tags),
-                Err(err) => {
-                    error!(filename = ?path.display(), error = %err, "Failed to get tags");
-                    None
-                }
-            })
+            .map(|path| Self::identify(path))
             .collect();
         Self { tags_by_file }
+    }
+
+    fn identify(path: &Path) -> Option<TagSet> {
+        match tags_from_path(path) {
+            Ok(tags) => Some(tags),
+            Err(err) => {
+                error!(filename = ?path.display(), error = %err, "Failed to get tags");
+                None
+            }
+        }
     }
 
     pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
@@ -339,7 +343,11 @@ pub(crate) struct RunFileIndex<'a> {
 }
 
 impl<'a> RunFileIndex<'a> {
-    pub(crate) fn new(input: &'a RunInput, projects: &[Arc<Project>]) -> Self {
+    pub(crate) fn new<'hooks>(
+        input: &'a RunInput,
+        projects: &[Arc<Project>],
+        hooks: impl IntoIterator<Item = &'hooks Hook>,
+    ) -> Self {
         let RunInput::Files(filenames) = input else {
             return Self {
                 projects: Vec::new(),
@@ -377,6 +385,19 @@ impl<'a> RunFileIndex<'a> {
             })
             .collect::<Vec<_>>();
 
+        let mut hook_filters: Vec<Vec<FilenameFilter<'_>>> =
+            projects.iter().map(|_| Vec::new()).collect();
+        for hook in hooks {
+            if hook.always_run && matches!(hook.pass_filenames, PassFilenames::None) {
+                continue;
+            }
+            hook_filters[hook.project().idx()].push(FilenameFilter::new(
+                hook.files.as_ref(),
+                hook.exclude.as_ref(),
+            ));
+        }
+
+        let mut needs_tags = vec![false; filenames.len()];
         let mut matching_projects = Vec::new();
         for (file_idx, filename) in filenames.iter().enumerate() {
             project_tree.matching_projects(filename, &mut matching_projects);
@@ -390,6 +411,13 @@ impl<'a> RunFileIndex<'a> {
                     .expect("matched project path must be a file prefix");
                 if project_filters[project_idx].matches(hook_path) {
                     project_files[project_idx].push(file_idx, hook_path);
+                    if !needs_tags[file_idx]
+                        && hook_filters[project_idx]
+                            .iter()
+                            .any(|filter| filter.matches(hook_path))
+                    {
+                        needs_tags[file_idx] = true;
+                    }
                 }
                 if project.config().orphan.unwrap_or(false) {
                     break;
@@ -397,9 +425,23 @@ impl<'a> RunFileIndex<'a> {
             }
         }
 
+        // Keep a single pre-hook snapshot: a hook may change a file's contents or mode.
+        // Paths rejected by every runnable hook need no filesystem access for tags.
+        let tags_by_file = filenames
+            .par_iter()
+            .enumerate()
+            .map(|(file_idx, path)| {
+                if needs_tags[file_idx] {
+                    FileTagCache::identify(path)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         Self {
             projects: project_files,
-            tag_cache: FileTagCache::from_paths(filenames),
+            tag_cache: FileTagCache { tags_by_file },
         }
     }
 
@@ -719,7 +761,156 @@ pub(super) const fn stage_uses_message_file_input(stage: Stage) -> bool {
 mod tests {
     use super::*;
     use crate::cli::FileSelectionArgs;
-    use crate::config::GlobPatterns;
+    use crate::config::{GlobPatterns, LocalHook};
+    use crate::hook::Repo;
+
+    async fn file_index_fixture(
+        config: &str,
+        hook: &str,
+    ) -> Result<(tempfile::TempDir, Arc<Project>, Hook)> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(prek_consts::PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, config)?;
+        let mut project = Project::from_config_file(config_path.into(), None)?;
+        // Absolute inputs let this fixture exercise project-relative filtering without
+        // changing the process working directory shared by other tests.
+        project.with_relative_path(temp.path().to_path_buf());
+        let project = Arc::new(project);
+        let local_hook: LocalHook = serde_saphyr::from_str(hook)?;
+        let hook = Hook::from_spec(
+            Arc::clone(&project),
+            Arc::new(Repo::Local),
+            local_hook.into(),
+            0,
+        )
+        .await?;
+        Ok((temp, project, hook))
+    }
+
+    #[tokio::test]
+    async fn run_file_index_identifies_only_candidate_files() -> Result<()> {
+        let (temp, project, hook) = file_index_fixture(
+            "repos: []\nexclude: ^ignored-project/\n",
+            indoc::indoc! {r#"
+                id: source
+                name: source
+                entry: echo
+                language: system
+                files:
+                  glob: ["src/**", "ignored-project/**"]
+                exclude:
+                  glob: "**/ignored.txt"
+                types: [text]
+            "#},
+        )
+        .await?;
+        let files = [
+            "src/kept.txt",
+            "src/binary.png",
+            "src/ignored.txt",
+            "ignored-project/kept.txt",
+            "docs/readme.json",
+        ];
+        let mut paths = Vec::new();
+        for filename in files {
+            let path = temp.path().join(filename);
+            if let Some(parent) = path.parent() {
+                fs_err::create_dir_all(parent)?;
+            }
+            fs_err::write(&path, "{}\n")?;
+            paths.push(path);
+        }
+        let input = RunInput::Files(paths);
+        let index = RunFileIndex::new(&input, std::slice::from_ref(&project), [&hook]);
+        let cache = index.tag_cache();
+        assert!(cache.tags(0).is_some());
+        assert!(cache.tags(1).is_some());
+        for (idx, filename) in files.iter().enumerate().skip(2) {
+            assert!(cache.tags(idx).is_none(), "unexpected tags for {filename}");
+        }
+        assert_eq!(
+            index.project_files(&project).matching_filenames(&hook, cache),
+            vec![Path::new("src/kept.txt")],
+        );
+
+        let mut docs_hook = hook.clone();
+        docs_hook.files = Some(regex_pattern(r"\.json$"));
+        docs_hook.exclude = None;
+        let index = RunFileIndex::new(
+            &input,
+            std::slice::from_ref(&project),
+            [&hook, &docs_hook],
+        );
+        assert_eq!(
+            index
+                .project_files(&project)
+                .matching_filenames(&docs_hook, index.tag_cache()),
+            vec![Path::new("docs/readme.json")],
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn run_file_index_preserves_initial_file_tags() -> Result<()> {
+        let (temp, project, hook) = file_index_fixture(
+            "repos: []\n",
+            indoc::indoc! {r"
+                id: text
+                name: text
+                entry: echo
+                language: system
+                types: [text]
+            "},
+        )
+        .await?;
+        let existing = temp.path().join("existing");
+        let missing = temp.path().join("missing");
+        fs_err::write(&existing, "text\n")?;
+        let input = RunInput::Files(vec![existing.clone(), missing.clone()]);
+        let index = RunFileIndex::new(&input, std::slice::from_ref(&project), [&hook]);
+
+        fs_err::write(&existing, b"\0")?;
+        fs_err::write(&missing, "text\n")?;
+        assert_eq!(
+            index
+                .project_files(&project)
+                .matching_filenames(&hook, index.tag_cache()),
+            vec![Path::new("existing")],
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn run_file_index_skips_unneeded_tag_queries() -> Result<()> {
+        let (temp, project, mut hook) = file_index_fixture(
+            "repos: []\n",
+            indoc::indoc! {r"
+                id: check
+                name: check
+                entry: echo
+                language: system
+            "},
+        )
+        .await?;
+        let file = temp.path().join("file.txt");
+        fs_err::write(&file, "text\n")?;
+        let input = RunInput::Files(vec![file]);
+
+        for (always_run, pass_filenames, needs_tags) in [
+            (true, PassFilenames::None, false),
+            (false, PassFilenames::None, true),
+            (true, PassFilenames::All, true),
+        ] {
+            hook.always_run = always_run;
+            hook.pass_filenames = pass_filenames;
+            let index = RunFileIndex::new(&input, std::slice::from_ref(&project), [&hook]);
+            assert_eq!(index.tag_cache().tags(0).is_some(), needs_tags);
+        }
+
+        let index = RunFileIndex::new(&input, std::slice::from_ref(&project), []);
+        assert!(index.tag_cache().tags(0).is_none());
+        Ok(())
+    }
 
     #[test]
     fn all_file_selection_preserves_partial_refs() {

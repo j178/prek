@@ -239,7 +239,14 @@ pub(crate) async fn run(
         )
     })?;
 
-    let file_index = RunFileIndex::new(&input, workspace.all_projects());
+    let file_index = RunFileIndex::new(
+        &input,
+        workspace.all_projects(),
+        selected_hooks
+            .iter()
+            .filter_map(HookPlan::as_run)
+            .map(|hook| hook.as_ref()),
+    );
     let installed_hooks = ensure_hooks_installed(
         store,
         printer,
