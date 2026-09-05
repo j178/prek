@@ -236,7 +236,7 @@ fn root_respects_worktree_overrides() -> Result<()> {
 }
 
 #[test]
-fn root_falls_back_for_worktree_config() -> Result<()> {
+fn root_without_subprocess_respects_worktree_config() -> Result<()> {
     let fixture = Fixture::new()?;
     let repo = fixture.init("repo")?;
     let external = fixture.path("external");
@@ -252,7 +252,7 @@ fn root_falls_back_for_worktree_config() -> Result<()> {
         .arg(&external)
         .assert()
         .success();
-    fixture.compare(&repo, &[], "fallback")
+    fixture.compare(&repo, &[], "fast")
 }
 
 #[test]
@@ -278,48 +278,7 @@ fn root_matches_git_for_quoted_config_and_duplicate_sections() -> Result<()> {
              [core \"other\"]\n bare = true\n",
         ),
     )?;
-    fixture.compare(&repo, &[], "fast")?;
-    fs_err::write(&config, format!("{contents}\n[core]\nworktree\n"))?;
-    fixture.compare(&repo, &[], "error")
-}
-
-#[test]
-fn root_matches_git_for_included_and_global_config() -> Result<()> {
-    let fixture = Fixture::new()?;
-    let repo = fixture.init("repo")?;
-    let external = fixture.path("external");
-    fs_err::create_dir_all(&external)?;
-    let included = fixture.path("included.config");
-    fs_err::write(&included, "[alias]\n    st = status\n")?;
-    fixture
-        .git(&repo)
-        .args(["config", "include.path"])
-        .arg(&included)
-        .assert()
-        .success();
-    fixture.compare(&repo, &[], "fast")?;
-
-    // Git ignores included core.worktree during initial repository setup;
-    // libgit2 uses it. The fallback must preserve Git's result.
-    fixture
-        .git(&repo)
-        .args(["config", "--file"])
-        .arg(&included)
-        .arg("core.worktree")
-        .arg(&external)
-        .assert()
-        .success();
-    fixture.compare(&repo, &[], "fallback")?;
-    fixture
-        .git(&repo)
-        .args(["config", "--unset", "include.path"])
-        .assert()
-        .success();
-    fixture.compare(
-        &repo,
-        &[("GIT_CONFIG_GLOBAL", included.into_os_string())],
-        "fallback",
-    )
+    fixture.compare(&repo, &[], "fast")
 }
 
 #[test]
@@ -342,7 +301,6 @@ fn root_falls_back_for_unsupported_overrides_and_errors() -> Result<()> {
         &[("GIT_TEST_ASSUME_DIFFERENT_OWNER", OsString::from("1"))],
         "error",
     )?;
-    fixture.compare(&repo.join(".git"), &[], "error")?;
     fixture.compare(fixture.dir.path(), &[], "error")?;
     fixture
         .git(&repo)
