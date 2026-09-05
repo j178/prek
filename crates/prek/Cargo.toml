@@ -50,6 +50,7 @@ fancy-regex = { workspace = true }
 fastrand = { workspace = true }
 fs-err = { workspace = true }
 futures-util = { workspace = true }
+git2 = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 ignore = { workspace = true }
