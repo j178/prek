@@ -2,6 +2,7 @@ use std::env::consts::EXE_EXTENSION;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
@@ -35,6 +36,29 @@ const GITHUB_UV_RELEASE_BASE: &str = "https://github.com/astral-sh/uv/releases/d
 
 fn release_archive_url(base: &str, version: &str, archive_name: &str) -> String {
     format!("{base}/{version}/{archive_name}")
+}
+
+/// Split a PEP 503 simple-index href into its URL path and the raw `sha256=<hex>` digest
+/// value embedded in its fragment, if present.
+///
+/// This intentionally returns the raw string rather than a parsed `Sha256Digest`: parsing
+/// can fail on a malformed fragment, and that failure must not surface until the checksum
+/// callback in `install_from_wheel_url` actually runs it, so a malformed digest doesn't break
+/// installs where the operator has disabled checksum verification (see
+/// `parse_expected_digest`).
+fn split_wheel_digest_fragment(href: &str) -> (&str, Option<&str>) {
+    let Some((path, fragment)) = href.split_once('#') else {
+        return (href, None);
+    };
+    (path, fragment.strip_prefix("sha256="))
+}
+
+/// Parse a raw digest string captured from a wheel source, deferred until the checksum
+/// callback is actually invoked. `download_artifact_with` only calls this when the resolved
+/// `DownloadChecksumPolicy` requires a digest, so a malformed value can't fail an install
+/// where checksum verification is disabled.
+fn parse_expected_digest(expected_digest: Option<&str>) -> Result<Option<Sha256Digest>> {
+    expected_digest.map(Sha256Digest::from_str).transpose()
 }
 
 fn static_musl_release_target_for_host(
@@ -415,8 +439,9 @@ impl InstallSource {
         let download_url = wheel_file["url"]
             .as_str()
             .context("Missing download URL in PyPI response")?;
+        let digest = wheel_file["digests"]["sha256"].as_str();
 
-        self.install_from_wheel_url(store, target, &wheel_name, download_url)
+        self.install_from_wheel_url(store, target, &wheel_name, download_url, digest)
             .await
     }
 
@@ -461,6 +486,8 @@ impl InstallSource {
                 )
             })?;
 
+        let (download_path, digest) = split_wheel_digest_fragment(download_path);
+
         // Resolve relative URLs
         let download_url = if download_path.starts_with("http") {
             download_path.to_string()
@@ -468,7 +495,7 @@ impl InstallSource {
             format!("{simple_url}{download_path}")
         };
 
-        self.install_from_wheel_url(store, target, &wheel_name, &download_url)
+        self.install_from_wheel_url(store, target, &wheel_name, &download_url, digest)
             .await
     }
 
@@ -478,13 +505,14 @@ impl InstallSource {
         target: &Path,
         filename: &str,
         download_url: &str,
+        expected_digest: Option<&str>,
     ) -> Result<()> {
         let download = download_artifact_with(
             download_url,
             filename,
             store,
-            DownloadChecksumPolicy::Disabled,
-            async || Ok(None),
+            DownloadChecksumPolicy::from_env(&EnvVars),
+            async || parse_expected_digest(expected_digest),
             |req| req,
         )
         .await
@@ -753,6 +781,70 @@ mod tests {
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "unknown")])),
             None
         );
+    }
+
+    #[test]
+    fn split_wheel_digest_fragment_extracts_sha256() {
+        let href = "../../packages/uv-0.11.29-py3-none-manylinux_2_17_x86_64.whl#sha256=eec03a8b63d55915694db3af4e91324b39ced49e2aeac7af37851c7eb3f470ea";
+        let (path, digest) = split_wheel_digest_fragment(href);
+
+        assert_eq!(
+            path,
+            "../../packages/uv-0.11.29-py3-none-manylinux_2_17_x86_64.whl"
+        );
+        assert_eq!(
+            digest,
+            Some("eec03a8b63d55915694db3af4e91324b39ced49e2aeac7af37851c7eb3f470ea")
+        );
+    }
+
+    #[test]
+    fn split_wheel_digest_fragment_handles_missing_fragment() {
+        let href = "../../packages/uv-0.11.29-py3-none-manylinux_2_17_x86_64.whl";
+        let (path, digest) = split_wheel_digest_fragment(href);
+
+        assert_eq!(path, href);
+        assert_eq!(digest, None);
+    }
+
+    #[test]
+    fn split_wheel_digest_fragment_does_not_parse_malformed_digest() {
+        // Extraction must stay infallible: a malformed fragment is only rejected once
+        // `parse_expected_digest` actually runs, not while just locating the download path.
+        let href = "../../packages/uv-0.11.29-py3-none-manylinux_2_17_x86_64.whl#sha256=not-hex";
+        let (path, digest) = split_wheel_digest_fragment(href);
+
+        assert_eq!(
+            path,
+            "../../packages/uv-0.11.29-py3-none-manylinux_2_17_x86_64.whl"
+        );
+        assert_eq!(digest, Some("not-hex"));
+    }
+
+    #[test]
+    fn parse_expected_digest_returns_none_when_absent() -> Result<()> {
+        assert_eq!(parse_expected_digest(None)?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn parse_expected_digest_parses_valid_hex() -> Result<()> {
+        let digest = parse_expected_digest(Some(
+            "eec03a8b63d55915694db3af4e91324b39ced49e2aeac7af37851c7eb3f470ea",
+        ))?;
+
+        assert_eq!(
+            digest,
+            Some(Sha256Digest::from_str(
+                "eec03a8b63d55915694db3af4e91324b39ced49e2aeac7af37851c7eb3f470ea"
+            )?)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_expected_digest_rejects_malformed_hex() {
+        assert!(parse_expected_digest(Some("not-hex")).is_err());
     }
 
     #[test]
