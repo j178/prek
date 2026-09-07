@@ -12,8 +12,8 @@ use crate::cli::run::{
     CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, collect_run_input,
 };
 use crate::config::{FilePattern, HookOptions, Language, MetaHook};
-use crate::hook::Hook;
-use crate::hooks::HookOutput;
+use crate::hook::{Hook, Repo};
+use crate::hooks::{BuiltinHooks, HookOutput};
 use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project};
 
@@ -134,7 +134,18 @@ pub(crate) async fn check_hooks_apply(
             .context("Failed to init hooks")?;
         let hooks = project_hooks
             .iter()
-            .filter(|hook| !hook.always_run && hook.language != Language::Fail)
+            .filter(|hook| {
+                if hook.always_run || hook.language == Language::Fail {
+                    return false;
+                }
+
+                // Builtins use `system`, but this hook only selects invalid filenames,
+                // so having no matches is expected, just like `language: fail`.
+                !matches!(
+                    hook.repo(),
+                    Repo::Builtin if hook.id == BuiltinHooks::CheckIllegalWindowsNames.as_ref()
+                )
+            })
             .collect::<Vec<_>>();
         if hooks.is_empty() {
             continue;

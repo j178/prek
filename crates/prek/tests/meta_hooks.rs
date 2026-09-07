@@ -64,6 +64,69 @@ fn meta_hooks() {
 }
 
 #[test]
+fn check_hooks_apply_builtin_illegal_windows_names() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-illegal-windows-names
+          - repo: meta
+            hooks:
+              - id: check-hooks-apply
+    "})
+        .with_file("normal.txt", "ok")
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check illegal windows names..........................(no files to check)Skipped
+    Check hooks apply........................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn check_hooks_apply_still_checks_other_hooks() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-illegal-windows-names
+              - id: check-json
+          - repo: local
+            hooks:
+              - id: check-illegal-windows-names
+                name: local check
+                language: system
+                entry: echo
+                files: ^nonexistent$
+          - repo: meta
+            hooks:
+              - id: check-hooks-apply
+    "})
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("check-hooks-apply"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Check hooks apply........................................................Failed
+    - hook id: check-hooks-apply
+    - exit code: 1
+
+      check-json does not apply to this repository
+      check-illegal-windows-names does not apply to this repository
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn meta_hooks_unknown_hook() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
