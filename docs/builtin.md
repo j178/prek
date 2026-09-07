@@ -386,12 +386,23 @@ Attempts to load all JSON5 files to verify syntax.
 
 #### `check-jsonc`
 
-Attempts to load all [JSONC files](https://jsonc.org/) to verify syntax.
+Checks `.jsonc` files for parseable syntax. Trailing commas are allowed.
+
+To check JSONC stored in `.json` files, such as `tsconfig.json`, override the default
+file-type filter:
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-jsonc
+        types: [json]
+        files: '(^|/)tsconfig\.json$'
+```
 
 **Supported arguments**
 
-- `--allow-trailing-commas`
-    - Allow trailing commas in objects and arrays.
+- None.
 
 **Caveats / differences**
 

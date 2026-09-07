@@ -3260,17 +3260,20 @@ fn check_jsonc() {
     "},
         )
         .with_file(
-            "invalid_trailing_comma.jsonc",
+            "invalid_missing_comma.jsonc",
             indoc::indoc! {"
         {
-            \"key\": \"value\",
+            \"key\": \"value\"
+            \"other\": \"value\"
         }
     "},
         )
+        .with_file("ignored.json", "not jsonc")
+        .with_file("ignored.json5", "{unquoted: 'json5'}")
         .init_git();
 
     // First run: hooks should fail
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3279,14 +3282,14 @@ fn check_jsonc() {
     - description: Checks JSONC files for parseable syntax
     - exit code: 1
 
-      invalid_trailing_comma.jsonc: Failed to jsonc decode (Trailing commas are not allowed on line 2 column 19)
+      invalid_missing_comma.jsonc: Failed to jsonc decode (Expected comma on line 2 column 19)
 
     ----- stderr -----
-    ");
+    "#);
 
     // Fix the files
     context.write_file(
-        "invalid_trailing_comma.jsonc",
+        "invalid_missing_comma.jsonc",
         indoc::indoc! {"
         // single line
         {
@@ -3308,27 +3311,26 @@ fn check_jsonc() {
 }
 
 #[test]
-fn check_jsonc_allow_trailing_commas() {
+fn check_jsonc_trailing_commas() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-jsonc
-                args: ['--allow-trailing-commas']
     "})
         .with_file(
             "trailing_comma.jsonc",
             indoc::indoc! {"
         // single line
         {
-            \"key\": \"value\",
+            \"array\": [1, 2, /* trailing comment */],
+            \"object\": {\"key\": \"value\",},
         }
     "},
         )
         .init_git();
 
-    // This example fails in the check_jsonc test where --allow-trailing-commas is not given
     cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
