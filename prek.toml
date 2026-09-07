@@ -23,7 +23,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = "8a48f81b6c64dcfea44b3633223084c4be58ac5f"  # frozen: v1.49.0
+rev = "4d9c206a77c041268485162b8e2579ad7a5cb9a3"  # frozen: v1.50.0
 hooks = [{ id = "typos" }]
 
 [[repos]]
@@ -59,7 +59,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/tombi-toml/tombi-pre-commit"
-rev = "dd68bbd8cdd8891c942fb6f33a6e87a477b2c375"  # frozen: v1.4.1
+rev = "1c6e088eb48854d65499ae12c0e7ec2f1737d0f8"  # frozen: v1.5.0
 hooks = [
   { id = "tombi-format", args = ["--offline"], files = '\.toml$' },
 ]
