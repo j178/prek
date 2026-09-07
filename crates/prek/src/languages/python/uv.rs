@@ -15,9 +15,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums};
 use crate::fs::LockedFile;
-use crate::http::{
-    DownloadChecksumPolicy, REQWEST_CLIENT, TempDownload, download_artifact, download_artifact_with,
-};
+use crate::http::{REQWEST_CLIENT, TempDownload, download_artifact};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::warn_user;
@@ -415,8 +413,9 @@ impl InstallSource {
         let download_url = wheel_file["url"]
             .as_str()
             .context("Missing download URL in PyPI response")?;
+        let digest = wheel_file["digests"]["sha256"].as_str();
 
-        self.install_from_wheel_url(store, target, &wheel_name, download_url)
+        self.install_from_wheel_url(store, target, &wheel_name, download_url, digest)
             .await
     }
 
@@ -461,6 +460,11 @@ impl InstallSource {
                 )
             })?;
 
+        let (download_path, digest) = match download_path.split_once('#') {
+            Some((path, fragment)) => (path, fragment.strip_prefix("sha256=")),
+            None => (download_path, None),
+        };
+
         // Resolve relative URLs
         let download_url = if download_path.starts_with("http") {
             download_path.to_string()
@@ -468,7 +472,7 @@ impl InstallSource {
             format!("{simple_url}{download_path}")
         };
 
-        self.install_from_wheel_url(store, target, &wheel_name, &download_url)
+        self.install_from_wheel_url(store, target, &wheel_name, &download_url, digest)
             .await
     }
 
@@ -478,15 +482,11 @@ impl InstallSource {
         target: &Path,
         filename: &str,
         download_url: &str,
+        expected_digest: Option<&str>,
     ) -> Result<()> {
-        let download = download_artifact_with(
-            download_url,
-            filename,
-            store,
-            DownloadChecksumPolicy::Disabled,
-            async || Ok(None),
-            |req| req,
-        )
+        let download = download_artifact(download_url, filename, store, async || {
+            expected_digest.map(str::parse).transpose()
+        })
         .await
         .context("Failed to download uv wheel")?;
         let extracted = archive::extract_archive(download.path())
