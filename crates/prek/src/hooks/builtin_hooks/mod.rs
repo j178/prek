@@ -74,6 +74,7 @@ impl BuiltinHooks {
     fn flags_command(self) -> Option<Command> {
         Some(match self {
             Self::CheckAddedLargeFiles => check_added_large_files::Args::command(),
+            Self::CheckJsonc => check_jsonc::Args::command(),
             Self::CheckMergeConflict => check_merge_conflict::Args::command(),
             Self::CheckVcsPermalinks => check_vcs_permalinks::Args::command(),
             Self::CheckYaml => check_yaml::Args::command(),

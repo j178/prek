@@ -3331,6 +3331,29 @@ fn check_jsonc_trailing_commas() {
         )
         .init_git();
 
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check jsonc..............................................................Failed
+    - hook id: check-jsonc
+    - description: Checks JSONC files for parseable syntax
+    - exit code: 1
+
+      trailing_comma.jsonc: Failed to jsonc decode (Trailing commas are not allowed on line 3 column 19)
+
+    ----- stderr -----
+    "#);
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+                args: [--allow-trailing-commas]
+    "});
+    context.git().add(".");
+
     cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
@@ -3339,6 +3362,27 @@ fn check_jsonc_trailing_commas() {
 
     ----- stderr -----
     ");
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+                args: [-t]
+    "});
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-jsonc`
+      caused by: error: unexpected argument '-t' found
+
+    Usage: check-jsonc [OPTIONS]
+    "#);
 }
 
 #[cfg(unix)]
