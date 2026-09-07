@@ -216,11 +216,16 @@ impl From<MetaHook> for HookSpec {
 
 impl From<BuiltinHook> for HookSpec {
     fn from(hook: BuiltinHook) -> Self {
+        let language = match hook.id.as_str() {
+            "check-illegal-windows-names" => Language::Fail,
+            _ => Language::System,
+        };
+
         Self {
             id: hook.id,
             name: hook.name,
             entry: hook.entry,
-            language: Language::System,
+            language,
             language_overridden: false,
             priority: hook.priority,
             groups: hook.groups,
