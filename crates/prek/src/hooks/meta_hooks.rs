@@ -13,7 +13,7 @@ use crate::cli::run::{
 };
 use crate::config::{FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::{Hook, Repo};
-use crate::hooks::HookOutput;
+use crate::hooks::{BuiltinHooks, HookOutput};
 use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project};
 
@@ -142,8 +142,8 @@ pub(crate) async fn check_hooks_apply(
                 // Builtins use `system`, but this hook only selects invalid filenames,
                 // so having no matches is expected, just like `language: fail`.
                 !matches!(
-                    (hook.repo(), hook.id.as_str()),
-                    (Repo::Builtin, "check-illegal-windows-names")
+                    hook.repo(),
+                    Repo::Builtin if hook.id == BuiltinHooks::CheckIllegalWindowsNames.as_ref()
                 )
             })
             .collect::<Vec<_>>();
