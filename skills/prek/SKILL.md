@@ -192,6 +192,7 @@ Builtin hooks called out by the docs include:
 - `fix-byte-order-marker`
 - `check-json`
 - `check-json5`
+- `check-jsonc`
 - `pretty-format-json`
 - `check-toml`
 - `check-vcs-permalinks`

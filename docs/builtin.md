@@ -154,6 +154,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`forbid-new-submodules`](#forbid-new-submodules) (Prevents the addition of new Git submodules.)
 - [`check-json`](#check-json) (Checks JSON files for parseable syntax.)
 - [`check-json5`](#check-json5) (Checks JSON5 files for parseable syntax.)
+- [`check-jsonc`](#check-jsonc) (Checks JSONC files for parseable syntax.)
 - [`pretty-format-json`](#pretty-format-json) (Checks that JSON files are pretty-formatted.)
 - [`check-toml`](#check-toml) (Checks TOML files for parseable syntax.)
 - [`check-vcs-permalinks`](#check-vcs-permalinks) (Ensures that links to VCS websites are permalinks.)
@@ -376,6 +377,34 @@ Attempts to load all JSON5 files to verify syntax.
 **Supported arguments**
 
 - None.
+
+**Caveats / differences**
+
+- This implementation rejects **duplicate object keys** (errors with `duplicate key ...`).
+
+---
+
+#### `check-jsonc`
+
+Checks `.jsonc` files for parseable syntax.
+
+To check JSONC stored in `.json` files, such as `tsconfig.json`, override the default
+file-type filter:
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-jsonc
+        types: [json]
+        files: '(^|/)tsconfig\.json$'
+        args: [--allow-trailing-commas]
+```
+
+**Supported arguments**
+
+- `--allow-trailing-commas`
+    - Allow trailing commas in objects and arrays (rejected by default).
 
 **Caveats / differences**
 

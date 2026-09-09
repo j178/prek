@@ -3236,6 +3236,155 @@ fn check_json5() {
     ");
 }
 
+#[test]
+fn check_jsonc() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+    "})
+        .with_file(
+            "valid.jsonc",
+            indoc::indoc! {"
+        // single-line
+        {
+            /*
+              multi
+              line
+              comment
+            */
+            \"key\": /* inline comment */ \"value\"  // trailing comment
+        }
+    "},
+        )
+        .with_file(
+            "invalid_missing_comma.jsonc",
+            indoc::indoc! {"
+        {
+            \"key\": \"value\"
+            \"other\": \"value\"
+        }
+    "},
+        )
+        .with_file("ignored.json", "not jsonc")
+        .with_file("ignored.json5", "{unquoted: 'json5'}")
+        .init_git();
+
+    // First run: hooks should fail
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check jsonc..............................................................Failed
+    - hook id: check-jsonc
+    - description: Checks JSONC files for parseable syntax
+    - exit code: 1
+
+      invalid_missing_comma.jsonc: Failed to jsonc decode (Expected comma on line 2 column 19)
+
+    ----- stderr -----
+    "#);
+
+    // Fix the files
+    context.write_file(
+        "invalid_missing_comma.jsonc",
+        indoc::indoc! {"
+        // single line
+        {
+          \"key\": \"value\"
+        }
+    "},
+    );
+    context.git().add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check jsonc..............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn check_jsonc_trailing_commas() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+    "})
+        .with_file(
+            "trailing_comma.jsonc",
+            indoc::indoc! {"
+        // single line
+        {
+            \"array\": [1, 2, /* trailing comment */],
+            \"object\": {\"key\": \"value\",},
+        }
+    "},
+        )
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check jsonc..............................................................Failed
+    - hook id: check-jsonc
+    - description: Checks JSONC files for parseable syntax
+    - exit code: 1
+
+      trailing_comma.jsonc: Failed to jsonc decode (Trailing commas are not allowed on line 3 column 19)
+
+    ----- stderr -----
+    "#);
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+                args: [--allow-trailing-commas]
+    "});
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check jsonc..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-jsonc
+                args: [-t]
+    "});
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-jsonc`
+      caused by: error: unexpected argument '-t' found
+
+    Usage: check-jsonc [OPTIONS]
+    "#);
+}
+
 #[cfg(unix)]
 #[test]
 fn check_illegal_windows_names() {
