@@ -215,14 +215,14 @@ jobs:
       contents: write
       id-token: write
       pages: write
-    uses: ./.github/workflows/publish-docs.yml
+    uses: $/.github/workflows/publish-docs.yml
     with:
       plan: ""
 
   build-release-binaries:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
-    uses: ./.github/workflows/build-release-binaries.yml
+    uses: $/.github/workflows/build-release-binaries.yml
     with:
       # CI has no cargo-dist manifest; release.yml passes the real plan when publishing.
       plan: ""
@@ -230,7 +230,7 @@ jobs:
   build-docker:
     needs: plan
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
-    uses: ./.github/workflows/build-docker.yml
+    uses: $/.github/workflows/build-docker.yml
     with:
       # CI has no cargo-dist manifest; an empty plan keeps Docker builds in dry-run mode.
       plan: ""
@@ -748,7 +748,7 @@ jobs:
   performance:
     needs: plan
     if: ${{ needs.plan.outputs.run-bench == 'true' }}
-    uses: ./.github/workflows/performance.yml
+    uses: $/.github/workflows/performance.yml
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
@@ -783,7 +783,7 @@ jobs:
   build-dev-binaries:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    uses: ./.github/workflows/build-dev-binaries.yml
+    uses: $/.github/workflows/build-dev-binaries.yml
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
