@@ -3,7 +3,61 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
 
+#[cfg(feature = "ci")]
+use crate::common::remove_bin_from_path;
 use crate::common::{TestEnv, cmd_snapshot};
+
+#[cfg(feature = "ci")]
+#[test]
+fn uv_source_none() -> anyhow::Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: python -c 'print("Hello, world!")'
+                always_run: true
+                pass_filenames: false
+    "#})
+        .init_git();
+
+    let path = remove_bin_from_path("uv", None)?;
+    let uv_dir = context.home_dir().child("tools/uv");
+
+    cmd_snapshot!(context, context.run()
+        .env(EnvVars::PREK_UV_SOURCE, "none")
+        .env(EnvVars::PATH, &path), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `local`
+      caused by: Failed to install uv
+      caused by: No compatible uv found and automatic installation is disabled by PREK_UV_SOURCE=none. Install uv (>=0.7.0) and add it to PATH
+    "#);
+    uv_dir.assert(predicates::path::missing());
+
+    fs_err::create_dir_all(&uv_dir)?;
+    let uv_path = uv_dir.child(format!("uv{}", std::env::consts::EXE_SUFFIX));
+    fs_err::copy(which::which("uv")?, &uv_path)?;
+
+    cmd_snapshot!(context, context.run()
+        .env(EnvVars::PREK_UV_SOURCE, "none")
+        .env(EnvVars::PATH, &path), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
 
 /// Test `language_version` parsing and downloading.
 /// We use `setup-python` action to install Python 3.12 in CI, when running tests uv can find them.

@@ -535,6 +535,9 @@ prek uses `uv` for creating virtual environments and installing dependencies:
 - If not found, automatically installs `uv` from Astral's CDN, falling back to PyPI (and mirrors) then `pip`
 - Automatically installs the required Python version if it's not already available
 
+Set [`PREK_UV_SOURCE=none`](reference/environment-variables.md#prek_uv_source) to
+disable automatic uv installation and require an existing compatible uv.
+
 !!! warning "Environment variables"
 
     Since prek calls `uv` under the hood to create Python virtual environments and install dependencies, most `uv` environment variables will affect prek's behavior. For example, setting `UV_RESOLUTION=lowest-direct` in your environment will cause hook dependencies to be resolved to their lowest compatible versions, which may lead to installation failures with old packages on modern Python versions.

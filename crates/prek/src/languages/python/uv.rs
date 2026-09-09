@@ -232,6 +232,13 @@ impl PyPiMirror {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+enum UvSource {
+    Auto,
+    None,
+    Explicit(InstallSource),
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum InstallSource {
     /// Download uv from Astral's CDN (the default).
     Astral,
@@ -640,6 +647,17 @@ impl Uv {
             }
         }
 
+        let source = match uv_source_from_env(&EnvVars) {
+            UvSource::Auto => None,
+            UvSource::None => bail!(
+                "No compatible uv found and automatic installation is disabled by {}=none. \
+                 Install uv ({}) and add it to PATH",
+                EnvVars::PREK_UV_SOURCE,
+                *UV_VERSION_RANGE,
+            ),
+            UvSource::Explicit(source) => Some(source),
+        };
+
         // Install new managed uv with proper locking
         fs_err::tokio::create_dir_all(&uv_dir).await?;
         let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
@@ -656,7 +674,7 @@ impl Uv {
             }
         }
 
-        if let Some(source) = uv_source_from_env(&EnvVars) {
+        if let Some(source) = source {
             source.install(store, uv_dir).await
         } else {
             Self::install_with_fallbacks(store, uv_dir).await
@@ -664,25 +682,30 @@ impl Uv {
     }
 }
 
-fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> Option<InstallSource> {
-    let var = env_vars.var(EnvVars::PREK_UV_SOURCE).ok()?;
+fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> UvSource {
+    let Ok(var) = env_vars.var(EnvVars::PREK_UV_SOURCE) else {
+        return UvSource::Auto;
+    };
     match var.as_str() {
-        "astral" => Some(InstallSource::Astral),
-        "github" => Some(InstallSource::GitHub),
-        "pypi" => Some(InstallSource::PyPi(PyPiMirror::Pypi)),
-        "tuna" => Some(InstallSource::PyPi(PyPiMirror::Tuna)),
-        "aliyun" => Some(InstallSource::PyPi(PyPiMirror::Aliyun)),
-        "tencent" => Some(InstallSource::PyPi(PyPiMirror::Tencent)),
-        "pip" => Some(InstallSource::Pip),
-        custom if custom.starts_with("http") => Some(InstallSource::PyPi(PyPiMirror::Custom(var))),
+        "none" => UvSource::None,
+        "astral" => UvSource::Explicit(InstallSource::Astral),
+        "github" => UvSource::Explicit(InstallSource::GitHub),
+        "pypi" => UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Pypi)),
+        "tuna" => UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Tuna)),
+        "aliyun" => UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Aliyun)),
+        "tencent" => UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Tencent)),
+        "pip" => UvSource::Explicit(InstallSource::Pip),
+        custom if custom.starts_with("http") => {
+            UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Custom(var)))
+        }
         _ => {
             warn_user!(
-                "Invalid value for {}: {:?}. Expected astral, github, pypi, tuna, aliyun, tencent, pip, or an http(s) URL; using default ({:?})",
+                "Invalid value for {}: {:?}. Expected none, astral, github, pypi, tuna, aliyun, tencent, pip, or an http(s) URL; using default ({:?})",
                 EnvVars::PREK_UV_SOURCE,
                 var,
                 "auto",
             );
-            None
+            UvSource::Auto
         }
     }
 }
@@ -723,35 +746,39 @@ mod tests {
 
     #[test]
     fn uv_source_from_env_reads_source_override() {
-        assert_eq!(uv_source_from_env(&EnvVars::from_map(&[])), None);
+        assert_eq!(uv_source_from_env(&EnvVars::from_map(&[])), UvSource::Auto);
+        assert_eq!(
+            uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "none")])),
+            UvSource::None
+        );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "astral")])),
-            Some(InstallSource::Astral)
+            UvSource::Explicit(InstallSource::Astral)
         );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "github")])),
-            Some(InstallSource::GitHub)
+            UvSource::Explicit(InstallSource::GitHub)
         );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "pypi")])),
-            Some(InstallSource::PyPi(PyPiMirror::Pypi))
+            UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Pypi))
         );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "pip")])),
-            Some(InstallSource::Pip)
+            UvSource::Explicit(InstallSource::Pip)
         );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(
                 EnvVars::PREK_UV_SOURCE,
                 "https://example.com/simple",
             )])),
-            Some(InstallSource::PyPi(PyPiMirror::Custom(
+            UvSource::Explicit(InstallSource::PyPi(PyPiMirror::Custom(
                 "https://example.com/simple".to_string()
             )))
         );
         assert_eq!(
             uv_source_from_env(&EnvVars::from_map(&[(EnvVars::PREK_UV_SOURCE, "unknown")])),
-            None
+            UvSource::Auto
         );
     }
 
