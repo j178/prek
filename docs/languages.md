@@ -380,7 +380,7 @@ prek installs Julia hooks into an isolated environment using Julia's built-in pa
 
 The hook repository can include a `Project.toml` (or `JuliaProject.toml`) and optionally a `Manifest.toml` (or `JuliaManifest.toml`). If these files are present, prek will use them to instantiate the environment. If no project file is found, an empty one is created to ensure the environment is correctly initialized.
 
-`additional_dependencies` are supported and will be added to the environment via `Pkg.add`.
+`additional_dependencies` supports Julia's Pkg REPL `add` syntax, including version specifiers such as `Runic@1.10.0`.
 
 #### `language_version`
 
