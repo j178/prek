@@ -12,6 +12,9 @@ rules:
   secrets-inherit:
     ignore:
       - release.yml
+  self-repository:
+    ignore:
+      - release.yml # cargo-dist 0.32.0 generates workspace-relative references.
   secrets-outside-env:
     ignore:
       - ci.yml # CODECOV_TOKEN is not important
