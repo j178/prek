@@ -233,6 +233,8 @@ impl PyPiMirror {
 
 #[derive(Debug, PartialEq, Eq)]
 enum InstallSource {
+    /// Disable automatic uv installation.
+    None,
     /// Download uv from Astral's CDN (the default).
     Astral,
     /// Download uv from GitHub releases.
@@ -246,6 +248,12 @@ enum InstallSource {
 impl InstallSource {
     async fn install(&self, store: &Store, target: &Path) -> Result<Uv> {
         match self {
+            Self::None => bail!(
+                "No compatible uv found and automatic installation is disabled by {}=none. \
+                 Install uv ({}) and add it to PATH",
+                EnvVars::PREK_UV_SOURCE,
+                *UV_VERSION_RANGE,
+            ),
             Self::Astral => {
                 self.install_from_release_archive(store, target, ASTRAL_UV_RELEASE_BASE, &HOST)
                     .await?;
@@ -667,6 +675,7 @@ impl Uv {
 fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> Option<InstallSource> {
     let var = env_vars.var(EnvVars::PREK_UV_SOURCE).ok()?;
     match var.as_str() {
+        "none" => Some(InstallSource::None),
         "astral" => Some(InstallSource::Astral),
         "github" => Some(InstallSource::GitHub),
         "pypi" => Some(InstallSource::PyPi(PyPiMirror::Pypi)),
@@ -677,7 +686,7 @@ fn uv_source_from_env(env_vars: &impl EnvVarsRead) -> Option<InstallSource> {
         custom if custom.starts_with("http") => Some(InstallSource::PyPi(PyPiMirror::Custom(var))),
         _ => {
             warn_user!(
-                "Invalid value for {}: {:?}. Expected astral, github, pypi, tuna, aliyun, tencent, pip, or an http(s) URL; using default ({:?})",
+                "Invalid value for {}: {:?}. Expected none, astral, github, pypi, tuna, aliyun, tencent, pip, or an http(s) URL; using default ({:?})",
                 EnvVars::PREK_UV_SOURCE,
                 var,
                 "auto",

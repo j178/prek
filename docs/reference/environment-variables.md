@@ -59,6 +59,7 @@ See [Built-in Fast Hooks](../builtin.md) for details.
 Choose one source for installing uv, the Python package installer.
 Options:
 
+- `none` (disable automatic uv installation)
 - `astral` (download from Astral's CDN)
 - `github` (download from GitHub releases)
 - `pypi` (install from PyPI)
@@ -70,6 +71,10 @@ Options:
 
 If not set, prek tries Astral's CDN, PyPI and its configured mirrors, then `pip`
 until one succeeds. The `github` source is used only when selected explicitly.
+
+With `none`, prek still uses a compatible uv found alongside the prek binary, on
+`PATH`, or in prek's cache. If none is available, prek returns an error instead of
+installing uv. This does not disable Python or package downloads by uv.
 
 ### `PREK_NATIVE_TLS`
 
