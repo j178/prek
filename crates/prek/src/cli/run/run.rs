@@ -25,7 +25,8 @@ use crate::cli::run::install::{InstallCache, install_hooks};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
-    ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
+    ProjectFiles, RepoFilter, RunFileIndex, RunInput, Selectors, collect_run_input,
+    project_status_marker,
 };
 use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
 use crate::config::{PassFilenames, Stage};
@@ -84,6 +85,7 @@ pub(crate) async fn run(
 ) -> Result<ExitStatus> {
     let RunArgs {
         options,
+        repo,
         stage: hook_stage,
         groups,
         required_groups,
@@ -125,6 +127,7 @@ pub(crate) async fn run(
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
     let group_filters = GroupFilters::parse(&groups, &required_groups, &no_groups)?;
+    let repo_filters = repo.into_iter().map(RepoFilter::new).collect::<Vec<_>>();
     let has_group_filters = group_filters.has_filters();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
@@ -140,7 +143,8 @@ pub(crate) async fn run(
         workspace
             .init_hooks(
                 store,
-                HookInitFilters::new(Some(&selectors), Some(&group_filters)),
+                HookInitFilters::new(Some(&selectors), Some(&group_filters))
+                    .with_repo_filter(&repo_filters),
                 Some(&reporter),
             )
             .await
@@ -160,6 +164,9 @@ pub(crate) async fn run(
 
     selectors.report_unused();
     group_filters.report_unused();
+    for repo_filter in &repo_filters {
+        repo_filter.report_unused();
+    }
 
     if selected_hooks.is_empty() {
         writeln!(

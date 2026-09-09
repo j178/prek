@@ -1437,6 +1437,135 @@ fn orphan_projects() {
     ");
 }
 
+#[test]
+fn repo_filter_matches_remote_repositories_across_workspace_projects() {
+    let context = TestEnv::new()
+        .with_config(indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+
+          - repo: local
+            hooks:
+              - id: root-local
+                name: Root Local
+                entry: echo root
+                language: system
+                always_run: true
+
+          - repo: meta
+            hooks:
+              - id: identity
+    "})
+        .with_project_config(
+            "nested",
+            indoc! {r"
+            repos:
+              - repo: https://github.com/pre-commit/pre-commit-hooks
+                rev: v4.6.0
+                hooks:
+                  - id: end-of-file-fixer
+
+              - repo: builtin
+                hooks:
+                  - id: check-toml
+        "},
+        )
+        .with_files([
+            ("root.txt", "root   \n"),
+            ("nested/nested.txt", "nested"),
+            ("nested/valid.toml", "[tool]\nname = \"valid\"\n"),
+        ])
+        .init_git();
+
+    cmd_snapshot!(context, context.run().args([
+        "--all-files",
+        "--dry-run",
+        "--repo",
+        "https://github.com/pre-commit/pre-commit-hooks",
+    ]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ nested
+      fix end of files......................................................Dry Run
+    ✓ <workspace>
+      trim trailing whitespace..............................................Dry Run
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().args([
+        "--all-files",
+        "--dry-run",
+        "--repo",
+        "pre-commit/pre-commit-hooks",
+    ]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ nested
+      fix end of files......................................................Dry Run
+    ✓ <workspace>
+      trim trailing whitespace..............................................Dry Run
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().args([
+        "nested/",
+        "--all-files",
+        "--dry-run",
+        "--repo",
+        "pre-commit/pre-commit-hooks",
+    ]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ nested
+      fix end of files......................................................Dry Run
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().args([
+        "--all-files",
+        "--dry-run",
+        "--repo",
+        "local",
+        "--repo",
+        "meta",
+        "--repo",
+        "builtin",
+        "--repo",
+        "pre-commit/pre-commit-hooks",
+    ]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ nested
+      fix end of files......................................................Dry Run
+      check toml............................................................Dry Run
+    ✓ <workspace>
+      trim trailing whitespace..............................................Dry Run
+      Root Local............................................................Dry Run
+      identity..............................................................Dry Run
+      - hook id: identity
+      - duration: [TIME]
+
+        `identity` would be run on 5 files:
+        - .pre-commit-config.yaml
+        - nested/.pre-commit-config.yaml
+        - nested/nested.txt
+        - nested/valid.toml
+        - root.txt
+
+    ----- stderr -----
+    ");
+}
+
 fn setup_relative_repo_path_project() -> Result<TestEnv> {
     // Create a local hook repository at the root level
     let context = TestEnv::new()

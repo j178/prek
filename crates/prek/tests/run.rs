@@ -1480,6 +1480,192 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() {
     "#);
 }
 
+#[test]
+fn repo_filter_selects_special_repositories_without_cloning_unrelated_remote() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-check
+                name: Local Check
+                entry: echo local
+                language: system
+                always_run: true
+
+          - repo: meta
+            hooks:
+              - id: identity
+
+          - repo: builtin
+            hooks:
+              - id: check-toml
+
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: unreachable-hook
+    "})
+        .with_file("valid.toml", "[tool]\nname = \"valid\"\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run().args(["--all-files", "--dry-run", "--repo", "local"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Local Check.............................................................Dry Run
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().args(["--all-files", "--dry-run", "--repo", "meta"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    identity................................................................Dry Run
+    - hook id: identity
+    - duration: [TIME]
+
+      `identity` would be run on 2 files:
+      - .pre-commit-config.yaml
+      - valid.toml
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().args(["--all-files", "--dry-run", "--repo", "builtin"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check toml..............................................................Dry Run
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn repo_filter_composes_with_run_filters() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: selected
+                name: Selected
+                entry: python3 -c 'import sys; print(" ".join(sys.argv[1:]))'
+                language: system
+                always_run: true
+                verbose: true
+                stages: [manual]
+                groups: [ci]
+              - id: skipped
+                name: Skipped
+                entry: echo skipped
+                language: system
+                always_run: true
+                stages: [manual]
+                groups: [ci]
+              - id: wrong-group
+                name: Wrong Group
+                entry: echo wrong-group
+                language: system
+                always_run: true
+                stages: [manual]
+                groups: [dev]
+              - id: wrong-stage
+                name: Wrong Stage
+                entry: echo wrong-stage
+                language: system
+                always_run: true
+                stages: [pre-commit]
+                groups: [ci]
+    "#})
+        .with_files([("selected.txt", "selected\n"), ("ignored.txt", "ignored\n")])
+        .init_git();
+
+    cmd_snapshot!(context, context.run().args([
+        "selected",
+        "wrong-group",
+        "wrong-stage",
+        "--repo",
+        "local",
+        "--group",
+        "ci",
+        "--stage",
+        "manual",
+        "--files",
+        "selected.txt",
+    ]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Selected.................................................................Passed
+    - hook id: selected
+    - duration: [TIME]
+
+      selected.txt
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().args([
+        "selected",
+        "skipped",
+        "--repo",
+        "local",
+        "--skip",
+        "skipped",
+        "--group",
+        "ci",
+        "--stage",
+        "manual",
+        "--files",
+        "selected.txt",
+    ]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Selected.................................................................Passed
+    - hook id: selected
+    - duration: [TIME]
+
+      selected.txt
+    Skipped.................................................................Skipped
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn repo_filter_warns_when_unmatched() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-check
+                name: Local Check
+                entry: echo local
+                language: system
+                always_run: true
+    "})
+        .init_git();
+
+    cmd_snapshot!(context, context.run().args([
+        "--all-files",
+        "--repo",
+        "missing/repository",
+    ]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: repository selector `--repo=missing/repository` did not match any configured repositories
+    error: No hooks found after filtering with the given selectors
+    ");
+}
+
 /// `.pre-commit-config.yaml` is not staged.
 #[test]
 fn config_not_staged() {
@@ -3547,7 +3733,7 @@ fn selectors_completion() -> Result<()> {
     // Unrelated non-project dir should not appear in subdir suggestions
     context.child("scratch").create_dir_all()?;
 
-    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
+    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3572,6 +3758,7 @@ fn selectors_completion() -> Result<()> {
     :lint:ruff	Ruff Lint
     root-hook	Root Hook
     --skip	Skip the specified hooks or projects
+    --repo	Select hooks by their configured repository
     --stage	The stage during which the hook is fired
     --group	Run hooks belonging to the specified group
     --require-group	Run hooks belonging to every specified group
@@ -3599,7 +3786,7 @@ fn selectors_completion() -> Result<()> {
     --version	Display the prek version
 
     ----- stderr -----
-    "#);
+    ");
 
     cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("."), @r"
     success: true
