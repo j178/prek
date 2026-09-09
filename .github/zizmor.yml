@@ -1,7 +1,6 @@
 # Configuration for the zizmor static analysis tool, run via pre-commit in CI
 # https://woodruffw.github.io/zizmor/configuration/
 
-# Ignore findings in the cargo-dist-derived release workflow.
 rules:
   template-injection:
     ignore:
