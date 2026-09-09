@@ -78,6 +78,48 @@ fn additional_dependencies() {
 }
 
 #[test]
+fn additional_dependencies_with_specifiers() {
+    let context = TestEnv::new()
+        .with_file(
+            "Project.toml",
+            indoc::indoc! {r#"
+            [deps]
+            Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+        "#},
+        )
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: julia-deps
+                name: julia-deps
+                language: julia
+                entry: -e 'using Example, TOML; println(pkgversion(Example)); println(TOML.parsefile(Base.active_project())["deps"]["TOML"])'
+                additional_dependencies:
+                  - Example@0.5.3
+                  - TOML=fa267f1f-6049-4f14-aa54-33bafae1ed76
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#})
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    julia-deps...............................................................Passed
+    - hook id: julia-deps
+    - duration: [TIME]
+
+      0.5.3
+      fa267f1f-6049-4f14-aa54-33bafae1ed76
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn project_toml() {
     let context = TestEnv::new()
         .with_file(

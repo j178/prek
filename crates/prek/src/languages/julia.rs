@@ -56,13 +56,13 @@ impl LanguageBackend for Julia {
             fs_err::tokio::copy(src, info.env_path.join("Manifest.toml")).await?;
         }
 
-        let julia_code = indoc::indoc! {r"
+        let julia_code = indoc::indoc! {r#"
             using Pkg
             Pkg.instantiate()
             if !isempty(ARGS)
-                Pkg.add(ARGS)
+                Pkg.REPLMode.pkgstr("add " * join(ARGS, " "))
             end
-        "};
+        "#};
 
         Cmd::new("julia")
             .current_dir(install_cwd)
