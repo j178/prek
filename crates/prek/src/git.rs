@@ -6,12 +6,12 @@ use std::sync::{LazyLock, OnceLock};
 
 use anyhow::Result;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
 
-use crate::fs::PathClean;
+use crate::fs::{PathClean, normalize_path};
 use crate::process;
 use crate::process::{Cmd, StatusError};
 
@@ -154,7 +154,7 @@ fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
 
 #[cfg(unix)]
 #[expect(clippy::unnecessary_wraps)]
-fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
+pub(crate) fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt as _;
 
@@ -162,7 +162,7 @@ fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
 }
 
 #[cfg(not(unix))]
-fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
+pub(crate) fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     str::from_utf8(bytes).map(PathBuf::from)
 }
 
@@ -251,6 +251,148 @@ pub(crate) async fn changed_files(
         .output()
         .await?;
     Ok(zsplit(&output.stdout)?)
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AddedHunk {
+    pub(crate) start_line: usize,
+    pub(crate) content: Vec<u8>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct GitDelta {
+    pub(crate) added_lines: FxHashMap<PathBuf, Vec<(usize, Vec<u8>)>>,
+    pub(crate) added_hunks: FxHashMap<PathBuf, Vec<AddedHunk>>,
+}
+
+pub(crate) async fn fetch_diff_delta(
+    work_dir: &Path,
+    diff_target: Option<(&str, &str)>,
+    filenames: &[&Path],
+) -> Result<GitDelta, Error> {
+    if filenames.is_empty() {
+        return Ok(GitDelta::default());
+    }
+
+    let build_cmd = |target_args: &[&str]| -> Result<Cmd, Error> {
+        let mut cmd = git_cmd()?;
+        cmd.current_dir(work_dir)
+            .arg("-c")
+            .arg("core.quotePath=false")
+            .arg("diff")
+            .hidden_args(["--no-ext-diff", "--no-color"])
+            .arg("-U0")
+            .arg("--no-prefix")
+            .arg("--relative");
+        for &arg in target_args {
+            cmd.arg(arg);
+        }
+        cmd.arg("--").file_args(filenames);
+        Ok(cmd)
+    };
+
+    let output = if let Some((old, new)) = diff_target {
+        let three_dot = format!("{old}...{new}");
+        let out = build_cmd(&[&three_dot])?.check(false).output().await?;
+        if out.status.success() {
+            out.stdout
+        } else {
+            let two_dot = format!("{old}..{new}");
+            build_cmd(&[&two_dot])?.check(true).output().await?.stdout
+        }
+    } else {
+        build_cmd(&["--cached"])?.check(true).output().await?.stdout
+    };
+
+    Ok(parse_git_diff_delta(&output))
+}
+
+pub(crate) fn parse_git_diff_delta(diff_output: &[u8]) -> GitDelta {
+    let mut delta = GitDelta::default();
+    let mut current_path: Option<PathBuf> = None;
+    let mut curr_line = 0;
+    let mut in_hunk = false;
+    let mut current_hunk: Option<AddedHunk> = None;
+
+    let flush_hunk =
+        |path: Option<&PathBuf>, hunk: &mut Option<AddedHunk>, delta: &mut GitDelta| {
+            if let Some(h) = hunk.take() {
+                if let Some(p) = path {
+                    delta.added_hunks.entry(p.clone()).or_default().push(h);
+                }
+            }
+        };
+
+    for raw_line in diff_output.split(|&b| b == b'\n') {
+        let line = raw_line.strip_suffix(b"\r").unwrap_or(raw_line);
+        if line.starts_with(b"diff --git ") {
+            flush_hunk(current_path.as_ref(), &mut current_hunk, &mut delta);
+            current_path = None;
+            in_hunk = false;
+        } else if let Some(path_bytes) = line.strip_prefix(b"+++ ") {
+            flush_hunk(current_path.as_ref(), &mut current_hunk, &mut delta);
+            let path_bytes =
+                memchr::memchr(b'\t', path_bytes).map_or(path_bytes, |pos| &path_bytes[..pos]);
+            current_path = if path_bytes == b"/dev/null" {
+                None
+            } else {
+                path_from_git_bytes(path_bytes).ok().map(normalize_path)
+            };
+            in_hunk = false;
+        } else if line.starts_with(b"@@ ") {
+            flush_hunk(current_path.as_ref(), &mut current_hunk, &mut delta);
+            if let Some((start, count)) = parse_hunk_range(line) {
+                curr_line = start;
+                in_hunk = count > 0;
+            } else {
+                in_hunk = false;
+            }
+        } else if in_hunk && let Some(path) = current_path.as_ref() {
+            if let Some(content) = line.strip_prefix(b"+") {
+                delta
+                    .added_lines
+                    .entry(path.clone())
+                    .or_default()
+                    .push((curr_line, content.to_vec()));
+
+                if let Some(hunk) = current_hunk.as_mut() {
+                    hunk.content.extend_from_slice(content);
+                    hunk.content.push(b'\n');
+                } else {
+                    let mut hunk_content = Vec::with_capacity(content.len() + 1);
+                    hunk_content.extend_from_slice(content);
+                    hunk_content.push(b'\n');
+                    current_hunk = Some(AddedHunk {
+                        start_line: curr_line,
+                        content: hunk_content,
+                    });
+                }
+                curr_line += 1;
+            } else if line.starts_with(b" ") {
+                flush_hunk(current_path.as_ref(), &mut current_hunk, &mut delta);
+                curr_line += 1;
+            }
+        }
+    }
+
+    flush_hunk(current_path.as_ref(), &mut current_hunk, &mut delta);
+
+    delta
+}
+
+fn parse_hunk_range(line: &[u8]) -> Option<(usize, usize)> {
+    let plus_pos = memchr::memchr(b'+', line)?;
+    let remainder = &line[plus_pos + 1..];
+    let header_end = remainder
+        .iter()
+        .position(|&b| b == b' ' || b == b'@')
+        .unwrap_or(remainder.len());
+    let spec = std::str::from_utf8(&remainder[..header_end]).ok()?;
+    if let Some((start, count)) = spec.split_once(',') {
+        Some((start.parse().ok()?, count.parse().ok()?))
+    } else {
+        Some((spec.parse().ok()?, 1))
+    }
 }
 
 #[instrument(level = "trace", skip(paths))]

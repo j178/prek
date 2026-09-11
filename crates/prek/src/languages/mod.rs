@@ -17,7 +17,7 @@ use crate::fs::PathClean;
 use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
-use crate::hooks::{self, HookOutput};
+use crate::hooks::{self, DiffMode, HookOutput};
 use crate::process::{Cmd, with_command_env};
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -583,6 +583,7 @@ impl Language {
         hook: &'a InstalledHook,
         filenames: &'a [&'p Path],
         reporter: &'a HookRunReporter,
+        diff_mode: &DiffMode,
     ) -> Result<HookOutput>
     where
         'p: 'a,
@@ -597,7 +598,7 @@ impl Language {
             Repo::Builtin => {
                 hooks::BuiltinHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames, reporter)
+                    .run(store, hook, filenames, reporter, diff_mode)
                     .await
             }
             // Fast path for hooks implemented in Rust
