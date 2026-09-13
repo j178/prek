@@ -13,7 +13,7 @@
         <loc>https://prek.j178.dev/dev/migration/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/usage/</loc>
+        <loc>https://prek.j178.dev/dev/running-hooks/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/configuration/</loc>
@@ -22,22 +22,19 @@
         <loc>https://prek.j178.dev/dev/local-hooks/</loc>
       </url>
       <url>
+        <loc>https://prek.j178.dev/dev/built-in-hooks/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/monorepos/</loc>
+      </url>
+      <url>
         <loc>https://prek.j178.dev/dev/ci/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/workspace/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/languages/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/builtin/</loc>
+        <loc>https://prek.j178.dev/dev/cookbook/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/integrations/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/cookbook/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/authoring-hooks/</loc>
@@ -47,6 +44,15 @@
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/reference/configuration/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/reference/built-in-hooks/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/reference/language-support/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/reference/workspace/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/reference/environment-variables/</loc>
