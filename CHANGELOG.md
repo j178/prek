@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.3
+
+Released on 2026-09-13.
+
+### Enhancements
+
+- Add PEP 740 attestations for PyPI releases ([#2705](https://github.com/j178/prek/pull/2705))
+- Add a `check-jsonc` builtin hook ([#2682](https://github.com/j178/prek/pull/2682))
+- Allow disabling automatic uv installation ([#2702](https://github.com/j178/prek/pull/2702))
+
+### Bug fixes
+
+- Fix Julia additional dependency specifiers ([#2703](https://github.com/j178/prek/pull/2703))
+- Update `granit-parser` to fix YAML flow indentation ([#2707](https://github.com/j178/prek/pull/2707))
+
+### Contributors
+
+- @clbarnes
+- @j178
+- @tisonkun
+
 ## 0.5.2
 
 Released on 2026-09-03.
