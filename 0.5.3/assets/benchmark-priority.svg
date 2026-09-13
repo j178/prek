@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 270" role="img" aria-labelledby="title desc">
+  <title id="title">Runtime improvement from priority scheduling</title>
+  <desc id="desc">Horizontal bars compare prek using the fast path at 213 milliseconds with prek also running independent hooks at the same priority concurrently at 172 milliseconds. Priority scheduling takes 19 percent less time. Lower is better.</desc>
+  <style>
+    text {
+      fill: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .title { font-size: 20px; font-weight: 600; }
+    .subtitle, .tick, .note { fill: #475569; }
+    .subtitle { font-size: 13px; }
+    .label { font-size: 14px; font-weight: 600; }
+    .value { font-size: 13px; }
+    .tick, .note { font-size: 12px; }
+    .grid { stroke: #cbd5e1; stroke-width: 1; }
+    .axis { stroke: #94a3b8; stroke-width: 1; }
+    .previous { fill: #94a3b8; }
+    .current { fill: #6366f1; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e2e8f0; }
+      .subtitle, .tick, .note { fill: #a8b3cf; }
+      .grid { stroke: #334155; }
+      .axis { stroke: #64748b; }
+      .previous { fill: #94a3b8; }
+      .current { fill: #818cf8; }
+    }
+  </style>
+
+  <text class="title" x="20" y="28">Group independent hooks with priority</text>
+  <text class="subtitle" x="20" y="51">Median wall time in milliseconds; lower is better</text>
+
+  <line class="grid" x1="250" y1="70" x2="250" y2="200" />
+  <line class="grid" x1="362" y1="70" x2="362" y2="200" />
+  <line class="grid" x1="474" y1="70" x2="474" y2="200" />
+  <line class="grid" x1="586" y1="70" x2="586" y2="200" />
+  <line class="grid" x1="698" y1="70" x2="698" y2="200" />
+  <line class="grid" x1="810" y1="70" x2="810" y2="200" />
+  <line class="axis" x1="250" y1="200" x2="810" y2="200" />
+
+  <text class="label" x="20" y="105">Fast path</text>
+  <rect class="previous" x="250" y="82" width="477" height="32" rx="4" />
+  <text class="value" x="739" y="104">213 ms</text>
+
+  <text class="label" x="20" y="165">Fast path + priority</text>
+  <rect class="current" x="250" y="142" width="385" height="32" rx="4" />
+  <text class="value" x="647" y="164">172 ms · 19% lower</text>
+
+  <text class="tick" x="250" y="221" text-anchor="middle">0</text>
+  <text class="tick" x="362" y="221" text-anchor="middle">50</text>
+  <text class="tick" x="474" y="221" text-anchor="middle">100</text>
+  <text class="tick" x="586" y="221" text-anchor="middle">150</text>
+  <text class="tick" x="698" y="221" text-anchor="middle">200</text>
+  <text class="tick" x="810" y="221" text-anchor="middle">250 ms</text>
+  <text class="note" x="20" y="253">19% lower than the previous stage · 8.36x faster than the no-fast-path baseline</text>
+</svg>
