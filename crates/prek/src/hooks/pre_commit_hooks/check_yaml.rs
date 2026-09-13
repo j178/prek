@@ -213,6 +213,19 @@ negative_infinity: -.inf
         Ok(())
     }
 
+    #[test]
+    fn test_under_indented_flow_sequence() {
+        let filename = Path::new("targets.yaml");
+        let content = b"- targets: [\n  \"192.168.1.1:9100\",\n  \"192.168.1.2:9100\",\n]\n";
+
+        for result in [
+            check_loaded(filename, content, false, false),
+            check_syntax(filename, content),
+        ] {
+            assert_eq!((result.exit_status, result.output), (0, Vec::new()));
+        }
+    }
+
     #[tokio::test]
     async fn test_invalid_yaml() -> Result<()> {
         let dir = tempdir()?;
