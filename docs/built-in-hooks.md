@@ -1,8 +1,9 @@
 # Built-in Hooks
 
-prek bundles Rust implementations of common hooks. Use `repo: builtin` to select
-them directly, or keep a supported remote hook config and let prek use its
-automatic fast path.
+prek includes fast, Rust-native implementations of popular hooks for speed and low overhead.
+
+Use `repo: builtin` to select them directly, or keep a supported remote hook
+config and let prek use its automatic fast path.
 
 |  | `repo: builtin` | Automatic fast path |
 | -- | -- | -- |

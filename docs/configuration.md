@@ -7,7 +7,7 @@ executing it.
 
 ## Choose a config file
 
-prek reads one config per project. Keep an existing YAML config, or use
+prek reads one config per project. Keep an existing `.pre-commit-config.yaml`, or use
 `prek.toml` for a new setup. Both formats describe the same configuration model.
 
 | Filename | Format |
