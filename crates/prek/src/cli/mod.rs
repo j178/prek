@@ -260,6 +260,18 @@ pub(crate) enum Command {
     /// Run configured hooks.
     Run(Box<RunArgs>),
     /// Run a command in the environment prepared for a configured hook.
+    ///
+    /// The selector must resolve to exactly one hook. Its environment is prepared
+    /// first if necessary, including its toolchain, dependencies, and environment
+    /// variables.
+    ///
+    /// Everything after `--` replaces the hook's configured `entry` and `args`.
+    /// This command does not select files, schedule other hooks, or stash changes.
+    /// The child process runs in the current working directory after `--cd`,
+    /// inherits standard input, output, and error, and returns its exit status.
+    ///
+    /// The `docker`, `docker_image`, `fail`, `julia`, and `pygrep` languages are
+    /// unsupported. Builtin and meta hooks are also unsupported.
     Exec(ExecArgs),
     /// List configured hooks.
     List(ListArgs),

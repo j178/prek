@@ -1,8 +1,7 @@
 # Integrations
 
-This page documents packaged integrations for CI and container workflows. For
-CI behavior that applies across providers, including revision ranges, caches,
-and credentials, see [Continuous Integration](ci.md).
+Use prek in container images and with coding agents. For GitHub Actions and
+other CI workflows, see [Continuous Integration](ci.md).
 
 ## Docker
 
@@ -71,10 +70,6 @@ Loaded 1 attestation from GitHub API
 
     Use a specific version tag (e.g., `ghcr.io/j178/prek:0.5.3`) or image
     digest rather than `latest` for verification.
-
-## GitHub Actions
-
---8<-- "README.md:github-actions"
 
 ## prek skill for agents
 

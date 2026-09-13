@@ -79,20 +79,22 @@ plugins:
           - quickstart.md
           - migration.md
         Usage:
-          - usage.md
+          - running-hooks.md
           - configuration.md
           - local-hooks.md
+          - built-in-hooks.md
+          - monorepos.md
           - ci.md
-          - workspace.md
-          - languages.md
-          - builtin.md
-          - integrations.md
           - cookbook.md
+          - integrations.md
         Authoring:
           - authoring-hooks.md
         Reference:
           - reference/cli.md
           - reference/configuration.md
+          - reference/built-in-hooks.md
+          - reference/language-support.md
+          - reference/workspace.md
           - reference/environment-variables.md
           - internals.md
         Help:
@@ -118,20 +120,22 @@ nav:
     - Quickstart: quickstart.md
     - Migrating from Other Tools: migration.md
   - Usage:
-    - Common Workflows: usage.md
+    - Running Hooks: running-hooks.md
     - Configuration: configuration.md
     - Local Hooks: local-hooks.md
+    - Built-in Hooks: built-in-hooks.md
+    - Monorepos: monorepos.md
     - Continuous Integration: ci.md
-    - Workspace Mode: workspace.md
-    - Language Support: languages.md
-    - Built-in Hooks: builtin.md
-    - Integrations: integrations.md
     - Cookbook: cookbook.md
+    - Integrations: integrations.md
   - Authoring:
     - Hook Repositories: authoring-hooks.md
   - Reference:
     - CLI Reference: reference/cli.md
     - Configuration Reference: reference/configuration.md
+    - Built-in Hooks: reference/built-in-hooks.md
+    - Language Support: reference/language-support.md
+    - Workspace Reference: reference/workspace.md
     - Environment Variables: reference/environment-variables.md
     - Internals: internals.md
   - Help:

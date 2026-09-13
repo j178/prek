@@ -1,4 +1,4 @@
-# Language support
+# Language Support
 
 ## What “language” means in prek
 
@@ -19,21 +19,7 @@ For `repo: local` hooks, relative paths in `additional_dependencies` and other i
 do not resolve from the work tree. Use an absolute path when an installer needs a local file. Hook
 commands still run from the work tree.
 
-## Choose a language for a local hook
-
-| What the command needs | Good starting point | Runtime source |
-| -- | -- | -- |
-| A tool already installed by the project or CI image | [`system`](#system) | Your `PATH`; prek does not install it |
-| A checked-in executable script with no isolated dependencies | [`script`](#script) | The hook repository or local project |
-| An isolated ecosystem environment | Python, Node, Bun, Deno, .NET, Go, mise, Ruby, or Rust | prek can select and download a compatible toolchain |
-| An ecosystem currently supplied by the machine | Conda, Coursier, Dart, Haskell, Julia, Lua, Perl, PHP, R, or Swift | A matching system installation |
-| A fully packaged runtime | [`docker`](#docker) or [`docker_image`](#docker_image) | A supported container runtime |
-| A message-only failure or content regex | [`fail`](#fail), [`pygrep`](#pygrep), or a [builtin hook](builtin.md) | No general-purpose hook environment |
-
-For an existing project linter or formatter, begin with
-[`language = "system"`](local-hooks.md). Choose a managed language when the hook
-repository itself needs an isolated installation or when prek should select the
-toolchain version.
+For help choosing a language, see [Local Hooks](../local-hooks.md#choose-a-language).
 
 ## Toolchain management and `language_version`
 
@@ -94,7 +80,7 @@ If `language_version` is `default`, prek uses the language’s default resolutio
 
 !!! note "prek-only"
 
-    `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](reference/configuration.md#language_version) for details.
+    `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](configuration.md#language_version) for details.
 
 Languages with managed toolchain downloads in prek today:
 
@@ -286,7 +272,7 @@ Use `docker` when you need a language runtime that isn’t otherwise supported; 
 
     prek auto-detects the container runtime (Docker, Podman, or [Container](https://github.com/apple/container)) and can be overridden with `PREK_CONTAINER_RUNTIME`.
     Set `PREK_DOCKER_NO_INIT=1` to skip the runtime's `--init` flag in container environments that cannot run the init helper. This is a compatibility escape hatch; disabling `--init` can leave containers running after Ctrl-C if the container's PID 1 does not handle forwarded signals.
-    See [Environment Variable Reference](reference/environment-variables.md) for details.
+    See [Environment Variable Reference](environment-variables.md) for details.
 
 ### docker_image
 
@@ -535,7 +521,7 @@ prek uses `uv` for creating virtual environments and installing dependencies:
 - If not found, automatically installs `uv` from Astral's CDN, falling back to PyPI (and mirrors) then `pip`
 - Automatically installs the required Python version if it's not already available
 
-Set [`PREK_UV_SOURCE=none`](reference/environment-variables.md#prek_uv_source) to
+Set [`PREK_UV_SOURCE=none`](environment-variables.md#prek_uv_source) to
 disable automatic uv installation and require an existing compatible uv.
 
 !!! warning "Environment variables"
@@ -623,7 +609,7 @@ Supported formats:
 
     Ruby interpreters are downloaded from those built by the `rv` project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.
 
-    The `PREK_RUBY_MIRROR` environment variable can point Ruby downloads at a different source, for example a private mirror or an air-gapped CI mirror. Mirrors should provide the selected Ruby archive assets and a `SHA256SUMS` asset from the same release download location so downloaded Rubies can be verified. If checksum metadata is missing, prek warns and continues by default; set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](reference/environment-variables.md#prek_download_checksum_policy) to `required` to fail instead. If the mirror is an exact HTTPS GitHub repository URL (`https://github.com/owner/repo`, with an optional `:443` port), prek uses the GitHub API for release metadata and may send `GITHUB_TOKEN` for rate limits or private mirrors. Non-GitHub mirrors are used as-is and never receive `GITHUB_TOKEN`.
+    The `PREK_RUBY_MIRROR` environment variable can point Ruby downloads at a different source, for example a private mirror or an air-gapped CI mirror. Mirrors should provide the selected Ruby archive assets and a `SHA256SUMS` asset from the same release download location so downloaded Rubies can be verified. If checksum metadata is missing, prek warns and continues by default; set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](environment-variables.md#prek_download_checksum_policy) to `required` to fail instead. If the mirror is an exact HTTPS GitHub repository URL (`https://github.com/owner/repo`, with an optional `:443` port), prek uses the GitHub API for release metadata and may send `GITHUB_TOKEN` for rate limits or private mirrors. Non-GitHub mirrors are used as-is and never receive `GITHUB_TOKEN`.
 
 Gems specified in hook gemspec files and `additional_dependencies` are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.
 
@@ -631,7 +617,7 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
 
-Only crates.io `cli:` dependencies use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) when [`PREK_USE_CARGO_BINSTALL=1`](reference/environment-variables.md#prek_use_cargo_binstall) is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
+Only crates.io `cli:` dependencies use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) when [`PREK_USE_CARGO_BINSTALL=1`](environment-variables.md#prek_use_cargo_binstall) is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
 
 !!! note "Using `--locked` flag"
 
@@ -648,7 +634,7 @@ Supported formats:
 
 #### Toolchain profile
 
-When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](reference/environment-variables.md#prek_rust_profile) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
+When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](environment-variables.md#prek_rust_profile) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
 
 !!! note "prek-only"
 
@@ -702,7 +688,7 @@ Regex matching uses Python’s `re` semantics for compatibility with pre-commit.
 
 !!! warning "Compatibility-only"
 
-    `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](builtin.md#deny-pattern) or [`require-pattern`](builtin.md#require-pattern) builtin.
+    `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](built-in-hooks.md#deny-pattern) or [`require-pattern`](built-in-hooks.md#require-pattern) builtin.
 
 ### system
 
@@ -730,7 +716,7 @@ prek installs each `additional_dependencies` item with `deno install --global` i
 
 Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available. Managed downloads verify Deno release checksum sidecars when they are available.
 
-By default, missing checksums produce a warning and the download continues without checksum verification. Set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](reference/environment-variables.md#prek_download_checksum_policy) to `required` to make missing checksum metadata fail, or to `disabled` to skip checksum verification.
+By default, missing checksums produce a warning and the download continues without checksum verification. Set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](environment-variables.md#prek_download_checksum_policy) to `required` to make missing checksum metadata fail, or to `disabled` to skip checksum verification.
 
 #### Rules
 

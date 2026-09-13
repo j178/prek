@@ -39,6 +39,25 @@ The following hook expects `uv` and the project's dependencies to be available.
 and any interpreters or package managers it invokes must already be available
 on `PATH`.
 
+## Choose a language
+
+| What the command needs | Good starting point | Runtime source |
+| -- | -- | -- |
+| A tool already installed by the project or CI image | [`system`](reference/language-support.md#system) | Your `PATH`; prek does not install it |
+| A checked-in executable script with no isolated dependencies | [`script`](reference/language-support.md#script) | The hook repository or local project |
+| An isolated ecosystem environment | Python, Node, Bun, Deno, .NET, Go, mise, Ruby, or Rust | prek can select and download a compatible toolchain |
+| An ecosystem currently supplied by the machine | Conda, Coursier, Dart, Haskell, Julia, Lua, Perl, PHP, R, or Swift | A matching system installation |
+| A fully packaged runtime | [`docker`](reference/language-support.md#docker) or [`docker_image`](reference/language-support.md#docker_image) | A supported container runtime |
+| A message-only failure or content regex | [`fail`](reference/language-support.md#fail), [`pygrep`](reference/language-support.md#pygrep), or a [builtin hook](reference/built-in-hooks.md) | No general-purpose hook environment |
+
+For an existing project linter or formatter, begin with
+[`language = "system"`](reference/language-support.md#system). Choose a managed language when the hook
+repository itself needs an isolated installation or when prek should select the
+toolchain version.
+
+For supported versions, dependencies, and installation behavior, see the
+[Language Support reference](reference/language-support.md).
+
 ## Decide how the command receives files
 
 `pass_filenames` defaults to `true`. Matching filenames are appended after
@@ -103,7 +122,7 @@ and Unix systems.
 
 A local hook runs in the directory of the project whose config defines it. In a
 single-config repository this is normally the Git root. In
-[workspace mode](workspace.md), a nested project's hooks run in that nested
+[workspace mode](monorepos.md), a nested project's hooks run in that nested
 project directory. Entries should therefore use paths relative to their own
 project rather than the directory from which the user invoked prek.
 

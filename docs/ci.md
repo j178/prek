@@ -13,9 +13,25 @@ extra wrapper is required.
 
 ## GitHub Actions
 
-The official [`j178/prek-action`](https://github.com/j178/prek-action) installs
-prek and runs `prek run --all-files`. See the ready-to-copy workflow in
-[Integrations](integrations.md#github-actions).
+prek can be used in GitHub Actions via the [j178/prek-action](https://github.com/j178/prek-action) repository.
+
+Example workflow:
+
+```yaml
+name: Prek checks
+on: [push, pull_request]
+
+jobs:
+  prek:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+```
+
+This action installs prek and runs `prek run --all-files` on your repository.
+
+prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
 
 ## Automatically fix pull requests with autofix.ci
 

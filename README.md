@@ -40,10 +40,10 @@ Although prek is pretty new, it’s already powering real‑world projects like 
 - A single binary with no dependencies, does not require Python or any other runtime.
 - [Faster](https://prek.j178.dev/benchmark/) than `pre-commit` and more efficient in disk space usage.
 - Fully compatible with the original pre-commit configurations and hooks.
-- Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace/)), including concurrent execution for independent same-depth projects.
+- Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/monorepos/)), including concurrent execution for independent same-depth projects.
 - Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - Improved toolchain installations for Python, Node.js, Bun, Go, Rust and Ruby, shared between hooks.
-- [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
+- [Built-in](https://prek.j178.dev/built-in-hooks/) Rust-native implementation of some common hooks.
 
 <!-- --8<-- [end:features] -->
 
@@ -353,15 +353,15 @@ prek self update
 - Hook environments and toolchains are shared across hooks instead of being duplicated per repository, which reduces both install time and cache size.
 - Repository fetches and independent hook environment setup run in parallel, hooks can run concurrently by [`priority`](https://prek.j178.dev/reference/configuration/#priority) using reusable [aliases](https://prek.j178.dev/reference/configuration/#priorities), and independent workspace projects at the same directory depth can run concurrently.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- For supported hooks from `pre-commit-hooks`, the [automatic fast path](https://prek.j178.dev/builtin/#1-automatic-fast-path) runs built-in Rust implementations without requiring any configuration changes.
+- For supported hooks from `pre-commit-hooks`, the [automatic fast path](https://prek.j178.dev/built-in-hooks/#1-automatic-fast-path) runs built-in Rust implementations without requiring any configuration changes.
 - The prek-only `repo: builtin` mode provides offline, zero-setup hooks, including native `deny-pattern` and `require-pattern` alternatives for common `pygrep` checks.
 
 ### prek is easier to work with
 
 - No need to install Python or any other runtime just to use `prek`; it is a single binary.
-- Its [language support](https://prek.j178.dev/languages/) covers every language available in `pre-commit`, plus Bun, Deno, mise, and PHP, and it automatically installs managed toolchains when needed for Python, Node.js, Bun, Deno, Go, mise, Rust, and Ruby.
+- Its [language support](https://prek.j178.dev/reference/language-support/) covers every language available in `pre-commit`, plus Bun, Deno, mise, and PHP, and it automatically installs managed toolchains when needed for Python, Node.js, Bun, Deno, Go, mise, Rust, and Ruby.
 - It supports native [`prek.toml`](https://prek.j178.dev/configuration/) in addition to pre-commit YAML, and [`prek util yaml-to-toml`](https://prek.j178.dev/reference/cli/#prek-util-yaml-to-toml) helps migrate existing configs.
-- Built-in support for [workspaces](https://prek.j178.dev/workspace/) means monorepos can keep separate configs per project and still run everything from one command, while independent same-depth projects run concurrently without mixing file scopes.
+- Built-in support for [workspaces](https://prek.j178.dev/monorepos/) means monorepos can keep separate configs per project and still run everything from one command, while independent same-depth projects run concurrently without mixing file scopes.
 - [`prek install`](https://prek.j178.dev/reference/cli/#prek-install) and [`prek uninstall`](https://prek.j178.dev/reference/cli/#prek-uninstall) honor repo-local and worktree-local `core.hooksPath`.
 - Hook [`groups`](https://prek.j178.dev/reference/configuration/#groups) let one config define workflows such as CI, linting, or formatting; `--group`, `--require-group`, and `--no-group` select them at runtime.
 - [`prek run`](https://prek.j178.dev/reference/cli/#prek-run) can select or skip multiple projects and hooks, target tracked files with repeatable `--glob` or `--directory` filters, pass explicit paths with `--files`, and preview the selection with `--dry-run`.

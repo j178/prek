@@ -22,11 +22,11 @@ These differences intentionally change upstream behavior instead of adding a com
 
 `prek` supports workspace mode, allowing you to run hooks for multiple projects in a single command. Each subproject can keep its own `prek.toml` or `.pre-commit-config.yaml` file.
 
-See [Workspace Mode](./workspace.md) for more information.
+See [Monorepos](monorepos.md) for more information.
 
 ## Language support
 
-See the dedicated [Language Support](languages.md) page for a complete list of supported languages, prek-specific behavior, and unsupported languages.
+See the dedicated [Language Support](reference/language-support.md) page for a complete list of supported languages, prek-specific behavior, and unsupported languages.
 
 Recent releases added support for more managed hook runtimes, including Bun, Julia, Deno, and experimental .NET support.
 
@@ -51,7 +51,7 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 
 ### `prek run`
 
-- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](workspace.md#running-specific-hooks-or-projects) for details.
+- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](monorepos.md#run-or-skip-a-project) for details.
 - `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](./reference/configuration.md#priority) may run concurrently), instead of strictly serial execution.
 - In workspace mode, `prek run` can execute independent projects at the same directory depth concurrently, while still running child projects before their parents.
 - `prek` provides dynamic completion for hook ids.

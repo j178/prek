@@ -51,7 +51,7 @@ prek util identify path/to/file
 ```
 
 In a workspace, use `prek list` to confirm the project and use a
-[project-qualified selector](workspace.md#project-and-hook-selection) when hook
+[project-qualified selector](reference/workspace.md#selectors) when hook
 IDs are repeated.
 
 ## A config or workspace change is not detected
@@ -81,7 +81,7 @@ toolchain download, or the language package manager. Then check:
 - [Private repository authentication](faq.md#how-do-i-use-hooks-from-private-repositories)
 - Proxy and certificate variables in the
   [Environment Variable Reference](reference/environment-variables.md#related-external-variables)
-- Language-specific prerequisites in [Language Support](languages.md)
+- Language-specific prerequisites in [Language Support](reference/language-support.md)
 - The checksum and trust boundary in the [Security Guide](security.md)
 
 If a Rust-native fast path behaves differently from the pinned hook, compare it

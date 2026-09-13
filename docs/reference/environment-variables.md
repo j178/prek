@@ -25,7 +25,7 @@ Comma-separated list of selectors to skip. A selector can be a hook ID, a
 project path ending in `/`, or a project-qualified hook such as
 `frontend:eslint`. For example, `PREK_SKIP=ruff,frontend/` skips every `ruff`
 hook and the `frontend` project.
-See [Skipping Projects or Hooks](../workspace.md#skipping-projects-or-hooks) for details.
+See [Skipping Projects or Hooks](workspace.md#selectors) for details.
 
 ### `PREK_ALLOW_NO_CONFIG`
 
@@ -52,7 +52,7 @@ Ignored when `PREK_NO_CONCURRENCY` is set.
 ### `PREK_NO_FAST_PATH`
 
 Disable Rust-native built-in hooks; always use the original hook implementation.
-See [Built-in Fast Hooks](../builtin.md) for details.
+See [Built-in Hooks](../built-in-hooks.md) for details.
 
 ### `PREK_UV_SOURCE`
 
@@ -112,7 +112,7 @@ Disabling `--init` can leave containers running after Ctrl-C if the container's 
 Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments).
 Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location.
 Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication.
-See [Ruby language support](../languages.md#ruby) for details.
+See [Ruby language support](language-support.md#ruby) for details.
 
 ### `PREK_CONDA_INSTALLER`
 
@@ -122,17 +122,17 @@ The default is `auto`, which searches for `pixi`, `micromamba`, `mamba`, then
 `conda`. This setting only affects newly created environments; existing matching
 environments are reused without requiring the selected installer to remain
 available. prek does not install these tools. See
-[Conda language support](../languages.md#conda) for details.
+[Conda language support](language-support.md#conda) for details.
 
 ### `PREK_RUST_PROFILE`
 
 Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`.
-See [Rust language support](../languages.md#rust) for details.
+See [Rust language support](language-support.md#rust) for details.
 
 ### `PREK_USE_CARGO_BINSTALL`
 
 Use a preinstalled [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) for crates.io `cli:` dependencies of `language: rust` hooks.
-prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](../languages.md#rust) for installations that continue to use Cargo.
+prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](language-support.md#rust) for installations that continue to use Cargo.
 
 ## Compatibility fallbacks
 

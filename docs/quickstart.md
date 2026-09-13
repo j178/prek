@@ -28,8 +28,8 @@ Great news - prek is designed as a drop-in replacement, you only need two tweaks
 From here you can explore what prek adds on top of pre-commit:
 
 - [Key differences and new features](./diff.md)
-- [Built-in Rust-native hooks](./builtin.md)
-- [Workspace mode for monorepos](./workspace.md)
+- [Built-in Rust-native hooks](built-in-hooks.md)
+- [Workspace mode for monorepos](monorepos.md)
 
 ## New to pre-commit-style workflows?
 
@@ -46,6 +46,11 @@ prek init
 This creates a starter `prek.toml` at the Git worktree root and installs the
 `pre-commit` Git shim. If the root already has a supported configuration file,
 prek keeps it unchanged and installs the shim.
+
+Use `--format yaml` to create `.pre-commit-config.yaml`, or `--no-install` to
+create only the config and install Git shims later with `prek install`. To create
+a config in an existing subdirectory, use `prek init <path>`; see
+[Monorepos](monorepos.md#add-a-project-configuration).
 
 The generated configuration uses prek's built-in hooks:
 
@@ -117,8 +122,8 @@ the shim later, or `prek uninstall` to remove it.
 ### 4. Go further
 
 - Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/). Every example there works with prek.
-- See [Common Workflows](./usage.md) for the commands you will use after setup and how to handle hook failures.
+- See [Running Hooks](running-hooks.md) for the commands you will use after setup and how to handle hook failures.
 - Check the [configuration reference](./reference/configuration.md) for prek-specific settings.
-- Browse the [built-in hooks](./builtin.md) and the [difference guide](./diff.md) to see what else you can leverage.
+- Browse the [built-in hooks](built-in-hooks.md) and the [difference guide](./diff.md) to see what else you can leverage.
 
 That’s it! You now have automated checks running locally with minimal setup. When you’re ready to dive deeper, the rest of the docs cover advanced workflows, language-specific installers, and more.
