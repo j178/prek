@@ -86,7 +86,7 @@ remaining stages.
 ### 2. Fast path
 
 Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration.
-prek's [automatic fast path](builtin.md#1-automatic-fast-path) recognizes the
+prek's [automatic fast path](built-in-hooks.md#1-automatic-fast-path) recognizes the
 13 hooks and runs their built-in Rust implementations. The median falls from
 1,438 ms to 213 ms: 85% less time, or a 6.75x speedup.
 
@@ -164,7 +164,7 @@ project configurations, but they see disjoint sets of files. This models a
 configured monorepo rather than duplicating every hook in every project just to
 exercise the scheduler.
 
-[Projects at the same depth](workspace.md#execution-order) can run concurrently.
+[Projects at the same depth](reference/workspace.md#execution-order) can run concurrently.
 Nested parent and child projects still run from deepest to shallowest, so a
 workspace should reflect real ownership boundaries rather than being split only
 to chase a benchmark number.

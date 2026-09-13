@@ -1,69 +1,39 @@
-# Common Workflows
+# Running Hooks
 
-This page explains how to set up and use prek in a Git repository, including
-creating or reusing a configuration, running hooks, and handling a hook that
-prevents a commit.
+Run hooks on demand or let Git run them when you commit. If you are setting up
+prek for the first time, start with the [Quickstart](quickstart.md).
 
-## Set up the repository
+For a repository that already has a config, enable its Git hooks in your checkout
+by running `prek install` from the repository root. If another tool already owns
+the hook, see [migration mode](migration.md#keep-the-existing-hook-during-rollout).
 
-First, [install prek](installation.md). The next step depends on whether the
-repository already has a configuration.
+## Run hooks yourself
 
-### Use an existing configuration
+You do not need to create a commit to run the configured hooks.
 
-If the repository already contains a supported configuration file, run this
-command from the repository root:
-
-```bash
-prek install
-```
-
-This installs the Git shims selected by the repository's configuration so that
-prek runs automatically during Git operations. By default, prek installs a
-`pre-commit` shim.
-
-If another tool already owns the hook, a normal install moves that hook to a
-`.legacy` file and configures prek to run both implementations. This migration
-mode lets you compare them before removing the old setup. When you are ready to
-replace the legacy hook, run:
+Run hooks for the files currently staged in Git:
 
 ```bash
-prek install -f
+prek run
 ```
 
-`prek uninstall` restores the legacy hook while migration mode is active. See
-[Migrating from Other Hook Tools](migration.md#keep-the-existing-hook-during-rollout)
-before using `--force` on a hook whose contents you have not reviewed.
-
-Hook environments are normally prepared the first time they are needed. To
-prepare them during setup instead, run:
+Run hooks against the whole repository, commonly before opening a pull request:
 
 ```bash
-prek install --prepare-hooks
+prek run --all-files
 ```
 
-### Create a configuration
-
-If the repository does not have a configuration yet, run `prek init` from
-anywhere in the Git worktree:
+Run a single hook by ID:
 
 ```bash
-prek init
+prek run ruff
 ```
 
-This creates a starter `prek.toml` at the Git worktree root and installs the
-`pre-commit` Git shim in one step.
-
-To place the configuration in an existing subdirectory, pass its path:
+Inspect what would run without executing hooks or changing files:
 
 ```bash
-prek init packages/my-project
+prek run --dry-run
 ```
-
-The directory must be inside the current Git worktree. Use `--format yaml` to
-create `.pre-commit-config.yaml` instead of `prek.toml`. Add `--no-install` to
-create only the configuration; run `prek install` later to install the Git hook
-shims.
 
 ## What happens when you commit
 
@@ -145,34 +115,6 @@ A hook can both modify files and report another error. In that case, keep the
 automatic fixes you want and resolve the remaining error before staging and
 retrying.
 
-## Run hooks yourself
-
-You do not need to create a commit to run the configured hooks.
-
-Run hooks for the files currently staged in Git:
-
-```bash
-prek run
-```
-
-Run hooks against the whole repository, commonly before opening a pull request:
-
-```bash
-prek run --all-files
-```
-
-Run a single hook by ID:
-
-```bash
-prek run ruff
-```
-
-Inspect what would run without executing hooks or changing files:
-
-```bash
-prek run --dry-run
-```
-
 ## Run a command in a hook environment
 
 Use `prek exec` to run an explicit command with the toolchain, installed
@@ -190,16 +132,9 @@ project-qualified selector when needed, for example:
 prek exec frontend:prettier -- prettier --version
 ```
 
-Everything after `--` is the command to execute. It replaces the hook's
-configured `entry` and `args`; `prek exec` does not select files, schedule other
-hooks, or stash changes. The child process keeps the current working directory
-after applying `--cd`, inherits the terminal's standard input, output, and error
-streams, and its exit status becomes the exit status of `prek exec`.
-
-Backends whose hook entry defines a special execution mechanism, including
-`docker`, `docker_image`, `fail`, `julia`, and `pygrep`, are not supported.
-Builtin and meta hooks are also unsupported; `prek exec` reports an error for
-these cases.
+The command runs in your current directory with the selected hook's environment.
+See [`prek exec`](reference/cli.md#prek-exec) for supported hooks and complete
+execution behavior.
 
 ## Skip hooks for one commit
 
@@ -210,7 +145,7 @@ PREK_SKIP=ruff git commit -m "Update generated files"
 ```
 
 `SKIP=ruff` is accepted for compatibility. In a workspace, the value can also be
-a [project or project-qualified selector](workspace.md#project-and-hook-selection).
+a [project or project-qualified selector](reference/workspace.md#selectors).
 
 When the repository's policy permits it, Git can instead bypass the entire
 `pre-commit` and `commit-msg` hook chain for one commit:
@@ -237,50 +172,16 @@ Use verbose output when a hook fails without enough context:
 prek run -vvv
 ```
 
-prek also writes a log file to `~/.cache/prek/prek.log` by default. See
-[Debugging](debugging.md) when reporting a prek problem.
-
-## Maintain the repository's hook configuration
-
-If you maintain the repository's prek setup, validate its configuration after
-editing it:
-
-```bash
-prek validate-config prek.toml
-```
-
-Use `.pre-commit-config.yaml` instead if that is the repository's config file.
-
-Inspect file type tags when `types`, `types_or`, or `exclude_types` filters do not
-match as expected:
-
-```bash
-prek util identify path/to/file
-```
-
-Update pinned hook repository revisions or prepare hook environments without
-touching Git shims:
-
-```bash
-prek update
-prek prepare-hooks
-```
-
-Show or clean cached repositories, hook environments, and toolchains:
-
-```bash
-prek cache dir
-prek cache gc
-prek cache clean
-```
+See [Debugging](debugging.md) for logs, cache problems, and hooks that do not run
+as expected.
 
 ## Where to go next
 
-- [Configuration](configuration.md) covers config file formats, discovery, and
-  validation.
+- [Configuration](configuration.md) covers config file formats, discovery,
+  validation, and updating hooks.
 - [Local Hooks](local-hooks.md) covers inline hook definitions, file passing,
   filtering, and working-directory behavior.
 - [Continuous Integration](ci.md) covers full-repository and revision-range
   checks in CI.
-- [Workspace Mode](workspace.md) covers monorepos and nested project configs.
+- [Monorepos](monorepos.md) covers nested project configs and project selection.
 - [CLI Reference](reference/cli.md) lists every command and option.

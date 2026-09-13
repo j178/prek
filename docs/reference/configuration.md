@@ -475,7 +475,7 @@ Example:
           - id: ruff
     ```
 
-See [Workspace Mode - File Processing Behavior](../workspace.md#file-processing-behavior) for details.
+See [Orphan projects](workspace.md#orphan-projects) for details.
 
 ## Repo entries
 
@@ -661,7 +661,8 @@ Example:
           - id: check-yaml
     ```
 
-For the list of available built-in hooks and the “automatic fast path” behavior, see [Built-in Fast Hooks](../builtin.md).
+For available hooks and their arguments, see [Built-in Hooks](built-in-hooks.md). For setup
+examples and automatic fast-path behavior, see [Built-in Hooks](../built-in-hooks.md).
 
 ## Hook entries
 
@@ -848,7 +849,7 @@ How `prek` should run the hook (and whether it should create a managed environme
 
 Common values include `system`, `python`, `node`, `php`, `rust`, `golang`, `ruby`, and `docker`.
 
-See [Language Support](../languages.md) for per-language behavior, supported values, and [`language_version`](#language_version) details.
+See [Language Support](language-support.md) for per-language behavior, supported values, and [`language_version`](#language_version) details.
 
 !!! note "Language name aliases"
 

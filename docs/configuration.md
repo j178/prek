@@ -103,7 +103,7 @@ If you run **without** `--config`, `prek` then enables **workspace mode**:
 - From that root, `prek` searches for additional config files in subdirectories (nested projects).
 
 Workspace discovery respects `.gitignore`, and also supports `.prekignore` for excluding directories from discovery.
-For the full behavior and examples, see [Workspace Mode](workspace.md).
+For the full behavior and examples, see [Monorepos](monorepos.md).
 
 !!! tip
 
@@ -274,52 +274,30 @@ global settings, see the
 
 ### Scope (per-project)
 
-Each configuration file (`prek.toml`, `.pre-commit-config.yaml`, or `.pre-commit-config.yml`) is scoped to the **project directory it lives in**.
+Each config applies to the project directory that contains it. Parent and child
+projects apply their filters independently: a parent's `exclude` does not
+disable a child's hooks, and a child config does not override its parent.
 
-In workspace mode, `prek` treats every discovered configuration file as a **distinct project**:
-
-- A project’s config only controls hook selection and filtering (for example `files` / `exclude`) for that project.
-- A project may contain nested subprojects (subdirectories with their own config). Those subprojects run using *their own* configs.
-
-Practical implication: filters in the parent project do not “turn off” a subproject.
-
-Example layout (monorepo with a nested project):
-
-- `foo/.pre-commit-config.yaml` (project `foo`)
-- `foo/bar/.pre-commit-config.yaml` (project `foo/bar`, nested subproject)
-
-If project `foo` config contains an `exclude` that matches `bar/**`, then hooks for project `foo` will not run on files under `foo/bar`:
-
-=== "prek.toml"
-
-    ```toml
-    # foo/prek.toml
-    exclude = { glob = "bar/**" }
-    ```
-
-=== ".pre-commit-config.yaml"
-
-    ```yaml
-    # foo/.pre-commit-config.yaml
-    exclude:
-      glob: "bar/**"
-    ```
-
-But if `foo/bar` is itself a project (has its own config), files under `foo/bar` are still eligible for hooks when running **in the context of project `foo/bar`**.
-
-!!! note "Excluding a nested project"
-
-    If `foo/bar/.pre-commit-config.yaml` exists but you *don’t* want it to be recognized as a project in workspace mode, exclude it from discovery using [`.prekignore`](workspace.md#discovery).
-
-    Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories.
-
-!!! tip
-
-    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
+Use [Monorepos](monorepos.md) to set up nested projects, select their hooks, or
+exclude a directory from discovery. The [workspace reference](reference/workspace.md)
+defines file scope, discovery rules, and `orphan` behavior. When you pass
+`--config`, hooks instead run from the Git repository root with
+[repository-relative paths](reference/workspace.md#single-config-mode).
 
 ### Validation
 
-Use [`prek validate-config`](reference/cli.md#prek-validate-config) to validate one or more config files.
+After editing a config, validate it and run the hooks against existing files:
+
+```bash
+prek validate-config prek.toml
+prek run --all-files
+```
+
+Use the repository's YAML config filename instead if applicable.
+[`prek validate-config`](reference/cli.md#prek-validate-config) accepts one or
+more config files. If file filters do not match as expected, use
+[`prek util identify`](reference/cli.md#prek-util-identify) to inspect file type
+tags and follow the [filtering guide](local-hooks.md#filter-when-the-hook-runs).
 
 If you want IDE completion / validation, prek publishes a JSON Schema through the [JSON Schema Store](https://www.schemastore.org/prek.json), so some editors may pick it up automatically.
 
@@ -329,3 +307,29 @@ Hook authors can opt into the separate schema for `.pre-commit-hooks.yaml` descr
 [Editor completion and validation](authoring-hooks.md#editor-completion-and-validation).
 
 For every accepted configuration key and hook option, see the [Configuration Reference](reference/configuration.md). For process environment controls, see the [Environment Variable Reference](reference/environment-variables.md).
+
+## Update hook versions
+
+Update pinned remote hook revisions with:
+
+```bash
+prek update
+```
+
+Review the config diff, then run `prek run --all-files` to check the updated
+hooks against the repository. Use `prek update --check` to check for available
+updates without changing the config. See [`prek update`](reference/cli.md#prek-update)
+for selecting repositories and controlling updates.
+
+## Prepare hook environments
+
+prek normally prepares a hook's environment the first time it is needed. To
+prepare environments in advance without changing Git shims, run:
+
+```bash
+prek prepare-hooks
+```
+
+When setting up a checkout, `prek install --prepare-hooks` installs the Git
+shims and prepares environments together. See [Debugging](debugging.md#cache-problems)
+for inspecting and cleaning cached environments.

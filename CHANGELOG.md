@@ -1578,7 +1578,7 @@ In this release, prek adds a new special repo type `repo: builtin` that lets you
 It basically gives you another way to use the existing built‑in fast path for pre‑commit‑hooks, but without needing to point to an external repo.
 Since prek doesn’t have to clone anything or set up a virtual environment, `repo: builtin` hooks work even in air‑gapped environments.
 
-For more details, see: https://prek.j178.dev/builtin/
+For more details, see: https://prek.j178.dev/built-in-hooks/
 
 ### Enhancements
 
@@ -2002,7 +2002,7 @@ This is a huge milestone release that introduces **Workspace Mode** — first‑
 It auto‑discovers nested projects, runs hooks in project scope, and provides flexible selectors to target specific projects and hooks.
 This makes `prek` a powerful tool for managing pre-commit hooks in complex repository structures.
 
-For more details, see [Workspace Mode](https://prek.j178.dev/workspace/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
+For more details, see [Workspace Mode](https://prek.j178.dev/monorepos/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
 
 **Note**: If you ran `prek install` in a repo before, you gonna need to run `prek install` again to replace the old git hook scripts for the workspace mode to work.
 
@@ -2111,7 +2111,7 @@ This is a huge milestone release that introduces **Workspace Mode** — first‑
 
 **Note**: If you ran `prek install` in a repo before, you gonna need to run `prek install` again to replace the old git hook scripts for the workspace mode to work.
 
-For more details, see [Workspace Mode](https://prek.j178.dev/workspace/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
+For more details, see [Workspace Mode](https://prek.j178.dev/monorepos/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
 
 Special thanks to @potiuk for all the help and feedback in designing and testing this feature!
 

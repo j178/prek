@@ -143,12 +143,12 @@ available on `PATH`. When `shell` is omitted, some backends intentionally give
 
 | Language | Meaning of `entry` |
 | -- | -- |
-| [`script`](languages.md#script) | The first argument is a script path. It is relative to the hook checkout for remote hooks and the project directory for local hooks. |
-| [`julia`](languages.md#julia) | A Julia source path, relative to the hook checkout for remote hooks and the project directory for local hooks. |
-| [`r`](languages.md#r) | `Rscript -e <expr>` or `Rscript <file>`; file paths use the same remote-checkout/local-project rule. |
-| [`rust`](languages.md#rust) | The executable name; for a remote hook, it identifies a binary built and installed from the hook package. |
-| [`docker`](languages.md#docker), [`docker_image`](languages.md#docker_image) | Container entrypoint, image, and argument information. The project is mounted as `/src` inside the container. |
-| [`fail`](languages.md#fail), [`pygrep`](languages.md#pygrep) | A failure message or regular expression, not a command. |
+| [`script`](reference/language-support.md#script) | The first argument is a script path. It is relative to the hook checkout for remote hooks and the project directory for local hooks. |
+| [`julia`](reference/language-support.md#julia) | A Julia source path, relative to the hook checkout for remote hooks and the project directory for local hooks. |
+| [`r`](reference/language-support.md#r) | `Rscript -e <expr>` or `Rscript <file>`; file paths use the same remote-checkout/local-project rule. |
+| [`rust`](reference/language-support.md#rust) | The executable name; for a remote hook, it identifies a binary built and installed from the hook package. |
+| [`docker`](reference/language-support.md#docker), [`docker_image`](reference/language-support.md#docker_image) | Container entrypoint, image, and argument information. The project is mounted as `/src` inside the container. |
+| [`fail`](reference/language-support.md#fail), [`pygrep`](reference/language-support.md#pygrep) | A failure message or regular expression, not a command. |
 
 The linked language sections describe the complete backend-specific behavior.
 

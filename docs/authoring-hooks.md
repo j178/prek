@@ -129,7 +129,7 @@ Example:
 
 Prefer entries that invoke an executable directly. Do not assume a shell is
 present or that POSIX paths work on Windows unless the hook explicitly declares
-that platform requirement. The [Language Support](languages.md) and
+that platform requirement. The [Language Support](reference/language-support.md) and
 [Hook Entry Resolution](internals.md#hook-entry-resolution) pages describe the
 runtime and working-directory contracts.
 

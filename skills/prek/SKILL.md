@@ -20,12 +20,12 @@ Per that file, prefer explicit markdown docs when you need details:
 - [Introduction](https://prek.j178.dev/index.md)
 - [Installation](https://prek.j178.dev/installation/index.md)
 - [Quickstart](https://prek.j178.dev/quickstart/index.md)
-- [Common Workflows](https://prek.j178.dev/usage/index.md)
+- [Running Hooks](https://prek.j178.dev/running-hooks/index.md)
 - [Cookbook](https://prek.j178.dev/cookbook/index.md)
 - [Configuration](https://prek.j178.dev/configuration/index.md)
-- [Workspace Mode](https://prek.j178.dev/workspace/index.md)
-- [Language Support](https://prek.j178.dev/languages/index.md)
-- [Built-in Hooks](https://prek.j178.dev/builtin/index.md)
+- [Monorepos](https://prek.j178.dev/monorepos/index.md)
+- [Language Support](https://prek.j178.dev/reference/language-support/index.md)
+- [Built-in Hooks](https://prek.j178.dev/built-in-hooks/index.md)
 - [CLI Reference](https://prek.j178.dev/reference/cli/index.md)
 - [Configuration Reference](https://prek.j178.dev/reference/configuration/index.md)
 - [Environment Variable Reference](https://prek.j178.dev/reference/environment-variables/index.md)
@@ -216,4 +216,4 @@ Builtin hooks called out by the docs include:
 - If the repo already uses `pre-commit-hooks`, remember that `prek` can use built-in Rust implementations for some common hooks.
 - Start with a small default hook set, then add language-specific hooks the project already uses.
 - Use `prek util yaml-to-toml` instead of hand-converting YAML when migrating.
-- Before promising parity for a specific hook language, verify it in [Language Support](https://prek.j178.dev/languages/index.md).
+- Before promising parity for a specific hook language, verify it in [Language Support](https://prek.j178.dev/reference/language-support/index.md).

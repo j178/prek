@@ -32,7 +32,7 @@ git commit
 ```
 
 The next run checks the newly staged content. See
-[When a hook modifies files](usage.md#when-a-hook-modifies-files).
+[When a hook modifies files](running-hooks.md#when-a-hook-modifies-files).
 
 ## Why must a changed config be staged?
 
