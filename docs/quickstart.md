@@ -95,8 +95,9 @@ fix end of files.........................................................Passed
 check for added large files..............................................Passed
 ```
 
-The first run can take longer because prek downloads the hook repository and
-prepares its environment.
+The built-in hooks in this example are ready to run immediately. Remote hooks
+can take longer on their first run while prek downloads their repository and
+prepares the environment.
 
 Need to run a single hook? Pass its ID, for example `prek run trailing-whitespace`. You can also target specific files with `--files`, or run against the entire repository with `--all-files`. Use `--all-files` after adding or changing a hook to check existing files that are not staged.
 

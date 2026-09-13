@@ -353,7 +353,7 @@ prek self update
 - Hook environments and toolchains are shared across hooks instead of being duplicated per repository, which reduces both install time and cache size.
 - Repository fetches and independent hook environment setup run in parallel, hooks can run concurrently by [`priority`](https://prek.j178.dev/reference/configuration/#priority) using reusable [aliases](https://prek.j178.dev/reference/configuration/#priorities), and independent workspace projects at the same directory depth can run concurrently.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- For supported hooks from `pre-commit-hooks`, the [automatic fast path](https://prek.j178.dev/built-in-hooks/#1-automatic-fast-path) runs built-in Rust implementations without requiring any configuration changes.
+- For supported hooks from `pre-commit-hooks`, the [automatic fast path](https://prek.j178.dev/built-in-hooks/#use-the-automatic-fast-path) runs built-in Rust implementations without requiring any configuration changes.
 - The prek-only `repo: builtin` mode provides offline, zero-setup hooks, including native `deny-pattern` and `require-pattern` alternatives for common `pygrep` checks.
 
 ### prek is easier to work with

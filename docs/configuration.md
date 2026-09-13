@@ -1,11 +1,33 @@
 # Configuration
 
-`prek` reads **one configuration file per project**. You only need to choose **one** format:
+Use a project config to choose hooks and customize their options. If you need a
+starter config, follow the [Quickstart](quickstart.md). This page covers editing,
+validating, and updating that config; [Running Hooks](running-hooks.md) covers
+executing it.
 
-- **prek.toml** (TOML) — recommended for new users
-- **.pre-commit-config.yaml** (YAML) — best if you already use pre-commit or rely on tool/editor support
+## Choose a config file
 
-Both formats are first-class and will be supported long-term. They describe the **same** configuration model: you list repositories under `repos`, then enable and configure hooks from those repositories.
+prek reads one config per project. Keep an existing `.pre-commit-config.yaml`, or use
+`prek.toml` for a new setup. Both formats describe the same configuration model.
+
+| Filename | Format |
+| -- | -- |
+| `prek.toml` | TOML |
+| `.pre-commit-config.yaml` | YAML |
+| `.pre-commit-config.yml` | YAML |
+
+If several of these files exist in one directory, prek uses the first one in
+the order above. Use one file per project to make it clear which config applies.
+
+To convert a YAML config, run
+[`prek util yaml-to-toml`](reference/cli.md#prek-util-yaml-to-toml). The conversion
+does not preserve YAML comments. If the config must also work with upstream
+pre-commit, keep YAML and read [Sharing a config with pre-commit](#sharing-a-config-with-pre-commit).
+
+## Add and configure hooks
+
+List hook repositories under `repos`, pin each remote repository to a `rev`,
+and select its hooks by `id`:
 
 === "prek.toml"
 
@@ -15,20 +37,7 @@ Both formats are first-class and will be supported long-term. They describe the 
     rev = "v6.0.0"
     hooks = [
       { id = "trailing-whitespace" },
-      { id = "check-toml" },
-    ]
-
-    [[repos]]
-    repo = "local"
-    hooks = [
-      {
-        id = "cargo-fmt",
-        name = "cargo fmt",
-        language = "system",
-        entry = "cargo fmt --",
-        types = ["rust"],
-        pass_filenames = false,
-      },
+      { id = "check-added-large-files", args = ["--maxkb=1024"] },
     ]
     ```
 
@@ -40,125 +49,23 @@ Both formats are first-class and will be supported long-term. They describe the 
         rev: v6.0.0
         hooks:
           - id: trailing-whitespace
-          - id: check-toml
-
-      - repo: local
-        hooks:
-          - id: cargo-fmt
-            name: cargo fmt
-            language: system
-            entry: cargo fmt --
-            types: [rust]
-            pass_filenames: false
+          - id: check-added-large-files
+            args: [--maxkb=1024]
     ```
 
-For hooks defined directly in your project configuration, see
-[Local Hooks](local-hooks.md). The rest of this page explains config discovery,
-file formats, filters, and validation.
+The hook repository supplies defaults such as the command and language. Add
+options to a hook entry to customize it. Here, `args` changes the large-file
+limit to 1024 KB. Consult the hook's documentation for the arguments it accepts.
 
-## Pre-commit compatibility
+You can also use:
 
-`prek` is **fully compatible** with [`pre-commit`](https://pre-commit.com/) YAML configs, so your existing `.pre-commit-config.yaml` files work unchanged.
+- [Local Hooks](local-hooks.md) to define commands directly in the project config.
+- [Built-in Hooks](built-in-hooks.md) to use hooks bundled with prek.
 
-If you use **`prek.toml`**, there’s nothing to worry about from a `pre-commit` perspective: upstream `pre-commit` does not read TOML.
+### TOML and YAML syntax
 
-If you use the same `.pre-commit-config.yaml` with both tools, avoid `prek`-only extensions or keep separate configs.
-Upstream `pre-commit` may warn about unknown keys or error out on unsupported features.
-For broader behavior differences, see [Compatibility](compatibility.md) and [Differences](diff.md).
-
-### Prek-only extensions
-
-These entries are implemented by `prek` and are not part of the documented upstream `pre-commit` configuration surface.
-They work in both YAML and TOML, but they only matter for compatibility if you share a YAML config with upstream `pre-commit`.
-
-- Top-level:
-    - [`update`](reference/configuration.md#update)
-    - [`default_env`](reference/configuration.md#default_env)
-    - [`priorities`](reference/configuration.md#priorities)
-    - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-config)
-    - [`orphan`](reference/configuration.md#prek-only-orphan)
-    - [`files` and `exclude` glob mappings](reference/configuration.md#top-level-files)
-- Repo type:
-    - [`repo: builtin`](reference/configuration.md#prek-only-repo-builtin)
-- Hook-level:
-    - [`env`](reference/configuration.md#prek-only-env)
-    - [`shell`](reference/configuration.md#shell)
-    - [`priority`](reference/configuration.md#prek-only-priority)
-    - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-hook)
-    - [`groups`](reference/configuration.md#groups)
-    - [A positive integer for `pass_filenames`](reference/configuration.md#pass_filenames)
-    - [An options map for `language_version`](reference/configuration.md#language_version)
-    - [`files` and `exclude` glob mappings](reference/configuration.md#files-exclude)
-
-## Configuration file
-
-### Location (discovery)
-
-By default, `prek` looks for a configuration file starting from your current working directory and moving upward.
-It stops when it finds a config file, or when it hits the git repository boundary.
-
-If you run **without** `--config`, `prek` then enables **workspace mode**:
-
-- The first config found while traversing upward becomes the workspace root.
-- From that root, `prek` searches for additional config files in subdirectories (nested projects).
-
-Workspace discovery respects `.gitignore`, and also supports `.prekignore` for excluding directories from discovery.
-For the full behavior and examples, see [Monorepos](monorepos.md).
-
-!!! tip
-
-    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
-
-If you pass `--config` / `-c`, workspace discovery is disabled and only that single config file is used.
-
-### File name
-
-`prek` recognizes the following configuration filenames:
-
-- `prek.toml` (TOML)
-- `.pre-commit-config.yaml` (YAML, preferred for pre-commit compatibility)
-- `.pre-commit-config.yml` (YAML, alternate)
-
-In workspace mode, each project uses one of these filenames in its own directory.
-
-!!! note "One format per repo"
-
-    We recommend using a **single format** across the whole repository to avoid confusion.
-
-    If multiple configuration files exist in the same directory, `prek` uses only one and ignores the rest.
-    The precedence order is:
-
-    1. `prek.toml`
-    2. `.pre-commit-config.yaml`
-    3. `.pre-commit-config.yml`
-
-### File format
-
-Both `prek.toml` and `.pre-commit-config.yaml` map to the same configuration model (repositories under `repos`, then `hooks` under each repo).
-
-This section focuses on format-specific authoring notes and examples.
-
-#### TOML (`prek.toml`)
-
-Practical notes:
-
-- Structure is explicit and less indentation-sensitive.
-- Inline tables are common for hooks (e.g. `{ id = "ruff" }`).
-
-TOML supports both **inline tables** and **array-of-tables**, so you can choose between a compact or expanded hook style.
-
-Inline tables (best for small/simple hook configs):
-
-```toml
-[[repos]]
-repo = "https://github.com/pre-commit/pre-commit-hooks"
-rev = "v6.0.0"
-hooks = [
-  { id = "end-of-file-fixer", args = ["--fix"] },
-]
-```
-
-Array-of-tables (more readable for larger hook configs):
+For larger TOML hook entries, use an array of tables instead of an inline table.
+This is equivalent to the large-file hook above:
 
 ```toml
 [[repos]]
@@ -166,125 +73,68 @@ repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v6.0.0"
 
 [[repos.hooks]]
-id = "trailing-whitespace"
-
-[[repos.hooks]]
-id = "check-json"
+id = "check-added-large-files"
+args = ["--maxkb=1024"]
 ```
 
-Example:
+prek also accepts multiline inline tables from TOML 1.1. If an editor does not
+support that syntax, use the array-of-tables form above.
+
+In YAML, quote regular expressions containing backslashes, for example
+`files: '\.rs$'`. YAML anchors, aliases, and merge keys can reuse repeated
+configuration.
+
+## Choose which files and stages to check
+
+A hook's `files`, `exclude`, `types`, `types_or`, and `exclude_types` options
+control which files it receives. Top-level `files` and `exclude` apply to every
+hook in that project. For example, exclude generated files from all hooks by
+adding this at the top of the config, before the repository entries:
 
 === "prek.toml"
 
     ```toml
-    default_language_version.python = "3.12"
-
-    [[repos]]
-    repo = "local"
-    hooks = [
-      {
-        id = "ruff",
-        name = "ruff",
-        language = "system",
-        entry = "python3 -m ruff check",
-        files = "\\.py$",
-      },
-    ]
+    exclude = '^generated/'
     ```
-
-The previous example uses multiline inline tables, a feature that was introduced in
-[TOML 1.1](https://toml.io/en/v1.1.0), not all parsers have support for it yet.
-You may want to use the longer form if your editor/IDE complains about it.
-
-=== "prek.toml"
-
-    ```toml
-    default_language_version.python = "3.12"
-
-    [[repos]]
-    repo = "local"
-
-    [[repos.hooks]]
-    id = "ruff"
-    name = "ruff"
-    language = "system"
-    entry = "python3 -m ruff check"
-    files = "\\.py$"
-    ```
-
-#### YAML (`.pre-commit-config.yaml` / `.yml`)
-
-Practical notes:
-
-- Regular expressions are provided as YAML strings.
-  If your regex contains backslashes, quote it (e.g. `files: '\.rs$'`).
-- YAML anchors/aliases and merge keys are supported, so you can de-duplicate repeated blocks.
-
-Example:
 
 === ".pre-commit-config.yaml"
 
     ```yaml
-    default_language_version:
-      python: "3.12"
-
-    repos:
-      - repo: local
-        hooks:
-          - id: ruff
-            name: ruff
-            language: system
-            entry: python3 -m ruff check
-            files: "\\.py$"
+    exclude: '^generated/'
     ```
 
-#### Choosing a format
+`files` and `exclude` accept regular expressions or prek's explicit glob form.
+Type filters use file type tags; inspect a file's tags with:
 
-**`prek.toml`**
+```bash
+prek util identify path/to/file
+```
 
-- Clearer structure and less error-prone syntax.
-- Recommended for new users or new projects.
+A hook's `stages` limits the Git hook stages where it runs. To install the
+corresponding Git shim, use `default_install_hook_types` or
+[`prek install --hook-type`](reference/cli.md#prek-install--hook-type).
+Setting `stages` alone does not install a shim.
 
-**`.pre-commit-config.yaml`**
+See the [Configuration Reference](reference/configuration.md) for filter
+combinations, stage names, and all available options.
 
-- Long-established in the ecosystem with broad tool/editor support.
-- Fully compatible with upstream `pre-commit`.
+## Config location and scope
 
-**Recommendation**
+prek searches upward from the current directory for a config, stopping at the
+Git repository root. The first config found defines the workspace root; prek
+then discovers nested projects below it.
 
-- If you already use `.pre-commit-config.yaml`, keep it.
-- If you want a cleaner, more robust authoring experience, prefer `prek.toml`.
-
-!!! tip
-
-    If you want to switch, you can use [`prek util yaml-to-toml`](reference/cli.md#prek-util-yaml-to-toml) to convert YAML configs to `prek.toml`.
-    YAML comments are not preserved during conversion.
-
-### Global configuration
-
-`prek` also reads an optional user-level global config from the platform config directory:
-
-- Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
-- Windows: `%APPDATA%\prek\prek.toml`
-
-This file is for user-level prek settings, not hook definitions. Project hooks
-still live in the project config files described above. For the supported
-global settings, see the
-[configuration reference](reference/configuration.md#global-config-file).
-
-### Scope (per-project)
-
-Each config applies to the project directory that contains it. Parent and child
-projects apply their filters independently: a parent's `exclude` does not
+Each project applies its config independently. A parent's filters do not
 disable a child's hooks, and a child config does not override its parent.
+See [Monorepos](monorepos.md) for setting up and selecting nested projects, or
+the [Workspace Reference](reference/workspace.md) for discovery and file-scope
+rules.
 
-Use [Monorepos](monorepos.md) to set up nested projects, select their hooks, or
-exclude a directory from discovery. The [workspace reference](reference/workspace.md)
-defines file scope, discovery rules, and `orphan` behavior. When you pass
-`--config`, hooks instead run from the Git repository root with
+Passing `--config` selects one config and disables workspace discovery. Hooks
+then run from the Git repository root with
 [repository-relative paths](reference/workspace.md#single-config-mode).
 
-### Validation
+## Validate changes
 
 After editing a config, validate it and run the hooks against existing files:
 
@@ -295,18 +145,11 @@ prek run --all-files
 
 Use the repository's YAML config filename instead if applicable.
 [`prek validate-config`](reference/cli.md#prek-validate-config) accepts one or
-more config files. If file filters do not match as expected, use
-[`prek util identify`](reference/cli.md#prek-util-identify) to inspect file type
-tags and follow the [filtering guide](local-hooks.md#filter-when-the-hook-runs).
+more config files. See
+[Debugging](debugging.md#a-hook-is-skipped-or-receives-no-files) if a hook is
+skipped unexpectedly.
 
 If you want IDE completion / validation, prek publishes a JSON Schema through the [JSON Schema Store](https://www.schemastore.org/prek.json), so some editors may pick it up automatically.
-
-That schema tracks what `prek` accepts today, but `prek` also intentionally tolerates unknown keys for forward compatibility.
-
-Hook authors can opt into the separate schema for `.pre-commit-hooks.yaml` described in
-[Editor completion and validation](authoring-hooks.md#editor-completion-and-validation).
-
-For every accepted configuration key and hook option, see the [Configuration Reference](reference/configuration.md). For process environment controls, see the [Environment Variable Reference](reference/environment-variables.md).
 
 ## Update hook versions
 
@@ -321,15 +164,24 @@ hooks against the repository. Use `prek update --check` to check for available
 updates without changing the config. See [`prek update`](reference/cli.md#prek-update)
 for selecting repositories and controlling updates.
 
-## Prepare hook environments
+## User settings
 
-prek normally prepares a hook's environment the first time it is needed. To
-prepare environments in advance without changing Git shims, run:
+`prek` also reads an optional user-level global config from the platform config directory:
 
-```bash
-prek prepare-hooks
-```
+- Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
+- Windows: `%APPDATA%\prek\prek.toml`
 
-When setting up a checkout, `prek install --prepare-hooks` installs the Git
-shims and prepares environments together. See [Debugging](debugging.md#cache-problems)
-for inspecting and cleaning cached environments.
+This file is for user-level prek settings, not hook definitions. Project hooks
+still live in the project config files described above. For the supported
+global settings, see the
+[configuration reference](reference/configuration.md#global-config-file).
+
+## Sharing a config with pre-commit
+
+Existing pre-commit YAML configs work in prek. To use the same config with both
+tools, keep the YAML format and avoid prek-only extensions. Upstream pre-commit
+may warn about unknown keys or reject unsupported features.
+
+See [Compatibility](compatibility.md#if-you-need-strict-upstream-portability)
+for the features that affect portability and [Differences](diff.md) for broader
+behavior differences.

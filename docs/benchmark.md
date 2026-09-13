@@ -86,7 +86,7 @@ remaining stages.
 ### 2. Fast path
 
 Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration.
-prek's [automatic fast path](built-in-hooks.md#1-automatic-fast-path) recognizes the
+prek's [automatic fast path](built-in-hooks.md#use-the-automatic-fast-path) recognizes the
 13 hooks and runs their built-in Rust implementations. The median falls from
 1,438 ms to 213 ms: 85% less time, or a 6.75x speedup.
 

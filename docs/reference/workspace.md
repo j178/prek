@@ -17,7 +17,7 @@ root. `-C` / `--cd` changes the working directory before discovery, so it can
 change which projects are found.
 
 When several supported config files exist in one directory, prek uses the
-[configuration filename precedence](../configuration.md#file-name) to choose one.
+[configuration filename precedence](../configuration.md#choose-a-config-file) to choose one.
 
 ### Exclusions
 

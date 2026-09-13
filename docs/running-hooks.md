@@ -35,6 +35,19 @@ Inspect what would run without executing hooks or changing files:
 prek run --dry-run
 ```
 
+## Prepare hook environments
+
+prek normally prepares a hook's environment the first time it is needed. To
+prepare environments in advance while setting up a checkout, run:
+
+```bash
+prek prepare-hooks
+```
+
+When setting up a checkout, `prek install --prepare-hooks` installs the Git
+shims and prepares environments together. See [Debugging](debugging.md#cache-problems)
+for inspecting and cleaning cached environments.
+
 ## What happens when you commit
 
 Use Git as usual: stage the changes that belong in the commit, then commit them.
@@ -50,8 +63,7 @@ mixed line ending........................................................Passed
 
 Before Git creates the commit, the `pre-commit` shim runs hooks configured for
 that stage against the staged files. Unstaged changes are temporarily stashed
-while the hooks run, so the hooks check the contents that will be committed. The
-first run may take longer while prek downloads and prepares hook environments.
+while the hooks run, so the hooks check the contents that will be committed.
 
 If every hook passes, Git creates the commit. If a hook fails or modifies files,
 prek exits unsuccessfully and Git stops without creating the commit.
@@ -115,27 +127,6 @@ A hook can both modify files and report another error. In that case, keep the
 automatic fixes you want and resolve the remaining error before staging and
 retrying.
 
-## Run a command in a hook environment
-
-Use `prek exec` to run an explicit command with the toolchain, installed
-dependencies, and environment variables prepared for one configured hook. The
-hook environment is prepared first if necessary:
-
-```bash
-prek exec prettier -- prettier --stdin-filepath src/app.js < src/app.js
-```
-
-The hook selector must resolve to exactly one hook. In a workspace, use a
-project-qualified selector when needed, for example:
-
-```bash
-prek exec frontend:prettier -- prettier --version
-```
-
-The command runs in your current directory with the selected hook's environment.
-See [`prek exec`](reference/cli.md#prek-exec) for supported hooks and complete
-execution behavior.
-
 ## Skip hooks for one commit
 
 When one known hook is not applicable, skip only that hook by ID:
@@ -157,6 +148,27 @@ git commit --no-verify
 This does not fix the reported problem, and the same checks may still fail in
 continuous integration. Prefer fixing or explicitly resolving the hook failure
 when possible.
+
+## Run a command in a hook environment
+
+Use `prek exec` to run an explicit command with the toolchain, installed
+dependencies, and environment variables prepared for one configured hook. The
+hook environment is prepared first if necessary:
+
+```bash
+prek exec prettier -- prettier --stdin-filepath src/app.js < src/app.js
+```
+
+The hook selector must resolve to exactly one hook. In a workspace, use a
+project-qualified selector when needed, for example:
+
+```bash
+prek exec frontend:prettier -- prettier --version
+```
+
+The command runs in your current directory with the selected hook's environment.
+See [`prek exec`](reference/cli.md#prek-exec) for supported hooks and complete
+execution behavior.
 
 ## Inspect and debug
 
