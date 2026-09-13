@@ -40,11 +40,34 @@ This organization keeps the primary help output focused without removing the und
 
 ## If you need strict upstream portability
 
-If the same config must continue working in upstream `pre-commit`, stay with the YAML config format and avoid `prek`-only features such as:
+If the same config must continue working in upstream `pre-commit`, keep the YAML
+format. Upstream pre-commit does not read `prek.toml` or discover nested projects
+through prek's workspace mode.
 
-- `prek.toml`
-- `repo: builtin`
-- glob mappings for `files` and `exclude`
-- workspace mode
+### Prek-only configuration extensions
 
-See [Configuration](configuration.md) for config format guidance, [Configuration Reference](reference/configuration.md) for key-level details, and [Differences](diff.md) for broader behavior and CLI differences.
+These entries are implemented by `prek` and are not part of the documented upstream `pre-commit` configuration surface.
+They work in both YAML and TOML, but they only matter for compatibility if you share a YAML config with upstream `pre-commit`.
+
+- Top-level:
+    - [`update`](reference/configuration.md#update)
+    - [`default_env`](reference/configuration.md#default_env)
+    - [`priorities`](reference/configuration.md#priorities)
+    - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-config)
+    - [`orphan`](reference/configuration.md#prek-only-orphan)
+    - [`files` and `exclude` glob mappings](reference/configuration.md#top-level-files)
+- Repo type:
+    - [`repo: builtin`](reference/configuration.md#prek-only-repo-builtin)
+- Hook-level:
+    - [`env`](reference/configuration.md#prek-only-env)
+    - [`shell`](reference/configuration.md#shell)
+    - [`priority`](reference/configuration.md#prek-only-priority)
+    - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-hook)
+    - [`groups`](reference/configuration.md#groups)
+    - [A positive integer for `pass_filenames`](reference/configuration.md#pass_filenames)
+    - [An options map for `language_version`](reference/configuration.md#language_version)
+    - [`files` and `exclude` glob mappings](reference/configuration.md#files-exclude)
+
+See [Configuration](configuration.md) for config format guidance,
+[Configuration Reference](reference/configuration.md) for key-level details, and
+[Differences](diff.md) for broader behavior and CLI differences.

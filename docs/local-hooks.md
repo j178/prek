@@ -41,22 +41,20 @@ on `PATH`.
 
 ## Choose a language
 
-| What the command needs | Good starting point | Runtime source |
-| -- | -- | -- |
-| A tool already installed by the project or CI image | [`system`](reference/language-support.md#system) | Your `PATH`; prek does not install it |
-| A checked-in executable script with no isolated dependencies | [`script`](reference/language-support.md#script) | The hook repository or local project |
-| An isolated ecosystem environment | Python, Node, Bun, Deno, .NET, Go, mise, Ruby, or Rust | prek can select and download a compatible toolchain |
-| An ecosystem currently supplied by the machine | Conda, Coursier, Dart, Haskell, Julia, Lua, Perl, PHP, R, or Swift | A matching system installation |
-| A fully packaged runtime | [`docker`](reference/language-support.md#docker) or [`docker_image`](reference/language-support.md#docker_image) | A supported container runtime |
-| A message-only failure or content regex | [`fail`](reference/language-support.md#fail), [`pygrep`](reference/language-support.md#pygrep), or a [builtin hook](reference/built-in-hooks.md) | No general-purpose hook environment |
+For a project linter or formatter, start with `language = "system"` as in the
+example above. Other choices depend on how the command should be installed:
 
-For an existing project linter or formatter, begin with
-[`language = "system"`](reference/language-support.md#system). Choose a managed language when the hook
-repository itself needs an isolated installation or when prek should select the
-toolchain version.
+| What the command needs | Language |
+| -- | -- |
+| A tool already installed by the project or CI image | [`system`](reference/language-support.md#system) |
+| A checked-in executable script | [`script`](reference/language-support.md#script) |
+| Dependencies installed in a hook environment | The ecosystem's language, such as `python` or `node` |
+| A packaged container runtime | [`docker`](reference/language-support.md#docker) or [`docker_image`](reference/language-support.md#docker_image) |
 
-For supported versions, dependencies, and installation behavior, see the
-[Language Support reference](reference/language-support.md).
+The [Language Support reference](reference/language-support.md) lists supported
+languages, toolchain requirements, and installation behavior. For simple content
+or filename checks, a [built-in hook](reference/built-in-hooks.md) may already do
+what you need.
 
 ## Decide how the command receives files
 
@@ -90,21 +88,10 @@ prek-specific form.
 
 ## Filter when the hook runs
 
-Use file filters to avoid starting a command when no relevant file changed:
-
-- `types` and `types_or` use file type tags detected by prek.
-- `files` and `exclude` match paths with regular expressions, or with prek's
-  explicit glob form.
-- `stages` limits the Git hook stages where a hook is eligible.
-
-Inspect a file's detected tags with:
-
-```bash
-prek util identify path/to/file
-```
-
-The [configuration reference](reference/configuration.md#common-hook-options)
-documents how the filters combine.
+Local hooks use the same [file and stage filters](configuration.md#choose-which-files-and-stages-to-check)
+as remote hooks. In the Ruff example, `types = ["python"]` limits the command to
+Python files. In the Cargo example, `types = ["rust"]` controls whether the
+command runs, while `pass_filenames = false` lets Cargo select files itself.
 
 ## Commands do not use a shell by default
 
