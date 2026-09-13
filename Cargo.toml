@@ -10,6 +10,7 @@ repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
+# tombi: format.rules.table-keys-order = "ascending"
 [workspace.dependencies]
 prek-consts = { path = "crates/prek-consts", version = "0.5.2" }
 prek-identify = { path = "crates/prek-identify", version = "0.5.2" }
@@ -21,10 +22,11 @@ anstream = { version = "1.0.0" }
 anstyle-parse = { version = "1.0.0" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
-async-trait = { version = "0.1.89" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
+async-trait = { version = "0.1.89" }
 async_zip = { version = "0.0.21", package = "astral_async_zip", features = ["deflate", "tokio"] }
 asyncband = { version = "0.7.1", features = ["once-cell", "once-map", "semaphore"] }
+aws-lc-rs = { version = "1.17.0", default-features = false, features = ["aws-lc-sys"] }
 axoupdater = { version = "0.10.0", default-features = false, features = ["github_releases"] }
 bstr = { version = "1.11.0", default-features = false, features = ["std"] }
 cargo_metadata = { version = "0.23.1" }
@@ -38,6 +40,8 @@ fancy-regex = { version = "0.19.0" }
 fastrand = { version = "2.4.1", default-features = false }
 fs-err = { version = "3.3.0", features = ["tokio"] }
 futures-util = { version = "0.3.31", default-features = false, features = ["alloc"] }
+globset = { version = "0.4.18" }
+granit-parser = { version = "1.2.1" }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
 ignore = { version = "0.4.23" }
@@ -54,6 +58,7 @@ memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.14.0", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
+rayon = { version = "1.11.0" }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "stream",
   "json",
@@ -61,20 +66,16 @@ reqwest = { version = "0.13.2", default-features = false, features = [
   "system-proxy",
   "socks",
 ] }
-aws-lc-rs = { version = "1.17.0", default-features = false, features = ["aws-lc-sys"] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
-rayon = { version = "1.11.0" }
 same-file = { version = "1.0.6" }
 seahash = { version = "4.1.0" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
+serde-saphyr = { version = "1.2.0", default-features = false, features = ["deserialize", "serialize"] }
 serde_json = { version = "1.0.132", features = ["preserve_order", "unbounded_depth"] }
 serde_stacker = { version = "0.1.12" }
-serde-saphyr = { version = "1.2.0", default-features = false, features = ["deserialize", "serialize"] }
 shlex = { version = "2.0.0" }
-globset = { version = "0.4.18" }
-granit-parser = { version = "1.2.0" }
 similar = { version = "3.0.0" }
 ssl-certs = { version = "0.1.1" }
 strum = { version = "0.28.0", features = ["derive"] }
