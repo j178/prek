@@ -16,7 +16,7 @@ use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;
 use crate::fs::{CWD, Simplified};
-use crate::git::{GIT_ROOT, git_cmd};
+use crate::git::git_cmd;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::{Error as WorkspaceError, HookInitFilters, Project, Workspace};
@@ -308,7 +308,7 @@ fn install_hook_script(
 
         write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
-        let git_root = GIT_ROOT.as_ref()?;
+        let git_root = git::root()?;
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.as_os_str().is_empty() {

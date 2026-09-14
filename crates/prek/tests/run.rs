@@ -346,24 +346,24 @@ fn run_glob_patterns_with_multiple_hooks() {
 #[test]
 fn run_in_non_git_repo() {
     let context = TestEnv::new().with_filter(
-        r"Command `[^`]*git(?:\.exe)? rev-parse --show-toplevel`",
-        "Command `[GIT] rev-parse --show-toplevel`",
+        r"Command `[^`]*git(?:\.exe)? rev-parse --show-toplevel --absolute-git-dir`",
+        "Command `[GIT] rev-parse --show-toplevel --absolute-git-dir`",
     );
 
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `[GIT] rev-parse --show-toplevel` exited with an error:
+    error: Command `[GIT] rev-parse --show-toplevel --absolute-git-dir` exited with an error:
 
     [status]
     exit status: 128
 
     [stderr]
     fatal: not a git repository (or any of the parent directories): .git
-    ");
+    "#);
 }
 
 #[test]

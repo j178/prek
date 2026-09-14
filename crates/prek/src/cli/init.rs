@@ -8,7 +8,7 @@ use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use crate::cli::sample_config::write_sample_config;
 use crate::cli::{ExitStatus, SampleConfigFormat, install};
 use crate::fs::Simplified;
-use crate::git::GIT_ROOT;
+use crate::git;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::{Error as WorkspaceError, Project, Workspace};
@@ -20,7 +20,7 @@ pub(crate) async fn init(
     no_install: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let git_root = GIT_ROOT.as_ref()?;
+    let git_root = git::root()?;
     let target = resolve_target(path, git_root)?;
     let (project, created) = load_or_create_project(&target, format)?;
 

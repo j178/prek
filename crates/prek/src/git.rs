@@ -5,6 +5,7 @@ use std::str::Utf8Error;
 use std::sync::{LazyLock, OnceLock};
 
 use anyhow::Result;
+use bstr::ByteSlice;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
 use same_file::is_same_file;
@@ -63,13 +64,25 @@ fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
 }
 
-pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
-    root()
-        .map(|root| dunce::canonicalize(&root).unwrap_or(root))
-        .inspect(|root| {
-            debug!("Git root: {}", root.display());
-        })
-});
+struct RepositoryPaths {
+    root: PathBuf,
+    git_dir: PathBuf,
+}
+
+static REPOSITORY_PATHS: LazyLock<Result<RepositoryPaths, Error>> =
+    LazyLock::new(|| RepositoryPaths::discover(&std::env::current_dir()?));
+
+/// Return the absolute path of the current repository's working tree.
+pub(crate) fn root() -> Result<&'static Path, &'static Error> {
+    REPOSITORY_PATHS.as_ref().map(|paths| paths.root.as_path())
+}
+
+/// Return the absolute Git directory of the current worktree, even after changing directory.
+pub(crate) fn git_dir() -> Result<&'static Path, &'static Error> {
+    REPOSITORY_PATHS
+        .as_ref()
+        .map(|paths| paths.git_dir.as_path())
+}
 
 /// Repository-local environment variables cleared before operating on another repository.
 ///
@@ -275,16 +288,6 @@ where
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn git_dir() -> Result<PathBuf, Error> {
-    let output = git_cmd()?
-        .arg("rev-parse")
-        .arg("--git-dir")
-        .check(true)
-        .output()
-        .await?;
-    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
-}
-
 pub(crate) async fn common_dir() -> Result<PathBuf, Error> {
     let output = git_cmd()?
         .arg("rev-parse")
@@ -384,12 +387,12 @@ pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
     Ok(status.code() == Some(1))
 }
 
-pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
-    let git_dir = git_dir().await?;
+pub(crate) fn is_in_merge_conflict() -> Result<bool> {
+    let git_dir = git_dir()?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>> {
     let tree = git_cmd()?.arg("write-tree").check(true).output().await?;
 
     let output = git_cmd()?
@@ -415,8 +418,8 @@ pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error>
         .collect())
 }
 
-async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
-    let git_dir = git_dir().await?;
+async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
+    let git_dir = git_dir()?;
     let merge_msg = git_dir.join("MERGE_MSG");
     let content = fs_err::tokio::read_to_string(&merge_msg).await?;
     let conflicts = content
@@ -494,26 +497,48 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
     Ok(str::from_utf8(output.stdout.trim_ascii())?.to_string())
 }
 
-/// Return the path of the top-level directory of the working tree.
-#[instrument(level = "trace")]
-pub(crate) fn root() -> Result<PathBuf, Error> {
-    let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
-    let mut cmd = Command::new(git);
-    let output = apply_git_work_tree(&mut cmd)
-        .arg("rev-parse")
-        .arg("--show-toplevel")
-        .output()?;
-    if !output.status.success() {
-        return Err(Error::Command(process::Error::Status {
-            command: format!("{} rev-parse --show-toplevel", git.to_string_lossy()),
-            error: StatusError {
-                status: output.status,
-                output: Some(output),
-            },
-        }));
-    }
+impl RepositoryPaths {
+    #[instrument(level = "trace")]
+    fn discover(cwd: &Path) -> Result<Self, Error> {
+        let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
+        let rev_parse = |args: &[&str]| -> Result<Vec<u8>, Error> {
+            let mut cmd = Command::new(git);
+            let mut output = apply_git_work_tree(&mut cmd)
+                .current_dir(cwd)
+                .arg("rev-parse")
+                .args(args)
+                .output()?;
+            if !output.status.success() {
+                return Err(Error::Command(process::Error::Status {
+                    command: format!("{} rev-parse {}", git.to_string_lossy(), args.join(" ")),
+                    error: StatusError {
+                        status: output.status,
+                        output: Some(output),
+                    },
+                }));
+            }
+            if output.stdout.ends_with(b"\n") {
+                output.stdout.truncate(output.stdout.len() - 1);
+            }
+            Ok(output.stdout)
+        };
 
-    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
+        let output = rev_parse(&["--show-toplevel", "--absolute-git-dir"])?;
+        let (root, git_dir) = match output.split_once_str(b"\n") {
+            Some((root, git_dir)) if !git_dir.contains(&b'\n') => {
+                (path_from_git_bytes(root)?, path_from_git_bytes(git_dir)?)
+            }
+            // rev-parse cannot NUL-delimit these paths. Query them separately when
+            // a path contains a newline so the separator is unambiguous.
+            _ => (
+                path_from_git_bytes(&rev_parse(&["--show-toplevel"])?)?,
+                path_from_git_bytes(&rev_parse(&["--absolute-git-dir"])?)?,
+            ),
+        };
+        let root = dunce::canonicalize(&root).unwrap_or(root);
+        debug!("Git root: {}", root.display());
+        Ok(Self { root, git_dir })
+    }
 }
 
 pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
@@ -1028,13 +1053,13 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    #[cfg(unix)]
-    use super::lfs_files;
     use super::zsplit;
     use super::{
         Error, GIT, TerminalPrompt, apply_shared_repository_file_mode, full_clone, init_repo,
         list_submodules, should_update_submodules, update_submodules,
     };
+    #[cfg(unix)]
+    use super::{RepositoryPaths, lfs_files};
     use assert_cmd::assert::OutputAssertExt;
 
     fn run_git(path: &Path, args: &[&str]) {
@@ -1042,6 +1067,34 @@ mod tests {
         command.current_dir(path).args(args);
 
         command.assert().success();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repository_paths_preserve_special_characters() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let names: &[&[u8]] = &[
+            b"repo\nwith newline\n",
+            b"repo with spaces ",
+            #[cfg(not(target_os = "macos"))]
+            b"repo-\xff",
+        ];
+        for name in names {
+            let repo = tmp.path().join(OsStr::from_bytes(name));
+            let subdir = repo.join("subdir");
+            fs_err::create_dir_all(&subdir).unwrap();
+            run_git(&repo, &["init"]);
+
+            let paths = RepositoryPaths::discover(&subdir).unwrap();
+            assert_eq!(paths.root, dunce::canonicalize(&repo).unwrap());
+            assert_eq!(
+                paths.git_dir,
+                dunce::canonicalize(repo.join(".git")).unwrap()
+            );
+        }
     }
 
     #[tokio::test]
