@@ -99,8 +99,8 @@ authentication often works automatically with no extra configuration:
 # GitHub CLI users: configure git to use gh for credentials
 gh auth setup-git
 
-# Now HTTPS URLs work automatically
-prek install
+# Download configured hook repositories and prepare their environments
+prek prepare-hooks
 ```
 
 Other credential helpers that work out of the box:

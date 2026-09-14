@@ -2,7 +2,7 @@
 
 prek provides multiple installation methods to suit different needs and environments.
 
-Git is required. Prebuilt releases are available for macOS, Linux, and Windows
+Prebuilt releases are available for macOS, Linux, and Windows
 across the architectures listed on the
 [GitHub Releases](https://github.com/j178/prek/releases) page.
 
@@ -119,27 +119,33 @@ If you added prek as a project dependency, run it through that package manager:
     uv run prek --version
     ```
 
-=== "uvx one-off"
-
-    ```bash
-    uvx prek --version
-    ```
-
 === "npm project dependency"
 
     ```bash
     npm exec -- prek --version
     ```
 
-The rest of this documentation uses the shorter `prek` form. Substitute
-`uv run prek`, `uvx prek`, or `npm exec -- prek` when you intentionally avoid a
-global installation.
+The rest of this documentation uses the shorter `prek` form. For a project
+dependency, substitute `uv run prek` or `npm exec -- prek`.
+
+## Run without installing
+
+To try prek in an isolated environment without adding it to your project, use
+`uvx`:
+
+```bash
+uvx prek --version
+```
+
+Use `uvx prek` in place of `prek` in subsequent commands.
 
 ## Updating
 
 --8<-- "README.md:self-update"
 
-For other installation methods, follow the same installation steps again.
+If you installed prek with a package manager, use its upgrade command. For
+example, use `uv tool upgrade prek` for a uv tool installation or
+`pip install --upgrade prek` for a pip installation.
 
 ## Shell Completion
 
