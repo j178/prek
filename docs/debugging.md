@@ -98,6 +98,11 @@ Inspect the cache before removing anything:
 ```bash
 prek cache dir
 prek cache size
+```
+
+To remove unused cached repositories and environments, run:
+
+```bash
 prek cache gc
 ```
 

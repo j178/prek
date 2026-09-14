@@ -37,20 +37,19 @@ Follow this short example to experience how prek automates linting and formattin
 
 ### 1. Initialize the repository
 
-Run `prek init` from anywhere in your Git worktree:
+From the root of a Git repository without an existing hook configuration, run:
 
 ```bash
 prek init
 ```
 
-This creates a starter `prek.toml` at the Git worktree root and installs the
-`pre-commit` Git shim. If the root already has a supported configuration file,
-prek keeps it unchanged and installs the shim.
+This creates a starter `prek.toml` and installs the `pre-commit` Git shim so
+Git runs prek when you commit.
 
-Use `--format yaml` to create `.pre-commit-config.yaml`, or `--no-install` to
-create only the config and install Git shims later with `prek install`. To create
-a config in an existing subdirectory, use `prek init <path>`; see
-[Monorepos](monorepos.md#add-a-project-configuration).
+!!! note
+
+    `prek.toml` is the native configuration file for **prek**. prek also supports
+    `.pre-commit-config.yaml`, so you can keep your existing configuration.
 
 The generated configuration uses prek's built-in hooks:
 
@@ -63,10 +62,6 @@ hooks = [
   { id = "check-added-large-files" },
 ]
 ```
-
-!!! note
-
-    `prek.toml` is the native configuration file for **prek**. If you already have a `.pre-commit-config.yaml`, prek can still read it today.
 
 Add a small YAML file so the first run has something to check, then stage both
 files:
@@ -121,6 +116,11 @@ configured hooks for the files in that commit. Run `prek install` to reinstall
 the shim later, or `prek uninstall` to remove it.
 
 ### 4. Go further
+
+For other setups, `prek init --format yaml` creates `.pre-commit-config.yaml`.
+Use `prek init --no-install` to create only the config, then run `prek install`
+when you are ready to enable checks on commit. To create a config in an existing
+subdirectory, see [Monorepos](monorepos.md#add-a-project-configuration).
 
 - Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/). Every example there works with prek.
 - See [Running Hooks](running-hooks.md) for the commands you will use after setup and how to handle hook failures.
