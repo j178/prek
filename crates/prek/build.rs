@@ -48,7 +48,7 @@ fn commit_info(workspace_root: &Path) {
     }
 
     if let Some(git_head_path) = git_head(&git_dir) {
-        println!("cargo:rerun-if-changed={}", git_head_path.display());
+        println!("cargo::rerun-if-changed={}", git_head_path.display());
 
         let git_head_contents = fs::read_to_string(git_head_path);
         if let Ok(git_head_contents) = git_head_contents {
@@ -61,7 +61,7 @@ fn commit_info(workspace_root: &Path) {
             git_ref_parts.next();
             if let Some(git_ref) = git_ref_parts.next() {
                 let git_ref_path = git_dir.join(git_ref);
-                println!("cargo:rerun-if-changed={}", git_ref_path.display());
+                println!("cargo::rerun-if-changed={}", git_ref_path.display());
             }
         }
     }
@@ -81,9 +81,9 @@ fn commit_info(workspace_root: &Path) {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let mut parts = stdout.split_whitespace();
     let mut next = || parts.next().unwrap();
-    println!("cargo:rustc-env=PREK_COMMIT_HASH={}", next());
-    println!("cargo:rustc-env=PREK_COMMIT_SHORT_HASH={}", next());
-    println!("cargo:rustc-env=PREK_COMMIT_DATE={}", next());
+    println!("cargo::rustc-env=PREK_COMMIT_HASH={}", next());
+    println!("cargo::rustc-env=PREK_COMMIT_SHORT_HASH={}", next());
+    println!("cargo::rustc-env=PREK_COMMIT_DATE={}", next());
 
     // Describe can fail for some commits
     // https://git-scm.com/docs/pretty-formats#Documentation/pretty-formats.txt-emdescribeoptionsem
@@ -92,11 +92,11 @@ fn commit_info(workspace_root: &Path) {
         let mut describe_parts = describe.rsplitn(3, '-');
         describe_parts.next();
         println!(
-            "cargo:rustc-env=PREK_LAST_TAG_DISTANCE={}",
+            "cargo::rustc-env=PREK_LAST_TAG_DISTANCE={}",
             describe_parts.next().unwrap_or("0")
         );
         if let Some(last_tag) = describe_parts.next() {
-            println!("cargo:rustc-env=PREK_LAST_TAG={last_tag}");
+            println!("cargo::rustc-env=PREK_LAST_TAG={last_tag}");
         }
     }
 }
