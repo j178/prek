@@ -457,7 +457,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 }
 
 fn main() -> ExitCode {
-    CompleteEnv::with_factory(Cli::command).complete();
+    CompleteEnv::with_factory(Cli::command)
+        .completer("prek")
+        .complete();
 
     ctrlc::set_handler(move || {
         cleanup();
