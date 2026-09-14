@@ -398,7 +398,7 @@ pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error>
         .hidden_args(["--no-ext-diff"])
         .arg("-z") // Use NUL as line terminator
         .arg("-m") // Show diffs for merge commits in the default format.
-        .arg(String::from_utf8_lossy(&tree.stdout).trim_ascii())
+        .arg(str::from_utf8(&tree.stdout)?.trim_ascii())
         .arg("HEAD")
         .arg("MERGE_HEAD")
         .arg("--")

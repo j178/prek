@@ -89,8 +89,7 @@ async fn query_node_version(node: &Path) -> Result<NodeVersion> {
         .check(true)
         .output()
         .await?;
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&output_str).context("Failed to parse node version")
+    serde_json::from_slice(&output.stdout).context("Failed to parse node version")
 }
 
 pub(crate) async fn query_node_version_cached(node: &Path) -> Result<Arc<NodeVersion>> {

@@ -51,7 +51,7 @@ impl BunResult {
 
     pub(crate) async fn from_executable(bun: PathBuf) -> Result<Self> {
         let output = Cmd::new(&bun).arg("--version").check(true).output().await?;
-        let output_str = String::from_utf8_lossy(&output.stdout);
+        let output_str = str::from_utf8(&output.stdout)?;
         let version: BunVersion = output_str
             .trim()
             .parse()

@@ -35,8 +35,8 @@ pub(crate) async fn query_swift_info() -> Result<SwiftInfo> {
         .await?
         .stdout;
 
-    let output = String::from_utf8_lossy(&stdout);
-    let version = parse_swift_version(&output).context("Failed to parse Swift version")?;
+    let output = str::from_utf8(&stdout)?;
+    let version = parse_swift_version(output).context("Failed to parse Swift version")?;
 
     Ok(SwiftInfo {
         version,

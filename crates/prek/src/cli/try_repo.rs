@@ -27,7 +27,7 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
         .output()
         .await?
         .stdout;
-    let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
+    let head_rev = str::from_utf8(&head_rev)?.trim().to_string();
     Ok(head_rev)
 }
 
@@ -138,11 +138,11 @@ async fn prepare_repo<'a>(
             .output()
             .await?
             .stdout;
-        String::from_utf8_lossy(&head_rev)
-            .split_ascii_whitespace()
-            .next()
-            .context("Failed to parse HEAD revision from git ls-remote output")?
-            .to_string()
+        let head_rev = head_rev
+            .split(u8::is_ascii_whitespace)
+            .find(|part| !part.is_empty())
+            .context("Failed to parse HEAD revision from git ls-remote output")?;
+        str::from_utf8(head_rev)?.to_string()
     };
 
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
