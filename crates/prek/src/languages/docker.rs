@@ -216,7 +216,7 @@ impl RuntimeKind {
             .arg(&container_id)
             .output()?
             .stdout;
-        let stdout = String::from_utf8_lossy(&output);
+        let stdout = str::from_utf8(&output)?;
         let stdout = stdout.trim().trim_matches('\'');
         let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
 

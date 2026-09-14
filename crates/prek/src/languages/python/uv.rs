@@ -124,7 +124,7 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
         bail!("Failed to get uv version");
     }
 
-    let version_output = String::from_utf8_lossy(&output.stdout);
+    let version_output = str::from_utf8(&output.stdout)?;
     let version_str = version_output
         .split_whitespace()
         .nth(1)

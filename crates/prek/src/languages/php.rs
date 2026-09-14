@@ -43,7 +43,7 @@ async fn query_php_version(executable: &Path) -> Result<Version> {
         .output()
         .await
         .context("Failed to query PHP version")?;
-    parse_php_version(&String::from_utf8_lossy(&output.stdout))
+    parse_php_version(str::from_utf8(&output.stdout)?)
 }
 
 fn parse_php_version(output: &str) -> Result<Version> {

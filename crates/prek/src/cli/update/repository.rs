@@ -48,7 +48,7 @@ pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> R
         .output()
         .await?;
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Ok(str::from_utf8(&output.stdout)?.trim().to_string())
 }
 
 /// Returns whether a pinned commit SHA is already present in the refs fetched for `prek update`.
@@ -143,7 +143,7 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
             .sanitize_git_repo_env()
             .output()
             .await?;
-        String::from_utf8_lossy(&output.stdout).trim().to_string()
+        str::from_utf8(&output.stdout)?.trim().to_string()
     };
 
     debug!("Resolved `FETCH_HEAD` to `{rev}`");

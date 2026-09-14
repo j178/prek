@@ -24,7 +24,7 @@ pub(crate) struct LuaInfo {
 pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
     let stdout = Cmd::new("lua").arg("-v").check(true).output().await?.stdout;
     // Lua 5.4.8  Copyright (C) 1994-2025 Lua.org, PUC-Rio
-    let version = String::from_utf8_lossy(&stdout)
+    let version = str::from_utf8(&stdout)?
         .split_whitespace()
         .nth(1)
         .context("Failed to get Lua version")?

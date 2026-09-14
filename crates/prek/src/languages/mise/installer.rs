@@ -81,7 +81,7 @@ impl MiseResult {
             .check(true)
             .output()
             .await?;
-        let output = String::from_utf8_lossy(&output.stdout);
+        let output = str::from_utf8(&output.stdout)?;
         let version = output
             .split_whitespace()
             .next()
