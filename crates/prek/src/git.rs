@@ -41,8 +41,25 @@ pub(crate) enum Error {
     InvalidHooksPath(PathBuf),
 }
 
-pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
-    LazyLock::new(|| which::which("git"));
+pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| {
+    let git = which::which("git")?;
+    // Resolve Apple's developer-tool shim once instead of looking up the toolchain
+    // on every Git invocation. Leave custom Git executables and wrappers alone.
+    #[cfg(target_os = "macos")]
+    if git == Path::new("/usr/bin/git")
+        && let Ok(output) = Command::new("/usr/bin/xcrun")
+            .args(["--find", "git"])
+            .output()
+        && output.status.success()
+    {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+        return Ok(PathBuf::from(OsStr::from_bytes(stdout)));
+    }
+    Ok(git)
+});
 
 // Git can expose `GIT_DIR` without `GIT_WORK_TREE` to hooks. Keep the derived
 // work tree in process-local state and add it only when preserving the current
