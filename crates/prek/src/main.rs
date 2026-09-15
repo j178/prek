@@ -404,12 +404,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cli::yaml_to_toml(args.input, args.output, args.force, printer)
             }
             UtilCommand::GenerateShellCompletion(args) => {
-                let mut command = Cli::command();
-                let bin_name = command
-                    .get_bin_name()
-                    .unwrap_or_else(|| command.get_name())
-                    .to_owned();
-                clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
+                let command = Cli::command();
+                let bin_name = command.get_bin_name().unwrap_or_else(|| command.get_name());
+                let shells = clap_complete::env::Shells::builtins();
+                let shell = shells
+                    .completer(&args.shell.to_string())
+                    .context("Unsupported shell for dynamic completion")?;
+
+                shell.write_registration(
+                    "COMPLETE",
+                    command.get_name(),
+                    bin_name,
+                    "prek",
+                    &mut std::io::stdout().lock(),
+                )?;
                 Ok(ExitStatus::Success)
             }
         },

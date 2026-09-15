@@ -1135,7 +1135,8 @@ pub(crate) enum UtilCommand {
     /// Convert a YAML configuration file to prek.toml.
     YamlToToml(YamlToTomlArgs),
     /// Generate shell completion scripts.
-    #[command(hide = true)]
+    ///
+    /// Load the generated script in your shell configuration to enable completion.
     GenerateShellCompletion(GenerateShellCompletionArgs),
 }
 
@@ -1228,7 +1229,7 @@ pub(crate) struct SelfUpdateArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct GenerateShellCompletionArgs {
-    /// The shell to generate the completion script for
+    /// The shell to generate the completion script for.
     #[arg(value_enum)]
     pub shell: clap_complete::Shell,
 }
