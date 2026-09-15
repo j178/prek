@@ -152,6 +152,14 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<ExitStatus> {
+    // Shell startup must not initialize the cache or overwrite the log from the last run.
+    if let Some(Command::Util(UtilNamespace {
+        command: UtilCommand::GenerateShellCompletion(args),
+    })) = &cli.command
+    {
+        return cli::generate_shell_completion(args.shell);
+    }
+
     terminal::enable_ansi_colors();
 
     ColorChoice::write_global(cli.globals.color.into());
@@ -403,22 +411,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             UtilCommand::YamlToToml(args) => {
                 cli::yaml_to_toml(args.input, args.output, args.force, printer)
             }
-            UtilCommand::GenerateShellCompletion(args) => {
-                let command = Cli::command();
-                let bin_name = command.get_bin_name().unwrap_or_else(|| command.get_name());
-                let shells = clap_complete::env::Shells::builtins();
-                let shell = shells
-                    .completer(&args.shell.to_string())
-                    .context("Unsupported shell for dynamic completion")?;
-
-                shell.write_registration(
-                    "COMPLETE",
-                    command.get_name(),
-                    bin_name,
-                    "prek",
-                    &mut std::io::stdout().lock(),
-                )?;
-                Ok(ExitStatus::Success)
+            UtilCommand::GenerateShellCompletion(_) => {
+                unreachable!("handled before store initialization")
             }
         },
         #[cfg(feature = "self-update")]
