@@ -35,6 +35,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-merge-conflict`](#check-merge-conflict) (Checks for files that contain merge conflict strings.)
 - [`detect-private-key`](#detect-private-key) (Detects the presence of private keys.)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Protects specific branches from direct commits.)
+- [`check-signed-commit`](#check-signed-commit) (Ensures commits are signed with a valid GPG/SSH signature before they're pushed.)
 - [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable.)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang.)
 
@@ -595,6 +596,46 @@ Protects specific branches from direct commits.
 - This hook is configured as `always_run: true` by default, and does not take filenames.
   As a result, `files`, `exclude`, `types`, etc. are ignored unless you explicitly set `always_run: false`.
 - If HEAD is detached (no current branch), the hook does nothing.
+
+---
+
+### `check-signed-commit`
+
+Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
+
+**Supported arguments**
+
+- `--allow-status <CODE>` (repeatable, default: `G`, `U`): accept commits whose signature
+  status is one of these codes. Codes are Git's own `%G?` values:
+
+    | Code | Meaning |
+    | -- | -- |
+    | `G` | good signature |
+    | `B` | bad signature |
+    | `U` | good signature, unknown validity (untrusted) |
+    | `X` | good signature, but expired |
+    | `Y` | good signature, made with an expired key |
+    | `R` | good signature, made with a revoked key |
+    | `E` | signature cannot be checked, e.g. missing public key |
+    | `N` | no signature |
+
+**Behavior / caveats**
+
+- Defaults to the `pre-push` and `manual` stages. This hook is configured as
+  `always_run: true` and does not take filenames.
+- Merge commits are skipped (`git log --no-merges`).
+- Checks the range being pushed, using `PRE_COMMIT_FROM_REF`/`PRE_COMMIT_TO_REF` (set by `prek`
+  around `pre-push` hooks).
+- For a root/orphan push (`PRE_COMMIT_TO_REF` set but no `PRE_COMMIT_FROM_REF`), it walks the
+  entire history reachable from `PRE_COMMIT_TO_REF`.
+- Outside `pre-push` (for example, `prek run check-signed-commit --hook-stage manual`), it
+  checks only the single commit at `HEAD`: the range `<parent>..HEAD`, or `HEAD` alone when
+  `HEAD` is a root commit with no parent to diff against.
+- In a repository with no commits yet (unborn `HEAD`), there's nothing to check and the hook
+  passes trivially.
+- Signature verification itself is entirely Git's: this hook only reads `git log`'s own status
+  codes, so it follows your local `gpg`/`gpg.ssh.allowedSignersFile`/`user.signingkey`
+  configuration exactly as `git verify-commit` would.
 
 ---
 
