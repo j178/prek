@@ -136,6 +136,36 @@ fn install() {
 }
 
 #[test]
+fn install_and_uninstall_in_bare_repository() {
+    let context = TestEnv::new();
+    context.git().run(["init", "--bare"]);
+
+    cmd_snapshot!(context, context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+    context
+        .child("hooks/pre-commit")
+        .assert(predicates::path::exists());
+
+    cmd_snapshot!(context, context.uninstall(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Uninstalled `pre-commit`
+
+    ----- stderr -----
+    "#);
+    context
+        .child("hooks/pre-commit")
+        .assert(predicates::path::missing());
+}
+
+#[test]
 fn install_with_git_dir() {
     let context = TestEnv::new().init_git();
 

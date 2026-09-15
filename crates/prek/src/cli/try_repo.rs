@@ -13,7 +13,6 @@ use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunArgs, RunOptions};
 use crate::config::{self, Stage};
 use crate::git;
-use crate::git::GIT_ROOT;
 use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
 use crate::store::Store;
@@ -219,7 +218,7 @@ pub(crate) async fn try_repo(
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
     let store = Store::from_path(tmp_dir.path())?.init()?;
-    let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
+    let selectors = Selectors::load(&run_args.includes, &run_args.skips, git::root()?)?;
 
     let predefined_hooks = match repo.as_str() {
         "builtin" => Some(select_predefined_hooks::<BuiltinHooks>(&selectors)),

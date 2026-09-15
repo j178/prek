@@ -14,7 +14,6 @@ use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, GlobPatterns, Stage};
 use crate::fs::PathClean;
-use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::workspace::Project;
 use crate::{fs, git, warn_user};
@@ -516,7 +515,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         commit_msg_filename,
     } = opts;
 
-    let git_root = GIT_ROOT.as_ref()?;
+    let git_root = git::root()?;
 
     match input_mode {
         RunInputMode::Files => {}
@@ -698,7 +697,7 @@ async fn collect_files_for_selection(
             Ok(files)
         }
         FileSelection::Default => {
-            if git::is_in_merge_conflict().await? {
+            if git::is_in_merge_conflict()? {
                 let files = git::conflicted_files(workspace_root).await?;
                 debug!("Conflicted files: {}", files.len());
                 return Ok(files);

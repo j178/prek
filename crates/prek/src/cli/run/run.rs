@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::slice;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use asyncband::semaphore::Semaphore;
@@ -30,7 +30,6 @@ use crate::cli::run::{
 use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
 use crate::config::{PassFilenames, Stage};
 use crate::fs::CWD;
-use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
 use crate::run::HOOK_CONCURRENCY;
@@ -110,8 +109,7 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    // Ensure we are in a git repository.
-    LazyLock::force(&GIT_ROOT).as_ref()?;
+    git::root()?;
 
     let should_stash = selection.requires_clean_worktree();
 

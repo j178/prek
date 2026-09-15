@@ -34,7 +34,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     let args: Args = parse_hook_args(hook)?;
 
     // Check if we're in a merge state or assuming merge
-    if !args.assume_in_merge && !is_in_merge().await? {
+    if !args.assume_in_merge && !is_in_merge()? {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
@@ -46,9 +46,8 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     .await
 }
 
-async fn is_in_merge() -> Result<bool> {
-    // Change directory temporarily or ensure we're in the right directory
-    let git_dir = git_dir().await?;
+fn is_in_merge() -> Result<bool> {
+    let git_dir = git_dir()?;
 
     // Check if MERGE_MSG exists
     let merge_msg_exists = git_dir.join("MERGE_MSG").exists();

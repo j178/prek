@@ -345,25 +345,57 @@ fn run_glob_patterns_with_multiple_hooks() {
 
 #[test]
 fn run_in_non_git_repo() {
-    let context = TestEnv::new().with_filter(
-        r"Command `[^`]*git(?:\.exe)? rev-parse --show-toplevel`",
-        "Command `[GIT] rev-parse --show-toplevel`",
-    );
+    let context = TestEnv::new();
 
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run().env(EnvVars::LC_ALL, "fr_FR.UTF-8"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `[GIT] rev-parse --show-toplevel` exited with an error:
+    error: Not in a Git repository. Change to a Git repository, or run `git init` to create one.
+    "#);
+}
+
+#[test]
+fn run_preserves_git_discovery_errors() {
+    let context = TestEnv::new()
+        .with_config("repos: []")
+        .with_filter(
+            r"Command `[^`]*git(?:\.exe)? rev-parse --absolute-git-dir --git-common-dir --git-path hooks --show-toplevel`",
+            "Command `[GIT] rev-parse --absolute-git-dir --git-common-dir --git-path hooks --show-toplevel`",
+        )
+        .init_git()
+        .with_file("invalid.gitconfig", "[invalid\n");
+
+    cmd_snapshot!(context, context.run().env("GIT_CONFIG_GLOBAL", context.child("invalid.gitconfig").path()), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Command `[GIT] rev-parse --absolute-git-dir --git-common-dir --git-path hooks --show-toplevel` exited with an error:
 
     [status]
     exit status: 128
 
     [stderr]
-    fatal: not a git repository (or any of the parent directories): .git
-    ");
+    fatal: bad config line 1 in file [TEMP_DIR]/invalid.gitconfig
+    "#);
+    cmd_snapshot!(context, context.run().env(EnvVars::GIT_DIR, "missing"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Command `[GIT] rev-parse --absolute-git-dir --git-common-dir --git-path hooks --show-toplevel` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: not a git repository: 'missing'
+    "#);
 }
 
 #[test]

@@ -5,6 +5,7 @@ use std::str::Utf8Error;
 use std::sync::{LazyLock, OnceLock};
 
 use anyhow::Result;
+use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
 use same_file::is_same_file;
@@ -22,6 +23,11 @@ pub(crate) enum Error {
 
     #[error("Failed to find git: {0}")]
     GitNotFound(#[from] which::Error),
+
+    #[error(
+        "Not in a Git repository. Change to a Git repository, or run `git init` to create one."
+    )]
+    NotRepository,
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -63,13 +69,31 @@ fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
 }
 
-pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
-    root()
-        .map(|root| dunce::canonicalize(&root).unwrap_or(root))
-        .inspect(|root| {
-            debug!("Git root: {}", root.display());
-        })
-});
+#[derive(Debug)]
+struct Repo {
+    root: Result<PathBuf, Error>,
+    git_dir: PathBuf,
+    common_dir: PathBuf,
+    hooks_dir: PathBuf,
+}
+
+static REPO: LazyLock<Result<Repo, Error>> =
+    LazyLock::new(|| Repo::discover(&std::env::current_dir()?));
+
+/// Return the absolute path of the current repository's working tree.
+pub(crate) fn root() -> Result<&'static Path, &'static Error> {
+    REPO.as_ref()?.root.as_deref()
+}
+
+/// Return the absolute Git directory of the current worktree, even after changing directory.
+pub(crate) fn git_dir() -> Result<&'static Path, &'static Error> {
+    Ok(&REPO.as_ref()?.git_dir)
+}
+
+/// Return the absolute Git directory shared by the current repository's worktrees.
+pub(crate) fn common_dir() -> Result<&'static Path, &'static Error> {
+    Ok(&REPO.as_ref()?.common_dir)
+}
 
 /// Repository-local environment variables cleared before operating on another repository.
 ///
@@ -275,54 +299,16 @@ where
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn git_dir() -> Result<PathBuf, Error> {
-    let output = git_cmd()?
-        .arg("rev-parse")
-        .arg("--git-dir")
-        .check(true)
-        .output()
-        .await?;
-    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
-}
-
-pub(crate) async fn common_dir() -> Result<PathBuf, Error> {
-    let output = git_cmd()?
-        .arg("rev-parse")
-        .arg("--git-common-dir")
-        .check(true)
-        .output()
-        .await?;
-    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
-}
-
-pub(crate) async fn hooks_dir() -> Result<PathBuf, Error> {
-    // Ask Git for the effective hooks directory instead of reconstructing it
-    // ourselves. That lets Git apply the full precedence chain for
-    // `core.hooksPath`, including local/worktree config, linked worktrees, bare
-    // + worktree layouts, and repo-owned config loaded through `include.path`
-    // / `includeIf`.
-    let output = git_cmd()?
-        .arg("rev-parse")
-        .arg("--git-path")
-        .arg("hooks")
-        .check(true)
-        .output()
-        .await?;
-    let stdout = output.stdout.trim_ascii();
-    let hooks_dir = if stdout.is_empty() {
-        common_dir().await?.join("hooks")
-    } else {
-        path_from_git_bytes(stdout)?
-    };
-
-    let cleaned = hooks_dir.clean();
+pub(crate) async fn hooks_dir() -> Result<&'static Path> {
+    let hooks_dir = &REPO.as_ref()?.hooks_dir;
     // `core.hooksPath=` is a particularly dangerous case: Git treats it as
     // configured, but resolves `--git-path hooks` to the current directory. If
     // we accepted that value, install/uninstall would write or remove hook
     // shims from the worktree root. Keep the explicit `core.hooksPath=.` case
     // working, but reject the empty-string variant.
-    if cleaned == Path::new(".") && config_value_is_empty(None, "core.hooksPath").await? {
-        Err(Error::InvalidHooksPath(cleaned))
+    if hooks_dir.clean() == *crate::fs::CWD && config_value_is_empty(None, "core.hooksPath").await?
+    {
+        Err(Error::InvalidHooksPath(PathBuf::from(".")).into())
     } else {
         Ok(hooks_dir)
     }
@@ -384,12 +370,12 @@ pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
     Ok(status.code() == Some(1))
 }
 
-pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
-    let git_dir = git_dir().await?;
+pub(crate) fn is_in_merge_conflict() -> Result<bool> {
+    let git_dir = git_dir()?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>> {
     let tree = git_cmd()?.arg("write-tree").check(true).output().await?;
 
     let output = git_cmd()?
@@ -415,8 +401,8 @@ pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error>
         .collect())
 }
 
-async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
-    let git_dir = git_dir().await?;
+async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
+    let git_dir = git_dir()?;
     let merge_msg = git_dir.join("MERGE_MSG");
     let content = fs_err::tokio::read_to_string(&merge_msg).await?;
     let conflicts = content
@@ -494,26 +480,82 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
     Ok(str::from_utf8(output.stdout.trim_ascii())?.to_string())
 }
 
-/// Return the path of the top-level directory of the working tree.
-#[instrument(level = "trace")]
-pub(crate) fn root() -> Result<PathBuf, Error> {
-    let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
-    let mut cmd = Command::new(git);
-    let output = apply_git_work_tree(&mut cmd)
-        .arg("rev-parse")
-        .arg("--show-toplevel")
-        .output()?;
-    if !output.status.success() {
-        return Err(Error::Command(process::Error::Status {
-            command: format!("{} rev-parse --show-toplevel", git.to_string_lossy()),
-            error: StatusError {
-                status: output.status,
-                output: Some(output),
-            },
-        }));
-    }
+impl Repo {
+    #[instrument(level = "trace")]
+    fn discover(cwd: &Path) -> Result<Self, Error> {
+        let rev_parse = |args: &[&str]| -> Result<_, Error> {
+            let mut cmd = git_cmd()?;
+            cmd.current_dir(cwd)
+                .arg("rev-parse")
+                .args(args)
+                // Keep diagnostics stable so discovery errors can be identified.
+                .env(EnvVars::LC_ALL, "C");
+            let output = cmd.inner.as_std_mut().output()?;
+            // Preserve errors from an invalid GIT_DIR or .git file.
+            if !output.status.success()
+                && output
+                    .stderr
+                    .split(|&b| b == b'\n')
+                    .any(|line| line.starts_with(b"fatal: not a git repository (or any"))
+            {
+                return Err(Error::NotRepository);
+            }
+            Ok((cmd, output))
+        };
 
-    path_from_git_bytes(output.stdout.trim_ascii()).map_err(Error::from)
+        // Keep --show-toplevel last: bare repositories can resolve the Git paths
+        // even though querying their working tree fails.
+        // Keep Git's default path format for hooks. With core.hooksPath=,
+        // --path-format=absolute fails instead of returning the current directory.
+        let (cmd, output) = rev_parse(&[
+            "--absolute-git-dir",
+            "--git-common-dir",
+            "--git-path",
+            "hooks",
+            "--show-toplevel",
+        ])?;
+        let output = if output.stdout.is_empty() {
+            cmd.check_output(output)?
+        } else {
+            output
+        };
+        let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+
+        let (git_dir, common_dir, hooks_dir, root) = if output.status.success()
+            && let Some((git_dir, common_dir, hooks_dir, root)) =
+                stdout.split(|&b| b == b'\n').collect_tuple()
+        {
+            (
+                path_from_git_bytes(git_dir)?,
+                path_from_git_bytes(common_dir)?,
+                path_from_git_bytes(hooks_dir)?,
+                Ok(path_from_git_bytes(root)?),
+            )
+        } else {
+            // rev-parse cannot NUL-delimit these paths. Query them separately
+            // for paths containing newlines or a repository without a worktree.
+            let path = |args: &[&str]| -> Result<PathBuf, Error> {
+                let (cmd, output) = rev_parse(args)?;
+                let output = cmd.check_output(output)?;
+                let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+                path_from_git_bytes(stdout).map_err(Error::from)
+            };
+            (
+                path(&["--absolute-git-dir"])?,
+                path(&["--git-common-dir"])?,
+                path(&["--git-path", "hooks"])?,
+                path(&["--show-toplevel"]),
+            )
+        };
+        let state = Self {
+            root: root.map(|root| dunce::canonicalize(&root).unwrap_or(root)),
+            git_dir,
+            common_dir: cwd.join(common_dir),
+            hooks_dir: cwd.join(hooks_dir),
+        };
+        debug!(?state, "Git repository state");
+        Ok(state)
+    }
 }
 
 pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
@@ -1029,12 +1071,15 @@ mod tests {
     use std::process::Command;
 
     #[cfg(unix)]
-    use super::lfs_files;
+    use crate::fs::PathClean;
+
     use super::zsplit;
     use super::{
         Error, GIT, TerminalPrompt, apply_shared_repository_file_mode, full_clone, init_repo,
         list_submodules, should_update_submodules, update_submodules,
     };
+    #[cfg(unix)]
+    use super::{Repo, lfs_files};
     use assert_cmd::assert::OutputAssertExt;
 
     fn run_git(path: &Path, args: &[&str]) {
@@ -1042,6 +1087,50 @@ mod tests {
         command.current_dir(path).args(args);
 
         command.assert().success();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repository_paths_preserve_special_characters() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let names: &[&[u8]] = &[
+            b"repo\nwith newline\n",
+            b"repo with spaces ",
+            #[cfg(not(target_os = "macos"))]
+            b"repo-\xff",
+        ];
+        for name in names {
+            let repo = tmp.path().join(OsStr::from_bytes(name));
+            let subdir = repo.join("subdir");
+            fs_err::create_dir_all(&subdir).unwrap();
+            run_git(&repo, &["init"]);
+
+            let state = Repo::discover(&subdir).unwrap();
+            assert_eq!(state.root.unwrap(), dunce::canonicalize(&repo).unwrap());
+            assert_eq!(
+                state.git_dir,
+                dunce::canonicalize(repo.join(".git")).unwrap()
+            );
+            assert_eq!(state.common_dir.clean(), repo.join(".git"));
+            assert_eq!(state.hooks_dir.clean(), repo.join(".git/hooks"));
+
+            for hooks_dir in ["custom\nhooks ", " "] {
+                run_git(&repo, &["config", "core.hooksPath", hooks_dir]);
+                let state = Repo::discover(&subdir).unwrap();
+                assert_eq!(state.hooks_dir.clean(), repo.join(hooks_dir));
+            }
+
+            let bare = repo.join("bare\n");
+            run_git(&repo, &["init", "--bare", "bare\n"]);
+            let state = Repo::discover(&bare).unwrap();
+            assert!(state.root.is_err());
+            assert_eq!(state.git_dir, dunce::canonicalize(&bare).unwrap());
+            assert_eq!(state.common_dir.clean(), bare);
+            assert_eq!(state.hooks_dir.clean(), bare.join("hooks"));
+        }
     }
 
     #[tokio::test]
