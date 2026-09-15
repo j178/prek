@@ -37,6 +37,7 @@ mod yaml_to_toml;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
+pub(crate) use completion::generate_shell_completion;
 use completion::selector_completer;
 pub(crate) use exec::exec;
 pub(crate) use hook_impl::hook_impl;
@@ -1135,7 +1136,8 @@ pub(crate) enum UtilCommand {
     /// Convert a YAML configuration file to prek.toml.
     YamlToToml(YamlToTomlArgs),
     /// Generate shell completion scripts.
-    #[command(hide = true)]
+    ///
+    /// Load the generated script in your shell configuration to enable completion.
     GenerateShellCompletion(GenerateShellCompletionArgs),
 }
 
@@ -1228,7 +1230,7 @@ pub(crate) struct SelfUpdateArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct GenerateShellCompletionArgs {
-    /// The shell to generate the completion script for
+    /// The shell to generate the completion script for.
     #[arg(value_enum)]
     pub shell: clap_complete::Shell,
 }

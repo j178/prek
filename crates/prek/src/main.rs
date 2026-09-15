@@ -152,6 +152,14 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<ExitStatus> {
+    // Shell startup must not initialize the cache or overwrite the log from the last run.
+    if let Some(Command::Util(UtilNamespace {
+        command: UtilCommand::GenerateShellCompletion(args),
+    })) = &cli.command
+    {
+        return cli::generate_shell_completion(args.shell);
+    }
+
     terminal::enable_ansi_colors();
 
     ColorChoice::write_global(cli.globals.color.into());
@@ -403,14 +411,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             UtilCommand::YamlToToml(args) => {
                 cli::yaml_to_toml(args.input, args.output, args.force, printer)
             }
-            UtilCommand::GenerateShellCompletion(args) => {
-                let mut command = Cli::command();
-                let bin_name = command
-                    .get_bin_name()
-                    .unwrap_or_else(|| command.get_name())
-                    .to_owned();
-                clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
-                Ok(ExitStatus::Success)
+            UtilCommand::GenerateShellCompletion(_) => {
+                unreachable!("handled before store initialization")
             }
         },
         #[cfg(feature = "self-update")]

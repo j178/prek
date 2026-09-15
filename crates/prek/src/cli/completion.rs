@@ -2,13 +2,34 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
+use anyhow::{Context, Result};
+use clap::CommandFactory;
 use clap::builder::StyledStr;
-use clap_complete::CompletionCandidate;
+use clap_complete::{CompletionCandidate, Shell};
 
+use crate::cli::{Cli, ExitStatus};
 use crate::config::Repo;
 use crate::fs::{CWD, PathClean};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
+
+pub(crate) fn generate_shell_completion(shell: Shell) -> Result<ExitStatus> {
+    let command = Cli::command();
+    let bin_name = command.get_bin_name().unwrap_or_else(|| command.get_name());
+    let shells = clap_complete::env::Shells::builtins();
+    let shell = shells
+        .completer(&shell.to_string())
+        .context("Unsupported shell for completion")?;
+
+    shell.write_registration(
+        "COMPLETE",
+        command.get_name(),
+        bin_name,
+        "prek",
+        &mut std::io::stdout().lock(),
+    )?;
+    Ok(ExitStatus::Success)
+}
 
 pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     let Some(current) = current.to_str() else {
