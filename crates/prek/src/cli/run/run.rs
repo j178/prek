@@ -109,7 +109,6 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    // Ensure we are in a git repository.
     git::root()?;
 
     let should_stash = selection.requires_clean_worktree();
