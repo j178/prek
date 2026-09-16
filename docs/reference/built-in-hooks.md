@@ -623,19 +623,10 @@ Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
 
 - Defaults to the `pre-push` and `manual` stages. This hook is configured as
   `always_run: true` and does not take filenames.
-- Merge commits are skipped (`git log --no-merges`).
-- Checks the range being pushed, using `PRE_COMMIT_FROM_REF`/`PRE_COMMIT_TO_REF` (set by `prek`
-  around `pre-push` hooks).
-- For a root/orphan push (`PRE_COMMIT_TO_REF` set but no `PRE_COMMIT_FROM_REF`), it walks the
-  entire history reachable from `PRE_COMMIT_TO_REF`.
-- Outside `pre-push` (for example, `prek run check-signed-commit --hook-stage manual`), it
-  checks only the single commit at `HEAD`: the range `<parent>..HEAD`, or `HEAD` alone when
-  `HEAD` is a root commit with no parent to diff against.
-- In a repository with no commits yet (unborn `HEAD`), there's nothing to check and the hook
-  passes trivially.
-- Signature verification itself is entirely Git's: this hook only reads `git log`'s own status
-  codes, so it follows your local `gpg`/`gpg.ssh.allowedSignersFile`/`user.signingkey`
-  configuration exactly as `git verify-commit` would.
+- Checks the commits being pushed. Root/orphan pushes check the entire branch history.
+- Manual runs check only `HEAD`.
+- Merge commits are skipped.
+- Signature verification uses your local Git GPG/SSH configuration.
 
 ---
 

@@ -11,11 +11,10 @@ use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks::{
     check_added_large_files, check_case_conflict, check_executables_have_shebangs,
     check_illegal_windows_names, check_json, check_merge_conflict,
-    check_shebang_scripts_are_executable, check_signed_commit, check_symlinks, check_toml,
-    check_vcs_permalinks, check_xml, check_yaml, destroyed_symlinks, detect_private_key,
-    file_contents_sorter, fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace,
-    forbid_new_submodules, mixed_line_ending, no_commit_to_branch, pretty_format_json,
-    requirements_txt_fixer,
+    check_shebang_scripts_are_executable, check_symlinks, check_toml, check_vcs_permalinks,
+    check_xml, check_yaml, destroyed_symlinks, detect_private_key, file_contents_sorter,
+    fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace, forbid_new_submodules,
+    mixed_line_ending, no_commit_to_branch, pretty_format_json, requirements_txt_fixer,
 };
 use crate::store::Store;
 
@@ -23,6 +22,7 @@ use super::{HookFuture, HookOutput};
 
 mod check_json5;
 mod check_jsonc;
+mod check_signed_commit;
 mod pattern;
 
 #[derive(
