@@ -93,7 +93,7 @@ pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     };
 
-    let stdout = git::git_cmd()?
+    let output = git::git_cmd()?
         .current_dir(hook.work_dir())
         .arg("log")
         .arg("--no-merges")
@@ -102,22 +102,21 @@ pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
         .arg(range)
         .check(true)
         .output()
-        .await?
-        .stdout;
+        .await?;
 
-    let offending: Vec<SignedCommit> = parse_signed_commits(&stdout)
+    let offending: Vec<SignedCommit> = parse_signed_commits(&output.stdout)
         .into_iter()
         .filter(|commit| !args.allow_status.contains(&commit.status))
         .collect();
 
-    if offending.is_empty() {
-        Ok(HookOutput::unchanged(0, Vec::new()))
-    } else {
-        Ok(HookOutput::unchanged(
-            1,
-            render_message(&offending).into_bytes(),
-        ))
+    let mut message = output.stderr;
+    if !offending.is_empty() {
+        message.extend_from_slice(render_message(&offending).as_bytes());
     }
+    Ok(HookOutput::unchanged(
+        i32::from(!offending.is_empty()),
+        message,
+    ))
 }
 
 /// Resolve the commit range to check.
@@ -143,11 +142,7 @@ async fn resolve_range() -> Result<Option<String>> {
         return Ok(None);
     }
 
-    Ok(Some(match git::parent_commit("HEAD").await? {
-        Some(parent) => format!("{parent}..HEAD"),
-        // Root commit: there's no parent to diff against, so check HEAD alone.
-        None => "HEAD".to_string(),
-    }))
+    Ok(Some("HEAD^!".to_string()))
 }
 
 struct SignedCommit {
@@ -160,7 +155,6 @@ struct SignedCommit {
 fn parse_signed_commits(stdout: &[u8]) -> Vec<SignedCommit> {
     stdout
         .split(|&b| b == b'\0')
-        .filter(|record| !record.is_empty())
         .filter_map(|record| {
             let record = String::from_utf8_lossy(record);
             let mut fields = record.splitn(3, '\u{1f}');
@@ -202,7 +196,7 @@ fn render_message(offending: &[SignedCommit]) -> String {
           E  signature cannot be checked, e.g. missing public key
           N  no signature
 
-        Pass `--allow-status <CODE>` (repeatable) to accept additional codes.
+        Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
     "});
 
     message

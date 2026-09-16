@@ -17,7 +17,6 @@ pub(crate) mod check_illegal_windows_names;
 pub(crate) mod check_json;
 pub(crate) mod check_merge_conflict;
 pub(crate) mod check_shebang_scripts_are_executable;
-pub(crate) mod check_signed_commit;
 pub(crate) mod check_symlinks;
 pub(crate) mod check_toml;
 pub(crate) mod check_vcs_permalinks;
