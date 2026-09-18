@@ -1060,6 +1060,7 @@
       "enum": [
         "check-added-large-files",
         "check-case-conflict",
+        "check-dco-signoff",
         "check-executables-have-shebangs",
         "check-illegal-windows-names",
         "check-json",

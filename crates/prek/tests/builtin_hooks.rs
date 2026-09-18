@@ -3476,3 +3476,167 @@ fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
 
     Ok(())
 }
+
+fn check_dco_signoff_context() -> TestEnv {
+    TestEnv::new()
+        .with_filter("[a-f0-9]{7}", "abc1234")
+        .with_config(indoc::indoc! {r"
+        default_install_hook_types:
+          - commit-msg
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-dco-signoff
+        "})
+        .init_git()
+}
+
+#[test]
+fn check_dco_signoff_hook_fails_without_signoff_trailer() {
+    let context = check_dco_signoff_context();
+
+    cmd_snapshot!(context, context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `.git/hooks/commit-msg`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = context.git().command();
+    commit.arg("commit").arg("-m").arg("Add feature");
+
+    cmd_snapshot!(context, commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    check for DCO sign-off...................................................Failed
+    - hook id: check-dco-signoff
+    - description: Checks that the commit message has a `Signed-off-by` trailer, per the Developer Certificate of Origin
+    - exit code: 1
+
+      .git/COMMIT_EDITMSG: no `Signed-off-by` trailer found
+
+      This commit must be signed off per the Developer Certificate of Origin
+      (https://developercertificate.org/), certifying you wrote it or otherwise
+      have the right to submit it.
+
+      To sign off this commit:
+        git commit -s
+
+      To sign off commits already made on this branch:
+        git rebase --exec 'git commit --amend --no-edit -s' <base-commit>
+    ");
+}
+
+#[test]
+fn check_dco_signoff_hook_passes_with_signoff_flag() {
+    let context = check_dco_signoff_context();
+
+    cmd_snapshot!(context, context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `.git/hooks/commit-msg`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = context.git().command();
+    commit.arg("commit").arg("-s").arg("-m").arg("Add feature");
+
+    cmd_snapshot!(context, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Add feature
+     1 file changed, 6 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+
+    ----- stderr -----
+    check for DCO sign-off...................................................Passed
+    ");
+}
+
+#[test]
+fn check_dco_signoff_hook_fails_with_only_co_authored_by_trailer() {
+    let context = check_dco_signoff_context();
+    cmd_snapshot!(context, context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `.git/hooks/commit-msg`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = context.git().command();
+    commit
+        .arg("commit")
+        .arg("-m")
+        .arg("Add feature")
+        .arg("-m")
+        .arg("Co-authored-by: Helper <helper@example.com>");
+
+    cmd_snapshot!(context, commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    check for DCO sign-off...................................................Failed
+    - hook id: check-dco-signoff
+    - description: Checks that the commit message has a `Signed-off-by` trailer, per the Developer Certificate of Origin
+    - exit code: 1
+
+      .git/COMMIT_EDITMSG: no `Signed-off-by` trailer found
+
+      This commit must be signed off per the Developer Certificate of Origin
+      (https://developercertificate.org/), certifying you wrote it or otherwise
+      have the right to submit it.
+
+      To sign off this commit:
+        git commit -s
+
+      To sign off commits already made on this branch:
+        git rebase --exec 'git commit --amend --no-edit -s' <base-commit>
+    ");
+}
+
+#[test]
+fn check_dco_signoff_hook_passes_with_one_valid_trailer_among_several() {
+    let context = check_dco_signoff_context();
+    cmd_snapshot!(context, context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `.git/hooks/commit-msg`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = context.git().command();
+    commit
+        .arg("commit")
+        .arg("-m")
+        .arg("Add feature")
+        .arg("-m")
+        .arg("Co-authored-by: Helper <helper@example.com>")
+        .arg("-m")
+        .arg("Signed-off-by: Prek Test <test@prek.dev>");
+
+    cmd_snapshot!(context, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Add feature
+     1 file changed, 6 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+
+    ----- stderr -----
+    check for DCO sign-off...................................................Passed
+    ");
+}
