@@ -67,7 +67,6 @@ asyncband = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 regex = { workspace = true }
-regex-automata = { workspace = true }
 reqwest = { workspace = true }
 rayon = { workspace = true }
 aws-lc-rs = { workspace = true }

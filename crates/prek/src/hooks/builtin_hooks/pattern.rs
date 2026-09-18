@@ -1,11 +1,12 @@
 use std::io::{BufRead, BufReader, Write};
+use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use fancy_regex::{BytesMode, RegexInput, RegexOptionsBuilder, RegexSet};
 use memchr::memchr_iter;
-use regex_automata::{MatchKind, meta::Regex, util::syntax};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
@@ -53,7 +54,7 @@ enum ScanMode {
 }
 
 struct Matcher {
-    regex: Arc<Regex>,
+    regex: Arc<RegexSet>,
     scan_mode: ScanMode,
 }
 
@@ -76,27 +77,30 @@ impl Matcher {
     }
 }
 
-fn build_regex(patterns: &[String], ignore_case: bool, multiline: bool) -> Result<Regex> {
-    let syntax = syntax::Config::new()
-        // Enable case-insensitive matching for `-i` / `--ignore-case`.
+fn build_regex(patterns: &[String], ignore_case: bool, multiline: bool) -> Result<RegexSet> {
+    let mut options = RegexOptionsBuilder::new();
+    options
         .case_insensitive(ignore_case)
-        // Let `^` and `$` match line boundaries for `-m` / `--multiline`.
         .multi_line(multiline)
-        // Let `.` match newlines for `-m` / `--multiline`.
         .dot_matches_new_line(multiline)
-        // Compile byte-oriented patterns so arbitrary file bytes can match.
-        .utf8(false);
-    Regex::builder()
-        .configure(
-            Regex::config()
-                // Return the earliest match, using pattern order to break ties.
-                .match_kind(MatchKind::LeftmostFirst)
-                // Allow empty matches at any byte offset, as byte regexes do.
-                .utf8_empty(false),
+        .bytes_mode(BytesMode::UnicodeBytes);
+    RegexSet::new_with_options(patterns, &options).with_context(|| {
+        format!(
+            "Failed to compile regex patterns `{}`",
+            patterns.join("`, `")
         )
-        .syntax(syntax)
-        .build_many(patterns)
-        .context("Failed to compile regex patterns")
+    })
+}
+
+fn find_match(patterns: &RegexSet, contents: &[u8]) -> Result<Option<Range<usize>>> {
+    let Some(mut matches) = patterns.find_input(RegexInput::new(contents))? else {
+        return Ok(None);
+    };
+    // The set returns the earliest matches in pattern order, preserving argument priority.
+    Ok(matches
+        .next()
+        .transpose()?
+        .map(|matched| matched.start()..matched.end()))
 }
 
 pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
@@ -126,9 +130,18 @@ fn run_filename_pattern(
     let mut output = Vec::new();
 
     for filename in filenames {
-        let matched = filename
-            .file_name()
-            .is_some_and(|basename| regex.is_match(basename.as_encoded_bytes()));
+        let matched = if let Some(basename) = filename.file_name() {
+            find_match(&regex, basename.as_encoded_bytes())
+                .with_context(|| {
+                    format!(
+                        "Failed to match patterns against filename `{}`",
+                        filename.display()
+                    )
+                })?
+                .is_some()
+        } else {
+            false
+        };
         let message = match policy {
             MatchPolicy::Deny if matched => "filename matches a denied pattern",
             MatchPolicy::Require if !matched => "filename does not match any required pattern",
@@ -171,7 +184,7 @@ async fn check_file(
 async fn check_lines(
     file_base: &Path,
     filename: &Path,
-    patterns: &Arc<Regex>,
+    patterns: &Arc<RegexSet>,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
@@ -184,7 +197,7 @@ async fn check_lines(
 fn check_lines_sync(
     file_path: &Path,
     filename: &Path,
-    patterns: &Regex,
+    patterns: &RegexSet,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
     let file = fs_err::File::open(file_path)?;
@@ -197,7 +210,15 @@ fn check_lines_sync(
     while reader.read_until(b'\n', &mut line)? != 0 {
         line_number += 1;
         let contents = trim_line_ending(&line);
-        if patterns.is_match(contents) {
+        if find_match(patterns, contents)
+            .with_context(|| {
+                format!(
+                    "Failed to match patterns in `{}:{line_number}`",
+                    filename.display()
+                )
+            })?
+            .is_some()
+        {
             if matches!(policy, MatchPolicy::Require) {
                 return Ok((0, Vec::new()));
             }
@@ -219,17 +240,19 @@ fn check_lines_sync(
 async fn check_multiline(
     file_base: &Path,
     filename: &Path,
-    patterns: &Regex,
+    patterns: &RegexSet,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
     let contents = fs_err::tokio::read(file_base.join(filename)).await?;
+    let matched = find_match(patterns, &contents)
+        .with_context(|| format!("Failed to match patterns in `{}`", filename.display()))?;
     match policy {
         MatchPolicy::Deny => {
-            let Some(matched) = patterns.find(&contents) else {
+            let Some(matched) = matched else {
                 return Ok((0, Vec::new()));
             };
-            let line_number = memchr_iter(b'\n', &contents[..matched.start()]).count() + 1;
-            let matched = &contents[matched.range()];
+            let line_number = memchr_iter(b'\n', &contents[..matched.start]).count() + 1;
+            let matched = &contents[matched];
             let mut output = Vec::new();
             write!(output, "{}:{line_number}:", filename.display())?;
             output.write_all(matched)?;
@@ -238,7 +261,7 @@ async fn check_multiline(
             }
             Ok((1, output))
         }
-        MatchPolicy::Require if patterns.is_match(&contents) => Ok((0, Vec::new())),
+        MatchPolicy::Require if matched.is_some() => Ok((0, Vec::new())),
         MatchPolicy::Require => Ok(missing_match(filename)),
     }
 }

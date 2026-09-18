@@ -149,6 +149,104 @@ fn deny_pattern_hook_reports_matching_lines() {
 }
 
 #[test]
+fn pattern_hooks_support_lookaround() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        files: '\.txt$'
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: ['(?<!allow: )TODO(?!\(tracked\))']
+              - id: require-pattern
+                args: ['(?<=license: )MIT$']
+              - id: deny-filename-pattern
+                args: ['(?<!public)\.txt$']
+              - id: require-filename-pattern
+                args: ['^public(?=\.txt$)']
+    "})
+        .with_files([
+            (
+                "public.txt",
+                "license: MIT\r\nallow: TODO\r\nTODO(tracked)\r\n",
+            ),
+            ("private.txt", "license: Apache-2.0\r\nTODO: fix\r\n"),
+        ])
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    deny patterns............................................................Failed
+    - hook id: deny-pattern
+    - description: Fails if any file contains a matching regular expression
+    - exit code: 1
+
+      private.txt:2:TODO: fix
+    require patterns.........................................................Failed
+    - hook id: require-pattern
+    - description: Fails if any file does not contain a matching regular expression
+    - exit code: 1
+
+      private.txt: no pattern matched
+    deny filename patterns...................................................Failed
+    - hook id: deny-filename-pattern
+    - description: Fails if any selected filename matches a regular expression
+    - exit code: 1
+
+      private.txt: filename matches a denied pattern
+    require filename patterns................................................Failed
+    - hook id: require-filename-pattern
+    - description: Fails if any selected filename does not match a regular expression
+    - exit code: 1
+
+      private.txt: filename does not match any required pattern
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn pattern_hooks_report_runtime_errors() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: deny-pattern
+                args: ['^(a|aa)+(?=b)$']
+                files: '\.txt$'
+              - id: require-pattern
+                args: [--multiline, '^(a|aa)+(?=b)$']
+                files: '\.txt$'
+    "})
+        .with_file("file.txt", "a".repeat(40))
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("deny-pattern"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `deny-pattern`
+      caused by: Failed to match patterns in `file.txt:1`
+      caused by: Error executing regex: Max limit for backtracking count exceeded
+    "#);
+    cmd_snapshot!(context, context.run().arg("require-pattern"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `require-pattern`
+      caused by: Failed to match patterns in `file.txt`
+      caused by: Error executing regex: Max limit for backtracking count exceeded
+    "#);
+}
+
+#[test]
 fn deny_pattern_hook_rejects_invalid_regex() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
@@ -168,12 +266,8 @@ fn deny_pattern_hook_rejects_invalid_regex() {
 
     ----- stderr -----
     error: Failed to run hook `deny-pattern`
-      caused by: Failed to compile regex patterns
-      caused by: error parsing pattern 0
-      caused by: regex parse error:
-        *invalid-pattern*
-        ^
-    error: repetition operator missing expression
+      caused by: Failed to compile regex patterns `*invalid-pattern*`
+      caused by: Parsing error at position 0: Target of repeat operator is invalid
     "#);
 }
 
@@ -181,15 +275,15 @@ fn deny_pattern_hook_rejects_invalid_regex() {
 fn deny_pattern_hook_reports_earliest_multiline_match() {
     let context = TestEnv::new().init_git();
 
-    // `END` is listed first, but `BEGIN.*END` starts earlier in the file.
-    // Multiline matching should report the earliest match, not the first pattern.
+    // Each backreference belongs to its own pattern. The second pattern starts
+    // earlier than the first, and wins the tie with the shorter third pattern.
     let context = context
         .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: deny-pattern
-                args: [-m, 'END', 'BEGIN.*END']
+                args: [-m, '(END)\1', '(BEGIN).*\1', 'BEGIN']
                 files: '\.txt$'
     "})
         .with_file(
@@ -198,14 +292,15 @@ fn deny_pattern_hook_reports_earliest_multiline_match() {
         before
         BEGIN
         middle
-        END
+        BEGIN
+        ENDEND
         after
     "},
         );
 
     context.git().add(".");
 
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -216,10 +311,10 @@ fn deny_pattern_hook_reports_earliest_multiline_match() {
 
       block.txt:2:BEGIN
       middle
-      END
+      BEGIN
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]
