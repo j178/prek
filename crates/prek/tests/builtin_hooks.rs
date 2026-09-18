@@ -189,7 +189,7 @@ fn pattern_hooks_support_lookaround() {
     - description: Fails if any file does not contain a matching regular expression
     - exit code: 1
 
-      private.txt: no pattern matched
+      private.txt: file does not match any required pattern
     deny filename patterns...................................................Failed
     - hook id: deny-filename-pattern
     - description: Fails if any selected filename matches a regular expression
@@ -372,7 +372,7 @@ fn require_pattern_hook_reports_files_without_any_match() {
         .with_file("missing.txt", "No required marker\n")
         .init_git();
 
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -381,10 +381,10 @@ fn require_pattern_hook_reports_files_without_any_match() {
     - description: Fails if any file does not contain a matching regular expression
     - exit code: 1
 
-      missing.txt: no pattern matched
+      missing.txt: file does not match any required pattern
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]

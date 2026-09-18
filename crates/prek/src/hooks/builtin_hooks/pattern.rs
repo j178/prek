@@ -269,7 +269,11 @@ async fn check_multiline(
 fn missing_match(filename: &Path) -> (i32, Vec<u8>) {
     (
         1,
-        format!("{}: no pattern matched\n", filename.display()).into_bytes(),
+        format!(
+            "{}: file does not match any required pattern\n",
+            filename.display()
+        )
+        .into_bytes(),
     )
 }
 
