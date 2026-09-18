@@ -18,7 +18,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
     ) {
         Cow::Owned(format!("{from_ref}...{to_ref}"))
     } else {
-        Cow::Borrowed("--staged")
+        Cow::Borrowed("--cached")
     };
 
     let stdout = git::git_cmd()?
@@ -26,7 +26,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
         .arg("diff")
         .arg("--relative")
         .arg("--diff-filter=A")
-        .hidden_args(["--no-ext-diff"])
+        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"])
         .arg("--raw")
         .arg("-z")
         .arg(diff_arg.as_ref())

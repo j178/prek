@@ -35,6 +35,9 @@ pub(crate) enum Error {
     #[error(transparent)]
     UTF8(#[from] Utf8Error),
 
+    #[error("Invalid file record in Git diff output")]
+    InvalidDiffFile,
+
     #[error(
         "Git resolved hooks directory to the current directory (`{0}`). Unset `core.hooksPath` or set it to a real directory path."
     )]
@@ -82,6 +85,7 @@ pub(crate) fn init_git_work_tree() -> Result<()> {
     Ok(())
 }
 
+/// Return the absolute worktree path saved for hook subprocesses, if one was needed.
 fn git_work_tree() -> Option<&'static Path> {
     GIT_WORK_TREE.get().and_then(Option::as_deref)
 }
@@ -186,6 +190,7 @@ pub(crate) fn git_cmd() -> Result<Cmd, Error> {
     Ok(cmd)
 }
 
+/// Decode NUL-separated paths without changing their spelling or base directory.
 fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
@@ -193,6 +198,7 @@ fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
         .collect()
 }
 
+/// Decode a Git path without resolving it against a directory.
 #[cfg(unix)]
 #[expect(clippy::unnecessary_wraps)]
 fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
@@ -202,11 +208,13 @@ fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     Ok(PathBuf::from(OsStr::from_bytes(bytes)))
 }
 
+/// Decode a Git path without resolving it against a directory.
 #[cfg(not(unix))]
 fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     str::from_utf8(bytes).map(PathBuf::from)
 }
 
+/// Encode a path for Git without changing its spelling or base directory.
 #[cfg(unix)]
 #[expect(clippy::unnecessary_wraps)]
 fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
@@ -215,6 +223,7 @@ fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
     Ok(path.as_os_str().as_bytes())
 }
 
+/// Encode a path for Git without changing its spelling or base directory.
 #[cfg(not(unix))]
 fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
     path.to_str().map(str::as_bytes).ok_or_else(|| {
@@ -225,10 +234,17 @@ fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
     })
 }
 
+/// Return intent-to-add paths under `root`, relative to the repository root.
+///
+/// `root` must be absolute. If it is a subdirectory, its repository-relative prefix
+/// is retained in the returned paths.
 pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd()?
+        .current_dir(root)
         .arg("diff")
         .hidden_args(["--no-ext-diff", "--ignore-submodules"])
+        // Callers resolve these paths from the repository root, regardless of `diff.relative`.
+        .arg("--no-relative")
         .arg("--diff-filter=A")
         .arg("--name-only")
         .arg("-z")
@@ -240,60 +256,124 @@ pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Err
     Ok(zsplit(&output.stdout)?)
 }
 
+/// Return newly staged paths under `root`, relative to `root` (the hook's working directory).
+///
+/// For example, with `root = <repo>/project`, `<repo>/project/file.rs` is returned as `file.rs`.
 pub(crate) async fn staged_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd()?
         .current_dir(root)
         .arg("diff")
-        .arg("--staged")
-        // `git diff --name-only` reports paths relative to the repository root by default,
-        // even when it runs inside a subdirectory. `--relative` keeps the output aligned
-        // with hooks, which receive filenames relative to their project root.
+        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"])
+        .arg("--cached")
         .arg("--relative")
         .arg("--name-only")
         .arg("--diff-filter=A")
-        .arg("-z") // Use NUL as line terminator
+        .arg("-z")
         .check(true)
         .output()
         .await?;
     Ok(zsplit(&output.stdout)?)
 }
 
+/// Return changed paths relative to the repository root.
+///
+/// `root` selects the repository. Results cover the whole repository, even when
+/// `root` is a subdirectory; each `FileEntry.path` retains its repository-relative prefix.
 pub(crate) async fn changed_files(
     old: &str,
     new: &str,
     root: &Path,
-) -> Result<Vec<PathBuf>, Error> {
-    let build_cmd = |range: String| -> Result<Cmd, Error> {
-        let mut cmd = git_cmd()?;
-        cmd.arg("diff")
-            .arg("--name-only")
-            .arg("--diff-filter=ACMRT")
-            .hidden_args(["--no-ext-diff"])
-            .arg("-z") // Use NUL as line terminator
-            .arg(range)
-            .arg("--")
-            .arg(root);
-        Ok(cmd)
-    };
-
+    include_deleted: bool,
+) -> Result<Vec<FileEntry>, Error> {
     // Try three-dot syntax first (merge-base diff), which works for commits
-    let output = build_cmd(format!("{old}...{new}"))?
+    let output = diff_files_cmd(include_deleted)?
+        .current_dir(root)
+        .arg(format!("{old}...{new}"))
         .check(false)
         .output()
         .await?;
 
     if output.status.success() {
-        return Ok(zsplit(&output.stdout)?);
+        return parse_diff_files(&output.stdout);
     }
 
     // Fall back to two-dot syntax, which works with both commits and trees
-    let output = build_cmd(format!("{old}..{new}"))?
+    let output = diff_files_cmd(include_deleted)?
+        .current_dir(root)
+        .arg(format!("{old}..{new}"))
         .check(true)
         .output()
         .await?;
-    Ok(zsplit(&output.stdout)?)
+    parse_diff_files(&output.stdout)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FileMode {
+    Regular,
+    Executable,
+    Symlink,
+    Submodule,
+}
+
+pub(crate) struct FileEntry {
+    pub(crate) path: PathBuf,
+    pub(crate) deleted_mode: Option<FileMode>,
+}
+
+impl From<PathBuf> for FileEntry {
+    fn from(path: PathBuf) -> Self {
+        Self {
+            path,
+            deleted_mode: None,
+        }
+    }
+}
+
+fn diff_files_cmd(include_deleted: bool) -> Result<Cmd, Error> {
+    let mut cmd = git_cmd()?;
+    // Each raw record must have one path. Renames become additions and deletions,
+    // so old paths can trigger hooks independently of Git's similarity heuristics.
+    cmd.args(["diff", "--raw", "--no-renames", "--no-relative", "-z"])
+        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"]);
+    if !include_deleted {
+        cmd.arg("--diff-filter=d");
+    }
+    Ok(cmd)
+}
+
+/// Parse raw diff records without changing the paths' spelling or base directory.
+/// Output from `diff_files_cmd` contains repository-relative paths.
+fn parse_diff_files(output: &[u8]) -> Result<Vec<FileEntry>, Error> {
+    let mut fields = output.split(|&byte| byte == b'\0');
+    let mut files = Vec::new();
+    while let Some(header) = fields.next().filter(|header| !header.is_empty()) {
+        let deleted_mode = if header.ends_with(b" D") {
+            Some(match header.split(|&byte| byte == b' ').next() {
+                Some(b":100644") => FileMode::Regular,
+                Some(b":100755") => FileMode::Executable,
+                Some(b":120000") => FileMode::Symlink,
+                Some(b":160000") => FileMode::Submodule,
+                _ => return Err(Error::InvalidDiffFile),
+            })
+        } else {
+            None
+        };
+        let path = fields
+            .next()
+            .filter(|path| !path.is_empty())
+            .ok_or(Error::InvalidDiffFile)?;
+        files.push(FileEntry {
+            path: path_from_git_bytes(path)?,
+            deleted_mode,
+        });
+    }
+    Ok(files)
+}
+
+/// Return indexed paths matching `paths`, relative to `cwd`.
+///
+/// Relative input paths are also interpreted relative to `cwd`. Absolute input
+/// paths still produce paths relative to `cwd`.
 #[instrument(level = "trace", skip(paths))]
 pub(crate) async fn ls_files<P>(
     cwd: &Path,
@@ -316,6 +396,7 @@ where
     Ok(zsplit(&output.stdout)?)
 }
 
+/// Return the absolute hooks directory, including any `core.hooksPath` override.
 pub(crate) async fn hooks_dir() -> Result<&'static Path> {
     let hooks_dir = &REPO.as_ref()?.hooks_dir;
     // `core.hooksPath=` is a particularly dangerous case: Git treats it as
@@ -331,28 +412,36 @@ pub(crate) async fn hooks_dir() -> Result<&'static Path> {
     }
 }
 
-pub(crate) async fn staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd()?
+/// Return staged paths relative to the repository root.
+///
+/// `root` selects the repository. Results cover the whole repository, even when
+/// `root` is a subdirectory; each `FileEntry.path` retains its repository-relative prefix.
+pub(crate) async fn staged_files(
+    root: &Path,
+    include_deleted: bool,
+) -> Result<Vec<FileEntry>, Error> {
+    let output = diff_files_cmd(include_deleted)?
         .current_dir(root)
-        .arg("diff")
         .arg("--cached")
-        .arg("--name-only")
-        .arg("--diff-filter=ACMRTUXB") // Everything except for D
-        .hidden_args(["--no-ext-diff"])
-        .arg("-z") // Use NUL as line terminator
         .check(true)
         .output()
         .await?;
-    Ok(zsplit(&output.stdout)?)
+    parse_diff_files(&output.stdout)
 }
 
+/// Return unstaged paths relative to the repository root.
+///
+/// Relative input paths are interpreted relative to the process's current working
+/// directory. The returned paths remain repository-relative, even for absolute inputs.
 pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<PathBuf>> {
     let output = git_cmd()?
         .arg("diff")
         .arg("--exit-code")
         .arg("--name-only")
+        .arg("--no-relative")
         .hidden_args(["--no-ext-diff"])
-        .arg("-z") // Use NUL as line terminator
+        .arg("-z")
+        .arg("--")
         .file_args(files)
         .check(false)
         .output()
@@ -375,12 +464,17 @@ pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
     Ok(!output.stdout.trim_ascii().is_empty())
 }
 
+/// Check for changes against `rev` anywhere in the repository containing `path`.
+///
+/// `path` selects the repository without limiting the check to that directory.
 pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
     let status = git_cmd()?
-        .arg("diff")
-        .arg("--quiet")
-        .arg(rev)
         .current_dir(path)
+        .arg("diff")
+        .hidden_args(["--no-ext-diff"])
+        .arg("--quiet")
+        .arg("--no-relative")
+        .arg(rev)
         .check(false)
         .status()
         .await?;
@@ -392,20 +486,29 @@ pub(crate) fn is_in_merge_conflict() -> Result<bool> {
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
+/// Return paths involved in the merge relative to the repository root.
+///
+/// `root` selects the repository. Both the diff and `MERGE_MSG` paths use the
+/// repository root as their base, including when `root` is a subdirectory.
 pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>> {
-    let tree = git_cmd()?.arg("write-tree").check(true).output().await?;
+    let tree = git_cmd()?
+        .current_dir(root)
+        .arg("write-tree")
+        .check(true)
+        .output()
+        .await?;
 
     let output = git_cmd()?
+        .current_dir(root)
         .arg("diff")
         .arg("--name-only")
-        .hidden_args(["--no-ext-diff"])
-        .arg("-z") // Use NUL as line terminator
+        .arg("--no-relative")
+        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"])
+        .arg("-z")
         .arg("-m") // Show diffs for merge commits in the default format.
         .arg(str::from_utf8(&tree.stdout)?.trim_ascii())
         .arg("HEAD")
         .arg("MERGE_HEAD")
-        .arg("--")
-        .arg(root)
         .check(true)
         .output()
         .await?;
@@ -418,6 +521,7 @@ pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>> {
         .collect())
 }
 
+/// Return conflict paths recorded in `MERGE_MSG`, relative to the repository root.
 async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
     let git_dir = git_dir()?;
     let merge_msg = git_dir.join("MERGE_MSG");
@@ -433,10 +537,12 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
     Ok(conflicts)
 }
 
+/// Check for unstaged changes under the absolute directory `path`, ignoring submodules.
 #[instrument(level = "trace")]
 pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
     let mut cmd = git_cmd()?;
     let status = cmd
+        .current_dir(path)
         .arg("diff-files")
         .arg("--quiet")
         .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
@@ -457,9 +563,14 @@ pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
     Ok(true)
 }
 
+/// Return a patch for unstaged changes under the absolute directory `path`.
+///
+/// File names are repository-relative by default, or relative to `path` when
+/// `diff.relative=true`. Git's patch prefixes are retained.
 #[instrument(level = "trace")]
 pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd()?
+        .current_dir(path)
         .arg("diff")
         .hidden_args([
             "--full-index",
@@ -498,6 +609,7 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 }
 
 impl Repo {
+    /// Discover repository directories from an absolute `cwd`, storing absolute paths.
     #[instrument(level = "trace")]
     fn discover(cwd: &Path) -> Result<Self, Error> {
         let rev_parse = |args: &[&str]| -> Result<_, Error> {
@@ -895,6 +1007,10 @@ pub(crate) async fn shared_repository_file_mode(mode: u32) -> Result<u32> {
     }
 }
 
+/// Return the input paths whose Git `filter` attribute is `lfs`.
+///
+/// Returned paths preserve their input spelling: relative paths are relative to
+/// `current_dir`, and absolute paths stay absolute.
 pub(crate) async fn lfs_files(
     current_dir: &Path,
     paths: &[&Path],
@@ -1047,7 +1163,8 @@ pub(crate) async fn parent_commit(commit: &str) -> Result<Option<String>, Error>
     }
 }
 
-/// Return a list of absolute paths of all git submodules in the repository.
+/// Return absolute submodule paths by joining their configured paths to `git_root`.
+/// `git_root` must be the absolute repository root.
 #[instrument(level = "trace")]
 pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
     if !git_root.join(".gitmodules").exists() {
@@ -1104,6 +1221,85 @@ mod tests {
         command.current_dir(path).args(args);
 
         command.assert().success();
+    }
+
+    #[tokio::test]
+    async fn diff_file_collectors_preserve_path_base() -> anyhow::Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let root = tmp.path();
+        let project = root.join("project");
+        fs_err::create_dir(&project)?;
+        run_git(root, &["init"]);
+        run_git(
+            root,
+            &[
+                "-c",
+                "user.name=prek",
+                "-c",
+                "user.email=prek@example.com",
+                "commit",
+                "--allow-empty",
+                "--no-gpg-sign",
+                "-m",
+                "Initial commit",
+            ],
+        );
+        fs_err::write(root.join("outside.txt"), "outside\n")?;
+        fs_err::write(project.join("added.txt"), "added\n")?;
+        run_git(root, &["add", "."]);
+
+        let output = super::git_cmd()?
+            .current_dir(root)
+            .arg("write-tree")
+            .check(true)
+            .output()
+            .await?;
+        let tree = str::from_utf8(&output.stdout)?.trim();
+
+        fs_err::write(root.join("intent.txt"), "outside intent\n")?;
+        fs_err::write(project.join("intent.txt"), "intent\n")?;
+        run_git(root, &["add", "--intent-to-add", "."]);
+
+        for relative in ["false", "true"] {
+            run_git(root, &["config", "diff.relative", relative]);
+            assert_eq!(
+                super::intent_to_add_files(root).await?,
+                vec![
+                    PathBuf::from("intent.txt"),
+                    PathBuf::from("project/intent.txt")
+                ],
+            );
+            assert_eq!(
+                super::intent_to_add_files(&project).await?,
+                vec![PathBuf::from("project/intent.txt")],
+            );
+            assert_eq!(
+                super::staged_added_files(root).await?,
+                vec![
+                    PathBuf::from("outside.txt"),
+                    PathBuf::from("project/added.txt"),
+                ],
+            );
+            assert_eq!(
+                super::staged_added_files(&project).await?,
+                vec![PathBuf::from("added.txt")],
+            );
+            for directory in [root, project.as_path()] {
+                for files in [
+                    super::staged_files(directory, false).await?,
+                    super::changed_files("HEAD", tree, directory, false).await?,
+                ] {
+                    assert_eq!(
+                        files.into_iter().map(|file| file.path).collect::<Vec<_>>(),
+                        vec![
+                            PathBuf::from("outside.txt"),
+                            PathBuf::from("project/added.txt"),
+                        ],
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     #[cfg(unix)]
@@ -1251,6 +1447,36 @@ mod tests {
             paths,
             vec![PathBuf::from(" leading.py"), PathBuf::from("trailing.py ")]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn diff_files_preserve_unusual_paths() -> anyhow::Result<()> {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let files = super::parse_diff_files(
+            b":000000 100644 000000 abc123 A\0added.rs\0\
+              :100644 000000 abc123 000000 D\0 leading\t\n\xff.rs\0\
+              :100644 100644 abc123 def456 M\0modified.rs\0\
+              :120000 000000 def456 000000 D\0link with spaces.rs\0",
+        )?;
+
+        assert_eq!(files.len(), 4);
+        assert_eq!(files[0].path, Path::new("added.rs"));
+        assert!(files[0].deleted_mode.is_none());
+        assert_eq!(files[1].path.as_os_str().as_bytes(), b" leading\t\n\xff.rs");
+        assert!(matches!(
+            files[1].deleted_mode,
+            Some(super::FileMode::Regular)
+        ));
+        assert_eq!(files[2].path, Path::new("modified.rs"));
+        assert!(files[2].deleted_mode.is_none());
+        assert_eq!(files[3].path, Path::new("link with spaces.rs"));
+        assert!(matches!(
+            files[3].deleted_mode,
+            Some(super::FileMode::Symlink)
+        ));
+        Ok(())
     }
 
     #[test]

@@ -1093,6 +1093,74 @@ If you need to match a path pattern that doesn’t align with a hook’s default
             files: \.(yaml|yml|myext)$
     ```
 
+### `include_deleted`
+
+!!! note "prek-only"
+
+    `include_deleted` is a `prek` extension.
+
+Include deleted paths when running hooks on staged changes or a commit range.
+
+- Type: boolean
+- Default: `false`
+
+Deleted paths pass through the same global and hook-level `files` / `exclude`
+filters as existing files.
+
+!!! note "Type tags for deleted files"
+
+    Type tags are inferred from the filename and Git's recorded file mode.
+    For example, a deleted regular `.rs` file still matches `types: [rust]`,
+    and a deleted symbolic link matches `types: [symlink]`.
+
+    Tags that require reading the deleted file, such as a language identified
+    only by its shebang, are unavailable. Unavailable tags neither satisfy
+    `types` / `types_or` nor match `exclude_types`.
+
+This is useful for project-wide checks that can fail after a file is deleted:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "cargo-clippy",
+        name = "cargo clippy",
+        language = "system",
+        entry = "cargo clippy --all-targets --all-features -- -D warnings",
+        types = ["rust"],
+        include_deleted = true,
+        pass_filenames = false,
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: cargo-clippy
+            name: cargo clippy
+            language: system
+            entry: cargo clippy --all-targets --all-features -- -D warnings
+            types: [rust]
+            include_deleted: true
+            pass_filenames: false
+    ```
+
+When [`pass_filenames`](#pass_filenames) is enabled, matching deleted paths are
+also passed to the hook. The hook must be able to handle paths that no longer
+exist. Renames include the old path as a deletion as well as the new path.
+
+`--all-files`, `--files`, `--directory`, and `--glob` retain their usual file
+selection and do not add deleted paths. Stages without file input, such as
+`post-merge`, still require [`always_run: true`](#always_run).
+Deleted-file matching during merge conflict resolution is not yet supported.
+
 ### `always_run`
 
 Run the hook even when no files match.

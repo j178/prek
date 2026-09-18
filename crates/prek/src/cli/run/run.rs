@@ -224,6 +224,10 @@ pub(crate) async fn run(
             input_mode,
             selection,
             commit_msg_filename: extra_args.commit_msg_filename,
+            include_deleted: selected_hooks
+                .iter()
+                .filter_map(HookPlan::as_run)
+                .any(|hook| hook.include_deleted),
         },
     )
     .await
@@ -1134,6 +1138,7 @@ impl<'a> HookRunSession<'a> {
                 "--color=never"
             };
             git::git_cmd()?
+                .current_dir(workspace.root())
                 .arg("--no-pager")
                 .arg("diff")
                 .hidden_args(["--no-ext-diff"])

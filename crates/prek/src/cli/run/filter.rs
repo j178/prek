@@ -7,13 +7,14 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use globset::Glob;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
-use prek_identify::{TagSet, tags_from_path};
+use prek_identify::{TagSet, tags, tags_from_filename, tags_from_path};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, GlobPatterns, Stage};
 use crate::fs::PathClean;
+use crate::git::FileEntry;
 use crate::hook::Hook;
 use crate::workspace::Project;
 use crate::{fs, git, warn_user};
@@ -85,11 +86,13 @@ impl<'a> FileTagFilter<'a> {
 pub(crate) struct HookFileFilter<'a> {
     filename: FilenameFilter<'a>,
     tags: FileTagFilter<'a>,
+    include_deleted: bool,
 }
 
 impl<'a> HookFileFilter<'a> {
     pub(crate) fn new(hook: &'a Hook) -> Self {
         Self {
+            include_deleted: hook.include_deleted,
             filename: FilenameFilter::new(hook.files.as_ref(), hook.exclude.as_ref()),
             tags: FileTagFilter::new(
                 Some(&hook.types),
@@ -113,7 +116,9 @@ impl<'a> HookFileFilter<'a> {
         file: &ProjectFile<'_>,
         tag_cache: &FileTagCache,
     ) -> bool {
-        self.matches_filename(file.hook_path) && self.matches_tags(file.tags(tag_cache))
+        (self.include_deleted || !file.deleted)
+            && self.matches_filename(file.hook_path)
+            && self.matches_tags(file.tags(tag_cache))
     }
 }
 
@@ -121,6 +126,7 @@ impl<'a> HookFileFilter<'a> {
 pub(crate) struct ProjectFile<'a> {
     file_idx: usize,
     hook_path: &'a Path,
+    deleted: bool,
 }
 
 impl<'a> ProjectFile<'a> {
@@ -128,6 +134,7 @@ impl<'a> ProjectFile<'a> {
         Self {
             file_idx,
             hook_path,
+            deleted: false,
         }
     }
 
@@ -149,14 +156,16 @@ pub(crate) struct FileTagCache {
 
 impl FileTagCache {
     pub(crate) fn from_paths(paths: &[PathBuf]) -> Self {
-        let tags_by_file = paths
+        let tags_by_file = paths.par_iter().map(|path| identify_file(path)).collect();
+        Self { tags_by_file }
+    }
+
+    fn from_files(files: &[FileEntry]) -> Self {
+        let tags_by_file = files
             .par_iter()
-            .map(|path| match tags_from_path(path) {
-                Ok(tags) => Some(tags),
-                Err(err) => {
-                    error!(filename = ?path.display(), error = %err, "Failed to get tags");
-                    None
-                }
+            .map(|file| match file.deleted_mode {
+                Some(mode) => Some(deleted_file_tags(&file.path, mode)),
+                None => identify_file(&file.path),
             })
             .collect();
         Self { tags_by_file }
@@ -165,6 +174,29 @@ impl FileTagCache {
     pub(crate) fn tags(&self, file_idx: usize) -> Option<&TagSet> {
         self.tags_by_file[file_idx].as_ref()
     }
+}
+
+fn identify_file(path: &Path) -> Option<TagSet> {
+    match tags_from_path(path) {
+        Ok(tags) => Some(tags),
+        Err(err) => {
+            error!(filename = ?path.display(), error = %err, "Failed to get tags");
+            None
+        }
+    }
+}
+
+fn deleted_file_tags(path: &Path, mode: git::FileMode) -> TagSet {
+    let permission_tag = match mode {
+        git::FileMode::Symlink => return tags::TAG_SET_SYMLINK,
+        git::FileMode::Submodule => return tags::TAG_SET_DIRECTORY,
+        git::FileMode::Regular => tags::TAG_NON_EXECUTABLE,
+        git::FileMode::Executable => tags::TAG_EXECUTABLE,
+    };
+    let mut result = tags::TAG_SET_FILE;
+    result |= &tags_from_filename(path);
+    result.insert(permission_tag);
+    result
 }
 
 pub(crate) struct ProjectFiles<'a> {
@@ -176,10 +208,6 @@ impl<'a> ProjectFiles<'a> {
         Self {
             files: Vec::with_capacity(capacity),
         }
-    }
-
-    fn push(&mut self, file_idx: usize, hook_path: &'a Path) {
-        self.files.push(ProjectFile::new(file_idx, hook_path));
     }
 
     /// Visit project-owned files without collecting them.
@@ -377,18 +405,23 @@ impl<'a> RunFileIndex<'a> {
             .collect::<Vec<_>>();
 
         let mut matching_projects = Vec::new();
-        for (file_idx, filename) in filenames.iter().enumerate() {
-            project_tree.matching_projects(filename, &mut matching_projects);
+        for (file_idx, file) in filenames.iter().enumerate() {
+            project_tree.matching_projects(&file.path, &mut matching_projects);
 
             // The tree yields ancestors from root to leaf. Apply ownership from the most
             // specific project upwards, stopping once an orphan project consumes the file.
             for &project_idx in matching_projects.iter().rev() {
                 let project = &projects[project_idx];
-                let hook_path = filename
+                let hook_path = file
+                    .path
                     .strip_prefix(project.relative_path())
                     .expect("matched project path must be a file prefix");
                 if project_filters[project_idx].matches(hook_path) {
-                    project_files[project_idx].push(file_idx, hook_path);
+                    project_files[project_idx].files.push(ProjectFile {
+                        file_idx,
+                        hook_path,
+                        deleted: file.deleted_mode.is_some(),
+                    });
                 }
                 if project.config().orphan.unwrap_or(false) {
                     break;
@@ -398,7 +431,7 @@ impl<'a> RunFileIndex<'a> {
 
         Self {
             projects: project_files,
-            tag_cache: FileTagCache::from_paths(filenames),
+            tag_cache: FileTagCache::from_files(filenames),
         }
     }
 
@@ -449,6 +482,7 @@ pub(crate) struct CollectOptions {
     pub(crate) input_mode: RunInputMode,
     pub(crate) selection: FileSelection,
     pub(crate) commit_msg_filename: Option<String>,
+    pub(crate) include_deleted: bool,
 }
 
 impl CollectOptions {
@@ -489,7 +523,7 @@ impl From<Stage> for RunInputMode {
 
 pub(crate) enum RunInput {
     /// File paths relative to the workspace root.
-    Files(Vec<PathBuf>),
+    Files(Vec<FileEntry>),
     /// Absolute path to the Git message file passed by `commit-msg` and `prepare-commit-msg`.
     MessageFile(PathBuf),
 }
@@ -501,7 +535,7 @@ impl RunInput {
     /// compatibility helper discards them and returns an empty list.
     pub(crate) fn into_files(self) -> Vec<PathBuf> {
         match self {
-            Self::Files(files) => files,
+            Self::Files(files) => files.into_iter().map(|file| file.path).collect(),
             Self::MessageFile(_) => vec![],
         }
     }
@@ -513,6 +547,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         input_mode,
         selection,
         commit_msg_filename,
+        include_deleted,
     } = opts;
 
     let git_root = git::root()?;
@@ -535,17 +570,17 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         )
     })?;
 
-    let mut filenames = collect_files_for_selection(git_root, root, selection).await?;
+    let mut files = collect_files_for_selection(git_root, root, selection, include_deleted).await?;
     if !relative_root.as_os_str().is_empty() {
-        filenames.retain_mut(|filename| strip_prefix_in_place(filename, relative_root));
+        files.retain_mut(|file| strip_prefix_in_place(&mut file.path, relative_root));
     }
 
     // Sort filenames if in tests to make the order consistent.
     if EnvVars.is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
-        filenames.sort_unstable();
+        files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
     }
 
-    Ok(RunInput::Files(filenames))
+    Ok(RunInput::Files(files))
 }
 
 fn strip_prefix_in_place(path: &mut PathBuf, prefix: &Path) -> bool {
@@ -674,10 +709,12 @@ async fn collect_files_for_selection(
     git_root: &Path,
     workspace_root: &Path,
     selection: FileSelection,
-) -> Result<Vec<PathBuf>> {
+    include_deleted: bool,
+) -> Result<Vec<FileEntry>> {
     match selection {
         FileSelection::Diff { from_ref, to_ref } => {
-            let files = git::changed_files(&from_ref, &to_ref, workspace_root).await?;
+            let files =
+                git::changed_files(&from_ref, &to_ref, workspace_root, include_deleted).await?;
             debug!(
                 "Files changed between {} and {}: {}",
                 from_ref,
@@ -690,20 +727,26 @@ async fn collect_files_for_selection(
             files,
             globs,
             directories,
-        } => collect_explicit_files(git_root, files, globs, directories).await,
+        } => Ok(collect_explicit_files(git_root, files, globs, directories)
+            .await?
+            .into_iter()
+            .map(FileEntry::from)
+            .collect()),
         FileSelection::All { .. } => {
             let files = git::ls_files(git_root, [workspace_root]).await?;
             debug!("All files in the workspace: {}", files.len());
-            Ok(files)
+            Ok(files.into_iter().map(FileEntry::from).collect())
         }
         FileSelection::Default => {
             if git::is_in_merge_conflict()? {
+                // TODO: Support include_deleted during merge conflict resolution,
+                // including files whose previous mode only exists in the other parent.
                 let files = git::conflicted_files(workspace_root).await?;
                 debug!("Conflicted files: {}", files.len());
-                return Ok(files);
+                return Ok(files.into_iter().map(FileEntry::from).collect());
             }
 
-            let files = git::staged_files(workspace_root).await?;
+            let files = git::staged_files(workspace_root, include_deleted).await?;
             debug!("Staged files: {}", files.len());
             Ok(files)
         }
