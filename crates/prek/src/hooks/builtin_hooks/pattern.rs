@@ -67,7 +67,7 @@ impl Matcher {
         };
 
         Ok(Self {
-            regex: Arc::new(build_regex(
+            regex: Arc::new(compile_patterns(
                 &args.patterns,
                 args.ignore_case,
                 args.multiline,
@@ -77,7 +77,7 @@ impl Matcher {
     }
 }
 
-fn build_regex(patterns: &[String], ignore_case: bool, multiline: bool) -> Result<RegexSet> {
+fn compile_patterns(patterns: &[String], ignore_case: bool, multiline: bool) -> Result<RegexSet> {
     let mut options = RegexOptionsBuilder::new();
     options
         .case_insensitive(ignore_case)
@@ -92,7 +92,7 @@ fn build_regex(patterns: &[String], ignore_case: bool, multiline: bool) -> Resul
     })
 }
 
-fn find_match(patterns: &RegexSet, contents: &[u8]) -> Result<Option<Range<usize>>> {
+fn find_first_match(patterns: &RegexSet, contents: &[u8]) -> Result<Option<Range<usize>>> {
     let Some(mut matches) = patterns.find_input(RegexInput::new(contents))? else {
         return Ok(None);
     };
@@ -104,34 +104,34 @@ fn find_match(patterns: &RegexSet, contents: &[u8]) -> Result<Option<Range<usize
 }
 
 pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    run(hook, filenames, MatchPolicy::Deny).await
+    run_content_patterns(hook, filenames, MatchPolicy::Deny).await
 }
 
 pub(crate) async fn require_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    run(hook, filenames, MatchPolicy::Require).await
+    run_content_patterns(hook, filenames, MatchPolicy::Require).await
 }
 
 pub(crate) fn deny_filename_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    run_filename_pattern(hook, filenames, MatchPolicy::Deny)
+    run_filename_patterns(hook, filenames, MatchPolicy::Deny)
 }
 
 pub(crate) fn require_filename_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    run_filename_pattern(hook, filenames, MatchPolicy::Require)
+    run_filename_patterns(hook, filenames, MatchPolicy::Require)
 }
 
-fn run_filename_pattern(
+fn run_filename_patterns(
     hook: &Hook,
     filenames: &[&Path],
     policy: MatchPolicy,
 ) -> Result<HookOutput> {
     let args = parse_hook_args::<FilenameArgs>(hook)?;
-    let regex = build_regex(&args.patterns, args.ignore_case, false)?;
+    let regex = compile_patterns(&args.patterns, args.ignore_case, false)?;
     let mut failed = false;
     let mut output = Vec::new();
 
     for filename in filenames {
         let matched = if let Some(basename) = filename.file_name() {
-            find_match(&regex, basename.as_encoded_bytes())
+            find_first_match(&regex, basename.as_encoded_bytes())
                 .with_context(|| {
                     format!(
                         "Failed to match patterns against filename `{}`",
@@ -155,7 +155,11 @@ fn run_filename_pattern(
     Ok(HookOutput::unchanged(i32::from(failed), output))
 }
 
-async fn run(hook: &Hook, filenames: &[&Path], policy: MatchPolicy) -> Result<HookOutput> {
+async fn run_content_patterns(
+    hook: &Hook,
+    filenames: &[&Path],
+    policy: MatchPolicy,
+) -> Result<HookOutput> {
     let args = parse_hook_args::<Args>(hook)?;
     let matcher = Matcher::new(&args)?;
     let file_base = hook.project().relative_path();
@@ -175,13 +179,15 @@ async fn check_file(
     policy: MatchPolicy,
 ) -> Result<HookOutput> {
     let (exit_status, output) = match matcher.scan_mode {
-        ScanMode::Lines => check_lines(file_base, filename, &matcher.regex, policy).await,
-        ScanMode::Multiline => check_multiline(file_base, filename, &matcher.regex, policy).await,
+        ScanMode::Lines => check_file_lines(file_base, filename, &matcher.regex, policy).await,
+        ScanMode::Multiline => {
+            check_file_multiline(file_base, filename, &matcher.regex, policy).await
+        }
     }?;
     Ok(HookOutput::unchanged(exit_status, output))
 }
 
-async fn check_lines(
+async fn check_file_lines(
     file_base: &Path,
     filename: &Path,
     patterns: &Arc<RegexSet>,
@@ -190,11 +196,13 @@ async fn check_lines(
     let file_path = file_base.join(filename);
     let filename = filename.to_path_buf();
     let patterns = Arc::clone(patterns);
-    tokio::task::spawn_blocking(move || check_lines_sync(&file_path, &filename, &patterns, policy))
-        .await?
+    tokio::task::spawn_blocking(move || {
+        check_file_lines_blocking(&file_path, &filename, &patterns, policy)
+    })
+    .await?
 }
 
-fn check_lines_sync(
+fn check_file_lines_blocking(
     file_path: &Path,
     filename: &Path,
     patterns: &RegexSet,
@@ -210,7 +218,7 @@ fn check_lines_sync(
     while reader.read_until(b'\n', &mut line)? != 0 {
         line_number += 1;
         let contents = trim_line_ending(&line);
-        if find_match(patterns, contents)
+        if find_first_match(patterns, contents)
             .with_context(|| {
                 format!(
                     "Failed to match patterns in `{}:{line_number}`",
@@ -237,14 +245,14 @@ fn check_lines_sync(
     }
 }
 
-async fn check_multiline(
+async fn check_file_multiline(
     file_base: &Path,
     filename: &Path,
     patterns: &RegexSet,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
     let contents = fs_err::tokio::read(file_base.join(filename)).await?;
-    let matched = find_match(patterns, &contents)
+    let matched = find_first_match(patterns, &contents)
         .with_context(|| format!("Failed to match patterns in `{}`", filename.display()))?;
     match policy {
         MatchPolicy::Deny => {
