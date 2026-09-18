@@ -36,6 +36,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`detect-private-key`](#detect-private-key) (Detects the presence of private keys.)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Protects specific branches from direct commits.)
 - [`check-signed-commit`](#check-signed-commit) (Ensures commits are signed with a valid GPG/SSH signature before they're pushed.)
+- [`check-dco-signoff`](#check-dco-signoff) (Checks that the commit message has a `Signed-off-by` trailer, per the Developer Certificate of Origin.)
 - [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable.)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang.)
 
@@ -627,6 +628,31 @@ Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
 - Commits must pass `git verify-commit` using your local Git GPG/SSH configuration.
   Unsigned commits and verification failures, including missing tools or public keys,
   fail the hook.
+
+---
+
+### `check-dco-signoff`
+
+Checks that the commit message has a `Signed-off-by` trailer, per the
+[Developer Certificate of Origin](https://developercertificate.org/).
+
+**Supported arguments**
+
+- None.
+
+**Caveats**
+
+- Defaults to the `commit-msg` stage.
+- Passes if at least one line matches `Signed-off-by: Name <local@domain>` (the trailer
+  keyword is case-sensitive, per Git's own trailer convention); multiple trailers (e.g.
+  co-authored or multi-signed commits) are fine as long as one is valid.
+- A `Co-authored-by` trailer does not satisfy the check on its own: the DCO requires each
+  committer's own sign-off.
+- A trailing `-----BEGIN PGP SIGNATURE-----` block, if present in the message file, is
+  stripped before checking, since some Git configs append one.
+- On failure, the error points you to `git commit -s` to sign off the current commit, and
+  `git rebase --exec 'git commit --amend --no-edit -s' <base-commit>` to fix historical
+  commits.
 
 ---
 
