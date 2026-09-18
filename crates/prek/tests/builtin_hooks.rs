@@ -3515,7 +3515,7 @@ fn check_signed_commit_hook_fails_on_unsigned_root_commit() {
         E  signature cannot be checked, e.g. missing public key
         N  no signature
 
-      Pass `--allow-status <CODE>` (repeatable) to accept additional codes.
+      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
 
     ----- stderr -----
     ");
@@ -3557,7 +3557,7 @@ fn check_signed_commit_hook_fails_on_unsigned_head_with_parent() {
         E  signature cannot be checked, e.g. missing public key
         N  no signature
 
-      Pass `--allow-status <CODE>` (repeatable) to accept additional codes.
+      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
 
     ----- stderr -----
     ");
@@ -3639,7 +3639,7 @@ fn check_signed_commit_hook_checks_full_history_when_only_to_ref_is_set() {
         E  signature cannot be checked, e.g. missing public key
         N  no signature
 
-      Pass `--allow-status <CODE>` (repeatable) to accept additional codes.
+      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
 
     ----- stderr -----
     "
