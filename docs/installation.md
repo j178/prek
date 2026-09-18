@@ -153,33 +153,37 @@ example, use `uv tool upgrade prek` for a uv tool installation or
 
     Run `echo $SHELL` to determine your shell.
 
-To enable shell autocompletion for prek commands, run one of the following:
+prek provides shell completion for commands, options, and hook or project selectors.
+To generate and load the completion script when your shell starts, run one of the following:
 
 === "Bash"
 
     ```bash
-    echo 'eval "$(COMPLETE=bash prek)"' >> ~/.bashrc
+    echo 'eval "$(prek util generate-shell-completion bash)"' >> ~/.bashrc
     ```
 
 === "Zsh"
 
     ```bash
-    echo 'eval "$(COMPLETE=zsh prek)"' >> ~/.zshrc
+    echo 'eval "$(prek util generate-shell-completion zsh)"' >> ~/.zshrc
     ```
 
 === "Fish"
 
-    ```bash
-    echo 'COMPLETE=fish prek | source' >> ~/.config/fish/config.fish
+    ```fish
+    echo 'prek util generate-shell-completion fish | source' >> ~/.config/fish/config.fish
     ```
 
 === "PowerShell"
 
     ```powershell
-    Add-Content -Path $PROFILE -Value '$env:COMPLETE = "powershell"; prek | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE'
+    Add-Content -Path $PROFILE -Value 'prek util generate-shell-completion powershell | Out-String | Invoke-Expression'
     ```
 
 Then restart your shell or source the config file.
+
+You can also save the generated script to a completion file. Regenerate it after
+upgrading prek so the script matches the installed version.
 
 ## Artifact Verification
 

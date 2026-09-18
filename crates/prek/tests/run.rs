@@ -3579,6 +3579,15 @@ fn selectors_completion() -> Result<()> {
     // Unrelated non-project dir should not appear in subdir suggestions
     context.child("scratch").create_dir_all()?;
 
+    cmd_snapshot!(context, context.command().args(["util", "generate-shell-completion", "fish"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    complete --keep-order --exclusive --command prek --arguments "(COMPLETE=fish prek -- (commandline --current-process --tokenize --cut-at-cursor) (commandline --current-token))"
+
+    ----- stderr -----
+    "#);
+
     cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
     success: true
     exit_code: 0
