@@ -13,7 +13,7 @@ use tracing::{debug, trace, warn};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::archive;
-use crate::checksum::{Sha256Digest, digest_from_sha256sums};
+use crate::checksum::{digest_from_sha256sums, fetch_checksum};
 use crate::fs::LockedFile;
 use crate::http::{REQWEST_CLIENT, TempDownload, download_artifact};
 use crate::process::Cmd;
@@ -273,28 +273,6 @@ impl InstallSource {
         Ok(Uv::new(uv_path))
     }
 
-    async fn fetch_release_archive_checksum(
-        checksum_url: &str,
-        archive_name: &str,
-    ) -> Result<Option<Sha256Digest>> {
-        let response = REQWEST_CLIENT
-            .get(checksum_url)
-            .send()
-            .await
-            .with_context(|| format!("Failed to fetch uv checksum from {checksum_url}"))?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-
-        let checksum = response
-            .error_for_status()
-            .with_context(|| format!("Failed to fetch uv checksum from {checksum_url}"))?
-            .text()
-            .await
-            .with_context(|| format!("Failed to read uv checksum from {checksum_url}"))?;
-        digest_from_sha256sums(&checksum, archive_name)
-    }
-
     async fn install_from_release_archive(
         &self,
         store: &Store,
@@ -363,7 +341,10 @@ impl InstallSource {
         let checksum_url = format!("{download_url}.sha256");
 
         let download = download_artifact(&download_url, &archive_name, store, async || {
-            Self::fetch_release_archive_checksum(&checksum_url, &archive_name).await
+            let Some(checksum) = fetch_checksum(&checksum_url).await? else {
+                return Ok(None);
+            };
+            digest_from_sha256sums(&checksum, &archive_name)
         })
         .await
         .context("Failed to download uv")?;

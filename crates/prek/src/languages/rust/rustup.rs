@@ -9,9 +9,9 @@ use semver::Version;
 use target_lexicon::HOST;
 use tracing::{debug, trace, warn};
 
-use crate::checksum::Sha256Digest;
+use crate::checksum::{Sha256Digest, fetch_checksum};
 use crate::fs::{LockedFile, make_executable};
-use crate::http::{REQWEST_CLIENT, download_artifact};
+use crate::http::download_artifact;
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
 use crate::store::Store;
@@ -118,7 +118,10 @@ impl Rustup {
         let checksum_url = format!("{url}.sha256");
 
         let download = download_artifact(&url, filename, store, async || {
-            Self::fetch_checksum(&checksum_url).await
+            let Some(checksum) = fetch_checksum(&checksum_url).await? else {
+                return Ok(None);
+            };
+            digest_from_rustup_checksum(&checksum)
         })
         .await?;
         make_executable(download.path())?;
@@ -135,24 +138,6 @@ impl Rustup {
             bin: target,
             rustup_home: rustup_home.to_path_buf(),
         })
-    }
-
-    async fn fetch_checksum(checksum_url: &str) -> Result<Option<Sha256Digest>> {
-        let response = REQWEST_CLIENT
-            .get(checksum_url)
-            .send()
-            .await
-            .with_context(|| format!("Failed to fetch rustup checksum from {checksum_url}"))?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-
-        let checksum = response
-            .error_for_status()
-            .with_context(|| format!("Failed to fetch rustup checksum from {checksum_url}"))?
-            .text()
-            .await?;
-        digest_from_rustup_checksum(&checksum)
     }
 
     pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<PathBuf> {

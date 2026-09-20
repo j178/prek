@@ -7,6 +7,8 @@ use anyhow::{Context, Result, bail};
 use aws_lc_rs::digest::{Context as Sha256Context, SHA256};
 use tokio::io::{AsyncRead, ReadBuf};
 
+use crate::http::REQWEST_CLIENT;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) struct Sha256Digest([u8; 32]);
 
@@ -85,6 +87,32 @@ impl<R: AsyncRead + Unpin> AsyncRead for HashReader<R> {
             other => other,
         }
     }
+}
+
+/// Fetch a checksum file, returning `None` if the server responds with 404.
+pub(crate) async fn fetch_checksum(checksum_url: &str) -> Result<Option<String>> {
+    fetch_checksum_with(checksum_url, |req| req).await
+}
+
+pub(crate) async fn fetch_checksum_with(
+    checksum_url: &str,
+    customize_request: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
+) -> Result<Option<String>> {
+    let response = customize_request(REQWEST_CLIENT.get(checksum_url))
+        .send()
+        .await
+        .with_context(|| format!("Failed to fetch checksum from {checksum_url}"))?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+
+    let checksum = response
+        .error_for_status()
+        .with_context(|| format!("Failed to fetch checksum from {checksum_url}"))?
+        .text()
+        .await
+        .with_context(|| format!("Failed to read checksum from {checksum_url}"))?;
+    Ok(Some(checksum))
 }
 
 pub(crate) fn digest_from_sha256sums(
