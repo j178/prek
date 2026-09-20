@@ -2018,7 +2018,6 @@ dependencies = [
  "pretty_assertions",
  "rayon",
  "regex",
- "regex-automata",
  "reqwest",
  "rustc-hash",
  "rustix",
