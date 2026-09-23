@@ -263,7 +263,7 @@ pub(crate) async fn staged_added_files(root: &Path) -> Result<Vec<PathBuf>, Erro
     let output = git_cmd()?
         .current_dir(root)
         .arg("diff")
-        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"])
+        .hidden_args(["--no-ext-diff"])
         .arg("--cached")
         .arg("--relative")
         .arg("--name-only")
@@ -334,7 +334,7 @@ fn diff_files_cmd(include_deleted: bool) -> Result<Cmd, Error> {
     // Each raw record must have one path. Renames become additions and deletions,
     // so old paths can trigger hooks independently of Git's similarity heuristics.
     cmd.args(["diff", "--raw", "--no-renames", "--no-relative", "-z"])
-        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"]);
+        .hidden_args(["--no-ext-diff"]);
     if !include_deleted {
         cmd.arg("--diff-filter=d");
     }
@@ -503,7 +503,7 @@ pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>> {
         .arg("diff")
         .arg("--name-only")
         .arg("--no-relative")
-        .hidden_args(["--no-ext-diff", "--ignore-submodules=none"])
+        .hidden_args(["--no-ext-diff"])
         .arg("-z")
         .arg("-m") // Show diffs for merge commits in the default format.
         .arg(str::from_utf8(&tree.stdout)?.trim_ascii())
