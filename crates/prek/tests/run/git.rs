@@ -163,6 +163,56 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn restore_intent_and_unstaged_changes_from_subdirectory() {
+    let context = TestEnv::new()
+        .with_file(
+            format!("project/{PRE_COMMIT_CONFIG_YAML}"),
+            indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: check-staged
+                    name: check staged
+                    language: system
+                    entry: python3 -c 'assert open("tracked.txt").read() == "staged\n"'
+                    files: ^tracked\.txt$
+        "#},
+        )
+        .with_file("project/tracked.txt", "staged\n")
+        .with_file("project/nested/.gitkeep", "")
+        .init_git();
+    context.git().run(["config", "diff.relative", "true"]);
+    context.write_file("project/tracked.txt", "unstaged\n");
+    context.write_file("project/intent.txt", "intent\n");
+    context.write_file("outside.txt", "outside\n");
+    context.git().run(["add", "--intent-to-add", "."]);
+
+    cmd_snapshot!(context, context.run().current_dir(context.child("project/nested")), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check staged.............................................................Passed
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    "#);
+
+    assert_eq!(context.read("project/tracked.txt"), "unstaged\n");
+    assert_eq!(context.read("project/intent.txt"), "intent\n");
+    assert_eq!(context.read("outside.txt"), "outside\n");
+    cmd_snapshot!(context, context.git().command().args(["diff", "--name-only", "--diff-filter=A"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    outside.txt
+    project/intent.txt
+
+    ----- stderr -----
+    "#);
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {

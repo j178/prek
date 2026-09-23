@@ -7,6 +7,7 @@ mod config;
 mod execution;
 mod files;
 mod git;
+mod include_deleted;
 mod modifications;
 mod output;
 mod repositories;

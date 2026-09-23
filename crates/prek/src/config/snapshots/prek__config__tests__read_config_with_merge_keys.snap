@@ -21,6 +21,7 @@ Config {
                             alias: None,
                             files: None,
                             exclude: None,
+                            include_deleted: None,
                             types: None,
                             types_or: Some(
                                 [
@@ -57,6 +58,7 @@ Config {
                             alias: None,
                             files: None,
                             exclude: None,
+                            include_deleted: None,
                             types: None,
                             types_or: Some(
                                 [

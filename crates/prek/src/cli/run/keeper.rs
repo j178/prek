@@ -43,6 +43,7 @@ impl IntentToAddRestorer {
 
         // TODO: xargs
         git_cmd()?
+            .current_dir(git::root()?)
             .arg("rm")
             .arg("--cached")
             .arg("--")
@@ -61,6 +62,7 @@ impl IntentToAddRestorer {
         if !self.0.is_empty() {
             let mut cmd = Command::new(GIT.as_ref()?);
             git::apply_git_work_tree(&mut cmd)
+                .current_dir(git::root()?)
                 .arg("add")
                 .arg("--intent-to-add")
                 .arg("--")
@@ -91,10 +93,17 @@ impl UnstagedChangesRestorer {
 
         let mut cmd = git_cmd()?;
         let output = cmd
+            .current_dir(git::root()?)
             .arg("diff-index")
             .arg("--binary")
             .arg("--exit-code")
-            .hidden_args(["--ignore-submodules", "--no-color", "--no-ext-diff"])
+            .hidden_args([
+                "--ignore-submodules",
+                "--no-color",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-relative",
+            ])
             .arg(tree)
             .arg("--")
             .arg(root)
@@ -157,6 +166,7 @@ impl UnstagedChangesRestorer {
     fn checkout_working_tree(root: &Path) -> Result<()> {
         let mut cmd = Command::new(GIT.as_ref()?);
         let output = git::apply_git_work_tree(&mut cmd)
+            .current_dir(git::root()?)
             .arg("-c")
             .arg("submodule.recurse=0")
             .arg("checkout")
@@ -177,6 +187,7 @@ impl UnstagedChangesRestorer {
     fn git_apply(patch: &Path) -> Result<()> {
         let mut cmd = Command::new(GIT.as_ref()?);
         let output = git::apply_git_work_tree(&mut cmd)
+            .current_dir(git::root()?)
             .arg("apply")
             .arg("--whitespace=nowarn")
             .arg(patch)
