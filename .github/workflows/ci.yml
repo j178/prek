@@ -529,7 +529,10 @@ jobs:
 
       - name: "Install mold"
         run: ./scripts/install-mold.sh
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        # Swift 6.4's default build system cannot identify mold and fails when
+        # parsing `ld -version_details`. This script replaces the system ld,
+        # so skip it for groups that test Swift.
+        if: ${{ matrix.os == 'ubuntu-latest' && !contains(format(' {0} ', matrix.languages), ' swift ') }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
