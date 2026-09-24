@@ -1,0 +1,129 @@
+name: "Update Nix flake"
+
+# Checks whether `flake.nix` lags behind the latest GitHub release. If it does,
+# prefetches the new release's per-platform SRI hashes, rewrites `flake.nix`,
+# and opens a PR.
+#
+# This runs on a schedule instead of `release: published` because prek's releases
+# are created with `secrets.GITHUB_TOKEN` (see .github/workflows/release.yml),
+# and GitHub does not start new workflow runs from events created by
+# GITHUB_TOKEN — so a `release: published` trigger would never fire. A daily
+# lag-check is fully decoupled from how releases are created and needs no PAT.
+# Run manually any time via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nix-flake-release
+  cancel-in-progress: true
+
+jobs:
+  update-flake:
+    name: Bump flake version + hashes if lagging
+    runs-on: ubuntu-latest
+    if: github.repository == 'j178/prek'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+
+      - name: Check for lag and rewrite flake.nix
+        env:
+          # system|asset-substring — one per line. The substring must uniquely
+          # match the release asset filename for that system (including the
+          # .tar.gz suffix so it does not match the sibling .sha256 files).
+          ASSET_MAP: |
+            x86_64-linux|x86_64-unknown-linux-gnu.tar.gz
+            aarch64-linux|aarch64-unknown-linux-gnu.tar.gz
+            x86_64-darwin|x86_64-apple-darwin.tar.gz
+            aarch64-darwin|aarch64-apple-darwin.tar.gz
+        run: |
+          set -euo pipefail
+          # Latest release tag from the GitHub API (strip leading 'v').
+          tag=$(curl -fsSL -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+          latest="${tag#v}"
+          # Version currently pinned in flake.nix.
+          current=$(python3 -c 'import re; s=open("flake.nix").read(); m=re.search(r"version = \"([^\"]*)\";", s); print(m.group(1))')
+          echo "flake.nix version: $current  |  latest release: $latest (tag $tag)"
+          if [ "$current" = "$latest" ]; then
+            echo "flake.nix is up to date; nothing to do."
+            echo "LAGGING=no" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "LAGGING=yes" >> "$GITHUB_ENV"
+          echo "VERSION=$latest" >> "$GITHUB_ENV"
+          export TAG="$tag"
+          python3 <<'PYEOF'
+          import json, os, re, subprocess, urllib.request
+          tag = os.environ["TAG"]
+          version = tag.lstrip("v")
+          repo = os.environ["GITHUB_REPOSITORY"]
+          with urllib.request.urlopen(
+              f"https://api.github.com/repos/{repo}/releases/latest") as r:
+              release = json.load(r)
+          # Drop sibling checksum files (.sha256) so a tarball substring does
+          # not also match its "<tarball>.sha256" companion (cargo-dist etc.).
+          names = {a["name"] for a in release["assets"]
+                   if not a["name"].endswith(".sha256")}
+          asset_map = {}
+          for line in os.environ["ASSET_MAP"].splitlines():
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              sys_, sub = line.split("|", 1)
+              asset_map[sys_.strip()] = sub.strip()
+          src = open("flake.nix").read()
+          src, n = re.subn(r'version = "[^"]*";', f'version = "{version}";', src, count=1)
+          if n != 1:
+              raise SystemExit('could not find version = "..." in flake.nix')
+          for sys_, sub in asset_map.items():
+              match = next((n for n in names if sub in n), None)
+              if not match:
+                  raise SystemExit(f"no asset for {sys_} ({sub}) in {tag}; have: {sorted(names)}")
+              url = f"https://github.com/{repo}/releases/download/{tag}/{match}"
+              out = json.loads(subprocess.check_output(
+                  ["nix", "store", "prefetch-file", "--json", "--hash-type", "sha256", url]))
+              sri = out["hash"]
+              pat = re.compile(r'("' + re.escape(sys_) + r'" = \{[^}]*\})', re.S)
+              def repl(m):
+                  b = m.group(1)
+                  b = re.sub(r'file = "[^"]*";', f'file = "{match}";', b, count=1)
+                  b = re.sub(r'sha256 = "[^"]*";', f'sha256 = "{sri}";', b, count=1)
+                  return b
+              src, n = pat.subn(repl, src, count=1)
+              if n != 1:
+                  raise SystemExit(f"could not find assets block for {sys_} in flake.nix")
+          open("flake.nix", "w").write(src)
+          print(f"bumped flake.nix to {version}: {list(asset_map)}")
+          PYEOF
+
+      - name: Open PR
+        if: env.LAGGING == 'yes'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          commit-message: "chore(nix): bump flake to v${{ env.VERSION }}"
+          title: "chore(nix): bump flake to v${{ env.VERSION }}"
+          branch: chore/nix-flake-v${{ env.VERSION }}
+          base: master
+          body: |
+            Auto-generated by the `Update Nix flake` workflow (daily lag-check).
+            The latest GitHub release is v${{ env.VERSION }} but `flake.nix` was
+            pinned to an older version. This PR bumps `version` and refreshes
+            the per-platform SRI hashes by prefetching the new release assets.
+
+            Note: PRs opened by `GITHUB_TOKEN` do not trigger downstream
+            workflow runs (e.g. CI), so this PR will show no checks. The diff
+            is a 5-line hash bump with no source changes — safe to merge as-is.
