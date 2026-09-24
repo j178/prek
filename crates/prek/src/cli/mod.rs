@@ -10,7 +10,7 @@ use globset::Glob;
 use prek_consts::env_vars::EnvVars;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{HookType, Language, Stage};
+use crate::config::{HideStatus, HookType, Language, Stage};
 use crate::fs::expand_tilde;
 
 mod cache_clean;
@@ -705,6 +705,7 @@ pub(crate) struct RunOptions {
     ///
     /// Can be specified multiple times or as a comma-separated list. This does
     /// not change hook execution or exit codes.
+    /// Overrides `hide_status` in project and user configuration.
     #[arg(
         long,
         value_name = "STATUS",
@@ -712,7 +713,11 @@ pub(crate) struct RunOptions {
         value_delimiter = ',',
         help_heading = "Run options"
     )]
-    pub(crate) hide_status: Vec<run::HideStatus>,
+    pub(crate) hide_status: Vec<HideStatus>,
+
+    /// Show all hook reports, overriding `hide_status` in configuration.
+    #[arg(long, conflicts_with = "hide_status", help_heading = "Run options")]
+    pub(crate) no_hide_status: bool,
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
