@@ -21,7 +21,7 @@ permissions: {}
 
 jobs:
   plan:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     outputs:
       push: ${{ steps.plan.outputs.push }}
       tag: ${{ steps.plan.outputs.tag }}

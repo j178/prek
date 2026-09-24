@@ -15,30 +15,31 @@ class LanguageTest:
     duration: int
 
 
-# Approximate CI cost in seconds, based on
-# https://github.com/j178/prek/actions/runs/27252262102?pr=2197.
+# Approximate CI cost in seconds from five master runs.
+# Use the slowest platform's median language setup + test wall time, rounded up
+# to 5 seconds. Exclude failed jobs and count overlapping test intervals once.
 # These are relative weights for balancing groups, not timeout guarantees.
 LANGUAGE_TESTS = {
-    "bun": LanguageTest("test(bun::)", 35),
-    "conda": LanguageTest("test(conda::)", 30),
-    "coursier": LanguageTest("test(coursier::)", 35),
-    "dart": LanguageTest("test(dart::)", 40),
-    "deno": LanguageTest("test(deno::)", 40),
-    "docker": LanguageTest("test(docker::) or test(docker_image::)", 30),
-    "dotnet": LanguageTest("test(dotnet::)", 125),
-    "golang": LanguageTest("test(golang::)", 90),
-    "haskell": LanguageTest("test(haskell::)", 240),
-    "julia": LanguageTest("test(julia::)", 110),
+    "bun": LanguageTest("test(bun::)", 15),
+    "conda": LanguageTest("test(conda::)", 15),
+    "coursier": LanguageTest("test(coursier::)", 20),
+    "dart": LanguageTest("test(dart::)", 20),
+    "deno": LanguageTest("test(deno::)", 10),
+    "docker": LanguageTest("test(docker::) or test(docker_image::)", 5),
+    "dotnet": LanguageTest("test(dotnet::)", 75),
+    "golang": LanguageTest("test(golang::)", 75),
+    "haskell": LanguageTest("test(haskell::)", 105),
+    "julia": LanguageTest("test(julia::)", 95),
     "lua": LanguageTest("test(lua::)", 35),
-    "mise": LanguageTest("test(mise::)", 90),
-    "node": LanguageTest("test(node::)", 35),
-    "perl": LanguageTest("test(perl::)", 30),
-    "php": LanguageTest("test(php::)", 30),
-    "python": LanguageTest("test(python::)", 60),
-    "r": LanguageTest("test(/^r::/)", 90),
-    "ruby": LanguageTest("test(ruby::)", 60),
-    "rust": LanguageTest("test(rust::)", 125),
-    "swift": LanguageTest("test(swift::)", 90),
+    "mise": LanguageTest("test(mise::)", 15),
+    "node": LanguageTest("test(node::)", 50),
+    "perl": LanguageTest("test(perl::)", 40),
+    "php": LanguageTest("test(php::)", 70),
+    "python": LanguageTest("test(python::)", 30),
+    "r": LanguageTest("test(/^r::/)", 70),
+    "ruby": LanguageTest("test(ruby::)", 55),
+    "rust": LanguageTest("test(rust::)", 25),
+    "swift": LanguageTest("test(swift::)", 35),
 }
 
 LANGUAGES = tuple(LANGUAGE_TESTS)
