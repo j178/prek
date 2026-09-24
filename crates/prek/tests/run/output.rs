@@ -174,6 +174,110 @@ fn cjk_hook_name() {
 }
 
 #[test]
+fn hide_status_config_precedence() {
+    let config = indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+            { id = "pass", name = "Passing Hook", language = "system", entry = "echo passed output", always_run = true, pass_filenames = false, verbose = true },
+            { id = "fail", name = "Failing Hook", language = "fail", entry = "failed output", always_run = true, pass_filenames = false },
+        ]
+    "#};
+    let context = TestEnv::new().with_file("prek.toml", config).init_git();
+    context.write_user_config("hide_status = ['passed']");
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failing Hook.............................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      failed output
+
+    ----- stderr -----
+    "#);
+
+    context.write_file("prek.toml", format!("hide_status = ['failed']\n{config}"));
+    context.git().add(".");
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Passing Hook.............................................................Passed
+    - hook id: pass
+    - duration: [TIME]
+
+      passed output
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().args(["--hide-status", "passed"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failing Hook.............................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      failed output
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().arg("--no-hide-status"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Passing Hook.............................................................Passed
+    - hook id: pass
+    - duration: [TIME]
+
+      passed output
+    Failing Hook.............................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      failed output
+
+    ----- stderr -----
+    "#);
+
+    context.write_file("prek.toml", format!("hide_status = []\n{config}"));
+    context.git().add(".");
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Passing Hook.............................................................Passed
+    - hook id: pass
+    - duration: [TIME]
+
+      passed output
+    Failing Hook.............................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      failed output
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context, context.run().args(["--hide-status", "failed", "--no-hide-status"]), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--hide-status <STATUS>' cannot be used with '--no-hide-status'
+
+    Usage: prek run --hide-status <STATUS> [HOOK|PROJECT]...
+
+    For more information, try '--help'.
+    "#);
+}
+
+#[test]
 fn hide_status_filters_hook_reports() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"

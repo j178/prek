@@ -33,6 +33,15 @@ use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) enum HideStatus {
+    Passed,
+    Failed,
+    Skipped,
+}
+
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -68,6 +77,8 @@ pub(crate) struct Config {
     /// Set to true to have prek stop running hooks after the first failure.
     /// Default is false.
     pub fail_fast: Option<bool>,
+    /// Hide hook reports with these final statuses. An empty list shows all reports.
+    pub hide_status: Option<Vec<HideStatus>>,
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
