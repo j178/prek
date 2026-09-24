@@ -3571,3 +3571,172 @@ fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
 
     Ok(())
 }
+
+fn check_signed_commit_context() -> TestEnv {
+    TestEnv::new().with_filter(r"\b[0-9a-f]{7,40}\b", "[COMMIT_SHA]")
+}
+
+#[test]
+fn check_signed_commit_hook_fails_on_unsigned_root_commit() {
+    let context = check_signed_commit_context()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-signed-commit
+        "})
+        .init_git();
+
+    context.git().commit("Initial commit");
+
+    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for commit signatures..............................................Failed
+    - hook id: check-signed-commit
+    - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
+    - exit code: 1
+
+      [COMMIT_SHA] [N] no signature: Initial commit
+
+      Commit signature status codes:
+        G  good signature
+        B  bad signature
+        U  good signature, unknown validity (untrusted)
+        X  good signature, but expired
+        Y  good signature, made with an expired key
+        R  good signature, made with a revoked key
+        E  signature cannot be checked, e.g. missing public key
+        N  no signature
+
+      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn check_signed_commit_hook_fails_on_unsigned_head_with_parent() {
+    let context = check_signed_commit_context()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-signed-commit
+        "})
+        .init_git();
+
+    context.git().commit("Initial commit");
+    context.write_file("file.txt", "content\n");
+    context.git().add(".").commit("Second commit");
+
+    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for commit signatures..............................................Failed
+    - hook id: check-signed-commit
+    - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
+    - exit code: 1
+
+      [COMMIT_SHA] [N] no signature: Second commit
+
+      Commit signature status codes:
+        G  good signature
+        B  bad signature
+        U  good signature, unknown validity (untrusted)
+        X  good signature, but expired
+        Y  good signature, made with an expired key
+        R  good signature, made with a revoked key
+        E  signature cannot be checked, e.g. missing public key
+        N  no signature
+
+      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn check_signed_commit_hook_passes_when_allow_status_widened_to_unsigned() {
+    let context = check_signed_commit_context()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-signed-commit
+                args: [--allow-status, N]
+        "})
+        .init_git();
+
+    context.git().commit("Initial commit");
+
+    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for commit signatures..............................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Regression test for a root/orphan-push scenario: `prek` only ever sets
+/// `PRE_COMMIT_TO_REF` (never `PRE_COMMIT_FROM_REF`) for the first push of a new
+/// repo/branch, since there's no "from" commit. `resolve_range` must treat a lone
+/// `PRE_COMMIT_TO_REF` as a single revision (walking its *entire* ancestor history),
+/// not silently fall through to the `HEAD^..HEAD` manual-invocation fallback — which
+/// would wrongly check only the tip commit and miss the rest of the pushed history.
+#[test]
+fn check_signed_commit_hook_checks_full_history_when_only_to_ref_is_set() {
+    let context = check_signed_commit_context()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-signed-commit
+        "})
+        .init_git();
+
+    context.git().commit("Initial commit");
+    context.write_file("file.txt", "content\n");
+    context.git().add(".").commit("Second commit");
+    let head = context.git().rev_parse("HEAD").unwrap();
+
+    cmd_snapshot!(
+        context,
+        context
+            .run()
+            .arg("--hook-stage")
+            .arg("manual")
+            .env("PRE_COMMIT_TO_REF", &head)
+            .env_remove("PRE_COMMIT_FROM_REF"),
+        @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for commit signatures..............................................Failed
+    - hook id: check-signed-commit
+    - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
+    - exit code: 1
+
+      [COMMIT_SHA] [N] no signature: Second commit
+      [COMMIT_SHA] [N] no signature: Initial commit
+
+      Commit signature status codes:
+        G  good signature
+        B  bad signature
+        U  good signature, unknown validity (untrusted)
+        X  good signature, but expired
+        Y  good signature, made with an expired key
+        R  good signature, made with a revoked key
+        E  signature cannot be checked, e.g. missing public key
+        N  no signature
+
+      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
+
+    ----- stderr -----
+    "
+    );
+}

@@ -22,6 +22,7 @@ use super::{HookFuture, HookOutput};
 
 mod check_json5;
 mod check_jsonc;
+mod check_signed_commit;
 mod pattern;
 
 #[derive(
@@ -48,6 +49,7 @@ pub(crate) enum BuiltinHooks {
     CheckJsonc,
     CheckMergeConflict,
     CheckShebangScriptsAreExecutable,
+    CheckSignedCommit,
     CheckSymlinks,
     CheckToml,
     CheckVcsPermalinks,
@@ -76,6 +78,7 @@ impl BuiltinHooks {
             Self::CheckAddedLargeFiles => check_added_large_files::Args::command(),
             Self::CheckJsonc => check_jsonc::Args::command(),
             Self::CheckMergeConflict => check_merge_conflict::Args::command(),
+            Self::CheckSignedCommit => check_signed_commit::Args::command(),
             Self::CheckVcsPermalinks => check_vcs_permalinks::Args::command(),
             Self::CheckYaml => check_yaml::Args::command(),
             Self::DenyFilenamePattern | Self::RequireFilenamePattern => {
@@ -121,6 +124,7 @@ impl BuiltinHooks {
             Self::CheckShebangScriptsAreExecutable => {
                 Box::pin(check_shebang_scripts_are_executable::run(hook, filenames))
             }
+            Self::CheckSignedCommit => Box::pin(check_signed_commit::run(hook)),
             Self::CheckSymlinks => Box::pin(check_symlinks::run(hook, filenames)),
             Self::CheckToml => Box::pin(check_toml::run(hook, filenames)),
             Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks::run(hook, filenames)),
@@ -279,6 +283,23 @@ impl BuiltinHook {
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckSignedCommit => BuiltinHook {
+                id: "check-signed-commit".to_string(),
+                name: "check for commit signatures".to_string(),
+                entry: "check-signed-commit".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Ensures commits are signed with a valid GPG/SSH signature before they're pushed."
+                            .to_string(),
+                    ),
+                    pass_filenames: Some(PassFilenames::None),
+                    always_run: Some(true),
+                    stages: Some([Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },
