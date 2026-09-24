@@ -246,8 +246,7 @@ impl NodeInstaller {
         }
 
         debug!(?extracted, target = %target.display(), "Moving node to target");
-        // TODO: retry on Windows
-        fs_err::tokio::rename(&extracted, &target).await?;
+        crate::fs::rename_with_retry(&extracted, &target).await?;
 
         Ok(NodeResult::from_dir(&target, version.clone()))
     }

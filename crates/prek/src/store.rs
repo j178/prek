@@ -135,9 +135,8 @@ impl Store {
     ) -> Result<PathBuf, Error> {
         let target = self.repo_path(repo);
 
-        // TODO: add windows retry
         fs_err::tokio::remove_dir_all(&target).await.ok();
-        fs_err::tokio::rename(temp, &target).await?;
+        crate::fs::rename_with_retry(temp, &target).await?;
 
         let marker = RepoMarker {
             repo: repo.source(),

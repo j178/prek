@@ -376,7 +376,7 @@ impl RubyInstaller {
             fs_err::tokio::remove_dir_all(&target).await?;
         }
 
-        fs_err::tokio::rename(&inner, &target).await?;
+        crate::fs::rename_with_retry(&inner, &target).await?;
 
         RubyResult::from_managed_dir(&target, version.clone())
     }

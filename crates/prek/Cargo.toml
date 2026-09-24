@@ -122,6 +122,7 @@ predicates = { workspace = true }
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"

@@ -232,7 +232,7 @@ impl BunInstaller {
 
         let target_binary = target_bin_dir.join("bun").with_extension(EXE_EXTENSION);
         debug!(?extracted_binary, target = %target_binary.display(), "Moving bun to target");
-        fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
+        crate::fs::rename_with_retry(&extracted_binary, &target_binary).await?;
 
         Ok(BunResult::from_dir(&target, version.clone()))
     }

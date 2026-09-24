@@ -249,8 +249,7 @@ impl GoInstaller {
         }
 
         debug!(?extracted, target = %target.display(), "Moving go to target");
-        // TODO: retry on Windows
-        fs_err::tokio::rename(&extracted, &target).await?;
+        crate::fs::rename_with_retry(&extracted, &target).await?;
 
         Ok(GoResult::from_dir(&target, version.clone()))
     }

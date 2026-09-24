@@ -51,6 +51,35 @@ static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(D
 static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
     LazyLock::new(Default::default);
 
+/// Rename a file or directory, retrying permission errors on Windows.
+pub(crate) async fn rename_with_retry(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        let from = from.as_ref();
+        let to = to.as_ref();
+        // Antivirus scanners can temporarily prevent renaming files and their parent directories.
+        // Match uv's retry window: 10ms exponential backoff, about ten seconds total.
+        for retry in 0..10 {
+            match fs_err::rename(from, to) {
+                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                    let delay = Duration::from_millis(10 << retry);
+                    debug!(from = %from.display(), to = %to.display(), ?delay, %err, "Retrying rename");
+                    tokio::time::sleep(delay).await;
+                }
+                result => return result,
+            }
+        }
+        fs_err::rename(from, to)
+    }
+    #[cfg(not(windows))]
+    {
+        fs_err::tokio::rename(from, to).await
+    }
+}
+
 /// Add executable bits to a file's Unix permissions.
 ///
 /// This is a no-op on Windows.
@@ -489,7 +518,85 @@ fn clean_path(path: impl AsRef<Path>) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
+    #[cfg(windows)]
+    use std::task::{Context, Waker};
     use std::time::Duration;
+
+    #[tokio::test(start_paused = true)]
+    async fn rename_does_not_retry_missing_source() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let source = temp_dir.path().join("missing");
+        let target = temp_dir.path().join("target");
+        let start = tokio::time::Instant::now();
+
+        let err = super::rename_with_retry(&source, &target)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert_eq!(start.elapsed(), Duration::ZERO);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test(start_paused = true)]
+    async fn rename_retries_locked_files_and_directories() -> std::io::Result<()> {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let temp_dir = tempfile::tempdir()?;
+        let source_dir = temp_dir.path().join("source-dir");
+        fs_err::create_dir(&source_dir)?;
+        let source_file = temp_dir.path().join("source-file");
+        let child_file = source_dir.join("child-file");
+
+        for (source, locked_file) in [(&source_file, &source_file), (&source_dir, &child_file)] {
+            fs_err::write(locked_file, "content")?;
+            let handle = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0)
+                .open(locked_file)?;
+            let target = source.with_added_extension("renamed");
+            let mut rename = std::pin::pin!(super::rename_with_retry(source, &target));
+
+            // The first attempt must fail while the handle denies delete sharing.
+            let mut context = Context::from_waker(Waker::noop());
+            assert!(rename.as_mut().poll(&mut context).is_pending());
+            drop(handle);
+            rename.await?;
+
+            assert!(!source.try_exists()?);
+            assert!(target.try_exists()?);
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test(start_paused = true)]
+    async fn rename_stops_retrying_a_persistently_locked_file() -> anyhow::Result<()> {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let temp_dir = tempfile::tempdir()?;
+        let source = temp_dir.path().join("source");
+        let target = temp_dir.path().join("target");
+        fs_err::write(&source, "content")?;
+        let _handle = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&source)?;
+        let start = tokio::time::Instant::now();
+        let err = tokio::time::timeout(
+            Duration::from_secs(11),
+            super::rename_with_retry(&source, &target),
+        )
+        .await?
+        .unwrap_err();
+
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(!start.elapsed().is_zero());
+        assert!(source.try_exists()?);
+        assert!(!target.try_exists()?);
+        Ok(())
+    }
 
     #[cfg(windows)]
     #[test]

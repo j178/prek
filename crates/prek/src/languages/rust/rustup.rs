@@ -132,7 +132,7 @@ impl Rustup {
             fs_err::tokio::remove_file(&target).await?;
         }
         debug!(path = %target.display(), "Installing rustup");
-        fs_err::tokio::rename(download.path(), &target).await?;
+        crate::fs::rename_with_retry(download.path(), &target).await?;
 
         Ok(Self {
             bin: target,

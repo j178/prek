@@ -190,7 +190,7 @@ async fn replace_uv_binary(source: &Path, target_path: &Path) -> Result<()> {
         fs_err::tokio::remove_file(target_path).await?;
     }
 
-    fs_err::tokio::rename(source, target_path).await?;
+    crate::fs::rename_with_retry(source, target_path).await?;
     Ok(())
 }
 
@@ -323,7 +323,6 @@ impl InstallSource {
         let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
         debug!(source = ?downloaded.path(), target = %target_path.display(), "Moving uv to target");
-        // TODO: retry on Windows
         replace_uv_binary(downloaded.path(), &target_path).await?;
 
         Ok(())

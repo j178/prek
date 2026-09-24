@@ -254,7 +254,7 @@ impl MiseInstaller {
             let source = bin_dir(&extracted)
                 .join("mise")
                 .with_extension(EXE_EXTENSION);
-            fs_err::tokio::rename(&source, &target_binary).await?;
+            crate::fs::rename_with_retry(&source, &target_binary).await?;
         }
         crate::fs::make_executable(&target_binary)?;
 
@@ -262,7 +262,7 @@ impl MiseInstaller {
         if target.exists() {
             fs_err::tokio::remove_dir_all(&target).await?;
         }
-        fs_err::tokio::rename(install_dir.keep(), &target).await?;
+        crate::fs::rename_with_retry(install_dir.keep(), &target).await?;
 
         Ok(MiseResult::from_dir(&target, version.clone()))
     }
