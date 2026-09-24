@@ -51,28 +51,45 @@ static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(D
 static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
     LazyLock::new(Default::default);
 
-/// Rename a file or directory, retrying permission errors on Windows.
+/// Rename a file or directory, retrying permission and sharing errors on Windows.
 pub(crate) async fn rename_with_retry(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> std::io::Result<()> {
     #[cfg(windows)]
     {
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+
         let from = from.as_ref();
         let to = to.as_ref();
+        // fs_err hides the raw error code, which is needed for sharing violations.
+        let mut result = std::fs::rename(from, to);
         // Antivirus scanners can temporarily prevent renaming files and their parent directories.
         // Match uv's retry window: 10ms exponential backoff, about ten seconds total.
         for retry in 0..10 {
-            match fs_err::rename(from, to) {
-                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            match &result {
+                Err(err)
+                    if err.kind() == std::io::ErrorKind::PermissionDenied
+                        || err.raw_os_error() == Some(ERROR_SHARING_VIOLATION) =>
+                {
                     let delay = Duration::from_millis(10 << retry);
                     debug!(from = %from.display(), to = %to.display(), ?delay, %err, "Retrying rename");
                     tokio::time::sleep(delay).await;
+                    result = std::fs::rename(from, to);
                 }
-                result => return result,
+                _ => break,
             }
         }
-        fs_err::rename(from, to)
+        result.map_err(|err| {
+            std::io::Error::new(
+                err.kind(),
+                format!(
+                    "failed to rename file from {} to {}: {err}",
+                    from.display(),
+                    to.display()
+                ),
+            )
+        })
     }
     #[cfg(not(windows))]
     {
@@ -560,7 +577,11 @@ mod tests {
 
             // The first attempt must fail while the handle denies delete sharing.
             let mut context = Context::from_waker(Waker::noop());
-            assert!(rename.as_mut().poll(&mut context).is_pending());
+            let result = rename.as_mut().poll(&mut context);
+            assert!(
+                result.is_pending(),
+                "rename completed while locked: {result:?}"
+            );
             drop(handle);
             rename.await?;
 
@@ -583,6 +604,7 @@ mod tests {
             .read(true)
             .share_mode(0)
             .open(&source)?;
+        let expected = fs_err::rename(&source, &target).unwrap_err();
         let start = tokio::time::Instant::now();
         let err = tokio::time::timeout(
             Duration::from_secs(11),
@@ -591,7 +613,8 @@ mod tests {
         .await?
         .unwrap_err();
 
-        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(err.kind(), expected.kind());
+        assert_eq!(err.to_string(), expected.to_string());
         assert!(!start.elapsed().is_zero());
         assert!(source.try_exists()?);
         assert!(!target.try_exists()?);
