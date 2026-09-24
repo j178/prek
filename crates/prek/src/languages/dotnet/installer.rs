@@ -220,7 +220,7 @@ impl DotnetInstaller {
         }
 
         let install_path = install_dir.keep();
-        fs_err::tokio::rename(&install_path, &final_dir).await?;
+        crate::fs::rename_with_retry(&install_path, &final_dir).await?;
 
         Ok(DotnetResult::from_dir(&final_dir, version))
     }

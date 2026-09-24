@@ -251,7 +251,7 @@ impl DenoInstaller {
 
         let target_binary = target_bin_dir.join("deno").with_extension(EXE_EXTENSION);
         debug!(?extracted_binary, target = %target_binary.display(), "Moving deno to target");
-        fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
+        crate::fs::rename_with_retry(&extracted_binary, &target_binary).await?;
 
         #[cfg(unix)]
         {

@@ -51,6 +51,52 @@ static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(D
 static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
     LazyLock::new(Default::default);
 
+/// Rename a file or directory, retrying permission and sharing errors on Windows.
+pub(crate) async fn rename_with_retry(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+
+        let from = from.as_ref();
+        let to = to.as_ref();
+        // fs_err hides the raw error code, which is needed for sharing violations.
+        let mut result = std::fs::rename(from, to);
+        // Antivirus scanners can temporarily prevent renaming files and their parent directories.
+        // Match uv's retry window: 10ms exponential backoff, about ten seconds total.
+        for retry in 0..10 {
+            match &result {
+                Err(err)
+                    if err.kind() == std::io::ErrorKind::PermissionDenied
+                        || err.raw_os_error() == Some(ERROR_SHARING_VIOLATION) =>
+                {
+                    let delay = Duration::from_millis(10 << retry);
+                    debug!(from = %from.display(), to = %to.display(), ?delay, %err, "Retrying rename");
+                    tokio::time::sleep(delay).await;
+                    result = std::fs::rename(from, to);
+                }
+                _ => break,
+            }
+        }
+        result.map_err(|err| {
+            std::io::Error::new(
+                err.kind(),
+                format!(
+                    "failed to rename file from {} to {}: {err}",
+                    from.display(),
+                    to.display()
+                ),
+            )
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        fs_err::tokio::rename(from, to).await
+    }
+}
+
 /// Add executable bits to a file's Unix permissions.
 ///
 /// This is a no-op on Windows.
