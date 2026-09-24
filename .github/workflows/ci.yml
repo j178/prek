@@ -42,7 +42,7 @@ env:
 
 jobs:
   plan:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       save-rust-cache: ${{ steps.plan.outputs.save_rust_cache }}
@@ -695,6 +695,15 @@ jobs:
         with:
           r-version: ${{ env.R_VERSION }}
           use-public-rspm: true
+          # Rtools' link.exe shadows the MSVC linker when Lua shares this job.
+          windows-path-include-rtools: false
+
+      - name: "Use Strawberry Perl"
+        if: ${{ matrix.os == 'windows-latest' && contains(format(' {0} ', matrix.languages), ' perl ') }}
+        shell: pwsh
+        # Micromamba puts Git's incomplete Perl ahead of Strawberry Perl.
+        run: |
+          "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       - name: "Check Perl and CPAN"
         if: ${{ contains(format(' {0} ', matrix.languages), ' perl ') }}
@@ -808,7 +817,7 @@ jobs:
       - language-tests
       - ecosystem-cpython
       - build-dev-binaries
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - name: "Check required jobs passed"
         run: |

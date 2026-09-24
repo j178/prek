@@ -15,12 +15,7 @@ class LanguageTest:
     duration: int
 
 
-# Approximate CI cost in seconds from five master runs on 2026-09-21 to 2026-09-24:
-# https://github.com/j178/prek/actions/runs/35560448285
-# https://github.com/j178/prek/actions/runs/35569458913
-# https://github.com/j178/prek/actions/runs/35836191670
-# https://github.com/j178/prek/actions/runs/35855389693
-# https://github.com/j178/prek/actions/runs/35953798915
+# Approximate CI cost in seconds from five master runs.
 # Use the slowest platform's median language setup + test wall time, rounded up
 # to 5 seconds. Exclude failed jobs and count overlapping test intervals once.
 # These are relative weights for balancing groups, not timeout guarantees.
