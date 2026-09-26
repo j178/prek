@@ -19,6 +19,9 @@ fn list_builtins_defaults_to_verbose_output() {
     check-case-conflict
       Checks for files that would conflict in case-insensitive filesystems.
 
+    check-dco-signoff
+      Checks that the commit message has a `Signed-off-by` trailer, per the Developer Certificate of Origin.
+
     check-executables-have-shebangs
       Ensures that (non-binary) executables have a shebang.
 
@@ -162,6 +165,11 @@ fn list_builtins_json() {
         "id": "check-case-conflict",
         "name": "check for case conflicts",
         "description": "Checks for files that would conflict in case-insensitive filesystems."
+      },
+      {
+        "id": "check-dco-signoff",
+        "name": "check for DCO sign-off",
+        "description": "Checks that the commit message has a `Signed-off-by` trailer, per the Developer Certificate of Origin."
       },
       {
         "id": "check-executables-have-shebangs",

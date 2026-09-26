@@ -20,6 +20,7 @@ use crate::store::Store;
 
 use super::{HookFuture, HookOutput};
 
+mod check_dco_signoff;
 mod check_json5;
 mod check_jsonc;
 mod pattern;
@@ -41,6 +42,7 @@ mod pattern;
 pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
+    CheckDcoSignoff,
     CheckExecutablesHaveShebangs,
     CheckIllegalWindowsNames,
     CheckJson,
@@ -108,6 +110,7 @@ impl BuiltinHooks {
         let future: HookFuture<'_> = match self {
             Self::CheckAddedLargeFiles => Box::pin(check_added_large_files::run(hook, filenames)),
             Self::CheckCaseConflict => Box::pin(check_case_conflict::run(hook, filenames)),
+            Self::CheckDcoSignoff => Box::pin(check_dco_signoff::run(hook, filenames)),
             Self::CheckExecutablesHaveShebangs => {
                 Box::pin(check_executables_have_shebangs::run(hook, filenames))
             }
@@ -179,6 +182,21 @@ impl BuiltinHook {
                         "Checks for files that would conflict in case-insensitive filesystems."
                             .to_string(),
                     ),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckDcoSignoff => BuiltinHook {
+                id: "check-dco-signoff".to_string(),
+                name: "check for DCO sign-off".to_string(),
+                entry: "check-dco-signoff".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Checks that the commit message has a `Signed-off-by` trailer, per the Developer Certificate of Origin."
+                            .to_string(),
+                    ),
+                    stages: Some([Stage::CommitMsg].into()),
                     ..Default::default()
                 },
             },
