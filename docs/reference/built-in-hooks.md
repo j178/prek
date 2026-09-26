@@ -405,7 +405,7 @@ Attempts to load all XML files to verify syntax.
 
 ### `deny-filename-pattern`
 
-Fails when the final path component (the basename) of any selected file matches a configured regular expression. Patterns use the [Rust `regex` syntax](https://docs.rs/regex/latest/regex/#syntax). When multiple patterns are provided, the hook fails when a basename matches any one of them.
+Fails when the final path component (the basename) of any selected file matches a configured regular expression. When multiple patterns are provided, the hook fails when a basename matches any one of them.
 
 The standard `files`, `exclude`, and type filters select which project-relative paths are checked. The patterns passed to this hook are then matched only against each selected basename.
 
@@ -433,7 +433,6 @@ repos:
 ### `deny-pattern`
 
 Fails when any selected text file matches a configured regular expression.
-Patterns use the [Rust `regex` syntax](https://docs.rs/regex/latest/regex/#syntax).
 When multiple patterns are provided, matching any one of them is sufficient.
 
 **Supported arguments**
@@ -486,7 +485,7 @@ repos:
 
 Fails when any selected text file does not match at least one configured regular expression. This is a per-file requirement: every file must match, while different files may match different patterns.
 
-`require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](#deny-pattern). Files without a match are reported as `path: no pattern matched`.
+`require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](#deny-pattern). Files without a match are reported as `path: file does not match any required pattern`.
 
 ```yaml
 repos:

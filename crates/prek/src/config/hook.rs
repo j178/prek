@@ -474,6 +474,9 @@ pub(crate) struct HookOptions {
     /// Exclude files that were matched by `files`.
     /// Default is `$^`, which matches nothing.
     pub exclude: Option<FilePattern>,
+    /// Include deleted paths when selecting staged changes or a commit range.
+    /// Default is false.
+    pub include_deleted: Option<bool>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
     pub types: Option<TagSet>,
@@ -541,6 +544,7 @@ impl HookOptions {
             alias,
             files,
             exclude,
+            include_deleted,
             types,
             types_or,
             exclude_types,
@@ -593,6 +597,7 @@ struct HookWire {
     alias: Option<String>,
     files: Option<FilePattern>,
     exclude: Option<FilePattern>,
+    include_deleted: Option<bool>,
     types: Option<TagSet>,
     types_or: Option<TagSet>,
     exclude_types: Option<TagSet>,
@@ -621,6 +626,7 @@ impl HookWire {
             alias: self.alias.take(),
             files: self.files.take(),
             exclude: self.exclude.take(),
+            include_deleted: self.include_deleted.take(),
             types: self.types.take(),
             types_or: self.types_or.take(),
             exclude_types: self.exclude_types.take(),

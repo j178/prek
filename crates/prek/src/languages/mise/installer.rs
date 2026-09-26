@@ -12,10 +12,10 @@ use tracing::{debug, trace, warn};
 
 use super::{inherited_mise_vars, mise_ceiling};
 use crate::archive;
-use crate::checksum::{Sha256Digest, digest_from_sha256sums};
+use crate::checksum::{digest_from_sha256sums, fetch_checksum};
 use crate::fs::{LockedFile, is_executable};
 use crate::git;
-use crate::http::{REQWEST_CLIENT, download_artifact};
+use crate::http::download_artifact;
 use crate::languages::version::{
     SemverRequest, ToolchainPolicy, ToolchainSource, find_system_executables,
 };
@@ -232,7 +232,10 @@ impl MiseInstaller {
         let checksum_url = format!("{base_url}/SHASUMS256.txt");
 
         let download = download_artifact(&url, &filename, store, async || {
-            Self::fetch_checksum(&checksum_url, &filename).await
+            let Some(checksums) = fetch_checksum(&checksum_url).await? else {
+                return Ok(None);
+            };
+            digest_from_sha256sums(&checksums, &filename)
         })
         .await
         .context("Failed to download mise")?;
@@ -251,7 +254,7 @@ impl MiseInstaller {
             let source = bin_dir(&extracted)
                 .join("mise")
                 .with_extension(EXE_EXTENSION);
-            fs_err::tokio::rename(&source, &target_binary).await?;
+            crate::fs::rename_with_retry(&source, &target_binary).await?;
         }
         crate::fs::make_executable(&target_binary)?;
 
@@ -259,22 +262,9 @@ impl MiseInstaller {
         if target.exists() {
             fs_err::tokio::remove_dir_all(&target).await?;
         }
-        fs_err::tokio::rename(install_dir.keep(), &target).await?;
+        crate::fs::rename_with_retry(install_dir.keep(), &target).await?;
 
         Ok(MiseResult::from_dir(&target, version.clone()))
-    }
-
-    async fn fetch_checksum(url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
-        let checksums = REQWEST_CLIENT
-            .get(url)
-            .send()
-            .await
-            .with_context(|| format!("Failed to fetch mise checksums from {url}"))?
-            .error_for_status()
-            .with_context(|| format!("Failed to fetch mise checksums from {url}"))?
-            .text()
-            .await?;
-        digest_from_sha256sums(&checksums, filename)
     }
 }
 

@@ -299,7 +299,10 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
     Ok(tags)
 }
 
-fn tags_from_filename(filename: &Path) -> TagSet {
+/// Identify tags from a filename and its extension without accessing the filesystem.
+///
+/// This does not identify the file kind, executable permissions, shebang, or content.
+pub fn tags_from_filename(filename: &Path) -> TagSet {
     let extension_tags = tags_from_extension(filename);
     let Some(filename) = filename.file_name().and_then(|name| name.to_str()) else {
         return extension_tags;

@@ -18,7 +18,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
     ) {
         Cow::Owned(format!("{from_ref}...{to_ref}"))
     } else {
-        Cow::Borrowed("--staged")
+        Cow::Borrowed("--cached")
     };
 
     let stdout = git::git_cmd()?

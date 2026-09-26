@@ -12,7 +12,7 @@ use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::archive;
-use crate::checksum::{Sha256Digest, digest_from_sha256sums};
+use crate::checksum::{Sha256Digest, digest_from_sha256sums, fetch_checksum};
 use crate::fs::LockedFile;
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::deno::DenoRequest;
@@ -216,7 +216,10 @@ impl DenoInstaller {
         let target = self.root.join(version.to_string());
 
         let download = download_artifact(&url, &filename, store, async || {
-            Self::fetch_checksum(&checksum_url, &filename).await
+            let Some(checksums) = fetch_checksum(&checksum_url).await? else {
+                return Ok(None);
+            };
+            digest_from_deno_checksum(&checksums, &filename)
         })
         .await
         .context("Failed to download deno")?;
@@ -226,24 +229,6 @@ impl DenoInstaller {
         Self::install_extracted(&target, &extracted).await?;
 
         Ok(DenoResult::from_dir(&target, version.clone()))
-    }
-
-    async fn fetch_checksum(checksum_url: &str, filename: &str) -> Result<Option<Sha256Digest>> {
-        let response = REQWEST_CLIENT
-            .get(checksum_url)
-            .send()
-            .await
-            .with_context(|| format!("Failed to fetch Deno checksum from {checksum_url}"))?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-
-        let checksums = response
-            .error_for_status()
-            .with_context(|| format!("Failed to fetch Deno checksum from {checksum_url}"))?
-            .text()
-            .await?;
-        digest_from_deno_checksum(&checksums, filename)
     }
 
     async fn install_extracted(target: &Path, extracted: &Path) -> Result<()> {
@@ -266,7 +251,7 @@ impl DenoInstaller {
 
         let target_binary = target_bin_dir.join("deno").with_extension(EXE_EXTENSION);
         debug!(?extracted_binary, target = %target_binary.display(), "Moving deno to target");
-        fs_err::tokio::rename(&extracted_binary, &target_binary).await?;
+        crate::fs::rename_with_retry(&extracted_binary, &target_binary).await?;
 
         #[cfg(unix)]
         {

@@ -129,7 +129,8 @@ pub(crate) async fn install(
             allow_missing_config,
             hook_mode,
             printer,
-        )?;
+        )
+        .await?;
     }
 
     if prepare_hooks {
@@ -216,7 +217,7 @@ fn get_hook_types(
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
-fn install_hook_script(
+async fn install_hook_script(
     project: Option<&Project>,
     config: Option<PathBuf>,
     selectors: Option<&Selectors>,
@@ -239,7 +240,7 @@ fn install_hook_script(
             )?;
         } else {
             if !is_our_script(&hook_path)? {
-                fs_err::rename(&hook_path, &legacy_path)?;
+                crate::fs::rename_with_retry(&hook_path, &legacy_path).await?;
                 writeln!(
                     printer.stdout(),
                     "Hook already exists at `{}`, moved it to `{}`",
@@ -485,7 +486,7 @@ pub(crate) async fn uninstall(
         )?;
 
         if legacy_path.try_exists()? {
-            fs_err::rename(&legacy_path, &hook_path)?;
+            crate::fs::rename_with_retry(&legacy_path, &hook_path).await?;
             writeln!(
                 printer.stdout(),
                 "Restored `{}` to `{}`",

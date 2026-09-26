@@ -304,6 +304,10 @@
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "$ref": "#/definitions/FilePattern"
         },
+        "include_deleted": {
+          "description": "Include deleted paths when selecting staged changes or a commit range.\nDefault is false.",
+          "type": "boolean"
+        },
         "types": {
           "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
           "type": "array",
@@ -614,6 +618,10 @@
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "$ref": "#/definitions/FilePattern"
         },
+        "include_deleted": {
+          "description": "Include deleted paths when selecting staged changes or a commit range.\nDefault is false.",
+          "type": "boolean"
+        },
         "types": {
           "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
           "type": "array",
@@ -782,6 +790,10 @@
         "exclude": {
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "$ref": "#/definitions/FilePattern"
+        },
+        "include_deleted": {
+          "description": "Include deleted paths when selecting staged changes or a commit range.\nDefault is false.",
+          "type": "boolean"
         },
         "types": {
           "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
@@ -956,6 +968,10 @@
         "exclude": {
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "$ref": "#/definitions/FilePattern"
+        },
+        "include_deleted": {
+          "description": "Include deleted paths when selecting staged changes or a commit range.\nDefault is false.",
+          "type": "boolean"
         },
         "types": {
           "description": "List of file types to run on (AND).\nDefault is `[file]`, which matches all files.",
