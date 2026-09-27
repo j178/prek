@@ -136,6 +136,7 @@ fn list_builtins_defaults_to_verbose_output() {
     trailing-whitespace
       Trims trailing whitespace.
       flags:
+            --check                         Report files that would change without modifying them
             --markdown-linebreak-ext <EXT>  Preserve Markdown hard line breaks for EXT (repeatable)
             --chars <CHARS>                 Trim only these characters
 
