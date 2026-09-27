@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -7,7 +6,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::debug;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, run_concurrent_file_checks};
+use crate::hooks::HookOutput;
 
 use super::HookFuture;
 
@@ -84,41 +83,6 @@ pub(crate) fn hook_filenames<'a>(
         .iter()
         .map(PathBuf::as_path)
         .chain(selected.iter().copied())
-}
-
-/// Runs explicit filenames serially, followed by selected filenames concurrently.
-///
-/// Duplicates and overlaps between the two inputs are intentionally preserved.
-pub(crate) async fn run_file_checks<'a, F, Fut>(
-    explicit: &'a [PathBuf],
-    selected: &'a [&Path],
-    concurrency: usize,
-    check: F,
-) -> Result<HookOutput>
-where
-    F: Fn(&'a Path) -> Fut,
-    Fut: Future<Output = Result<HookOutput>>,
-{
-    // Keep the common case on the concurrent path without an extra accumulator.
-    if explicit.is_empty() {
-        return run_concurrent_file_checks(selected.iter().copied(), concurrency, check).await;
-    }
-
-    // Filenames from `entry` or `args` may repeat or overlap with `selected`, so finish
-    // them serially in CLI order before starting the selected batch.
-    let mut result = HookOutput::unchanged(0, Vec::new());
-    for filename in explicit {
-        result.merge_known(check(filename).await?);
-    }
-    if selected.is_empty() {
-        return Ok(result);
-    }
-
-    // The explicit batch is complete, so selected filenames retain their normal concurrency.
-    let selected_result =
-        run_concurrent_file_checks(selected.iter().copied(), concurrency, check).await?;
-    result.merge_known(selected_result);
-    Ok(result)
 }
 
 /// Runs blocking file checks, preserving filename order in the combined output.
@@ -238,9 +202,6 @@ pub(crate) fn is_pre_commit_hooks(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
     use super::*;
 
     #[tokio::test]
@@ -289,36 +250,5 @@ mod tests {
         assert_eq!(result.exit_status, 3);
         assert_eq!(result.file_changes, crate::hooks::FileChanges::Unchanged);
         Ok(())
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn explicit_filenames_run_serially_before_selected_filenames() {
-        let explicit = vec![PathBuf::from("shared"), PathBuf::from("shared")];
-        let selected = [Path::new("shared"), Path::new("selected")];
-        let events = Rc::new(RefCell::new(Vec::new()));
-
-        run_file_checks(&explicit, &selected, 2, |path| {
-            let events = Rc::clone(&events);
-            async move {
-                events.borrow_mut().push(format!("start {path:?}"));
-                tokio::task::yield_now().await;
-                events.borrow_mut().push(format!("end {path:?}"));
-                Ok(HookOutput::unchanged(0, Vec::new()))
-            }
-        })
-        .await
-        .unwrap();
-
-        let events = events.borrow();
-        assert_eq!(events.len(), 8);
-        assert_eq!(
-            &events[..4],
-            [
-                "start \"shared\"",
-                "end \"shared\"",
-                "start \"shared\"",
-                "end \"shared\"",
-            ]
-        );
     }
 }

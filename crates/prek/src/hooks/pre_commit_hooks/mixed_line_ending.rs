@@ -105,7 +105,8 @@ fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<Hook
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    apply_line_ending(file_path, &contents, target_ending)?;
+    let contents = normalize_line_endings(contents, target_ending, &counts);
+    fs_err::write(file_path, &contents)?;
     Ok(HookOutput::known(
         1,
         format!("Fixing {}\n", filename.display()).into_bytes(),
@@ -138,8 +139,40 @@ fn find_most_common_ending(counts: &LineEndingCounts) -> &'static [u8] {
     }
 }
 
-fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> Result<()> {
-    let mut new_contents = Vec::with_capacity(contents.len());
+fn normalize_line_endings(
+    mut contents: Vec<u8>,
+    ending: &[u8],
+    counts: &LineEndingCounts,
+) -> Vec<u8> {
+    let needs_final_ending =
+        !contents.is_empty() && !contents.ends_with(CR) && !contents.ends_with(LF);
+    if ending == LF {
+        let mut copied = 0;
+        let mut written = 0;
+        while let Some(offset) = memchr::memchr(b'\r', &contents[copied..]) {
+            let index = copied + offset;
+            let next = index + 1 + usize::from(contents.get(index + 1) == Some(&b'\n'));
+            // LF conversion only shrinks the file, so unread bytes stay ahead of the output.
+            contents.copy_within(copied..index, written);
+            written += index - copied;
+            contents[written] = b'\n';
+            written += 1;
+            copied = next;
+        }
+        contents.copy_within(copied.., written);
+        contents.truncate(written + contents.len() - copied);
+        if needs_final_ending {
+            contents.push(b'\n');
+        }
+        return contents;
+    }
+
+    let endings = counts.cr + counts.crlf + counts.lf;
+    let mut capacity = contents.len() - counts.crlf + endings * (ending.len() - 1);
+    if needs_final_ending {
+        capacity += ending.len();
+    }
+    let mut new_contents = Vec::with_capacity(capacity);
     let mut line_start = 0;
     let mut search_start = 0;
 
@@ -164,8 +197,7 @@ fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> Result<
         new_contents.extend_from_slice(ending);
     }
 
-    fs_err::write(filename, &new_contents)?;
-    Ok(())
+    new_contents
 }
 
 #[cfg(test)]
