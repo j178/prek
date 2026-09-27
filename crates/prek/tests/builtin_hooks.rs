@@ -656,6 +656,78 @@ fn builtin_hook_checks_filename_from_args_after_options() {
 }
 
 #[test]
+fn file_contents_sorter_check() -> Result<()> {
+    let files = [
+        ("case-dirty.txt", "Banana\napple\n"),
+        ("case-clean.txt", "apple\nBanana\n"),
+        ("unique-dirty.txt", "alpha\nalpha\nbeta\n"),
+        ("unique-clean.txt", "alpha\nbeta\n"),
+        ("unique-crlf.txt", "alpha\r\nbeta\r\n"),
+        ("unique-empty.txt", ""),
+    ];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: file-contents-sorter
+                name: case-insensitive sorter
+                files: ^case-.*\.txt$
+                args: [--check, --ignore-case]
+              - id: file-contents-sorter
+                name: unique sorter
+                files: ^unique-.*\.txt$
+                args: [--check, --unique]
+    "})
+        .with_files(files)
+        .init_git();
+
+    let mut modified = Vec::new();
+    for (name, _) in files {
+        let path = context.child(name);
+        #[cfg(unix)]
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(0o444))?;
+        modified.push(fs_err::metadata(&path)?.modified()?);
+    }
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    case-insensitive sorter..................................................Failed
+    - hook id: file-contents-sorter
+    - description: Sorts the lines in specified files (defaults to alphabetical)
+    - exit code: 1
+
+      Would sort case-dirty.txt
+    unique sorter............................................................Failed
+    - hook id: file-contents-sorter
+    - description: Sorts the lines in specified files (defaults to alphabetical)
+    - exit code: 1
+
+      Would sort unique-crlf.txt
+      Would sort unique-dirty.txt
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().arg("--files").args(["case-clean.txt", "unique-clean.txt", "unique-empty.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    case-insensitive sorter..................................................Passed
+    unique sorter............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    for ((name, contents), modified) in files.into_iter().zip(modified) {
+        assert_eq!(context.read(name), contents);
+        assert_eq!(fs_err::metadata(context.child(name))?.modified()?, modified);
+    }
+    Ok(())
+}
+
+#[test]
 fn requirements_txt_fixer_hook() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"

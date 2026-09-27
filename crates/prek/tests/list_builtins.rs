@@ -91,6 +91,7 @@ fn list_builtins_defaults_to_verbose_output() {
     file-contents-sorter
       Sorts the lines in specified files (defaults to alphabetical).
       flags:
+            --check        Report files that would change without modifying them
             --ignore-case  Sort lines case-insensitively
             --unique       Remove duplicate lines
 

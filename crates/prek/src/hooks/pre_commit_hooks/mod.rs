@@ -62,6 +62,19 @@ pub(crate) fn parse_hook_args<T: Parser>(hook: &Hook) -> Result<T> {
     )?)
 }
 
+pub(crate) fn contents_equal<'a>(
+    mut original: &[u8],
+    chunks: impl IntoIterator<Item = &'a [u8]>,
+) -> bool {
+    for chunk in chunks {
+        let Some(rest) = original.strip_prefix(chunk) else {
+            return false;
+        };
+        original = rest;
+    }
+    original.is_empty()
+}
+
 pub(crate) fn hook_filenames<'a>(
     configured: &'a [PathBuf],
     selected: &'a [&Path],

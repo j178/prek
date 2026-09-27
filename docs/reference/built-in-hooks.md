@@ -183,8 +183,10 @@ Ensures files end in a newline and only a newline.
 
 Sorts the non-empty lines in each matched file and rewrites the file when the normalized order changes.
 
-**Supported arguments** (compatible with `pre-commit-hooks`):
+**Supported arguments**:
 
+- `--check` (prek only)
+    - Report files that would change and exit nonzero without modifying them.
 - `--ignore-case`
     - Sort using ASCII case-folded ordering.
     - Mutually exclusive with `--unique`.

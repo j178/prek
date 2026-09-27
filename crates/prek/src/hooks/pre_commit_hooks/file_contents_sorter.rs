@@ -6,7 +6,7 @@ use clap::Parser;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
+use crate::hooks::pre_commit_hooks::{contents_equal, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
@@ -14,6 +14,9 @@ use crate::run::INTERNAL_CONCURRENCY;
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
 pub(crate) struct Args {
+    /// Report files that would change without modifying them.
+    #[arg(long)]
+    check: bool,
     /// Sort lines case-insensitively.
     #[arg(long, conflicts_with = "unique")]
     ignore_case: bool,
@@ -33,25 +36,33 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         &args.filenames,
         filenames,
         *INTERNAL_CONCURRENCY,
-        |filename| sort_file(file_base, filename, args.ignore_case, args.unique),
+        |filename| sort_file(file_base, filename, &args),
     )
     .await
 }
 
-async fn sort_file(
-    file_base: &Path,
-    filename: &Path,
-    ignore_case: bool,
-    unique: bool,
-) -> Result<HookOutput> {
+async fn sort_file(file_base: &Path, filename: &Path, args: &Args) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     let before = fs_err::tokio::read(&file_path).await?;
-    let after = sorted_contents(&before, ignore_case, unique);
+    let lines = sorted_lines(&before, args.ignore_case, args.unique);
 
-    if before == after {
+    if contents_equal(&before, lines.iter().flat_map(|&line| [line, b"\n"])) {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
+    if args.check {
+        return Ok(HookOutput::unchanged(
+            1,
+            format!("Would sort {}\n", filename.display()).into_bytes(),
+        ));
+    }
+
+    let mut after =
+        Vec::with_capacity(lines.iter().map(|line| line.len()).sum::<usize>() + lines.len());
+    for line in lines {
+        after.extend_from_slice(line);
+        after.push(b'\n');
+    }
     fs_err::tokio::write(&file_path, &after).await?;
     Ok(HookOutput::known(
         1,
@@ -60,7 +71,7 @@ async fn sort_file(
     ))
 }
 
-fn sorted_contents(before: &[u8], ignore_case: bool, unique: bool) -> Vec<u8> {
+fn sorted_lines(before: &[u8], ignore_case: bool, unique: bool) -> Vec<&[u8]> {
     let mut lines = before
         .split_inclusive(|&byte| byte == b'\n')
         .filter_map(normalize_line)
@@ -75,17 +86,7 @@ fn sorted_contents(before: &[u8], ignore_case: bool, unique: bool) -> Vec<u8> {
         }
     }
 
-    if lines.is_empty() {
-        return Vec::new();
-    }
-
-    let mut after =
-        Vec::with_capacity(lines.iter().map(|line| line.len()).sum::<usize>() + lines.len());
-    for line in lines {
-        after.extend_from_slice(line);
-        after.push(b'\n');
-    }
-    after
+    lines
 }
 
 fn normalize_line(mut line: &[u8]) -> Option<&[u8]> {
@@ -117,31 +118,31 @@ mod tests {
     }
 
     #[test]
-    fn test_sorted_contents_sorts_and_drops_blank_lines() {
+    fn test_sorted_lines_sorts_and_drops_blank_lines() {
         let before = b"beta\n\n  \nalpha\r\n";
-        let after = sorted_contents(before, false, false);
-        assert_eq!(after, b"alpha\nbeta\n");
+        let after = sorted_lines(before, false, false);
+        assert_eq!(after, [b"alpha".as_slice(), b"beta"]);
     }
 
     #[test]
-    fn test_sorted_contents_ignore_case() {
+    fn test_sorted_lines_ignore_case() {
         let before = b"Banana\napple\nApricot\n";
-        let after = sorted_contents(before, true, false);
-        assert_eq!(after, b"apple\nApricot\nBanana\n");
+        let after = sorted_lines(before, true, false);
+        assert_eq!(after, [b"apple".as_slice(), b"Apricot", b"Banana"]);
     }
 
     #[test]
-    fn test_sorted_contents_ignore_case_is_stable_for_equal_keys() {
+    fn test_sorted_lines_ignore_case_is_stable_for_equal_keys() {
         let before = b"Apple\napple\n";
-        let after = sorted_contents(before, true, false);
-        assert_eq!(after, b"Apple\napple\n");
+        let after = sorted_lines(before, true, false);
+        assert_eq!(after, [b"Apple".as_slice(), b"apple"]);
     }
 
     #[test]
-    fn test_sorted_contents_unique() {
+    fn test_sorted_lines_unique() {
         let before = b"beta\nalpha\nbeta\n";
-        let after = sorted_contents(before, false, true);
-        assert_eq!(after, b"alpha\nbeta\n");
+        let after = sorted_lines(before, false, true);
+        assert_eq!(after, [b"alpha".as_slice(), b"beta"]);
     }
 
     #[tokio::test]
@@ -150,7 +151,8 @@ mod tests {
         let relative = PathBuf::from("allowlist.txt");
         let file_path = create_test_file(&dir, "allowlist.txt", b"beta\nalpha\n").await?;
 
-        let result = sort_file(dir.path(), &relative, false, false).await?;
+        let args = Args::try_parse_from(["file-contents-sorter"])?;
+        let result = sort_file(dir.path(), &relative, &args).await?;
 
         assert_eq!(result.exit_status, 1);
         assert_eq!(String::from_utf8(result.output)?, "Sorting allowlist.txt\n");
@@ -165,7 +167,8 @@ mod tests {
         let relative = PathBuf::from("allowlist.txt");
         let file_path = create_test_file(&dir, "allowlist.txt", b"alpha\nbeta\n").await?;
 
-        let result = sort_file(dir.path(), &relative, false, false).await?;
+        let args = Args::try_parse_from(["file-contents-sorter"])?;
+        let result = sort_file(dir.path(), &relative, &args).await?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
