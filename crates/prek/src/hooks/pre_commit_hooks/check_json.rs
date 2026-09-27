@@ -1,9 +1,8 @@
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::Result;
-use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Deserializer};
 
 use crate::hook::Hook;
@@ -54,12 +53,25 @@ impl<'de> Deserialize<'de> for JsonDuplicateKeyChecker {
     where
         D: Deserializer<'de>,
     {
-        use serde::de::{self, MapAccess, SeqAccess, Visitor};
+        use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
         use std::fmt;
 
-        struct JsonDuplicateKeyVisitor;
+        struct JsonDuplicateKeyVisitor<'de> {
+            spare_keys: Vec<FxHashSet<Cow<'de, str>>>,
+        }
 
-        impl<'de> Visitor<'de> for JsonDuplicateKeyVisitor {
+        impl<'de> DeserializeSeed<'de> for &mut JsonDuplicateKeyVisitor<'de> {
+            type Value = JsonDuplicateKeyChecker;
+
+            fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserializer.deserialize_any(self)
+            }
+        }
+
+        impl<'de> Visitor<'de> for &mut JsonDuplicateKeyVisitor<'de> {
             type Value = JsonDuplicateKeyChecker;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -98,7 +110,7 @@ impl<'de> Deserialize<'de> for JsonDuplicateKeyChecker {
             where
                 A: SeqAccess<'de>,
             {
-                while seq.next_element::<JsonDuplicateKeyChecker>()?.is_some() {
+                while seq.next_element_seed(&mut *self)?.is_some() {
                     // Keep traversing nested values to detect duplicate keys in objects.
                 }
                 Ok(JsonDuplicateKeyChecker)
@@ -108,26 +120,27 @@ impl<'de> Deserialize<'de> for JsonDuplicateKeyChecker {
             where
                 A: MapAccess<'de>,
             {
-                let mut keys = FxHashMap::default();
+                let mut keys = self.spare_keys.pop().unwrap_or_default();
                 while let Some(JsonKey(key)) = map.next_key::<JsonKey<'de>>()? {
-                    match keys.entry(key) {
-                        Entry::Occupied(entry) => {
-                            return Err(de::Error::custom(format!(
-                                "duplicate key `{}`",
-                                entry.key()
-                            )));
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(());
-                        }
+                    if let Some(key) = keys.replace(key) {
+                        return Err(de::Error::custom(format!("duplicate key `{key}`")));
                     }
-                    map.next_value::<JsonDuplicateKeyChecker>()?;
+                    map.next_value_seed(&mut *self)?;
+                }
+                // Reuse the allocation for sibling objects, but discard oversized tables.
+                // Otherwise, clearing a large table for each small object can be quadratic.
+                if keys.capacity() <= 4 * (keys.len() + 1) {
+                    keys.clear();
+                    self.spare_keys.push(keys);
                 }
                 Ok(JsonDuplicateKeyChecker)
             }
         }
 
-        deserializer.deserialize_any(JsonDuplicateKeyVisitor)
+        JsonDuplicateKeyVisitor {
+            spare_keys: Vec::new(),
+        }
+        .deserialize(deserializer)
     }
 }
 
@@ -147,6 +160,23 @@ mod tests {
             (r#"{"😀": 1, "\ud83d\ude00": 2}"#, 1),
             (r#"{"a\nb": 1, "a\u000ab": 2}"#, 1),
             (r#"{"key": {"\u006bey": 1}, "keys": 2}"#, 0),
+        ] {
+            fs_err::write(&path, content)?;
+            assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_keys_are_scoped_to_each_object() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("objects.json");
+        for (content, status) in [
+            (r#"[{"key": 1}, {"key": 2}]"#, 0),
+            (r#"{"first": {"key": 1}, "second": {"\u006bey": 2}}"#, 0),
+            (r#"{"key": 1, "nested": {"key": 2}, "key": 3}"#, 1),
+            (r#"[{"key": 1}, {"nested": {"key": 1, "key": 2}}]"#, 1),
+            (r#"[{"key": 1}, {"key": 2, "\u006bey": 3}]"#, 1),
         ] {
             fs_err::write(&path, content)?;
             assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
@@ -240,15 +270,13 @@ mod tests {
     async fn test_recursion_limit() -> Result<()> {
         let dir = tempdir()?;
 
-        let mut json = String::new();
-        for _ in 0..10000 {
-            json = format!("[{json}]");
+        for (open, close) in [("[", "]"), (r#"{"key":"#, "}")] {
+            let json = format!("{}null{}", open.repeat(10000), close.repeat(10000));
+            let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await?;
+            let result = check_file(&file_path, &file_path)?;
+            assert_eq!(result.exit_status, 0);
+            assert!(result.output.is_empty());
         }
-
-        let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await?;
-        let result = check_file(&file_path, &file_path)?;
-        assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
 
         Ok(())
     }
