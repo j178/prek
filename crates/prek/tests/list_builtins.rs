@@ -135,6 +135,8 @@ fn list_builtins_defaults_to_verbose_output() {
 
     requirements-txt-fixer
       Sorts entries in requirements.txt.
+      flags:
+            --check  Report files that would change without modifying them
 
     trailing-whitespace
       Trims trailing whitespace.
