@@ -183,7 +183,10 @@ fn hide_status_config_precedence() {
             { id = "fail", name = "Failing Hook", language = "fail", entry = "failed output", always_run = true, pass_filenames = false },
         ]
     "#};
-    let context = TestEnv::new().with_file("prek.toml", config).init_git();
+    let context = TestEnv::new()
+        .with_file("prek.toml", config)
+        .with_filter(r"Usage: prek\.exe\b", "Usage: prek")
+        .init_git();
     context.write_user_config("hide_status = ['passed']");
 
     cmd_snapshot!(context, context.run(), @r#"
