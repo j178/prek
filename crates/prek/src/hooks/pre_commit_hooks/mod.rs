@@ -44,6 +44,18 @@ pub(crate) struct FilenamesArgs {
     pub(crate) filenames: Vec<PathBuf>,
 }
 
+#[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+pub(crate) struct FixArgs {
+    /// Report files that would change without modifying them.
+    #[arg(long)]
+    pub(crate) check: bool,
+    #[arg(value_name = "FILENAMES")]
+    pub(crate) filenames: Vec<PathBuf>,
+}
+
 pub(crate) fn parse_hook_args<T: Parser>(hook: &Hook) -> Result<T> {
     Ok(T::try_parse_from(
         hook.entry.expect_argv_entry().split_with_args(&hook.args)?,

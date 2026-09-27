@@ -167,7 +167,8 @@ Ensures files end in a newline and only a newline.
 
 **Supported arguments**
 
-- None.
+- `--check` (prek only)
+    - Report files that would change and exit nonzero without modifying them.
 
 **Behavior / caveats**
 

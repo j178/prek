@@ -510,6 +510,65 @@ fn end_of_file_fixer_hook() {
 }
 
 #[test]
+fn end_of_file_fixer_check() -> Result<()> {
+    let files = [
+        ("missing.txt", "no newline"),
+        ("extra.txt", "extra\r\n\r\n"),
+        ("only_newlines.txt", "\n\n"),
+        ("clean.txt", "keep\r\n"),
+        ("empty.txt", ""),
+    ];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                args: [--check]
+    "})
+        .with_files(files)
+        .init_git();
+
+    let mut modified = Vec::new();
+    for (name, _) in files {
+        let path = context.child(name);
+        #[cfg(unix)]
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(0o444))?;
+        modified.push(fs_err::metadata(&path)?.modified()?);
+    }
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - description: Ensures that a file is either empty, or ends with one newline
+    - exit code: 1
+
+      Would fix only_newlines.txt
+      Would fix extra.txt
+      Would fix missing.txt
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().arg("--files").args(["clean.txt", "empty.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix end of files.........................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    for ((name, contents), modified) in files.into_iter().zip(modified) {
+        assert_eq!(context.read(name), contents);
+        assert_eq!(fs_err::metadata(context.child(name))?.modified()?, modified);
+    }
+    Ok(())
+}
+
+#[test]
 fn file_contents_sorter_hook() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"

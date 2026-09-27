@@ -5,37 +5,38 @@ use anyhow::Result;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
+use crate::hooks::pre_commit_hooks::{FixArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 /// Runs the `end-of-file-fixer` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    let args: FilenamesArgs = parse_hook_args(hook)?;
+    let args: FixArgs = parse_hook_args(hook)?;
     run_file_checks(
         &args.filenames,
         filenames,
         *INTERNAL_CONCURRENCY,
-        |filename| fix_file(hook.project().relative_path(), filename),
+        |filename| fix_file(hook.project().relative_path(), filename, args.check),
     )
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
+async fn fix_file(file_base: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
     // Keep a file's blocking I/O in one task instead of re-entering the blocking pool per operation.
-    let modified = tokio::task::spawn_blocking(move || fix_file_sync(&file_path)).await??;
-    if modified {
+    let needs_fix = tokio::task::spawn_blocking(move || fix_file_sync(&file_path, check)).await??;
+    if needs_fix {
+        let action = if check { "Would fix" } else { "Fixing" };
         Ok(HookOutput::known(
             1,
-            format!("Fixing {}\n", filename.display()).into_bytes(),
-            true,
+            format!("{action} {}\n", filename.display()).into_bytes(),
+            !check,
         ))
     } else {
         Ok(HookOutput::unchanged(0, Vec::new()))
     }
 }
 
-fn fix_file_sync(file_path: &Path) -> Result<bool> {
+fn fix_file_sync(file_path: &Path, check: bool) -> Result<bool> {
     // If the file is empty, do nothing and avoid opening a write handle.
     let file_size = fs_err::metadata(file_path)?.len();
     if file_size == 0 {
@@ -44,92 +45,53 @@ fn fix_file_sync(file_path: &Path) -> Result<bool> {
 
     let mut file = fs_err::OpenOptions::new()
         .read(true)
-        .write(true)
+        .write(!check)
         .open(file_path)?;
 
-    match find_last_non_ending(&mut file)? {
-        (None, _) => {
-            // File contains only line endings, so we can just set it to empty.
-            file.set_len(0)?;
-            file.flush()?;
-            Ok(true)
-        }
-        (Some(pos), None) => {
-            // File has some content, but no line ending at the end.
-            file.seek(SeekFrom::Start(pos + 1))?;
+    let fixed_len = fixed_file_len(&mut file, file_size)?;
+    if fixed_len == file_size {
+        return Ok(false);
+    }
+
+    if !check {
+        if fixed_len > file_size {
+            file.seek(SeekFrom::Start(file_size))?;
             file.write_all(b"\n")?;
-            file.flush()?;
-            Ok(true)
-        }
-        (Some(pos), Some(line_ending)) => {
-            // File has some content and at least one line ending.
-            let new_size = pos + 1 + line_ending.len() as u64;
-            if file_size == new_size {
-                // File already has the correct line ending.
-                return Ok(false);
-            }
-            file.set_len(new_size)?;
-            Ok(true)
+        } else {
+            file.set_len(fixed_len)?;
         }
     }
+    Ok(true)
 }
 
-fn determine_line_ending(first: u8, second: u8) -> Option<&'static str> {
-    if first == b'\r' && second == b'\n' {
-        Some("\r\n")
-    } else if first == b'\n' {
-        Some("\n")
-    } else if first == b'\r' {
-        Some("\r")
-    } else {
-        None
-    }
-}
+fn fixed_file_len(reader: &mut (impl Read + Seek), file_size: u64) -> Result<u64> {
+    let mut buf = [0u8; 4096];
+    let mut offset = file_size;
+    let mut ending_len = 0;
+    let mut next_byte = None;
 
-/// Searches for the last non-line-ending character in the file.
-/// Returns the position of the last non-line-ending character and the line ending type.
-fn find_last_non_ending<T>(reader: &mut T) -> Result<(Option<u64>, Option<&str>)>
-where
-    T: Read + Seek,
-{
-    const MAX_SCAN_SIZE: usize = 4 * 1024; // 4KB
-
-    let data_len = reader.seek(SeekFrom::End(0))?;
-    if data_len == 0 {
-        return Ok((None, None));
-    }
-
-    let mut read_len = 0;
-    let mut next_char = 0;
-    let mut buf = [0u8; MAX_SCAN_SIZE];
-    let mut line_ending = None;
-
-    while read_len < data_len {
-        let block_size = MAX_SCAN_SIZE.min(usize::try_from(data_len - read_len)?);
-        // SAFETY: block_size is guaranteed to be less than or equal to MAX_SCAN_SIZE
-        reader.seek(SeekFrom::Current(-i64::try_from(block_size).unwrap()))?;
+    while offset > 0 {
+        let block_size = usize::try_from(offset.min(buf.len() as u64))?;
+        offset -= block_size as u64;
+        reader.seek(SeekFrom::Start(offset))?;
         reader.read_exact(&mut buf[..block_size])?;
-        read_len += block_size as u64;
 
-        let mut pos = block_size;
-        while pos > 0 {
-            pos -= 1;
-
-            if matches!(buf[pos], b'\n' | b'\r') {
-                line_ending = if pos + 1 == block_size {
-                    determine_line_ending(buf[pos], next_char)
-                } else {
-                    determine_line_ending(buf[pos], buf[pos + 1])
-                };
-            } else {
-                return Ok((Some(data_len - read_len + pos as u64), line_ending));
+        for (index, &byte) in buf[..block_size].iter().enumerate().rev() {
+            if !matches!(byte, b'\r' | b'\n') {
+                // Files without a trailing line ending need an appended LF.
+                return Ok(offset + index as u64 + 1 + ending_len.max(1));
             }
+            ending_len = if byte == b'\r' && next_byte == Some(b'\n') {
+                2
+            } else {
+                1
+            };
+            // Preserve CRLF detection across block boundaries.
+            next_byte = Some(byte);
         }
-
-        next_char = buf[0];
     }
 
-    Ok((None, line_ending))
+    Ok(0)
 }
 
 #[cfg(test)]
@@ -152,6 +114,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_long_trailing_newlines_preserve_contents() -> Result<()> {
+        let dir = tempdir()?;
+        for ending in [b"\n".as_slice(), b"\r\n", b"\r"] {
+            for count in [4095, 4096, 4097, 8193] {
+                let content = [b"keep", ending.repeat(count).as_slice()].concat();
+                let path = create_test_file(&dir, "long-tail.txt", &content).await?;
+
+                let result = fix_file(Path::new(""), &path, true).await?;
+                assert_eq!(result.exit_status, 1);
+                assert_eq!(fs_err::tokio::read(&path).await?, content);
+
+                let result = fix_file(Path::new(""), &path, false).await?;
+                assert_eq!(result.exit_status, 1);
+                assert_eq!(
+                    fs_err::tokio::read(&path).await?,
+                    [b"keep", ending].concat()
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_no_line_ending_1() -> Result<()> {
         let dir = tempdir()?;
 
@@ -161,7 +146,7 @@ mod tests {
 
         let content = b"line1\nline2\nline3";
         let file_path = create_test_file(&dir, "unix_no_eof.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
         assert_eq!(result.exit_status, 1, "Should fix the file");
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -169,7 +154,7 @@ mod tests {
 
         let content = b"line1\r\nline2\nline3\r\nline4";
         let file_path = create_test_file(&dir, "mixed.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
         assert_eq!(result.exit_status, 1, "Should fix the file");
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -177,7 +162,7 @@ mod tests {
 
         let content = b"line1\r\nline2\r\nline3";
         let file_path = create_test_file(&dir, "windows_no_eof.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
         assert_eq!(result.exit_status, 1, "Should fix the file");
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -193,7 +178,7 @@ mod tests {
         let content = b"line1\r\nline2\r\nline3\r\n";
         let file_path = create_test_file(&dir, "windows_with_eof.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0, "Should not change the file");
         assert!(result.output.is_empty());
@@ -211,7 +196,7 @@ mod tests {
         let content = b"line1\nline2\nline3\n";
         let file_path = create_test_file(&dir, "unix_with_eof.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0, "Should not change the file");
         assert!(result.output.is_empty());
@@ -229,7 +214,7 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0, "Should not change empty file");
         assert!(result.output.is_empty());
@@ -247,7 +232,7 @@ mod tests {
         let content = b"line1\nline2\n\n\n\n";
         let file_path = create_test_file(&dir, "excess_newlines.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1, "Should fix the file");
         assert!(result.output.as_bytes().contains_str("Fixing"));
@@ -265,7 +250,7 @@ mod tests {
         let content = b"line1\r\nline2\r\n\r\n\r\n";
         let file_path = create_test_file(&dir, "excess_crlf.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1, "Should fix the file");
         assert!(result.output.as_bytes().contains_str("Fixing"));
@@ -283,7 +268,7 @@ mod tests {
         let content = b"\n\n\n\n";
         let file_path = create_test_file(&dir, "only_newlines.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1, "Should fix the file");
         assert!(result.output.as_bytes().contains_str("Fixing"));
