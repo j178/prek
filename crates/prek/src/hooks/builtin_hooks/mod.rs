@@ -9,7 +9,7 @@ use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks::{
-    check_added_large_files, check_case_conflict, check_executables_have_shebangs,
+    FixArgs, check_added_large_files, check_case_conflict, check_executables_have_shebangs,
     check_illegal_windows_names, check_json, check_merge_conflict,
     check_shebang_scripts_are_executable, check_symlinks, check_toml, check_vcs_permalinks,
     check_xml, check_yaml, destroyed_symlinks, detect_private_key, file_contents_sorter,
@@ -82,6 +82,7 @@ impl BuiltinHooks {
                 pattern::FilenameArgs::command()
             }
             Self::DenyPattern | Self::RequirePattern => pattern::Args::command(),
+            Self::EndOfFileFixer => FixArgs::command(),
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
