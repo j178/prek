@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
-use memchr::{memchr_iter, memchr2};
+use memchr::memchr2;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
@@ -77,6 +77,13 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<HookOutput> {
     let contents = fs_err::read(file_path)?;
 
+    // Without CR, auto/no/LF cannot change the file, including a partial final line.
+    if matches!(fix_mode, FixMode::Auto | FixMode::No | FixMode::LF)
+        && memchr::memchr(b'\r', &contents).is_none()
+    {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    }
+
     // Skip empty files or binary files
     if contents.is_empty() || contents.find_byte(0).is_some() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
@@ -115,17 +122,44 @@ fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<Hook
 }
 
 fn count_line_endings(contents: &[u8]) -> LineEndingCounts {
-    let mut counts = LineEndingCounts::default();
-    for index in memchr_iter(b'\r', contents) {
-        if contents.get(index + 1) == Some(&b'\n') {
-            counts.crlf += 1;
-        } else {
-            counts.cr += 1;
+    let Some((&first, rest)) = contents.split_first() else {
+        return LineEndingCounts::default();
+    };
+    let mut cr = usize::from(first == b'\r');
+    let mut lf = usize::from(first == b'\n');
+    let mut crlf = 0;
+
+    // Byte counters let the compiler compare and accumulate SIMD lanes without
+    // widening every result. Reduce them before any lane can exceed u8::MAX.
+    let batch_size = 64 * usize::from(u8::MAX);
+    // The views stay one byte apart so CRLF pairs can cross block boundaries.
+    for (batch, previous) in rest.chunks(batch_size).zip(contents.chunks(batch_size)) {
+        let (blocks, tail) = batch.as_chunks::<64>();
+        let mut cr_lanes = [0u8; 64];
+        let mut lf_lanes = [0u8; 64];
+        let mut crlf_lanes = [0u8; 64];
+        for (block, previous) in blocks.iter().zip(previous.as_chunks::<64>().0) {
+            for i in 0..64 {
+                cr_lanes[i] += u8::from(block[i] == b'\r');
+                lf_lanes[i] += u8::from(block[i] == b'\n');
+                crlf_lanes[i] += u8::from(previous[i] == b'\r' && block[i] == b'\n');
+            }
+        }
+        cr += cr_lanes.into_iter().map(usize::from).sum::<usize>();
+        lf += lf_lanes.into_iter().map(usize::from).sum::<usize>();
+        crlf += crlf_lanes.into_iter().map(usize::from).sum::<usize>();
+        for (&byte, &previous) in tail.iter().zip(&previous[blocks.len() * 64..]) {
+            cr += usize::from(byte == b'\r');
+            lf += usize::from(byte == b'\n');
+            crlf += usize::from(previous == b'\r' && byte == b'\n');
         }
     }
-    // Counting all LFs at once uses memchr's vectorized counter, including for LF-only files.
-    counts.lf = memchr_iter(b'\n', contents).count() - counts.crlf;
-    counts
+
+    LineEndingCounts {
+        cr: cr - crlf,
+        crlf,
+        lf: lf - crlf,
+    }
 }
 
 fn find_most_common_ending(counts: &LineEndingCounts) -> &'static [u8] {
@@ -206,6 +240,33 @@ mod tests {
     use bstr::ByteSlice;
     use std::path::PathBuf;
     use tempfile::tempdir;
+
+    #[test]
+    fn count_endings_across_blocks_and_counter_reductions() {
+        for pattern in [b"x\r\n".as_slice(), b"\r", b"\n", b"\r\n", b"\r\r\n\n"] {
+            let contents = pattern.repeat(33000);
+            for start in 0..64 {
+                for len in [0, 1, 2, 63, 64, 65, 16319, 16320, 16321, 32641] {
+                    let contents = &contents[start..start + len];
+                    let mut expected = (0, 0, 0);
+                    let mut bytes = contents.iter().peekable();
+                    while let Some(&byte) = bytes.next() {
+                        match byte {
+                            b'\r' if bytes.peek() == Some(&&b'\n') => {
+                                expected.1 += 1;
+                                bytes.next();
+                            }
+                            b'\r' => expected.0 += 1,
+                            b'\n' => expected.2 += 1,
+                            _ => {}
+                        }
+                    }
+                    let counts = count_line_endings(contents);
+                    assert_eq!((counts.cr, counts.crlf, counts.lf), expected);
+                }
+            }
+        }
+    }
 
     #[test]
     fn adjacent_endings_and_unterminated_tail() -> Result<()> {
