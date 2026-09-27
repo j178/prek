@@ -80,6 +80,7 @@ serde_json = { workspace = true }
 serde_stacker = { workspace = true }
 serde-saphyr = { workspace = true }
 shlex = { workspace = true }
+simdutf8 = { workspace = true }
 similar = { workspace = true }
 ssl-certs = { workspace = true }
 strum = { workspace = true }

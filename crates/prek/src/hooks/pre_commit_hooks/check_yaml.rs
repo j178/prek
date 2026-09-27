@@ -99,10 +99,14 @@ fn check_loaded(
         // legal YAML, not whether an untyped data model can represent them. See #2544.
         reject_non_finite_typeless_float: false,
     };
-    let result = if allow_multi_docs {
-        serde_saphyr::from_slice_multiple_with_options::<IgnoredAny>(content, options).map(|_| ())
-    } else {
-        serde_saphyr::from_slice_with_options::<IgnoredAny>(content, options).map(|_| ())
+    let result = match simdutf8::compat::from_utf8(content) {
+        Ok(content) if allow_multi_docs => {
+            serde_saphyr::from_multiple_with_options::<IgnoredAny>(content, options).map(|_| ())
+        }
+        Ok(content) => {
+            serde_saphyr::from_str_with_options::<IgnoredAny>(content, options).map(|_| ())
+        }
+        Err(_) => Err(serde_saphyr::Error::InvalidUtf8Input),
     };
     match result {
         Ok(()) => HookOutput::unchanged(0, Vec::new()),
@@ -118,7 +122,7 @@ fn check_loaded(
 }
 
 fn check_syntax(filename: &Path, content: &[u8]) -> HookOutput {
-    let content = match std::str::from_utf8(content) {
+    let content = match simdutf8::compat::from_utf8(content) {
         Ok(content) => content,
         Err(error) => {
             let error_message =
@@ -341,11 +345,17 @@ key2: value2
     #[tokio::test]
     async fn test_unsafe_rejects_invalid_utf8() -> Result<()> {
         let dir = tempdir()?;
-        let file_path = create_test_file(&dir, "invalid.yaml", b"key: \xff").await?;
+        let mut content = b"key: ".to_vec();
+        content.resize(65, b'a');
+        content.extend_from_slice(b"\xf0\x9f\x92");
+        let file_path = create_test_file(&dir, "invalid.yaml", &content).await?;
 
-        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
+        let result = check_file(&file_path, Path::new("invalid.yaml"), CheckMode::SyntaxOnly)?;
         assert_eq!(result.exit_status, 1);
-        assert!(String::from_utf8_lossy(&result.output).contains("Failed to decode UTF-8"));
+        assert_eq!(
+            result.output,
+            b"invalid.yaml: Failed to decode UTF-8 (incomplete utf-8 byte sequence from index 65)\n"
+        );
         Ok(())
     }
 
