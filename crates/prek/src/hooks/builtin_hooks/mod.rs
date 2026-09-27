@@ -82,7 +82,9 @@ impl BuiltinHooks {
                 pattern::FilenameArgs::command()
             }
             Self::DenyPattern | Self::RequirePattern => pattern::Args::command(),
-            Self::EndOfFileFixer => FixArgs::command(),
+            Self::EndOfFileFixer | Self::FixByteOrderMarker | Self::RequirementsTxtFixer => {
+                FixArgs::command()
+            }
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),

@@ -1,83 +1,76 @@
-use std::{io::ErrorKind, path::Path};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::path::Path;
 
 use anyhow::Result;
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
+use crate::hooks::pre_commit_hooks::{FixArgs, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
-const BUFFER_SIZE: usize = 8192; // 8KB buffer for streaming
 
 /// Runs the `fix-byte-order-marker` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    let args: FilenamesArgs = parse_hook_args(hook)?;
+    let args: FixArgs = parse_hook_args(hook)?;
     run_file_checks(
         &args.filenames,
         filenames,
         *INTERNAL_CONCURRENCY,
-        |filename| fix_file(hook.project().relative_path(), filename),
+        |filename| fix_file(hook.project().relative_path(), filename, args.check),
     )
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
+async fn fix_file(file_base: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
-
-    let mut file = fs_err::tokio::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&file_path)
-        .await?;
-
-    let mut bom_buffer = [0u8; 3];
-    match file.read_exact(&mut bom_buffer).await {
-        Ok(_) => {}
-        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-            return Ok(HookOutput::unchanged(0, Vec::new()));
-        }
-        Err(err) => return Err(err.into()),
-    }
-    if bom_buffer != UTF8_BOM {
+    // Keep streaming I/O in one blocking task instead of switching tasks for every chunk.
+    let needs_fix = tokio::task::spawn_blocking(move || fix_file_sync(&file_path, check)).await??;
+    if !needs_fix {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    let file_len = file.seek(SeekFrom::End(0)).await?;
-    if file_len == UTF8_BOM.len() as u64 {
-        file.set_len(0).await?;
-    } else {
-        // Shift the payload in place so large files do not need a full second buffer.
-        shift_file_left(&mut file, file_len, UTF8_BOM.len() as u64).await?;
-    }
-
+    let action = if check { "would remove" } else { "removed" };
     Ok(HookOutput::known(
         1,
-        format!("{}: removed byte-order marker\n", filename.display()).into_bytes(),
-        true,
+        format!("{}: {action} byte-order marker\n", filename.display()).into_bytes(),
+        !check,
     ))
 }
 
-async fn shift_file_left(file: &mut fs_err::tokio::File, file_len: u64, offset: u64) -> Result<()> {
-    let mut buf = vec![0u8; BUFFER_SIZE];
-    let mut read_pos = offset;
-    let mut write_pos = 0;
+fn fix_file_sync(file_path: &Path, check: bool) -> Result<bool> {
+    let mut file = fs_err::OpenOptions::new()
+        .read(true)
+        .write(!check)
+        .open(file_path)?;
 
-    while read_pos < file_len {
-        // Read after the BOM and rewrite earlier in the same file.
-        let remaining = usize::try_from(file_len - read_pos)?;
-        let chunk_len = BUFFER_SIZE.min(remaining);
-        file.seek(SeekFrom::Start(read_pos)).await?;
-        file.read_exact(&mut buf[..chunk_len]).await?;
-        file.seek(SeekFrom::Start(write_pos)).await?;
-        file.write_all(&buf[..chunk_len]).await?;
-        read_pos += chunk_len as u64;
-        write_pos += chunk_len as u64;
+    let mut bom_buffer = [0u8; 3];
+    match file.read_exact(&mut bom_buffer) {
+        Ok(()) => {}
+        Err(err) if err.kind() == ErrorKind::UnexpectedEof => return Ok(false),
+        Err(err) => return Err(err.into()),
+    }
+    if bom_buffer != UTF8_BOM {
+        return Ok(false);
+    }
+    if check {
+        return Ok(true);
     }
 
-    file.set_len(file_len - offset).await?;
-    Ok(())
+    // Shift the payload in place so large files do not need a full second buffer.
+    let file_len = file.seek(SeekFrom::End(0))?;
+    let mut buf = [0u8; 8192];
+    let mut read_pos = UTF8_BOM.len() as u64;
+    while read_pos < file_len {
+        let chunk_len = usize::try_from((file_len - read_pos).min(buf.len() as u64))?;
+        file.seek(SeekFrom::Start(read_pos))?;
+        file.read_exact(&mut buf[..chunk_len])?;
+        file.seek(SeekFrom::Start(read_pos - UTF8_BOM.len() as u64))?;
+        file.write_all(&buf[..chunk_len])?;
+        read_pos += chunk_len as u64;
+    }
+    file.set_len(file_len - UTF8_BOM.len() as u64)?;
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -102,7 +95,7 @@ mod tests {
         let content = b"\xef\xbb\xbfHello, World!";
         let file_path = create_test_file(&dir, "with_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
@@ -120,7 +113,7 @@ mod tests {
         let content = b"Hello, World!";
         let file_path = create_test_file(&dir, "without_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -137,7 +130,7 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -154,7 +147,7 @@ mod tests {
         let content = b"Hi";
         let file_path = create_test_file(&dir, "short.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -171,7 +164,7 @@ mod tests {
         let content = b"\xef\xbbHello"; // Only first 2 bytes of BOM
         let file_path = create_test_file(&dir, "partial_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -188,7 +181,7 @@ mod tests {
         let content = b"\xef\xbb\xbf";
         let file_path = create_test_file(&dir, "bom_only.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
@@ -206,7 +199,7 @@ mod tests {
         let content = b"\xef\xbb\xbf\xe4\xb8\xad\xe6\x96\x87"; // BOM + Chinese characters "中文"
         let file_path = create_test_file(&dir, "utf8_with_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
@@ -233,7 +226,7 @@ mod tests {
 
         let file_path = create_test_file(&dir, "large_with_bom.txt", &content).await?;
 
-        let result = fix_file(Path::new(""), &file_path).await?;
+        let result = fix_file(Path::new(""), &file_path, false).await?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);

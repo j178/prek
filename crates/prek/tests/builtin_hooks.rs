@@ -815,6 +815,66 @@ fn requirements_txt_fixer_hook() {
 }
 
 #[test]
+fn requirements_txt_fixer_check() -> Result<()> {
+    let files = [
+        (
+            "requirements.txt",
+            "requests==2\nFlask==3\nrequests==2\npkg-resources==0.0.0\n",
+        ),
+        ("requirements-invalid.txt", "flask\n  requests==2\n"),
+        ("constraints.txt", "flask\nrequests\n"),
+        ("requirements-empty.txt", ""),
+    ];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: requirements-txt-fixer
+                args: [--check]
+    "})
+        .with_files(files)
+        .init_git();
+
+    let mut modified = Vec::new();
+    for (name, _) in files {
+        let path = context.child(name);
+        #[cfg(unix)]
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(0o444))?;
+        modified.push(fs_err::metadata(&path)?.modified()?);
+    }
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix requirements.txt.....................................................Failed
+    - hook id: requirements-txt-fixer
+    - description: Sorts entries in requirements.txt
+    - exit code: 1
+
+      Would sort requirements.txt
+      requirements-invalid.txt:2: requirement entry starts with whitespace
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().arg("--files").args(["constraints.txt", "requirements-empty.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix requirements.txt.....................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    for ((name, contents), modified) in files.into_iter().zip(modified) {
+        assert_eq!(context.read(name), contents);
+        assert_eq!(fs_err::metadata(context.child(name))?.modified()?, modified);
+    }
+    Ok(())
+}
+
+#[test]
 fn forbid_new_submodules_hook_in_workspace_project() {
     let context = TestEnv::new()
         .with_config("repos: []\n")
@@ -1656,6 +1716,64 @@ fn fix_byte_order_marker_hook() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+fn fix_byte_order_marker_check() -> Result<()> {
+    let files = [
+        ("with_bom.txt", "\u{feff}Hello, World!"),
+        ("bom_only.txt", "\u{feff}"),
+        ("clean.txt", "Hello, World!"),
+        ("short.txt", "Hi"),
+        ("empty.txt", ""),
+    ];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: fix-byte-order-marker
+                args: [--check]
+    "})
+        .with_files(files)
+        .init_git();
+
+    let mut modified = Vec::new();
+    for (name, _) in files {
+        let path = context.child(name);
+        #[cfg(unix)]
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(0o444))?;
+        modified.push(fs_err::metadata(&path)?.modified()?);
+    }
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix utf-8 byte order marker..............................................Failed
+    - hook id: fix-byte-order-marker
+    - description: Removes UTF-8 byte order marker
+    - exit code: 1
+
+      with_bom.txt: would remove byte-order marker
+      bom_only.txt: would remove byte-order marker
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().arg("--files").args(["clean.txt", "short.txt", "empty.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix utf-8 byte order marker..............................................Passed
+
+    ----- stderr -----
+    "#);
+
+    for ((name, contents), modified) in files.into_iter().zip(modified) {
+        assert_eq!(context.read(name), contents);
+        assert_eq!(fs_err::metadata(context.child(name))?.modified()?, modified);
+    }
+    Ok(())
 }
 
 #[test]

@@ -216,6 +216,11 @@ repos:
 
 Sorts entries in Python `requirements*.txt` and `constraints*.txt` files by their case-insensitive requirement name.
 
+**Supported arguments**
+
+- `--check` (prek only)
+    - Report files that would change and exit nonzero without modifying them.
+
 **Behavior / caveats**
 
 - The default file pattern is `(requirements|constraints).*\.txt$`.
@@ -232,7 +237,8 @@ Removes a UTF-8 byte order marker (BOM) from the beginning of a file.
 
 **Supported arguments**
 
-- None.
+- `--check` (prek only)
+    - Report files that would change and exit nonzero without modifying them.
 
 **Caveats**
 

@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_file_checks};
+use crate::hooks::pre_commit_hooks::{FixArgs, contents_equal, parse_hook_args, run_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 const BROKEN_PKG_RESOURCES: [&[u8]; 2] = [b"pkg-resources==0.0.0\n", b"pkg_resources==0.0.0\n"];
@@ -154,54 +154,48 @@ impl<'a> ParsedRequirements<'a> {
         self.requirements.sort_by(compare_requirements);
     }
 
-    fn render(&self, capacity: usize) -> Vec<u8> {
-        let mut output = Vec::with_capacity(capacity);
+    fn chunks(&self) -> impl Iterator<Item = &[u8]> {
         let mut previous = None;
-
-        for &line in &self.header {
-            output.extend_from_slice(line);
-        }
-
-        for requirement in &self.requirements {
-            for &comment in &requirement.comments {
-                output.extend_from_slice(comment);
-            }
-
+        let requirements = self.requirements.iter().flat_map(move |requirement| {
             let value = requirement.value.as_ref();
-            if previous != Some(value) {
-                output.extend_from_slice(value);
-                previous = Some(value);
-            }
-        }
+            let unique = if previous == Some(value) {
+                None
+            } else {
+                Some(value)
+            };
+            previous = Some(value);
+            requirement.comments.iter().copied().chain(unique)
+        });
 
-        for &comment in &self.trailing_comments {
-            output.extend_from_slice(comment);
-        }
-
-        output
+        self.header
+            .iter()
+            .copied()
+            .chain(requirements)
+            .chain(self.trailing_comments.iter().copied())
     }
 }
 
 /// Runs the `requirements-txt-fixer` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    let args: FilenamesArgs = parse_hook_args(hook)?;
+    let args: FixArgs = parse_hook_args(hook)?;
     let file_base = hook.project().relative_path();
 
     run_file_checks(
         &args.filenames,
         filenames,
         *INTERNAL_CONCURRENCY,
-        |filename| fix_file(file_base, filename),
+        |filename| fix_file(file_base, filename, args.check),
     )
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
+async fn fix_file(file_base: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
     let file_path = file_base.join(filename);
-    let before = fs_err::tokio::read(&file_path).await?;
+    let mut before = fs_err::tokio::read(&file_path).await?;
+    let capacity = before.len() + 1;
 
-    let after = match fixed_contents(before) {
-        Ok(Some(after)) => after,
+    let fixed = match fixed_requirements(&mut before) {
+        Ok(Some(fixed)) => fixed,
         Ok(None) => return Ok(HookOutput::unchanged(0, Vec::new())),
         Err(error) => {
             let output = format!("{}:{}: {error}\n", filename.display(), error.line_number());
@@ -209,6 +203,20 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
         }
     };
 
+    if check {
+        return Ok(HookOutput::unchanged(
+            1,
+            format!("Would sort {}\n", filename.display()).into_bytes(),
+        ));
+    }
+
+    let mut after = Vec::with_capacity(capacity);
+    for chunk in fixed.chunks() {
+        after.extend_from_slice(chunk);
+    }
+    // Concurrent writes only need to retain the rendered output.
+    drop(fixed);
+    drop(before);
     fs_err::tokio::write(file_path, after).await?;
     Ok(HookOutput::known(
         1,
@@ -217,7 +225,7 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
     ))
 }
 
-fn fixed_contents(mut before: Vec<u8>) -> FixResult<Option<Vec<u8>>> {
+fn fixed_requirements(before: &mut Vec<u8>) -> FixResult<Option<ParsedRequirements<'_>>> {
     // Upstream leaves empty and whitespace-only files byte-for-byte unchanged.
     if before.trim_ascii().is_empty() {
         return Ok(None);
@@ -228,14 +236,13 @@ fn fixed_contents(mut before: Vec<u8>) -> FixResult<Option<Vec<u8>>> {
         before.push(b'\n');
     }
 
-    let mut parsed = ParsedRequirements::parse(&before)?;
+    let mut parsed = ParsedRequirements::parse(before)?;
     parsed.sort_and_filter();
 
-    let after = parsed.render(before.len());
-    if after.as_slice() == &before[..original_len] {
+    if contents_equal(&before[..original_len], parsed.chunks()) {
         Ok(None)
     } else {
-        Ok(Some(after))
+        Ok(Some(parsed))
     }
 }
 
@@ -295,7 +302,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fixed_contents_matches_expected_behavior() -> Result<()> {
+    fn fixed_requirements_match_expected_behavior() -> Result<()> {
         let cases: &[(&[u8], &[u8])] = &[
             (b"", b""),
             (b"\n", b"\n"),
@@ -389,7 +396,9 @@ mod tests {
         ];
 
         for &(before, expected) in cases {
-            let fixed = fixed_contents(before.to_vec())?;
+            let mut contents = before.to_vec();
+            let fixed = fixed_requirements(&mut contents)?
+                .map(|parsed| parsed.chunks().flatten().copied().collect::<Vec<_>>());
             assert_eq!(fixed.as_deref().unwrap_or(before), expected);
         }
 
@@ -404,8 +413,11 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                fixed_contents(before.to_vec()).unwrap_err().to_string(),
-                expected
+                fixed_requirements(&mut before.to_vec())
+                    .err()
+                    .map(|error| error.to_string())
+                    .as_deref(),
+                Some(expected)
             );
         }
 
