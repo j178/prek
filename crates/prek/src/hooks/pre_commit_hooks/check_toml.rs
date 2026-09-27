@@ -5,23 +5,22 @@ use anyhow::Result;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
-use crate::hooks::run_concurrent_file_checks;
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_blocking_file_checks};
 
 /// Runs the `check-toml` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
-    run_concurrent_file_checks(
-        hook_filenames(&args.filenames, filenames),
-        *INTERNAL_CONCURRENCY,
-        |filename| check_file(hook.project().relative_path(), filename),
+    run_blocking_file_checks(
+        hook.project().relative_path(),
+        &args.filenames,
+        filenames,
+        check_file,
     )
     .await
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
-    let content = fs_err::tokio::read(file_base.join(filename)).await?;
+fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
+    let content = fs_err::read(file_path)?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
@@ -75,7 +74,7 @@ mod tests {
 key2 = "value2"
 "#;
         let file_path = create_test_file(&dir, "valid.toml", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
         Ok(())
@@ -88,7 +87,7 @@ key2 = "value2"
 key2 = "value2"
 "#;
         let file_path = create_test_file(&dir, "invalid.toml", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
         Ok(())
@@ -101,7 +100,7 @@ key2 = "value2"
 key1 = "value2"
 "#;
         let file_path = create_test_file(&dir, "duplicate.toml", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
         Ok(())
@@ -112,7 +111,7 @@ key1 = "value2"
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.toml", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
         Ok(())
@@ -129,7 +128,7 @@ key3 = invalid_value_without_quotes
 key4 = "another unclosed string
 "#;
         let file_path = create_test_file(&dir, "multiple_errors.toml", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
 
@@ -146,7 +145,7 @@ key4 = "another unclosed string
         let content = b"key1 = \"\xff\xfe\xfd\"\nkey2 = \"valid\"";
         let file_path = create_test_file(&dir, "invalid_utf8.toml", content).await?;
 
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Failed to decode UTF-8"));

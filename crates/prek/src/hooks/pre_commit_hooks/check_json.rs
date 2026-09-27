@@ -1,30 +1,29 @@
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::Result;
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
-use crate::hooks::run_concurrent_file_checks;
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{FilenamesArgs, parse_hook_args, run_blocking_file_checks};
 
 /// Runs the `check-json` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
-    run_concurrent_file_checks(
-        hook_filenames(&args.filenames, filenames),
-        *INTERNAL_CONCURRENCY,
-        |filename| check_file(hook.project().relative_path(), filename),
+    run_blocking_file_checks(
+        hook.project().relative_path(),
+        &args.filenames,
+        filenames,
+        check_file,
     )
     .await
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
-    let file_path = file_base.join(filename);
-    let content = fs_err::tokio::read(file_path).await?;
+fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
+    let content = fs_err::read(file_path)?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
@@ -42,6 +41,11 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<HookOutput> {
         }
     }
 }
+
+// Bare `Cow<str>` deserializes into an owned string. Borrow unescaped keys from the input.
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct JsonKey<'a>(#[serde(borrow)] Cow<'a, str>);
 
 pub(crate) struct JsonDuplicateKeyChecker;
 
@@ -104,13 +108,20 @@ impl<'de> Deserialize<'de> for JsonDuplicateKeyChecker {
             where
                 A: MapAccess<'de>,
             {
-                let mut keys = FxHashSet::default();
-                while let Some(key) = map.next_key::<Cow<'de, str>>()? {
-                    if keys.contains(&key) {
-                        return Err(de::Error::custom(format!("duplicate key `{key}`")));
+                let mut keys = FxHashMap::default();
+                while let Some(JsonKey(key)) = map.next_key::<JsonKey<'de>>()? {
+                    match keys.entry(key) {
+                        Entry::Occupied(entry) => {
+                            return Err(de::Error::custom(format!(
+                                "duplicate key `{}`",
+                                entry.key()
+                            )));
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(());
+                        }
                     }
                     map.next_value::<JsonDuplicateKeyChecker>()?;
-                    keys.insert(key);
                 }
                 Ok(JsonDuplicateKeyChecker)
             }
@@ -123,8 +134,25 @@ impl<'de> Deserialize<'de> for JsonDuplicateKeyChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tempfile::tempdir;
+
+    #[test]
+    fn escaped_keys_share_duplicate_detection_with_borrowed_keys() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("keys.json");
+        for (content, status) in [
+            (r#"{"key": 1, "\u006bey": 2}"#, 1),
+            (r#"{"\u006bey": 1, "key": 2}"#, 1),
+            (r#"{"😀": 1, "\ud83d\ude00": 2}"#, 1),
+            (r#"{"a\nb": 1, "a\u000ab": 2}"#, 1),
+            (r#"{"key": {"\u006bey": 1}, "keys": 2}"#, 0),
+        ] {
+            fs_err::write(&path, content)?;
+            assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
+        }
+        Ok(())
+    }
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
@@ -141,7 +169,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": "value2"}"#;
         let file_path = create_test_file(&dir, "valid.json", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
 
@@ -153,7 +181,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": "value2""#;
         let file_path = create_test_file(&dir, "invalid.json", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
 
@@ -165,7 +193,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key1": "value2"}"#;
         let file_path = create_test_file(&dir, "duplicate.json", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
 
@@ -177,7 +205,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.json", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
 
@@ -189,7 +217,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"[{"key1": "value1"}, {"key2": "value2"}]"#;
         let file_path = create_test_file(&dir, "valid_array.json", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
 
@@ -201,7 +229,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": {"nested_key": 1, "nested_key": 2}}"#;
         let file_path = create_test_file(&dir, "nested_duplicate.json", content).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
         assert!(!result.output.is_empty());
 
@@ -218,7 +246,7 @@ mod tests {
         }
 
         let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await?;
-        let result = check_file(Path::new(""), &file_path).await?;
+        let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
 

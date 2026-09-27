@@ -3,12 +3,11 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
-use memchr::memchr2;
+use memchr::{memchr_iter, memchr2};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{parse_hook_args, run_file_checks};
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
 
 const CRLF: &[u8] = b"\r\n";
 const LF: &[u8] = b"\n";
@@ -66,19 +65,17 @@ impl LineEndingCounts {
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
 
-    run_file_checks(
+    run_blocking_file_checks(
+        hook.project().relative_path(),
         &args.filenames,
         filenames,
-        *INTERNAL_CONCURRENCY,
-        |filename| fix_file(hook.project().relative_path(), filename, args.fix),
+        move |file_path, filename| fix_file(file_path, filename, args.fix),
     )
     .await
 }
 
-// Process a single file for mixed line endings
-async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Result<HookOutput> {
-    let file_path = file_base.join(filename);
-    let contents = fs_err::tokio::read(&file_path).await?;
+fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<HookOutput> {
+    let contents = fs_err::read(file_path)?;
 
     // Skip empty files or binary files
     if contents.is_empty() || contents.find_byte(0).is_some() {
@@ -88,76 +85,45 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: FixMode) -> Resul
     let counts = count_line_endings(&contents);
     let has_mixed_endings = counts.kind_count() > 1;
 
-    match fix_mode {
+    let target_ending = match fix_mode {
         FixMode::No => {
-            if has_mixed_endings {
+            return if has_mixed_endings {
                 Ok(HookOutput::unchanged(
                     1,
                     format!("{}: mixed line endings\n", filename.display()).into_bytes(),
                 ))
             } else {
                 Ok(HookOutput::unchanged(0, Vec::new()))
-            }
-        }
-        FixMode::Auto => {
-            if !has_mixed_endings {
-                return Ok(HookOutput::unchanged(0, Vec::new()));
-            }
-
-            let target_ending = find_most_common_ending(&counts);
-            apply_line_ending(&file_path, &contents, target_ending).await?;
-            Ok(HookOutput::known(
-                1,
-                format!("Fixing {}\n", filename.display()).into_bytes(),
-                true,
-            ))
-        }
-        _ => {
-            let target_ending = match fix_mode {
-                FixMode::LF => LF,
-                FixMode::CRLF => CRLF,
-                FixMode::CR => CR,
-                _ => unreachable!(),
             };
-            let needs_fixing = counts.has_any_except(target_ending);
-
-            if needs_fixing {
-                apply_line_ending(&file_path, &contents, target_ending).await?;
-                Ok(HookOutput::known(
-                    1,
-                    format!("Fixing {}\n", filename.display()).into_bytes(),
-                    true,
-                ))
-            } else {
-                Ok(HookOutput::unchanged(0, Vec::new()))
-            }
         }
+        FixMode::Auto => find_most_common_ending(&counts),
+        FixMode::LF => LF,
+        FixMode::CRLF => CRLF,
+        FixMode::CR => CR,
+    };
+    if !counts.has_any_except(target_ending) {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
+
+    apply_line_ending(file_path, &contents, target_ending)?;
+    Ok(HookOutput::known(
+        1,
+        format!("Fixing {}\n", filename.display()).into_bytes(),
+        true,
+    ))
 }
 
 fn count_line_endings(contents: &[u8]) -> LineEndingCounts {
     let mut counts = LineEndingCounts::default();
-    let mut search_start = 0;
-
-    while let Some(offset) = memchr2(b'\r', b'\n', &contents[search_start..]) {
-        let index = search_start + offset;
-        match contents[index] {
-            b'\r' if contents.get(index + 1) == Some(&b'\n') => {
-                counts.crlf += 1;
-                search_start = index + 2;
-            }
-            b'\r' => {
-                counts.cr += 1;
-                search_start = index + 1;
-            }
-            b'\n' => {
-                counts.lf += 1;
-                search_start = index + 1;
-            }
-            _ => unreachable!(),
+    for index in memchr_iter(b'\r', contents) {
+        if contents.get(index + 1) == Some(&b'\n') {
+            counts.crlf += 1;
+        } else {
+            counts.cr += 1;
         }
     }
-
+    // Counting all LFs at once uses memchr's vectorized counter, including for LF-only files.
+    counts.lf = memchr_iter(b'\n', contents).count() - counts.crlf;
     counts
 }
 
@@ -172,7 +138,7 @@ fn find_most_common_ending(counts: &LineEndingCounts) -> &'static [u8] {
     }
 }
 
-async fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> Result<()> {
+fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> Result<()> {
     let mut new_contents = Vec::with_capacity(contents.len());
     let mut line_start = 0;
     let mut search_start = 0;
@@ -185,18 +151,20 @@ async fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> R
             1
         };
 
-        new_contents.extend_from_slice(&contents[line_start..index]);
-        new_contents.extend_from_slice(ending);
         search_start = index + ending_len;
-        line_start = search_start;
+        if &contents[index..search_start] != ending {
+            new_contents.extend_from_slice(&contents[line_start..index]);
+            new_contents.extend_from_slice(ending);
+            line_start = search_start;
+        }
     }
 
-    if line_start < contents.len() {
-        new_contents.extend_from_slice(&contents[line_start..]);
+    new_contents.extend_from_slice(&contents[line_start..]);
+    if search_start < contents.len() {
         new_contents.extend_from_slice(ending);
     }
 
-    fs_err::tokio::write(filename, &new_contents).await?;
+    fs_err::write(filename, &new_contents)?;
     Ok(())
 }
 
@@ -204,8 +172,26 @@ async fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> R
 mod tests {
     use super::*;
     use bstr::ByteSlice;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tempfile::tempdir;
+
+    #[test]
+    fn adjacent_endings_and_unterminated_tail() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("endings.txt");
+        for (mode, expected) in [
+            (FixMode::LF, b"one\n\ntwo\nlast\n".as_slice()),
+            (FixMode::CRLF, b"one\r\n\r\ntwo\r\nlast\r\n"),
+            (FixMode::CR, b"one\r\rtwo\rlast\r"),
+            (FixMode::Auto, b"one\n\ntwo\nlast\n"),
+        ] {
+            fs_err::write(&path, b"one\r\r\ntwo\nlast")?;
+            assert_eq!(fix_file(&path, &path, mode)?.exit_status, 1);
+            assert_eq!(fs_err::read(&path)?, expected);
+            assert_eq!(fix_file(&path, &path, mode)?.exit_status, 0);
+        }
+        Ok(())
+    }
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
@@ -222,7 +208,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\r\nline3\r\n"; // 1 LF, 2 CRLF
         let file_path = create_test_file(&dir, "mixed_crlf.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::Auto)?;
         assert_eq!(result.exit_status, 1);
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -236,7 +222,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\nline3\r\n"; // 2 LF, 1 CRLF
         let file_path = create_test_file(&dir, "mixed_lf.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::Auto)?;
         assert_eq!(result.exit_status, 1);
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -250,7 +236,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\r\n"; // 1 LF, 1 CRLF
         let file_path = create_test_file(&dir, "mixed_tie.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::Auto)?;
         assert_eq!(result.exit_status, 1);
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -264,7 +250,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"line1\nline2\r\n";
         let file_path = create_test_file(&dir, "mixed_no.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path, FixMode::No).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::No)?;
         assert_eq!(result.exit_status, 1);
         assert!(result.output.as_bytes().contains_str("mixed line endings"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -278,7 +264,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"some content";
         let file_path = create_test_file(&dir, "no_endings.txt", content).await?;
-        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::Auto)?;
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
 
@@ -293,7 +279,7 @@ mod tests {
         let file_path = create_test_file(&dir, "all_mixed.txt", content).await?;
 
         // Test auto fix (should prefer LF as it's a 3-way tie)
-        let result = fix_file(Path::new(""), &file_path, FixMode::Auto).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::Auto)?;
         assert_eq!(result.exit_status, 1);
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -301,7 +287,7 @@ mod tests {
 
         // Restore content and test fix to CRLF
         fs_err::tokio::write(&file_path, content).await?;
-        let result = fix_file(Path::new(""), &file_path, FixMode::CRLF).await?;
+        let result = fix_file(&file_path, &file_path, FixMode::CRLF)?;
         assert_eq!(result.exit_status, 1);
         assert!(result.output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
