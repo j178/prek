@@ -388,6 +388,64 @@ fn require_pattern_hook_reports_files_without_any_match() {
 }
 
 #[test]
+fn trailing_whitespace_check() -> Result<()> {
+    let files = [
+        ("extra.md", "trim   \r\n"),
+        ("extra.txt", "trim \n"),
+        ("clean.md", "keep  \r\n"),
+        ("clean.txt", "keep\t\n"),
+        ("empty.txt", ""),
+    ];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: trailing-whitespace
+                args: [--check, --markdown-linebreak-ext=md, "--chars= "]
+    "#})
+        .with_files(files)
+        .init_git();
+
+    let mut modified = Vec::new();
+    for (name, _) in files {
+        let path = context.child(name);
+        #[cfg(unix)]
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(0o444))?;
+        modified.push(fs_err::metadata(&path)?.modified()?);
+    }
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - description: Trims trailing whitespace
+    - exit code: 1
+
+      Would fix extra.txt
+      Would fix extra.md
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().arg("--files").args(["clean.md", "clean.txt", "empty.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trim trailing whitespace.................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    for ((name, contents), modified) in files.into_iter().zip(modified) {
+        assert_eq!(context.read(name), contents);
+        assert_eq!(fs_err::metadata(context.child(name))?.modified()?, modified);
+    }
+    Ok(())
+}
+
+#[test]
 fn end_of_file_fixer_hook() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
