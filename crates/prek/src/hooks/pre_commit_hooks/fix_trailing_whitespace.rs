@@ -102,7 +102,14 @@ fn fix_file(
     let is_markdown = force_markdown || is_markdown_file(filename, markdown_exts);
 
     let mut content = fs_err::read(file_path)?;
-    let mut line_start = 0;
+    let mut line_start = if chars.is_empty() && !is_markdown {
+        let Some(start) = first_line_with_trailing_whitespace(&content) else {
+            return Ok(HookOutput::unchanged(0, Vec::new()));
+        };
+        start
+    } else {
+        0
+    };
     let mut copied = 0;
     let mut written = 0;
     while line_start < content.len() {
@@ -153,6 +160,20 @@ fn fix_file(
     ))
 }
 
+fn first_line_with_trailing_whitespace(content: &[u8]) -> Option<usize> {
+    let mut start = 0;
+    for index in memchr::memchr_iter(b'\n', content).chain(std::iter::once(content.len())) {
+        let prefix = &content[..index];
+        let body = prefix.strip_suffix(b"\r").unwrap_or(prefix);
+        // LF separates lines; one CR belongs to the line ending, even at EOF.
+        if matches!(body.last(), Some(b' ' | b'\t' | b'\x0c' | b'\r')) {
+            return Some(start);
+        }
+        start = index + 1;
+    }
+    None
+}
+
 fn is_markdown_file(filename: &Path, markdown_exts: &[String]) -> bool {
     filename
         .extension()
@@ -186,6 +207,36 @@ mod tests {
 
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[test]
+    fn skip_clean_prefix_before_trailing_whitespace() -> Result<()> {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("sparse.txt");
+        let prefix = b"unchanged\r\n\n\r\n\x0b\n".repeat(8192);
+        for ending in [b"\n".as_slice(), b"\r\n", b"\r", b""] {
+            let original = [prefix.as_slice(), b"\xfflast \t\x0c", ending].concat();
+            fs_err::write(&path, &original)?;
+
+            assert_eq!(
+                fix_file(&path, &path, &[], false, &[], true)?.exit_status,
+                1
+            );
+            assert_eq!(fs_err::read(&path)?, original);
+            assert_eq!(
+                fix_file(&path, &path, &[], false, &[], false)?.exit_status,
+                1
+            );
+            assert_eq!(
+                fs_err::read(&path)?,
+                [prefix.as_slice(), b"\xfflast", ending].concat()
+            );
+            assert_eq!(
+                fix_file(&path, &path, &[], false, &[], false)?.exit_status,
+                0
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn compact_sparse_whitespace_preserves_intervening_bytes() -> Result<()> {
