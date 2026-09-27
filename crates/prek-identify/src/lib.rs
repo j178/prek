@@ -599,7 +599,7 @@ mod tests {
         assert_tagset(&tags, &["toml", "text"]);
 
         let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
-        assert_tagset(&tags, &["json", "text"]);
+        assert_tagset(&tags, &["json", "pipfile-lock", "text"]);
 
         let tags = super::tags_from_filename(Path::new("file.pdf"));
         assert_tagset(&tags, &["pdf", "binary"]);
