@@ -237,7 +237,8 @@ Removes a UTF-8 byte order marker (BOM) from the beginning of a file.
 
 **Supported arguments**
 
-- None.
+- `--check` (prek only)
+    - Report files that would change and exit nonzero without modifying them.
 
 **Caveats**
 

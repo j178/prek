@@ -97,6 +97,8 @@ fn list_builtins_defaults_to_verbose_output() {
 
     fix-byte-order-marker
       Removes UTF-8 byte order marker.
+      flags:
+            --check  Report files that would change without modifying them
 
     forbid-new-submodules
       Prevents the addition of new Git submodules.
