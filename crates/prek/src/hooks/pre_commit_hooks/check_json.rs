@@ -27,7 +27,16 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    let mut deserializer = serde_json::Deserializer::from_slice(&content);
+    let content = match simdutf8::compat::from_utf8(&content) {
+        Ok(content) => content,
+        Err(error) => {
+            let error_message =
+                format!("{}: Failed to decode UTF-8 ({error})\n", filename.display());
+            return Ok(HookOutput::unchanged(1, error_message.into_bytes()));
+        }
+    };
+
+    let mut deserializer = serde_json::Deserializer::from_str(content);
     deserializer.disable_recursion_limit();
     let deserializer = serde_stacker::Deserializer::new(&mut deserializer);
 
@@ -239,6 +248,17 @@ mod tests {
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_invalid_utf8() -> Result<()> {
+        let dir = tempdir()?;
+        for content in [b"{\"key\":\"\xff\"}".as_slice(), b"{}\xff"] {
+            let file_path = create_test_file(&dir, "invalid.json", content).await?;
+            let result = check_file(&file_path, &file_path)?;
+            assert_eq!(result.exit_status, 1);
+        }
         Ok(())
     }
 

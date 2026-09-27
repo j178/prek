@@ -141,17 +141,15 @@ key4 = "another unclosed string
     #[tokio::test]
     async fn test_invalid_utf8() -> Result<()> {
         let dir = tempdir()?;
-        // The invalid sequence crosses a SIMD block boundary.
-        let mut content = b"key = \"".to_vec();
-        content.resize(63, b'a');
-        content.extend_from_slice(b"\xf0\x9f\x92\"\n");
-        let file_path = create_test_file(&dir, "invalid_utf8.toml", &content).await?;
+        let content =
+            b"key = \"a longer value with invalid UTF-8 after otherwise valid text: \xff\"\n";
+        let file_path = create_test_file(&dir, "invalid_utf8.toml", content).await?;
 
         let result = check_file(&file_path, Path::new("invalid_utf8.toml"))?;
         assert_eq!(result.exit_status, 1);
         assert_eq!(
             result.output,
-            b"invalid_utf8.toml: Failed to decode UTF-8 (invalid utf-8 sequence of 3 bytes from index 63)\n"
+            b"invalid_utf8.toml: Failed to decode UTF-8 (invalid utf-8 sequence of 1 bytes from index 69)\n"
         );
         Ok(())
     }

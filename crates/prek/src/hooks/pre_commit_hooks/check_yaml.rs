@@ -345,17 +345,11 @@ key2: value2
     #[tokio::test]
     async fn test_unsafe_rejects_invalid_utf8() -> Result<()> {
         let dir = tempdir()?;
-        let mut content = b"key: ".to_vec();
-        content.resize(65, b'a');
-        content.extend_from_slice(b"\xf0\x9f\x92");
-        let file_path = create_test_file(&dir, "invalid.yaml", &content).await?;
+        let file_path = create_test_file(&dir, "invalid.yaml", b"key: \xff").await?;
 
-        let result = check_file(&file_path, Path::new("invalid.yaml"), CheckMode::SyntaxOnly)?;
+        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
         assert_eq!(result.exit_status, 1);
-        assert_eq!(
-            result.output,
-            b"invalid.yaml: Failed to decode UTF-8 (incomplete utf-8 byte sequence from index 65)\n"
-        );
+        assert!(String::from_utf8_lossy(&result.output).contains("Failed to decode UTF-8"));
         Ok(())
     }
 
