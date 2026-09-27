@@ -142,6 +142,13 @@
       "description": "Set to true to have prek stop running hooks after the first failure.\nDefault is false.",
       "type": "boolean"
     },
+    "hide_status": {
+      "description": "Hide hook reports with these final statuses. An empty list shows all reports.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/HideStatus"
+      }
+    },
     "minimum_prek_version": {
       "description": "The minimum version of prek required to run this configuration.",
       "type": "string"
@@ -1118,6 +1125,14 @@
         "pre-push",
         "pre-rebase",
         "prepare-commit-msg"
+      ]
+    },
+    "HideStatus": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "skipped"
       ]
     }
   }

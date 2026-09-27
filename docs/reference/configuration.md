@@ -11,6 +11,19 @@ This page documents the configuration keys that `prek` understands.
 
 This file stores user-level `prek` settings and does not define project hooks.
 
+### Global `hide_status`
+
+Default hook report filtering for `prek run`, installed Git hooks, and `prek try-repo`:
+
+```toml
+hide_status = ["passed", "skipped"]
+```
+
+The default is an empty list, which shows all reports. CLI options override project
+[`hide_status`](#hide_status), which overrides this user-level default. Each source
+replaces the entire list. Set `hide_status = []` in a project to show all reports,
+or use `--no-hide-status` for a single run.
+
 ### Global `update`
 
 User-level defaults for [`prek update`](cli.md#prek-update):
@@ -246,6 +259,31 @@ Stop the run after the first failing hook.
 - Default: `false`
 
 This is a global default; individual hooks can also set `fail_fast`.
+
+### `hide_status`
+
+!!! note "prek-only"
+
+    Hook report filtering is a prek extension.
+
+Hide hook reports with the specified final statuses, including their output.
+
+- Type: list of `"passed"`, `"failed"`, or `"skipped"`
+- Default: the [user-level setting](#global-hide_status), or an empty list
+
+```toml
+hide_status = ["passed", "skipped"]
+```
+
+```yaml
+hide_status: [passed, skipped]
+```
+
+`--hide-status` replaces the configured list. Use `hide_status = []` or
+`--no-hide-status` to show all reports.
+
+In workspace mode, this setting applies only to the current project.
+Filtering does not change hook execution or exit codes.
 
 ### `default_language_version`
 

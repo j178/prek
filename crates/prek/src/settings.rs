@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use serde::Deserialize;
 
-use crate::config::{StringOrList, UpdateOptions as ProjectUpdateOptions};
+use crate::config::{HideStatus, StringOrList, UpdateOptions as ProjectUpdateOptions};
 use crate::fs::Simplified;
 use crate::warn_user;
 
@@ -132,6 +132,7 @@ impl Deref for FilesystemOptions {
 #[serde(default, rename_all = "snake_case")]
 pub(crate) struct Options {
     update: Option<GlobalUpdateOptions>,
+    pub(crate) hide_status: Option<Vec<HideStatus>>,
 
     #[serde(flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
