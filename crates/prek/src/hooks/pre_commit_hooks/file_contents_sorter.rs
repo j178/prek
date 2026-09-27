@@ -6,8 +6,7 @@ use clap::Parser;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{contents_equal, parse_hook_args, run_file_checks};
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{contents_equal, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -30,27 +29,39 @@ pub(crate) struct Args {
 /// Runs the `file-contents-sorter` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
-    let file_base = hook.project().relative_path();
 
-    run_file_checks(
+    run_blocking_file_checks(
+        hook.project().relative_path(),
         &args.filenames,
         filenames,
-        *INTERNAL_CONCURRENCY,
-        |filename| sort_file(file_base, filename, &args),
+        move |file_path, filename| {
+            sort_file(
+                file_path,
+                filename,
+                args.check,
+                args.ignore_case,
+                args.unique,
+            )
+        },
     )
     .await
 }
 
-async fn sort_file(file_base: &Path, filename: &Path, args: &Args) -> Result<HookOutput> {
-    let file_path = file_base.join(filename);
-    let before = fs_err::tokio::read(&file_path).await?;
-    let lines = sorted_lines(&before, args.ignore_case, args.unique);
+fn sort_file(
+    file_path: &Path,
+    filename: &Path,
+    check: bool,
+    ignore_case: bool,
+    unique: bool,
+) -> Result<HookOutput> {
+    let before = fs_err::read(file_path)?;
+    let lines = sorted_lines(&before, ignore_case, unique);
 
     if contents_equal(&before, lines.iter().flat_map(|&line| [line, b"\n"])) {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    if args.check {
+    if check {
         return Ok(HookOutput::unchanged(
             1,
             format!("Would sort {}\n", filename.display()).into_bytes(),
@@ -63,7 +74,7 @@ async fn sort_file(file_base: &Path, filename: &Path, args: &Args) -> Result<Hoo
         after.extend_from_slice(line);
         after.push(b'\n');
     }
-    fs_err::tokio::write(&file_path, &after).await?;
+    fs_err::write(file_path, &after)?;
     Ok(HookOutput::known(
         1,
         format!("Sorting {}\n", filename.display()).into_bytes(),
@@ -73,7 +84,7 @@ async fn sort_file(file_base: &Path, filename: &Path, args: &Args) -> Result<Hoo
 
 fn sorted_lines(before: &[u8], ignore_case: bool, unique: bool) -> Vec<&[u8]> {
     let mut lines = before
-        .split_inclusive(|&byte| byte == b'\n')
+        .lines_with_terminator()
         .filter_map(normalize_line)
         .collect::<Vec<_>>();
 
@@ -152,7 +163,13 @@ mod tests {
         let file_path = create_test_file(&dir, "allowlist.txt", b"beta\nalpha\n").await?;
 
         let args = Args::try_parse_from(["file-contents-sorter"])?;
-        let result = sort_file(dir.path(), &relative, &args).await?;
+        let result = sort_file(
+            &file_path,
+            &relative,
+            args.check,
+            args.ignore_case,
+            args.unique,
+        )?;
 
         assert_eq!(result.exit_status, 1);
         assert_eq!(String::from_utf8(result.output)?, "Sorting allowlist.txt\n");
@@ -168,7 +185,13 @@ mod tests {
         let file_path = create_test_file(&dir, "allowlist.txt", b"alpha\nbeta\n").await?;
 
         let args = Args::try_parse_from(["file-contents-sorter"])?;
-        let result = sort_file(dir.path(), &relative, &args).await?;
+        let result = sort_file(
+            &file_path,
+            &relative,
+            args.check,
+            args.ignore_case,
+            args.unique,
+        )?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());

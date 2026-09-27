@@ -5,27 +5,24 @@ use anyhow::Result;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FixArgs, parse_hook_args, run_file_checks};
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{FixArgs, parse_hook_args, run_blocking_file_checks};
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 
 /// Runs the `fix-byte-order-marker` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: FixArgs = parse_hook_args(hook)?;
-    run_file_checks(
+    run_blocking_file_checks(
+        hook.project().relative_path(),
         &args.filenames,
         filenames,
-        *INTERNAL_CONCURRENCY,
-        |filename| fix_file(hook.project().relative_path(), filename, args.check),
+        move |file_path, filename| fix_file(file_path, filename, args.check),
     )
     .await
 }
 
-async fn fix_file(file_base: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
-    let file_path = file_base.join(filename);
-    // Keep streaming I/O in one blocking task instead of switching tasks for every chunk.
-    let needs_fix = tokio::task::spawn_blocking(move || fix_file_sync(&file_path, check)).await??;
+fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
+    let needs_fix = fix_file_sync(file_path, check)?;
     if !needs_fix {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
@@ -95,7 +92,7 @@ mod tests {
         let content = b"\xef\xbb\xbfHello, World!";
         let file_path = create_test_file(&dir, "with_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
@@ -113,7 +110,7 @@ mod tests {
         let content = b"Hello, World!";
         let file_path = create_test_file(&dir, "without_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -130,7 +127,7 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -147,7 +144,7 @@ mod tests {
         let content = b"Hi";
         let file_path = create_test_file(&dir, "short.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -164,7 +161,7 @@ mod tests {
         let content = b"\xef\xbbHello"; // Only first 2 bytes of BOM
         let file_path = create_test_file(&dir, "partial_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
         assert!(result.output.is_empty());
@@ -181,7 +178,7 @@ mod tests {
         let content = b"\xef\xbb\xbf";
         let file_path = create_test_file(&dir, "bom_only.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
@@ -199,7 +196,7 @@ mod tests {
         let content = b"\xef\xbb\xbf\xe4\xb8\xad\xe6\x96\x87"; // BOM + Chinese characters "中文"
         let file_path = create_test_file(&dir, "utf8_with_bom.txt", content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
@@ -226,7 +223,7 @@ mod tests {
 
         let file_path = create_test_file(&dir, "large_with_bom.txt", &content).await?;
 
-        let result = fix_file(Path::new(""), &file_path, false).await?;
+        let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
