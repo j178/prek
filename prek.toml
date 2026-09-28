@@ -23,7 +23,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = "d43b6c087ac471e2ea7b8af622ff15f05c0c365b"  # frozen: v1.50.1
+rev = "53821664afd79bb88fcdd22fdc2f49d8d3f6cac9"  # frozen: v1
 hooks = [{ id = "typos" }]
 
 [[repos]]
