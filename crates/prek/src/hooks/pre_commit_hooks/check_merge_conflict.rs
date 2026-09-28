@@ -1,9 +1,9 @@
-use std::io::{BufReader, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use bstr::io::BufReadExt;
 use clap::Parser;
+use memchr::{memchr_iter, memmem};
 
 use crate::git::git_dir;
 use crate::hook::Hook;
@@ -61,12 +61,17 @@ fn is_in_merge() -> Result<bool> {
 }
 
 fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
-    let file = fs_err::File::open(file_path)?;
-    let mut reader = BufReader::new(file);
-
+    // Keep enough lookahead for the longest marker, "=======\r\n".
+    const LOOKAHEAD: usize = 8;
+    let mut file = fs_err::File::open(file_path)?;
+    let start_marker = memmem::Finder::new(b"\n<<<<<<< ");
+    let end_marker = memmem::Finder::new(b"\n>>>>>>> ");
+    let mut buf = vec![0u8; 32768 + LOOKAHEAD];
+    let mut carry_len = 0;
     let mut code = 0;
     let mut output = Vec::new();
     let mut line_number = 1;
+    let mut at_line_start = true;
     let mut in_conflict = false;
 
     let mut report_conflict = |line_number: usize, pattern: &str| -> std::io::Result<()> {
@@ -75,26 +80,67 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
         Ok(())
     };
 
-    reader.for_byte_line_with_terminator(|line| {
-        if line.starts_with(START_PATTERN) {
-            report_conflict(line_number, "<<<<<<< ")?;
-            in_conflict = true;
-        } else if in_conflict && line.starts_with(ANCESTOR_PATTERN) {
-            report_conflict(line_number, "||||||| ")?;
-        } else if in_conflict
-            && SEPARATOR_PATTERNS
-                .iter()
-                .any(|pattern| line.starts_with(pattern))
-        {
-            report_conflict(line_number, "=======")?;
-        } else if line.starts_with(END_PATTERN) {
-            report_conflict(line_number, ">>>>>>> ")?;
-            in_conflict = false;
-        }
+    loop {
+        let read = match file.read(&mut buf[carry_len..]) {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
+        let len = carry_len + read;
+        let consumed = if read == 0 {
+            len
+        } else {
+            len.saturating_sub(LOOKAHEAD)
+        };
+        let content = &buf[..len];
+        let newlines = memchr_iter(b'\n', &content[..consumed]);
 
-        line_number += 1;
-        Ok(true)
-    })?;
+        if in_conflict
+            || (at_line_start
+                && (content.starts_with(START_PATTERN) || content.starts_with(END_PATTERN)))
+            || start_marker.find(content).is_some()
+            || end_marker.find(content).is_some()
+        {
+            let mut check_line = |index: usize, line_number| -> std::io::Result<()> {
+                let line = &content[index..];
+                if line.starts_with(START_PATTERN) {
+                    report_conflict(line_number, "<<<<<<< ")?;
+                    in_conflict = true;
+                } else if in_conflict && line.starts_with(ANCESTOR_PATTERN) {
+                    report_conflict(line_number, "||||||| ")?;
+                } else if in_conflict
+                    && SEPARATOR_PATTERNS
+                        .iter()
+                        .any(|pattern| line.starts_with(pattern))
+                {
+                    report_conflict(line_number, "=======")?;
+                } else if line.starts_with(END_PATTERN) {
+                    report_conflict(line_number, ">>>>>>> ")?;
+                    in_conflict = false;
+                }
+                Ok(())
+            };
+            if consumed > 0 && at_line_start {
+                check_line(0, line_number)?;
+            }
+            for index in newlines {
+                line_number += 1;
+                if index + 1 < consumed {
+                    check_line(index + 1, line_number)?;
+                }
+            }
+        } else {
+            // Most files have no conflict markers, so count whole blocks instead of visiting lines.
+            line_number += newlines.count();
+        }
+        if consumed > 0 {
+            at_line_start = content[consumed - 1] == b'\n';
+        }
+        if read == 0 {
+            break;
+        }
+        carry_len = len - consumed;
+        buf.copy_within(consumed..len, 0);
+    }
 
     Ok(HookOutput::unchanged(code, output))
 }
@@ -122,7 +168,7 @@ mod tests {
     fn conflict_markers_across_read_boundaries() -> Result<()> {
         let dir = tempdir()?;
         let path = dir.path().join("conflict.txt");
-        for padding in [8190, 8191, 8192, 16383] {
+        for padding in [8190, 8191, 8192, 16355, 16364, 16383, 32763] {
             let mut content = vec![b'x'; padding];
             content.extend_from_slice(b"\n<<<<<<< HEAD\r\n");
             content.extend_from_slice(&vec![b'x'; 16384]);
