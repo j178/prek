@@ -16,7 +16,7 @@ use tracing::{debug, error, instrument, trace};
 
 use crate::cli::run::{ConfiguredHook, GroupFilters, Selectors};
 use crate::config::{self, Config, read_config};
-use crate::fs::Simplified;
+use crate::fs::{PathClean, Simplified};
 use crate::hook::HookSpec;
 use crate::hook::{self, Hook, Repo};
 use crate::store::{CacheBucket, Store};
@@ -900,32 +900,29 @@ impl Workspace {
     }
 
     /// Check if all configuration files are staged in git.
-    pub(crate) async fn check_configs_staged(&self) -> Result<()> {
-        let config_files = self.config_files().collect::<Vec<_>>();
-        let non_staged = git::files_not_staged(&config_files).await?;
-
-        let git_root = git::root()?;
-        if !non_staged.is_empty() {
-            let non_staged = non_staged
-                .into_iter()
-                .map(|p| git_root.join(p))
-                .collect::<Vec<_>>();
-            match non_staged.as_slice() {
-                [filename] => anyhow::bail!(
-                    "Configuration file `{}` is not staged. Stage it with `git add` and try again",
-                    filename.user_display().cyan()
-                ),
-                _ => anyhow::bail!(
-                    "The following configuration files are not staged. Stage them with `git add` and try again:\n{}",
-                    non_staged
-                        .iter()
-                        .map(|p| format!("  - `{}`", p.user_display()))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
-            }
+    pub(crate) fn check_configs_staged(&self, unstaged: &[PathBuf]) -> Result<()> {
+        let config_files = self
+            .config_files()
+            .map(Path::clean)
+            .collect::<FxHashSet<_>>();
+        let unstaged_configs = unstaged
+            .iter()
+            .filter(|path| config_files.contains(*path))
+            .collect::<Vec<_>>();
+        match unstaged_configs.as_slice() {
+            [] => Ok(()),
+            [filename] => anyhow::bail!(
+                "Configuration file `{}` is not staged. Stage it with `git add` and try again",
+                filename.user_display().cyan()
+            ),
+            filenames => anyhow::bail!(
+                "The following configuration files are not staged. Stage them with `git add` and try again:\n{}",
+                filenames
+                    .iter()
+                    .map(|p| format!("  - `{}`", p.user_display()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
         }
-
-        Ok(())
     }
 }

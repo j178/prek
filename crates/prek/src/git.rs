@@ -429,39 +429,46 @@ pub(crate) async fn staged_files(
     parse_diff_files(&output.stdout)
 }
 
-/// Return unstaged paths relative to the repository root.
-///
-/// Relative input paths are interpreted relative to the process's current working
-/// directory. The returned paths remain repository-relative, even for absolute inputs.
-pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<PathBuf>> {
-    let output = git_cmd()?
-        .arg("diff")
-        .arg("--exit-code")
-        .arg("--name-only")
-        .arg("--no-relative")
-        .hidden_args(["--no-ext-diff"])
-        .arg("-z")
-        .arg("--")
-        .file_args(files)
-        .check(false)
-        .output()
-        .await?;
-
-    if output.status.code().is_some_and(|code| code == 1) {
-        return Ok(zsplit(&output.stdout)?);
-    }
-
-    Ok(vec![])
+pub(crate) struct WorktreeStatus {
+    pub(crate) unmerged: bool,
+    pub(crate) unstaged: Vec<PathBuf>,
 }
 
-pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
+/// Check conflicts and unstaged changes together. Unstaged paths are absolute.
+pub(crate) async fn worktree_status(root: &Path) -> Result<WorktreeStatus, Error> {
     let output = git_cmd()?
-        .arg("ls-files")
-        .arg("--unmerged")
+        .current_dir(root)
+        .args([
+            "diff",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            "--no-relative",
+            "--no-ext-diff",
+            "--ignore-submodules",
+        ])
         .check(true)
         .output()
         .await?;
-    Ok(!output.stdout.trim_ascii().is_empty())
+    parse_worktree_status(&output.stdout, root)
+}
+
+fn parse_worktree_status(output: &[u8], root: &Path) -> Result<WorktreeStatus, Error> {
+    let mut status = WorktreeStatus {
+        unmerged: false,
+        unstaged: Vec::new(),
+    };
+    // Disabling renames gives each status exactly one NUL-terminated, unquoted path.
+    let mut fields = output.split(|&byte| byte == b'\0');
+    while let Some(change) = fields.next().filter(|field| !field.is_empty()) {
+        let path = fields
+            .next()
+            .filter(|path| !path.is_empty())
+            .ok_or(Error::InvalidDiffFile)?;
+        status.unmerged |= change == b"U";
+        status.unstaged.push(root.join(path_from_git_bytes(path)?));
+    }
+    Ok(status)
 }
 
 /// Check for changes against `rev` anywhere in the repository containing `path`.
@@ -1221,6 +1228,61 @@ mod tests {
         command.current_dir(path).args(args);
 
         command.assert().success();
+    }
+
+    #[tokio::test]
+    async fn worktree_status_with_staged_and_unstaged_changes() -> anyhow::Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let root = tmp.path();
+        run_git(root, &["init"]);
+        for name in ["staged.txt", "modified.txt", "deleted.txt"] {
+            fs_err::write(root.join(name), "staged\n")?;
+        }
+        run_git(root, &["add", "."]);
+
+        // A new repository has no HEAD but can still have a clean worktree.
+        let status = super::worktree_status(root).await?;
+        assert!(!status.unmerged);
+        assert!(status.unstaged.is_empty());
+
+        fs_err::write(root.join("modified.txt"), "unstaged\n")?;
+        fs_err::remove_file(root.join("deleted.txt"))?;
+        fs_err::write(root.join("intent.txt"), "")?;
+        fs_err::write(root.join("untracked.txt"), "untracked\n")?;
+        run_git(root, &["add", "--intent-to-add", "intent.txt"]);
+
+        let status = super::worktree_status(root).await?;
+        assert!(!status.unmerged);
+        assert_eq!(
+            status.unstaged,
+            ["deleted.txt", "intent.txt", "modified.txt"].map(|name| root.join(name))
+        );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn worktree_status_preserves_unquoted_path_bytes() -> anyhow::Result<()> {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let status = super::parse_worktree_status(
+            b"M\0 leading\nname-\xff.txt \0D\0deleted.txt\0",
+            Path::new("/repo"),
+        )?;
+        assert!(!status.unmerged);
+        let paths = status
+            .unstaged
+            .iter()
+            .map(|path| path.as_os_str().as_bytes())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            [
+                b"/repo/ leading\nname-\xff.txt ".as_slice(),
+                b"/repo/deleted.txt"
+            ]
+        );
+        Ok(())
     }
 
     #[cfg(unix)]
