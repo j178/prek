@@ -305,7 +305,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -332,12 +332,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-llvm-cov
 
@@ -365,7 +365,7 @@ jobs:
           cargo llvm-cov report --profile no-debug --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -401,12 +401,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-llvm-cov
 
@@ -434,7 +434,7 @@ jobs:
             -E "${CI_CORE_FILTER}"
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -467,12 +467,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-llvm-cov
 
@@ -508,7 +508,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ env.PREK_WORKSPACE }}/lcov.info
@@ -544,18 +544,18 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-llvm-cov
 
       - name: "Install cargo-binstall"
         if: ${{ contains(format(' {0} ', matrix.languages), ' rust ') }}
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-binstall
 
@@ -619,7 +619,7 @@ jobs:
 
       - name: "Install Ruby"
         if: ${{ contains(format(' {0} ', matrix.languages), ' ruby ') }}
-        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1.324.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
@@ -654,7 +654,7 @@ jobs:
 
       - name: "Install Coursier"
         if: ${{ contains(format(' {0} ', matrix.languages), ' coursier ') }}
-        uses: coursier/setup-action@9b7939bf01fd1185ce2babe16135168361bf2c62 # v3.0.2
+        uses: coursier/setup-action@3174df5c784a0c8724f06b7924b849551c40c39e # v3.0.3
         with:
           apps: ""
 
@@ -752,7 +752,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
