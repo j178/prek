@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::CommandFactory;
 use clap::builder::StyledStr;
-use clap_complete::{CompletionCandidate, Shell};
+use clap_complete::{CompletionCandidate, Generator};
 
 use crate::cli::{Cli, ExitStatus};
 use crate::config::Repo;
@@ -13,8 +13,28 @@ use crate::fs::{CWD, PathClean};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
-pub(crate) fn generate_shell_completion(shell: Shell) -> Result<ExitStatus> {
-    let command = Cli::command();
+#[derive(Debug, Clone, Copy, clap::ValueEnum, strum::Display)]
+#[value(rename_all = "lower")]
+#[strum(serialize_all = "lowercase")]
+pub(crate) enum CompletionShell {
+    Bash,
+    Elvish,
+    Fish,
+    #[value(alias = "nu")]
+    Nushell,
+    PowerShell,
+    Zsh,
+}
+
+pub(crate) fn generate_shell_completion(shell: CompletionShell) -> Result<ExitStatus> {
+    let mut command = Cli::command();
+    if let CompletionShell::Nushell = shell {
+        command.set_bin_name("prek");
+        command.build();
+        clap_complete_nushell::Nushell.try_generate(&command, &mut std::io::stdout().lock())?;
+        return Ok(ExitStatus::Success);
+    }
+
     let bin_name = command.get_bin_name().unwrap_or_else(|| command.get_name());
     let shells = clap_complete::env::Shells::builtins();
     let shell = shells
