@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.5.4
+
+Released on 2026-09-28.
+
+### Highlights
+
+#### Faster builtin hooks
+
+Faster builtin hook execution and Git startup reduced total runtime by about 28%
+in an end-to-end benchmark running seven builtin hooks over prek's source tree
+(62 ms in 0.5.3 to 45 ms in 0.5.4).
+
+### Enhancements
+
+- Add `include_deleted` to allow hooks to include deleted files ([#2733](https://github.com/j178/prek/pull/2733))
+- Add `--check` and simplify `end-of-file-fixer` ([#2764](https://github.com/j178/prek/pull/2764))
+- Add `--check` to `file-contents-sorter` ([#2765](https://github.com/j178/prek/pull/2765))
+- Add `--check` to `requirements-txt-fixer` ([#2766](https://github.com/j178/prek/pull/2766))
+- Add `--check` to `trailing-whitespace` ([#2763](https://github.com/j178/prek/pull/2763))
+- Expose and document `prek util generate-shell-completion` ([#2727](https://github.com/j178/prek/pull/2727))
+- Support `hide_status` in project and user configuration ([#2760](https://github.com/j178/prek/pull/2760))
+- Support look-around regex in builtin pattern hooks ([#2732](https://github.com/j178/prek/pull/2732))
+
+### Performance
+
+- Cache the resolved Git executable on macOS ([#2726](https://github.com/j178/prek/pull/2726))
+- Combine and cache Git repository path queries ([#2724](https://github.com/j178/prek/pull/2724))
+- Optimize common builtin hook execution ([#2768](https://github.com/j178/prek/pull/2768))
+- Optimize scanning in `mixed-line-ending` and `trailing-whitespace` ([#2769](https://github.com/j178/prek/pull/2769))
+- Scan `check-merge-conflict` files in fixed-size blocks ([#2781](https://github.com/j178/prek/pull/2781))
+- Use SIMD UTF-8 validation in `check-json`, `check-toml`, and `check-yaml` ([#2770](https://github.com/j178/prek/pull/2770))
+
+### Bug fixes
+
+- Retry transient rename failures on Windows ([#2756](https://github.com/j178/prek/pull/2756))
+- Use PATH to resolve prek in completion scripts ([#2719](https://github.com/j178/prek/pull/2719))
+
+### Documentation
+
+- Clarify the flow and scope of usage guides ([#2710](https://github.com/j178/prek/pull/2710))
+- Reorganize usage guides and reference documentation ([#2709](https://github.com/j178/prek/pull/2709))
+
+### Other changes
+
+- Sync latest identify tags ([#2762](https://github.com/j178/prek/pull/2762))
+
+### Contributors
+
+- @github-actions
+- @j178
+
 ## 0.5.3
 
 Released on 2026-09-13.
