@@ -8,9 +8,9 @@ Released on 2026-09-28.
 
 #### Faster builtin hooks
 
-Faster builtin hook execution and Git startup reduced total runtime by about 28%
-in an end-to-end benchmark running seven builtin hooks over prek's source tree
-(62 ms in 0.5.3 to 45 ms in 0.5.4).
+In our end-to-end benchmark, prek is about 38% faster than 0.5.3, with some builtin
+hooks up to 273% faster (`check-yaml`: 273%, `check-json`: 80%,
+`check-merge-conflict`: 71%).
 
 ### Enhancements
 
