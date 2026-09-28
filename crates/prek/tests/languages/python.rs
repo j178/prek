@@ -605,7 +605,7 @@ fn local_relative_additional_dependency_is_not_resolved_from_worktree() {
       caused by: Command `[UV] pip install --project / .` exited with an error:
 
     [status]
-    exit status: 2
+    exit status: 1
 
     [stderr]
     Using Python [VERSION] environment at: [HOME]/hooks/python-[HASH]
