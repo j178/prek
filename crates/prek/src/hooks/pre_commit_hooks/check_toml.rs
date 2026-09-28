@@ -26,7 +26,7 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
     }
 
     // Use string content for borrowed parsing
-    let content_str = match std::str::from_utf8(&content) {
+    let content_str = match simdutf8::compat::from_utf8(&content) {
         Ok(s) => s,
         Err(e) => {
             let error_message = format!("{}: Failed to decode UTF-8 ({e})\n", filename.display());
@@ -141,15 +141,16 @@ key4 = "another unclosed string
     #[tokio::test]
     async fn test_invalid_utf8() -> Result<()> {
         let dir = tempdir()?;
-        // Create content with invalid UTF-8 bytes
-        let content = b"key1 = \"\xff\xfe\xfd\"\nkey2 = \"valid\"";
+        let content =
+            b"key = \"a longer value with invalid UTF-8 after otherwise valid text: \xff\"\n";
         let file_path = create_test_file(&dir, "invalid_utf8.toml", content).await?;
 
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, Path::new("invalid_utf8.toml"))?;
         assert_eq!(result.exit_status, 1);
-        let output_str = String::from_utf8_lossy(&result.output);
-        assert!(output_str.contains("Failed to decode UTF-8"));
-        assert!(output_str.contains("invalid_utf8.toml"));
+        assert_eq!(
+            result.output,
+            b"invalid_utf8.toml: Failed to decode UTF-8 (invalid utf-8 sequence of 1 bytes from index 69)\n"
+        );
         Ok(())
     }
 }

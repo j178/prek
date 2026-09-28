@@ -76,6 +76,7 @@ serde-saphyr = { version = "1.2.0", default-features = false, features = ["deser
 serde_json = { version = "1.0.132", features = ["preserve_order", "unbounded_depth"] }
 serde_stacker = { version = "0.1.12" }
 shlex = { version = "2.0.0" }
+simdutf8 = { version = "0.1.5" }
 similar = { version = "3.0.0" }
 ssl-certs = { version = "0.1.1" }
 strum = { version = "0.28.0", features = ["derive"] }

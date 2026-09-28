@@ -2036,6 +2036,7 @@ dependencies = [
  "serde_json",
  "serde_stacker",
  "shlex",
+ "simdutf8",
  "similar 3.2.0",
  "ssl-certs",
  "strum",
