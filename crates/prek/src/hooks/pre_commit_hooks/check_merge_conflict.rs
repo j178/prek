@@ -60,7 +60,7 @@ fn is_in_merge() -> Result<bool> {
         || git_dir.join("rebase-merge").exists())
 }
 
-fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
+fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
     // Keep enough lookahead for the longest marker, "=======\r\n".
     const LOOKAHEAD: usize = 8;
     let mut file = fs_err::File::open(file_path)?;
@@ -75,7 +75,7 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
     let mut in_conflict = false;
 
     let mut report_conflict = |line_number: usize, pattern: &str| -> std::io::Result<()> {
-        write_conflict_message(&mut output, filename, line_number, pattern)?;
+        write_conflict_message(&mut output, display_path, line_number, pattern)?;
         code = 1;
         Ok(())
     };
@@ -147,14 +147,14 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
 
 fn write_conflict_message(
     output: &mut Vec<u8>,
-    filename: &Path,
+    display_path: &Path,
     line_number: usize,
     pattern: &str,
 ) -> std::io::Result<()> {
     writeln!(
         output,
         "{}:{line_number}: Merge conflict string {pattern:?} found",
-        filename.display(),
+        display_path.display(),
     )
 }
 

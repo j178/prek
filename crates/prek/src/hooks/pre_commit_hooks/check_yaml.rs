@@ -51,12 +51,12 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| check_file(file_path, filename, mode),
+        move |file_path, display_path| check_file(file_path, display_path, mode),
     )
     .await
 }
 
-fn check_file(file_path: &Path, filename: &Path, mode: CheckMode) -> Result<HookOutput> {
+fn check_file(file_path: &Path, display_path: &Path, mode: CheckMode) -> Result<HookOutput> {
     let content = fs_err::read(file_path)?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
@@ -66,14 +66,14 @@ fn check_file(file_path: &Path, filename: &Path, mode: CheckMode) -> Result<Hook
         CheckMode::Load {
             multiple,
             disallow_unknown_tags,
-        } => check_loaded(filename, &content, multiple, disallow_unknown_tags),
-        CheckMode::SyntaxOnly => check_syntax(filename, &content),
+        } => check_loaded(display_path, &content, multiple, disallow_unknown_tags),
+        CheckMode::SyntaxOnly => check_syntax(display_path, &content),
     };
     Ok(output)
 }
 
 fn check_loaded(
-    filename: &Path,
+    display_path: &Path,
     content: &[u8],
     allow_multi_docs: bool,
     disallow_unknown_tags: bool,
@@ -115,18 +115,23 @@ fn check_loaded(
                 snippets: serde_saphyr::SnippetMode::Off,
                 formatter: &serde_saphyr::UserMessageFormatter,
             });
-            let error_message = format!("{}: Failed to yaml decode ({err})\n", filename.display());
+            let error_message = format!(
+                "{}: Failed to yaml decode ({err})\n",
+                display_path.display()
+            );
             HookOutput::unchanged(1, error_message.into_bytes())
         }
     }
 }
 
-fn check_syntax(filename: &Path, content: &[u8]) -> HookOutput {
+fn check_syntax(display_path: &Path, content: &[u8]) -> HookOutput {
     let content = match simdutf8::compat::from_utf8(content) {
         Ok(content) => content,
         Err(error) => {
-            let error_message =
-                format!("{}: Failed to decode UTF-8 ({error})\n", filename.display());
+            let error_message = format!(
+                "{}: Failed to decode UTF-8 ({error})\n",
+                display_path.display()
+            );
             return HookOutput::unchanged(1, error_message.into_bytes());
         }
     };
@@ -141,7 +146,10 @@ fn check_syntax(filename: &Path, content: &[u8]) -> HookOutput {
     for event in granit_parser::Parser::with_options(granit_parser::StrInput::new(content), options)
     {
         if let Err(error) = event {
-            let error_message = format!("{}: Failed to yaml parse ({error})\n", filename.display());
+            let error_message = format!(
+                "{}: Failed to yaml parse ({error})\n",
+                display_path.display()
+            );
             return HookOutput::unchanged(1, error_message.into_bytes());
         }
     }

@@ -34,10 +34,10 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| {
+        move |file_path, display_path| {
             sort_file(
                 file_path,
-                filename,
+                display_path,
                 args.check,
                 args.ignore_case,
                 args.unique,
@@ -49,7 +49,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
 fn sort_file(
     file_path: &Path,
-    filename: &Path,
+    display_path: &Path,
     check: bool,
     ignore_case: bool,
     unique: bool,
@@ -64,7 +64,7 @@ fn sort_file(
     if check {
         return Ok(HookOutput::unchanged(
             1,
-            format!("Would sort {}\n", filename.display()).into_bytes(),
+            format!("Would sort {}\n", display_path.display()).into_bytes(),
         ));
     }
 
@@ -77,7 +77,7 @@ fn sort_file(
     fs_err::write(file_path, &after)?;
     Ok(HookOutput::known(
         1,
-        format!("Sorting {}\n", filename.display()).into_bytes(),
+        format!("Sorting {}\n", display_path.display()).into_bytes(),
         true,
     ))
 }

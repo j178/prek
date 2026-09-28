@@ -58,10 +58,10 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 /// For example, if one read ends with `BEGIN RSA PRIV` and the next read starts
 /// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
 /// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
-fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
+fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
     let found = check_file_sync(file_path)?;
     if found {
-        let error_message = format!("Private key found: {}\n", filename.display());
+        let error_message = format!("Private key found: {}\n", display_path.display());
         Ok(HookOutput::unchanged(1, error_message.into_bytes()))
     } else {
         Ok(HookOutput::unchanged(0, Vec::new()))

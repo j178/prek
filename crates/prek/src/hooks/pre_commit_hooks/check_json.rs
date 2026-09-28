@@ -21,7 +21,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     .await
 }
 
-fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
+fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
     let content = fs_err::read(file_path)?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
@@ -30,8 +30,10 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
     let content = match simdutf8::compat::from_utf8(&content) {
         Ok(content) => content,
         Err(error) => {
-            let error_message =
-                format!("{}: Failed to decode UTF-8 ({error})\n", filename.display());
+            let error_message = format!(
+                "{}: Failed to decode UTF-8 ({error})\n",
+                display_path.display()
+            );
             return Ok(HookOutput::unchanged(1, error_message.into_bytes()));
         }
     };
@@ -44,7 +46,8 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
     match JsonDuplicateKeyChecker::deserialize(deserializer) {
         Ok(JsonDuplicateKeyChecker) => Ok(HookOutput::unchanged(0, Vec::new())),
         Err(e) => {
-            let error_message = format!("{}: Failed to json decode ({e})\n", filename.display());
+            let error_message =
+                format!("{}: Failed to json decode ({e})\n", display_path.display());
             Ok(HookOutput::unchanged(1, error_message.into_bytes()))
         }
     }

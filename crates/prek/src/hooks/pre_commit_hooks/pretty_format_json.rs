@@ -84,12 +84,12 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| check_file(file_path, filename, &prepared),
+        move |file_path, display_path| check_file(file_path, display_path, &prepared),
     )
     .await
 }
 
-fn check_file(file_path: &Path, filename: &Path, args: &PreparedArgs) -> Result<HookOutput> {
+fn check_file(file_path: &Path, display_path: &Path, args: &PreparedArgs) -> Result<HookOutput> {
     let original_content = fs_err::read_to_string(file_path)?;
 
     match prettify_json(&original_content, args) {
@@ -104,19 +104,20 @@ fn check_file(file_path: &Path, filename: &Path, args: &PreparedArgs) -> Result<
                 // existing newline style instead of forcing serde_json's LF.
                 let output = with_original_line_ending(&prettified_json, &original_content);
                 fs_err::write(file_path, output.as_bytes())?;
-                let message = format!("Fixing file {}\n", filename.display());
+                let message = format!("Fixing file {}\n", display_path.display());
                 Ok(HookOutput::known(1, message.into_bytes(), true))
             } else {
                 let normalized_content = normalize_newlines(&original_content);
-                let diff = generate_diff(normalized_content.as_ref(), &prettified_json, filename);
-                let message = format!("{}: not pretty-formatted.\n{diff}", filename.display());
+                let diff =
+                    generate_diff(normalized_content.as_ref(), &prettified_json, display_path);
+                let message = format!("{}: not pretty-formatted.\n{diff}", display_path.display());
                 Ok(HookOutput::unchanged(1, message.into_bytes()))
             }
         }
         Err(err) => {
             let error_message = format!(
                 "{}: invalid JSON ({err}). Consider using the `check-json` hook.\n",
-                filename.display(),
+                display_path.display(),
             );
             Ok(HookOutput::unchanged(1, error_message.into_bytes()))
         }
@@ -443,13 +444,13 @@ fn reorder_keys(value: &mut Value, top_keys: &[String], sort_keys: bool) {
     }
 }
 
-fn generate_diff(original: &str, formatted: &str, filename: &Path) -> String {
+fn generate_diff(original: &str, formatted: &str, display_path: &Path) -> String {
     TextDiff::from_lines(original, formatted)
         .unified_diff()
         .context_radius(3)
         .header(
-            &filename.display().to_string(),
-            &filename.display().to_string(),
+            &display_path.display().to_string(),
+            &display_path.display().to_string(),
         )
         .to_string()
 }

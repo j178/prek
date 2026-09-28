@@ -87,6 +87,7 @@ pub(crate) fn hook_filenames<'a>(
 
 /// Runs blocking file checks, preserving filename order in the combined output.
 /// Explicit filenames finish serially before selected filenames run in parallel.
+/// Each check receives the path joined to `file_base` for I/O and the original path for diagnostics.
 pub(crate) async fn run_blocking_file_checks<F>(
     file_base: &Path,
     explicit: &[PathBuf],

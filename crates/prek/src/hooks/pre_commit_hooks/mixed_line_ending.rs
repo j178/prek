@@ -69,12 +69,12 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| fix_file(file_path, filename, args.fix),
+        move |file_path, display_path| fix_file(file_path, display_path, args.fix),
     )
     .await
 }
 
-fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<HookOutput> {
+fn fix_file(file_path: &Path, display_path: &Path, fix_mode: FixMode) -> Result<HookOutput> {
     let contents = fs_err::read(file_path)?;
 
     // Without CR, auto/no/LF cannot change the file, including a partial final line.
@@ -97,7 +97,7 @@ fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<Hook
             return if has_mixed_endings {
                 Ok(HookOutput::unchanged(
                     1,
-                    format!("{}: mixed line endings\n", filename.display()).into_bytes(),
+                    format!("{}: mixed line endings\n", display_path.display()).into_bytes(),
                 ))
             } else {
                 Ok(HookOutput::unchanged(0, Vec::new()))
@@ -116,7 +116,7 @@ fn fix_file(file_path: &Path, filename: &Path, fix_mode: FixMode) -> Result<Hook
     fs_err::write(file_path, &contents)?;
     Ok(HookOutput::known(
         1,
-        format!("Fixing {}\n", filename.display()).into_bytes(),
+        format!("Fixing {}\n", display_path.display()).into_bytes(),
         true,
     ))
 }
