@@ -32,6 +32,7 @@ bstr = { version = "1.11.0", default-features = false, features = ["std"] }
 cargo_metadata = { version = "0.23.1" }
 clap = { version = "4.6.0", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
+clap_complete_nushell = { version = "4.6.2" }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std"] }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }

@@ -153,7 +153,8 @@ example, use `uv tool upgrade prek` for a uv tool installation or
 
     Run `echo $SHELL` to determine your shell.
 
-prek provides shell completion for commands, options, and hook or project selectors.
+prek provides shell completion for commands and options. Bash, Zsh, Fish, PowerShell,
+and Elvish also support hook or project selectors.
 To generate and load the completion script when your shell starts, run one of the following:
 
 === "Bash"
@@ -178,6 +179,20 @@ To generate and load the completion script when your shell starts, run one of th
 
     ```powershell
     Add-Content -Path $PROFILE -Value 'prek util generate-shell-completion powershell | Out-String | Invoke-Expression'
+    ```
+
+=== "Nushell"
+
+    Save the completion script:
+
+    ```nu
+    prek util generate-shell-completion nushell | save --force ($nu.default-config-dir | path join 'prek-completions.nu')
+    ```
+
+    Add the following to your `config.nu`:
+
+    ```nu
+    source ($nu.default-config-dir | path join 'prek-completions.nu')
     ```
 
 Then restart your shell or source the config file.

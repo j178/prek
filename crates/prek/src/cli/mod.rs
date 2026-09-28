@@ -1237,7 +1237,7 @@ pub(crate) struct SelfUpdateArgs {
 pub(crate) struct GenerateShellCompletionArgs {
     /// The shell to generate the completion script for.
     #[arg(value_enum)]
-    pub shell: clap_complete::Shell,
+    pub shell: completion::CompletionShell,
 }
 
 #[derive(Debug, Args)]
