@@ -16,12 +16,12 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| fix_file(file_path, filename, args.check),
+        move |file_path, display_path| fix_file(file_path, display_path, args.check),
     )
     .await
 }
 
-fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
+fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOutput> {
     let needs_fix = fix_file_sync(file_path, check)?;
     if !needs_fix {
         return Ok(HookOutput::unchanged(0, Vec::new()));
@@ -30,7 +30,7 @@ fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput
     let action = if check { "would remove" } else { "removed" };
     Ok(HookOutput::known(
         1,
-        format!("{}: {action} byte-order marker\n", filename.display()).into_bytes(),
+        format!("{}: {action} byte-order marker\n", display_path.display()).into_bytes(),
         !check,
     ))
 }

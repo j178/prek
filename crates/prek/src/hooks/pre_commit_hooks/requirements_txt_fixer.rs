@@ -196,12 +196,12 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| fix_file(file_path, filename, args.check),
+        move |file_path, display_path| fix_file(file_path, display_path, args.check),
     )
     .await
 }
 
-fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput> {
+fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOutput> {
     let mut before = fs_err::read(file_path)?;
     let capacity = before.len() + 1;
 
@@ -209,7 +209,11 @@ fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput
         Ok(Some(fixed)) => fixed,
         Ok(None) => return Ok(HookOutput::unchanged(0, Vec::new())),
         Err(error) => {
-            let output = format!("{}:{}: {error}\n", filename.display(), error.line_number());
+            let output = format!(
+                "{}:{}: {error}\n",
+                display_path.display(),
+                error.line_number()
+            );
             return Ok(HookOutput::unchanged(1, output.into_bytes()));
         }
     };
@@ -217,7 +221,7 @@ fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput
     if check {
         return Ok(HookOutput::unchanged(
             1,
-            format!("Would sort {}\n", filename.display()).into_bytes(),
+            format!("Would sort {}\n", display_path.display()).into_bytes(),
         ));
     }
 
@@ -231,7 +235,7 @@ fn fix_file(file_path: &Path, filename: &Path, check: bool) -> Result<HookOutput
     fs_err::write(file_path, after)?;
     Ok(HookOutput::known(
         1,
-        format!("Sorting {}\n", filename.display()).into_bytes(),
+        format!("Sorting {}\n", display_path.display()).into_bytes(),
         true,
     ))
 }

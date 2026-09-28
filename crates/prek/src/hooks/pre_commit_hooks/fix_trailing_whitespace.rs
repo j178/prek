@@ -77,10 +77,10 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, filename| {
+        move |file_path, display_path| {
             fix_file(
                 file_path,
-                filename,
+                display_path,
                 &chars,
                 force_markdown,
                 &markdown_exts,
@@ -93,13 +93,13 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
 fn fix_file(
     file_path: &Path,
-    filename: &Path,
+    display_path: &Path,
     chars: &[char],
     force_markdown: bool,
     markdown_exts: &[String],
     check: bool,
 ) -> Result<HookOutput> {
-    let is_markdown = force_markdown || is_markdown_file(filename, markdown_exts);
+    let is_markdown = force_markdown || is_markdown_file(display_path, markdown_exts);
 
     let mut content = fs_err::read(file_path)?;
     let mut line_start = if chars.is_empty() && !is_markdown {
@@ -136,7 +136,7 @@ fn fix_file(
             if check {
                 return Ok(HookOutput::unchanged(
                     1,
-                    format!("Would fix {}\n", filename.display()).into_bytes(),
+                    format!("Would fix {}\n", display_path.display()).into_bytes(),
                 ));
             }
             // Compact unchanged runs in place. The destination never reaches unread bytes.
@@ -155,7 +155,7 @@ fn fix_file(
     fs_err::write(file_path, &content)?;
     Ok(HookOutput::known(
         1,
-        format!("Fixing {}\n", filename.display()).into_bytes(),
+        format!("Fixing {}\n", display_path.display()).into_bytes(),
         true,
     ))
 }
