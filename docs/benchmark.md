@@ -241,8 +241,7 @@ global state.
 The complete fixture generator, pinned hook configurations, and hyperfine
 commands are published in
 [`prek-ci/benchmarks`](https://github.com/prek-ci/benchmarks).
-The [0.5.4 raw samples and environment details](assets/benchmark-0.5.4.json)
-are included with this page. This run used benchmark commit
+This run used benchmark commit
 [`38dbddb`](https://github.com/prek-ci/benchmarks/tree/38dbddbeccdf6578c7e9c60e67e88fb20360ebdf).
 The generator recreates all three fixture layouts and verifies their Git tree
 hashes, so a change to any workload file is detected before measurements begin.
