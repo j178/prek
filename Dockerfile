@@ -2,7 +2,8 @@ FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:0.11.28@sha256:0f36cb9361a33
 
 FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 AS build
 
-ARG UBUNTU_SNAPSHOT=20260801T000000Z
+# Keep the snapshot at least as recent as the Ubuntu base image.
+ARG UBUNTU_SNAPSHOT=20260928T000000Z
 ARG RUSTUP_VERSION=1.28.2
 
 ENV HOME="/root"
