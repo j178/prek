@@ -10,8 +10,8 @@ which files matter, match those files to hooks, start processes, present the
 results, and determine whether anything changed.
 
 That distinction is the key to reading these numbers. If `cargo clippy` takes
-30 seconds, even cutting everything around it from roughly 1.4 seconds to 0.1
-seconds only changes the total from 31.4 seconds to 30.1 seconds: about a 1.04x
+30 seconds, even cutting everything around it from roughly 1.2 seconds to 0.1
+seconds only changes the total from 31.2 seconds to 30.1 seconds: about a 1.04x
 speedup. At the other extreme, a repository with many quick hooks can spend most
 of its time inside the runner, especially when checking the worktree with
 `git diff` is expensive.
@@ -51,8 +51,8 @@ These are generic hooks, so prek's built-in fast path is not involved.
 This is still not a measurement of literally zero hook cost: the runner must
 launch a child process for every `true`. The one-hook case mostly exposes fixed
 startup and repository-processing costs. With ten hooks, both runners repeat
-dispatch and modification checks; prek saves 203 ms in absolute time, while the
-relative gap narrows from 3.30x to 1.80x.
+dispatch and modification checks; prek saves 234 ms in absolute time, while the
+relative gap narrows from 3.96x to 2.85x.
 
 That gives us a useful lower bound, but not yet a representative hook workload.
 The next question is what happens when the hooks perform real, predictable work
@@ -77,8 +77,8 @@ implementations. The hooks keep their implicit priorities and run sequentially.
 This gives us a baseline before enabling any prek-specific runtime
 optimizations.
 
-The `pre-commit` reference takes 1,737 ms. prek completes the same workload in
-1,438 ms, 17% less time. We use that 1,438 ms result as the baseline for the
+The `pre-commit` reference takes 1,532 ms. prek completes the same workload in
+1,165 ms, 24% less time. We use that 1,165 ms result as the baseline for the
 remaining stages.
 
 ![Horizontal bars comparing pre-commit with prek without the fast path](assets/benchmark-no-fast-path.svg)
@@ -88,7 +88,7 @@ remaining stages.
 Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration.
 prek's [automatic fast path](built-in-hooks.md#use-the-automatic-fast-path) recognizes the
 13 hooks and runs their built-in Rust implementations. The median falls from
-1,438 ms to 213 ms: 85% less time, or a 6.75x speedup.
+1,165 ms to 119 ms: 90% less time, or a 9.81x speedup.
 
 ![Horizontal bars showing the effect of the fast path](assets/benchmark-fast-path.svg)
 
@@ -138,8 +138,8 @@ repos:
         priority: checks
 ```
 
-With the fast path retained, priority scheduling lowers the median from 213 ms
-to 172 ms, another 19% reduction. That is 8.36x faster than the no-fast-path
+With the fast path retained, priority scheduling lowers the median from 119 ms
+to 100 ms, another 16% reduction. That is 11.62x faster than the no-fast-path
 baseline.
 
 ![Horizontal bars showing the effect of priority scheduling](assets/benchmark-priority.svg)
@@ -169,7 +169,7 @@ Nested parent and child projects still run from deepest to shallowest, so a
 workspace should reflect real ownership boundaries rather than being split only
 to chase a benchmark number.
 
-Adding the second project lowers the median from 172 ms to 135 ms, another 21%
+Adding the second project lowers the median from 100 ms to 91 ms, another 10%
 reduction.
 
 ![Horizontal bars showing the effect of two concurrent projects](assets/benchmark-projects.svg)
@@ -180,8 +180,8 @@ Put together, the four measurements form the complete optimization ladder:
 
 ![Horizontal bar chart of the runtime optimization ladder](assets/benchmark-runtime.svg)
 
-Across the complete ladder, prek falls from 1,438 ms to 135 ms: 90.6% less
-time, or a 10.64x speedup. The final configuration is 12.85x faster than the
+Across the complete ladder, prek falls from 1,165 ms to 91 ms: 92.2% less
+time, or a 12.86x speedup. The final configuration is 16.92x faster than the
 `pre-commit` reference.
 
 ## The hidden cost of `git diff`
@@ -202,7 +202,7 @@ they changed files. When every result is known, prek can skip those diffs
 entirely.
 
 This fixture is deliberately moderate: a separate 30-run check of a clean
-`git diff` had a median of about 18 ms. The difference becomes much larger in an
+`git diff` had a median of about 14 ms. The difference becomes much larger in an
 extreme repository where one diff takes hundreds of milliseconds. For example,
 at 300 ms per diff:
 
@@ -238,9 +238,12 @@ global state.
 
 ## Reproduce the benchmark
 
-The complete fixture generator, pinned hook configurations, hyperfine commands,
-and raw samples are published in
+The complete fixture generator, pinned hook configurations, and hyperfine
+commands are published in
 [`prek-ci/benchmarks`](https://github.com/prek-ci/benchmarks).
+The [0.5.4 raw samples and environment details](assets/benchmark-0.5.4.json)
+are included with this page. This run used benchmark commit
+[`38dbddb`](https://github.com/prek-ci/benchmarks/tree/38dbddbeccdf6578c7e9c60e67e88fb20360ebdf).
 The generator recreates all three fixture layouts and verifies their Git tree
 hashes, so a change to any workload file is detected before measurements begin.
 
@@ -249,31 +252,38 @@ With Git, uv, hyperfine, and Python 3 installed, run:
 ```console
 git clone https://github.com/prek-ci/benchmarks.git
 cd benchmarks
-./scripts/setup-tools.sh
-./benchmark.sh
+git checkout 38dbddbeccdf6578c7e9c60e67e88fb20360ebdf
+PREK_VERSION=0.5.4 ./scripts/setup-tools.sh
+PATH="$PWD/.tools/pre-commit/bin:$PATH" ./benchmark.sh
 ```
 
-`setup-tools.sh` installs the prek 0.4.12 binary wheel and pre-commit 4.6.1 in
-isolated tool environments using Python 3.14.6. `benchmark.sh` creates a fresh
-960-file fixture, warms both runner caches, executes the framework,
-runtime-ladder, and clean-`git diff` benchmarks in both command orders, and
-writes the raw JSON plus a pooled-median summary to
+With `PREK_VERSION=0.5.4`, `setup-tools.sh` installs the prek 0.5.4 binary wheel
+and pre-commit 4.6.1 in isolated tool environments using Python 3.14.6.
+Adding the pre-commit environment to `PATH` makes that Python version available
+to both runners when they prepare hook environments. `benchmark.sh` creates a
+fresh 960-file fixture, warms both runner caches, executes the framework and
+runtime-ladder benchmarks in both command orders, and measures a clean
+`git diff`. It writes the raw JSON plus a pooled-median summary to
 `results/local-<timestamp>/`.
 
 The [original 2026-07-31 samples](https://github.com/prek-ci/benchmarks/tree/main/results/2026-07-31)
-are preserved alongside the scripts. Expect absolute times to vary across
-machines; compare the ordering and relative changes on your own hardware.
+remain available for historical reference. The OS and prek version have changed
+since that run, so these results are not a controlled version-to-version
+comparison. Expect absolute times to vary across machines; compare the ordering
+and relative changes on your own hardware.
 
 ## Methodology
 
-- Date: 2026-07-31
-- OS: macOS 15.7.7
+- Date: 2026-09-28
+- OS: macOS 27.0
 - CPU: Apple M3 Pro, 12 cores
 - RAM: 18 GiB
-- prek: `0.4.12`
+- prek: `0.5.4` (PyPI binary wheel)
 - pre-commit: `4.6.1`
+- Python: `3.14.6`
 - pre-commit-hooks: `v6.0.0`
 - hyperfine: `1.20.0`
+- Git: `2.54.0` (Apple Git-157)
 - Framework workload: 960 workload files; 10 local `language: system` hooks
   invoking `true`; `always_run: true`; `pass_filenames: false`; one or ten hooks
   selected; clean worktree and warm filesystem caches
@@ -281,7 +291,8 @@ machines; compare the ordering and relative changes on your own hardware.
   hook matching; 13 unique built-in-capable hook IDs; clean worktree; warm hook
   environments and filesystem caches
 - Sampling: 5 warmups followed by 15 measured runs in forward order and 15 in
-  reverse order; the charts report the pooled median of 30 runs
+  reverse order; the charts report the pooled median of all 30 runs, including
+  outliers; percentages and speedups use unrounded medians
 
 Benchmark performance varies with hardware, operating system, repository shape,
 hook configuration, cache state, and background load. Compare representative
