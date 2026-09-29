@@ -118,17 +118,21 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    git::root()?;
+    let git_root = git::root()?;
     let filesystem = FilesystemOptions::user()?;
 
-    let should_stash = selection.requires_clean_worktree();
-
-    // Check if we have unresolved merge conflict files and fail fast.
-    if should_stash && git::has_unmerged_paths().await? {
-        anyhow::bail!(
-            "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
-        );
-    }
+    let requires_clean_worktree = selection.requires_clean_worktree();
+    let unstaged = if requires_clean_worktree {
+        let status = git::worktree_status(git_root).await?;
+        if status.unmerged {
+            anyhow::bail!(
+                "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
+            );
+        }
+        Some(status.unstaged)
+    } else {
+        None
+    };
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
@@ -136,8 +140,8 @@ pub(crate) async fn run(
     let has_group_filters = group_filters.has_filters();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    if should_stash {
-        workspace.check_configs_staged().await?;
+    if let Some(unstaged) = &unstaged {
+        workspace.check_configs_staged(unstaged)?;
     }
 
     let reporter = HookInitReporter::new(printer);
@@ -216,14 +220,19 @@ pub(crate) async fn run(
     );
 
     // Clear any unstaged changes from the git working directory.
-    let mut _guard = None;
-    if should_stash {
-        _guard = Some(
+    let _guard = if let Some(unstaged) = &unstaged
+        && unstaged
+            .iter()
+            .any(|path| path.starts_with(workspace.root()))
+    {
+        Some(
             WorkTreeKeeper::clean(store, workspace.root())
                 .await
                 .context("Failed to clean work tree")?,
-        );
-    }
+        )
+    } else {
+        None
+    };
 
     let (from_ref, to_ref) = selection.refs();
     set_env_vars(from_ref, to_ref, &extra_args);
@@ -273,7 +282,7 @@ pub(crate) async fn run(
         dry_run,
         hide_status,
         filesystem.as_ref(),
-        should_stash,
+        requires_clean_worktree,
         verbose,
         printer,
     )
