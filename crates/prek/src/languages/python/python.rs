@@ -7,7 +7,6 @@ use asyncband::once::OnceMap;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use rustc_hash::FxBuildHasher;
-use serde::Deserialize;
 use tracing::{debug, trace};
 
 use crate::cli::reporter::HookInstallReporter;
@@ -30,9 +29,23 @@ pub(crate) struct PythonInfo {
     pub(crate) python_exec: PathBuf,
 }
 
+impl PythonInfo {
+    fn parse(output: &[u8]) -> Result<Self> {
+        let output = std::str::from_utf8(output)?;
+        // The prefix may contain newlines or trailing whitespace.
+        let (version, base_exec_prefix) = output
+            .split_once('\n')
+            .context("Missing Python version separator")?;
+        Ok(Self {
+            version: version.parse()?,
+            python_exec: python_exec(Path::new(base_exec_prefix)),
+        })
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PythonInfoError {
-    #[error("Failed to parse Python info JSON: {0}")]
+    #[error("Failed to parse Python info: {0}")]
     Parse(String),
     #[error("Failed to query Python info: {0}")]
     Query(String),
@@ -43,19 +56,10 @@ static PYTHON_INFO_CACHE: LazyLock<OnceMap<PathBuf, Arc<PythonInfo>, FxBuildHash
     LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
 async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError> {
-    #[derive(Deserialize)]
-    struct QueryPythonInfo {
-        version: semver::Version,
-        base_exec_prefix: PathBuf,
-    }
-
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
-    import sys, json
-    info = {
-        "version": ".".join(map(str, sys.version_info[:3])),
-        "base_exec_prefix": sys.base_exec_prefix,
-    }
-    print(json.dumps(info))
+    import sys
+    info = ".".join(map(str, sys.version_info[:3])) + "\n" + sys.base_exec_prefix
+    sys.stdout.buffer.write(info.encode("utf-8"))
     "#};
 
     let stdout = Cmd::new(python)
@@ -68,14 +72,7 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
         .map_err(|err| PythonInfoError::Query(err.to_string()))?
         .stdout;
 
-    let info: QueryPythonInfo =
-        serde_json::from_slice(&stdout).map_err(|err| PythonInfoError::Parse(err.to_string()))?;
-    let python_exec = python_exec(&info.base_exec_prefix);
-
-    Ok(PythonInfo {
-        version: info.version,
-        python_exec,
-    })
+    PythonInfo::parse(&stdout).map_err(|err| PythonInfoError::Parse(err.to_string()))
 }
 
 pub(crate) async fn query_python_info_cached(
@@ -385,15 +382,38 @@ pub(crate) fn python_exec(venv: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
-    use super::{Python, VenvAttempt};
+    use super::{Python, PythonInfo, VenvAttempt, python_exec};
     use crate::config::Language;
     use crate::hook::InstallInfo;
     use crate::languages::python::uv::Uv;
     use crate::languages::version::LanguageRequest;
     use crate::store::{Store, ToolBucket};
     use prek_consts::env_vars::EnvVars;
+
+    #[test]
+    fn python_info_preserves_prefix() -> anyhow::Result<()> {
+        for prefix in ["/tmp/Python 安装", "/tmp/Python\n ", r"C:\Users\Jo\Python"] {
+            let output = format!("3.14.0\n{prefix}");
+            let info = PythonInfo::parse(output.as_bytes())?;
+
+            assert_eq!(info.version, semver::Version::new(3, 14, 0));
+            assert_eq!(info.python_exec, python_exec(Path::new(prefix)));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn python_info_rejects_malformed_output() {
+        for output in [
+            b"3.14.0".as_slice(),
+            b"invalid\n/tmp/python",
+            b"3.14.0\n\xff",
+        ] {
+            assert!(PythonInfo::parse(output).is_err());
+        }
+    }
 
     fn setup_test_install() -> (tempfile::TempDir, Uv, Store, InstallInfo) {
         let temp = tempfile::tempdir().expect("create tempdir");
