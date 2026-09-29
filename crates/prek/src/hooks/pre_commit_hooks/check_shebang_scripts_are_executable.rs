@@ -1,7 +1,8 @@
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
@@ -16,14 +17,29 @@ use rustc_hash::FxHashSet;
 /// Runs the `check-shebang-scripts-are-executable` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
-    let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
+    let filenames = hook_filenames(&args.filenames, filenames)
+        .map(Path::to_path_buf)
+        .collect::<Vec<_>>();
     if filenames.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
     let file_base = hook.project().relative_path();
+    let base = file_base.to_path_buf();
+    let (filenames, needs_index) = tokio::task::spawn_blocking(move || {
+        let needs_index = filenames
+            .par_iter()
+            // Defer read errors until the index confirms the file needs checking.
+            .any(|file| file_has_shebang(&base.join(file)).unwrap_or(true));
+        (filenames, needs_index)
+    })
+    .await?;
+    if !needs_index {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    }
+
     let stdout = git_index_stage_output(file_base).await?;
-    let filenames: FxHashSet<_> = filenames.into_iter().collect();
+    let filenames: FxHashSet<_> = filenames.iter().map(PathBuf::as_path).collect();
     let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, &filenames, false)
         .collect::<Vec<_>>();
 

@@ -22,6 +22,12 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
+    let file_base = hook.project().relative_path();
+    let result = check_shebangs(file_base, &filenames).await;
+    if result.as_ref().is_ok_and(|output| output.exit_status == 0) {
+        return result;
+    }
+
     let stdout = git::git_cmd()?
         .arg("config")
         .arg("core.fileMode")
@@ -31,12 +37,11 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
         .stdout;
 
     let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
-    let file_base = hook.project().relative_path();
 
     if tracks_executable_bit {
         // core.fileMode=true means the platform honors the executable bit, so trust the FS metadata.
         // The `executables-have-shebangs` hook already restricts inputs to executable text files (`types: [text, executable]`).
-        check_shebangs(file_base, &filenames).await
+        result
     } else {
         // If on win32 use git to check executable bit
         git_check_shebangs(file_base, &filenames).await

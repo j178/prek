@@ -3355,6 +3355,53 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn shebang_read_errors_follow_index_mode() -> Result<()> {
+    let context = TestEnv::new()
+        .with_filter(
+            r"(`missing\.sh`: ).* \(os error 2\)",
+            "${1}No such file or directory (os error 2)",
+        )
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-shebang-scripts-are-executable
+                args: [missing.sh]
+                always_run: true
+                pass_filenames: false
+    "})
+        .with_file("missing.sh", "#!/bin/sh\n")
+        .init_git();
+
+    fs_err::remove_file(context.child("missing.sh"))?;
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-shebang-scripts-are-executable`
+      caused by: failed to open file `missing.sh`: No such file or directory (os error 2)
+    "#);
+
+    context.write_file("missing.sh", "#!/bin/sh\n");
+    context
+        .git()
+        .run(["update-index", "--chmod=+x", "missing.sh"]);
+    fs_err::remove_file(context.child("missing.sh"))?;
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check that scripts with shebangs are executable..........................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
 fn is_case_sensitive_filesystem(context: &TestEnv) -> Result<bool> {
     let test_lower = context.child("case_test_file.txt");
     test_lower.write_str("test")?;
