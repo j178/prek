@@ -1,15 +1,15 @@
+use std::io::Read;
 use std::path::Path;
 use std::str;
 
 use rustc_hash::FxHashSet;
-use tokio::io::AsyncReadExt;
 
 use crate::git;
 
-pub(super) async fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error> {
-    let mut file = fs_err::tokio::File::open(path).await?;
+pub(super) fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error> {
+    let mut file = fs_err::File::open(path)?;
     let mut buf = [0u8; 2];
-    let n = file.read(&mut buf).await?;
+    let n = file.read(&mut buf)?;
     Ok(n >= 2 && buf[0] == b'#' && buf[1] == b'!')
 }
 
@@ -99,21 +99,21 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn file_has_shebang_detects_valid_shebang() -> Result<(), anyhow::Error> {
+    #[test]
+    fn file_has_shebang_detects_valid_shebang() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
-        fs_err::tokio::write(file.path(), b"#!/bin/sh\necho hi\n").await?;
+        fs_err::write(file.path(), b"#!/bin/sh\necho hi\n")?;
 
-        assert!(file_has_shebang(file.path()).await?);
+        assert!(file_has_shebang(file.path())?);
         Ok(())
     }
 
-    #[tokio::test]
-    async fn file_has_shebang_rejects_non_shebang_prefixes() -> Result<(), anyhow::Error> {
+    #[test]
+    fn file_has_shebang_rejects_non_shebang_prefixes() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
-        fs_err::tokio::write(file.path(), b"##!/bin/sh\n").await?;
+        fs_err::write(file.path(), b"##!/bin/sh\n")?;
 
-        assert!(!file_has_shebang(file.path()).await?);
+        assert!(!file_has_shebang(file.path())?);
         Ok(())
     }
 }
