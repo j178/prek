@@ -1368,6 +1368,31 @@ fn check_added_large_files_hook() {
 }
 
 #[test]
+fn check_added_large_files_ignores_missing_lfs_argument() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--enforce-all', 'missing.dat']
+                always_run: true
+                pass_filenames: false
+    "})
+        .with_file(".gitattributes", "*.dat filter=lfs\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() {
     // Regression: builtin hooks receive project-relative filenames even in workspace mode.
     // `check-added-large-files` must therefore resolve git-lfs attributes relative to the
