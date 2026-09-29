@@ -1,9 +1,7 @@
-use std::collections::hash_map::Entry;
 use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 
 use crate::git;
@@ -17,62 +15,20 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let work_dir = hook.work_dir();
 
-    let (repo_files, added) = tokio::try_join!(
-        git::ls_files(work_dir, [Path::new(".")]),
-        git::staged_added_files(work_dir),
-    )?;
-    let mut repo_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
+    let repo_files = git::ls_files(work_dir, [Path::new(".")]).await?;
+    let mut all_files = FxHashSet::default();
     for path in &repo_files {
-        insert_path_and_parents(&mut repo_files_with_dirs, path);
+        insert_path_and_parents(&mut all_files, path);
     }
-
-    // Get relevant files (filenames + added files) and include their parent directories.
-    let mut relevant_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for filename in &filenames {
-        insert_path_and_parents(&mut relevant_files_with_dirs, filename);
-    }
-    for path in &added {
-        insert_path_and_parents(&mut relevant_files_with_dirs, path);
+        insert_path_and_parents(&mut all_files, filename);
     }
 
-    // Remove relevant files from repo files (avoid self-conflicts).
-    for file in &relevant_files_with_dirs {
-        repo_files_with_dirs.remove(file);
-    }
-
-    // Compute conflicts:
-    // 1) relevant vs repo (case-insensitive intersection)
-    // 2) relevant vs relevant (case-insensitive duplicates)
-    let mut repo_lower: FxHashSet<String> = FxHashSet::default();
-    repo_lower.reserve(repo_files_with_dirs.len());
-    for path in &repo_files_with_dirs {
-        repo_lower.insert(lower_key(path));
-    }
-
-    let mut conflicts: FxHashSet<String> = FxHashSet::default();
-    let mut relevant_lower_counts: FxHashMap<String, u8> = FxHashMap::default();
-    relevant_lower_counts.reserve(relevant_files_with_dirs.len());
-
-    for path in &relevant_files_with_dirs {
-        let lower = lower_key(path);
-
-        if repo_lower.contains(&lower) {
-            conflicts.insert(lower.clone());
-        }
-
-        match relevant_lower_counts.entry(lower) {
-            Entry::Vacant(entry) => {
-                entry.insert(1);
-            }
-            Entry::Occupied(mut entry) => {
-                let count = entry.get_mut();
-                *count = count.saturating_add(1);
-                if *count == 2 {
-                    // Only mark the conflict on the *first* duplicate to avoid repeated
-                    // cloning/inserting for the 3rd+ occurrences of the same lowercase key.
-                    conflicts.insert(entry.key().clone());
-                }
-            }
+    let mut seen = FxHashSet::default();
+    let mut conflicts = FxHashSet::default();
+    for path in &all_files {
+        if !seen.insert(lower_key(path)) {
+            conflicts.insert(lower_key(path));
         }
     }
 
@@ -81,11 +37,28 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         return Ok(HookOutput::unchanged(0, output));
     }
 
-    // The sets are disjoint at this point (relevant removed from repo), so we can just chain.
-    let mut conflicting_files: Vec<_> = repo_files_with_dirs
+    // Newly staged files are already in the index. Query them only when a
+    // conflict exists, to distinguish relevant conflicts from existing ones.
+    let added = git::staged_added_files(work_dir).await?;
+    let mut relevant_files = FxHashSet::default();
+    for filename in &filenames {
+        insert_path_and_parents(&mut relevant_files, filename);
+    }
+    for path in &added {
+        insert_path_and_parents(&mut relevant_files, path);
+    }
+    let relevant_conflicts: FxHashSet<_> = relevant_files
         .iter()
-        .chain(relevant_files_with_dirs.iter())
-        .filter(|path| conflicts.contains(&lower_key(path)))
+        .map(|path| lower_key(path))
+        .filter(|lower| conflicts.contains(lower))
+        .collect();
+    if relevant_conflicts.is_empty() {
+        return Ok(HookOutput::unchanged(0, output));
+    }
+
+    let mut conflicting_files: Vec<_> = all_files
+        .iter()
+        .filter(|path| relevant_conflicts.contains(&lower_key(path)))
         .collect();
     conflicting_files.sort();
 

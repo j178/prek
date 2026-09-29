@@ -3515,6 +3515,70 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 }
 
 #[test]
+fn check_case_conflict_selected_and_unselected_paths() -> Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-case-conflict
+    "})
+        .with_files([("foo.txt", "existing file"), ("trigger.txt", "trigger")])
+        .init_git();
+    context.git().commit("Initial commit");
+
+    // Populate the index directly so this also works on case-insensitive filesystems.
+    let blob = context.git().rev_parse("HEAD:foo.txt")?;
+    context.git().run([
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        &format!("100644,{blob},FOO.txt"),
+    ]);
+
+    cmd_snapshot!(context, context.run().args(["--files", "trigger.txt"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - description: Checks for files that would conflict in case-insensitive filesystems
+    - exit code: 1
+
+      Case-insensitivity conflict found: FOO.txt
+      Case-insensitivity conflict found: foo.txt
+
+    ----- stderr -----
+    "#);
+
+    context.git().commit("Existing case conflict");
+    cmd_snapshot!(context, context.run().args(["--files", "trigger.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for case conflicts.................................................Passed
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().args(["--files", "foo.txt"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - description: Checks for files that would conflict in case-insensitive filesystems
+    - exit code: 1
+
+      Case-insensitivity conflict found: FOO.txt
+      Case-insensitivity conflict found: foo.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
     let context = TestEnv::new().init_git();
 
