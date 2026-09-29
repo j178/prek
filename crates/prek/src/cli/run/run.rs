@@ -272,7 +272,7 @@ pub(crate) async fn run(
     )
     .await?;
 
-    run_hooks(
+    let result = run_hooks(
         &workspace,
         &input,
         &file_index,
@@ -287,7 +287,14 @@ pub(crate) async fn run(
         verbose,
         printer,
     )
-    .await
+    .await;
+
+    if let Some(keeper) = _guard {
+        if keeper.restore()? {
+            return result.map(|_| ExitStatus::Failure);
+        }
+    }
+    result
 }
 
 fn infer_stage_and_input_mode(

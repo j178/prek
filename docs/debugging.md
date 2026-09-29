@@ -91,6 +91,40 @@ with:
 PREK_NO_FAST_PATH=1 prek run check-yaml --all-files
 ```
 
+## Recovering unstaged changes
+
+When hooks run against staged files, prek saves unstaged changes in a patch and
+restores them afterwards. If hook fixes conflict with that patch, prek rolls back
+the fixes and restores your changes. Hooks should leave staging to you instead of
+running `git add` themselves.
+
+If restoration fails, prek stops the commit and prints the saved patch path and
+the pre-hook index tree. The tree ID is also recorded at the top of the patch.
+Keep the patch and export the tree before cleaning the prek cache or pruning Git
+objects.
+
+To recover without overwriting your current checkout, run this from the repository
+root in Bash (or Git Bash on Windows). Replace `TREE` with the printed tree ID and
+choose new paths outside any Git repository:
+
+```bash
+GIT_INDEX_FILE="/absolute/path/recovery.index" git read-tree TREE
+GIT_INDEX_FILE="/absolute/path/recovery.index" git checkout-index --all --prefix="/absolute/path/recovered/"
+git -C /absolute/path/recovered apply --check /absolute/path/saved.patch
+git -C /absolute/path/recovered apply /absolute/path/saved.patch
+```
+
+These commands use a separate index and leave your checkout's index untouched.
+Keep the trailing `/` on `--prefix`. The recovered files contain your original
+staged content. Applying the patch adds your saved unstaged edits. Compare those
+files with your checkout, copy back the changes you want, and review what to stage
+before retrying the commit. Untracked files are not included in this recovery copy.
+
+If `apply --check` still fails in the recovery directory, keep both the recovered
+files and the patch. You can apply the matching parts with
+`git -C /absolute/path/recovered apply --reject /absolute/path/saved.patch` and
+resolve the remaining changes from the generated `.rej` files there.
+
 ## Cache problems
 
 Inspect the cache before removing anything:

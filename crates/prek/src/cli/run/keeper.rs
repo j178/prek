@@ -1,9 +1,10 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use anstream::eprintln;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use tracing::{debug, error, trace};
@@ -16,6 +17,7 @@ use crate::store::Store;
 struct IntentToAddRestorer(Vec<PathBuf>);
 struct UnstagedChangesRestorer {
     root: PathBuf,
+    tree: String,
     patch: Option<PathBuf>,
 }
 
@@ -57,20 +59,22 @@ impl IntentToAddRestorer {
         Ok(Self(files))
     }
 
-    fn restore(&self) -> Result<()> {
+    fn restore(&mut self) -> Result<()> {
         // Restore the intent-to-add changes.
-        if !self.0.is_empty() {
+        let files = std::mem::take(&mut self.0);
+        if !files.is_empty() {
             let mut cmd = Command::new(GIT.as_ref()?);
-            git::apply_git_work_tree(&mut cmd)
+            let output = git::apply_git_work_tree(&mut cmd)
                 .current_dir(git::root()?)
                 .arg("add")
                 .arg("--intent-to-add")
                 .arg("--")
                 // TODO: xargs
-                .args(&self.0)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()?;
+                .args(&files)
+                .output()?;
+            if !output.status.success() {
+                anyhow::bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+            }
         }
         Ok(())
     }
@@ -104,7 +108,7 @@ impl UnstagedChangesRestorer {
                 "--no-textconv",
                 "--no-relative",
             ])
-            .arg(tree)
+            .arg(&tree)
             .arg("--")
             .arg(root)
             .check(false)
@@ -116,6 +120,7 @@ impl UnstagedChangesRestorer {
             // No non-staged changes
             Ok(Self {
                 root: root.to_path_buf(),
+                tree,
                 patch: None,
             })
         } else if output.status.code() == Some(1) {
@@ -124,6 +129,7 @@ impl UnstagedChangesRestorer {
                 // probably git auto crlf behavior quirks
                 Ok(Self {
                     root: root.to_path_buf(),
+                    tree,
                     patch: None,
                 })
             } else {
@@ -147,16 +153,23 @@ impl UnstagedChangesRestorer {
                     .yellow()
                     .bold()
                 );
-                fs_err::write(&patch_path, output.stdout)?;
+                let mut patch_file = fs_err::File::create(&patch_path)?;
+                // Keep the baseline discoverable even if the run's log is overwritten.
+                writeln!(patch_file, "# prek pre-hook index tree: {tree}")?;
+                patch_file.write_all(&output.stdout)?;
+                drop(patch_file);
+
+                let restorer = Self {
+                    root: root.to_path_buf(),
+                    tree,
+                    patch: Some(patch_path),
+                };
 
                 // Clean the working tree
                 debug!("Cleaning working tree");
                 Self::checkout_working_tree(root)?;
 
-                Ok(Self {
-                    root: root.to_path_buf(),
-                    patch: Some(patch_path),
-                })
+                Ok(restorer)
             }
         } else {
             Err(cmd.check_status(output.status).unwrap_err().into())
@@ -179,9 +192,27 @@ impl UnstagedChangesRestorer {
             Ok(())
         } else {
             Err(anyhow::anyhow!(
-                "Failed to checkout working tree: {output:?}"
+                "Failed to checkout working tree:\n{}",
+                String::from_utf8_lossy(&output.stderr).trim()
             ))
         }
+    }
+
+    fn rollback_hook_changes(&self) -> Result<()> {
+        // Unstage hook additions without deleting files that were previously untracked.
+        let mut cmd = Command::new(GIT.as_ref()?);
+        let output = git::apply_git_work_tree(&mut cmd)
+            .current_dir(git::root()?)
+            .args(["reset", "--quiet", &self.tree, "--"])
+            .arg(&self.root)
+            .output()?;
+        if !output.status.success() {
+            anyhow::bail!(
+                "Failed to restore the pre-hook index:\n{}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        Self::checkout_working_tree(&self.root)
     }
 
     fn git_apply(patch: &Path) -> Result<()> {
@@ -195,15 +226,32 @@ impl UnstagedChangesRestorer {
         if output.status.success() {
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Failed to apply the patch: {output:?}"))
+            Err(anyhow::anyhow!(
+                "Failed to apply the patch:\n{}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ))
         }
     }
 
-    fn restore(&self) -> Result<()> {
-        let Some(patch) = self.patch.as_ref() else {
-            return Ok(());
+    fn restore(&mut self) -> Result<bool> {
+        let Some(patch) = self.patch.take() else {
+            return Ok(false);
         };
 
+        self.restore_patch(&patch).with_context(|| {
+            format!(
+                "Failed to restore unstaged changes.\n\
+                 Your changes are saved in `{}`.\n\
+                 Pre-hook index tree: {}\n\
+                 To recover in a separate directory, see https://prek.j178.dev/debugging/#recovering-unstaged-changes",
+                patch.user_display(),
+                self.tree,
+            )
+        })
+    }
+
+    fn restore_patch(&self, patch: &Path) -> Result<bool> {
+        let mut rolled_back = false;
         // Try to apply the patch
         if let Err(e) = Self::git_apply(patch) {
             error!("{e}");
@@ -212,9 +260,9 @@ impl UnstagedChangesRestorer {
                 "Hook changes conflicted with the saved unstaged changes. Reverting the hook changes".red().bold()
             );
 
-            // Discard any changes made by hooks, and try applying the patch again.
-            Self::checkout_working_tree(&self.root)?;
+            self.rollback_hook_changes()?;
             Self::git_apply(patch)?;
+            rolled_back = true;
         }
 
         eprintln!(
@@ -224,17 +272,14 @@ impl UnstagedChangesRestorer {
                 .bold()
         );
 
-        Ok(())
+        Ok(rolled_back)
     }
 }
 
 impl Drop for UnstagedChangesRestorer {
     fn drop(&mut self) {
         if let Err(err) = self.restore() {
-            eprintln!(
-                "{}",
-                format!("Failed to restore unstaged changes: {err}").red()
-            );
+            eprintln!("{}", format!("{err:#}").red());
         }
     }
 }
@@ -252,12 +297,31 @@ struct WorkTreeState {
 
 impl Drop for WorkTreeKeeper {
     fn drop(&mut self) {
-        let mut state = self.state.lock().unwrap();
-        drop(state.take());
+        if let Err(err) = self.restore() {
+            eprintln!("{}", format!("{err:#}").red());
+        }
     }
 }
 
 impl WorkTreeKeeper {
+    /// Restore saved changes, returning whether hook changes were rolled back.
+    pub fn restore(&self) -> Result<bool> {
+        // Keep cleanup on another thread from exiting before restoration finishes.
+        let mut guard = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(mut state) = guard.take() else {
+            return Ok(false);
+        };
+        let rolled_back = state.unstaged_changes.restore()?;
+        state
+            .intent_to_add
+            .restore()
+            .context("Failed to restore intent-to-add changes")?;
+        Ok(rolled_back)
+    }
+
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
     /// Intent-to-add paths must be absolute; only paths under `root` are cleared.
@@ -271,10 +335,13 @@ impl WorkTreeKeeper {
         let state = Arc::new(Mutex::new(Some(state)));
 
         // Make sure restoration when ctrl-c is pressed.
-        let cleanup_state = Arc::clone(&state);
+        let cleanup_keeper = Self {
+            state: Arc::clone(&state),
+        };
         add_cleanup(move || {
-            let mut state = cleanup_state.lock().unwrap();
-            drop(state.take());
+            if let Err(err) = cleanup_keeper.restore() {
+                eprintln!("{}", format!("{err:#}").red());
+            }
         });
 
         Ok(Self { state })
