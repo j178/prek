@@ -277,10 +277,8 @@ fn failed_stash_restore_aborts_commit_and_allows_recovery() -> Result<()> {
         )
         .with_file("doc.md", "ORIGINAL\nbody\n")
         .with_file("other.txt", "other original\n")
-        .with_filter(
-            r"Pre-hook index tree: [a-f0-9]+",
-            "Pre-hook index tree: [TREE]",
-        )
+        .with_filter(r"\b[a-f0-9]{40,64}\b", "[TREE]")
+        .with_filter(r"Command `[^`]*git(?:\.exe)? ", "Command `[GIT] ")
         .with_filter(
             r"(?s)Another git process seems to be running in this repository.*",
             "[GIT_LOCK_HINT]",
@@ -305,9 +303,14 @@ fn failed_stash_restore_aborts_commit_and_allows_recovery() -> Result<()> {
     error: Failed to restore unstaged changes.
     Your changes are saved in `[HOME]/patches/[TIME]-[PID].patch`.
     Pre-hook index tree: [TREE]
-      caused by: Failed to restore the pre-hook index:
-    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
+      caused by: Failed to restore the pre-hook index
+      caused by: Command `[GIT] reset --quiet [TREE] -- [TEMP_DIR]/` exited with an error:
 
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
     [GIT_LOCK_HINT]
     "#);
     cmd_snapshot!(context, context.git().command().args(["log", "-1", "--format=%s"]), @r#"
@@ -432,6 +435,7 @@ fn restore_intent_and_unstaged_changes_from_subdirectory() {
 #[test]
 fn restore_after_checkout_failure() {
     let context = TestEnv::new()
+        .with_filter(r"Command `[^`]*git(?:\.exe)? ", "Command `[GIT] ")
         .with_config(indoc::indoc! {r"
             repos:
               - repo: local
@@ -463,7 +467,13 @@ fn restore_after_checkout_failure() {
     Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
     Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
     error: Failed to clean work tree
-      caused by: Failed to checkout working tree:
+      caused by: Failed to checkout working tree
+      caused by: Command `[GIT] -c submodule.recurse=0 checkout -- [TEMP_DIR]/` exited with an error:
+
+    [status]
+    exit status: 1
+
+    [stderr]
     checkout hook failed
     "#);
     assert_eq!(context.read("file.txt"), "unstaged\n");
@@ -613,7 +623,8 @@ fn restore_reports_hook_and_recovery_errors() {
                     priority: 1
         "#})
         .with_file("file.txt", "original\n")
-        .with_filter(r"Pre-hook index tree: [a-f0-9]+", "Pre-hook index tree: [TREE]")
+        .with_filter(r"\b[a-f0-9]{40,64}\b", "[TREE]")
+        .with_filter(r"Command `[^`]*git(?:\.exe)? ", "Command `[GIT] ")
         .with_filter(
             r"(?m)Another git process[^\n]*(?:\n(?:e\.g\.|make sure|persist|remove the file)[^\n]*)*",
             "[GIT_LOCK_HINT]",
@@ -636,15 +647,24 @@ fn restore_reports_hook_and_recovery_errors() {
     Worktree restoration also failed:
     Failed to restore unstaged changes.
     Your changes are saved in `[HOME]/patches/[TIME]-[PID].patch`.
-    Pre-hook index tree: [TREE]: Failed to restore the pre-hook index:
-    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
+    Pre-hook index tree: [TREE]: Failed to restore the pre-hook index: Command `[GIT] reset --quiet [TREE] -- [TEMP_DIR]/` exited with an error:
 
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
     [GIT_LOCK_HINT]
 
-    Additionally:
-    Failed to restore intent-to-add changes:
-    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
 
+    Additionally:
+    Failed to restore intent-to-add changes: Command `[GIT] add --intent-to-add -- [TEMP_DIR]/intent.txt` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
     [GIT_LOCK_HINT]
     "#);
 }

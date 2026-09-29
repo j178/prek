@@ -1,6 +1,5 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use anstream::eprintln;
@@ -11,7 +10,8 @@ use tracing::{debug, error, trace};
 
 use crate::cleanup::add_cleanup;
 use crate::fs::Simplified;
-use crate::git::{self, GIT, git_cmd};
+use crate::git::{self, git_cmd};
+use crate::process::Cmd;
 use crate::store::Store;
 
 struct SavedPatch {
@@ -35,29 +35,17 @@ fn ensure_patches_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn git_command() -> Result<Command> {
-    let mut cmd = Command::new(GIT.as_ref()?);
-    git::apply_git_work_tree(&mut cmd).current_dir(git::root()?);
+fn git_command() -> Result<Cmd> {
+    let mut cmd = git_cmd()?;
+    cmd.current_dir(git::root()?);
     Ok(cmd)
-}
-
-fn run_git(cmd: &mut Command, context: &str) -> Result<()> {
-    let output = cmd.output().with_context(|| context.to_owned())?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "{context}:\n{}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(())
 }
 
 impl SavedPatch {
     fn save(root: &Path, patch_dir: &Path) -> Result<Option<Self>> {
         let tree = git::write_tree()?;
 
-        let output = git_cmd()?
-            .current_dir(git::root()?)
+        let output = git_command()?
             .arg("diff-index")
             .arg("--binary")
             .arg("--exit-code")
@@ -122,63 +110,54 @@ impl SavedPatch {
         }))
     }
 
-    fn checkout_working_tree(root: &Path) -> Result<()> {
-        run_git(
-            git_command()?
-                .arg("-c")
-                .arg("submodule.recurse=0")
-                .arg("checkout")
-                .arg("--")
-                .arg(root)
-                // prevent recursive post-checkout hooks
-                .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1"),
-            "Failed to checkout working tree",
-        )
+    fn checkout(&self) -> Result<()> {
+        git_command()?
+            .args(["-c", "submodule.recurse=0", "checkout", "--"])
+            .arg(&self.root)
+            // Prevent recursive post-checkout hooks.
+            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
+            .output_sync()
+            .context("Failed to checkout working tree")?;
+        Ok(())
     }
 
-    fn rollback_hook_changes(&self) -> Result<()> {
+    fn restore_from_tree(&self) -> Result<()> {
         // Unstage hook additions without deleting files that were previously untracked.
-        run_git(
-            git_command()?
-                .args(["reset", "--quiet", &self.tree, "--"])
-                .arg(&self.root),
-            "Failed to restore the pre-hook index",
-        )?;
-        Self::checkout_working_tree(&self.root)
+        git_command()?
+            .args(["reset", "--quiet", &self.tree, "--"])
+            .arg(&self.root)
+            .output_sync()
+            .context("Failed to restore the pre-hook index")?;
+        self.checkout()?;
+        self.apply()
     }
 
-    fn git_apply(patch: &Path) -> Result<()> {
-        run_git(
-            git_command()?
-                .arg("apply")
-                .arg("--whitespace=nowarn")
-                .arg(patch),
-            "Failed to apply the patch",
-        )
+    fn apply(&self) -> Result<()> {
+        git_command()?
+            .args(["apply", "--whitespace=nowarn"])
+            .arg(&self.path)
+            .output_sync()
+            .context("Failed to apply the patch")?;
+        Ok(())
     }
 
     fn restore(&self) -> Result<RestoreOutcome> {
-        self.restore_patch().with_context(|| {
-            format!(
-                "Failed to restore unstaged changes.\n\
-                 Your changes are saved in `{}`.\n\
-                 Pre-hook index tree: {}",
-                self.path.user_display(),
-                self.tree,
-            )
-        })
-    }
-
-    fn restore_patch(&self) -> Result<RestoreOutcome> {
-        let outcome = if let Err(e) = Self::git_apply(&self.path) {
+        let outcome = if let Err(e) = self.apply() {
             error!("{e}");
             eprintln!(
                 "{}",
                 "Hook changes conflicted with the saved unstaged changes. Reverting the hook changes".red().bold()
             );
 
-            self.rollback_hook_changes()?;
-            Self::git_apply(&self.path)?;
+            self.restore_from_tree().with_context(|| {
+                format!(
+                    "Failed to restore unstaged changes.\n\
+                     Your changes are saved in `{}`.\n\
+                     Pre-hook index tree: {}",
+                    self.path.user_display(),
+                    self.tree,
+                )
+            })?;
             RestoreOutcome::HookChangesReverted
         } else {
             RestoreOutcome::Restored
@@ -203,7 +182,7 @@ pub(super) enum RestoreOutcome {
     HookChangesReverted,
 }
 
-/// Clean Git intent-to-add files and working tree changes, and restore them when dropped.
+/// Temporarily save unstaged changes, restoring them explicitly or when dropped.
 pub(super) struct WorktreeStash {
     // Preparation and restoration share the lock so cleanup cannot race a Git mutation.
     // None means restoration has already been attempted, even if it failed.
@@ -219,17 +198,16 @@ struct PendingChanges {
 impl PendingChanges {
     fn prepare(&mut self, root: &Path, patch_dir: &Path) -> Result<()> {
         if !self.intent_to_add.is_empty() {
-            run_git(
-                git_command()?
-                    .args(["rm", "--cached", "--"])
-                    .args(&self.intent_to_add),
-                "Failed to clear intent-to-add changes",
-            )?;
+            git_command()?
+                .args(["rm", "--cached", "--"])
+                .args(&self.intent_to_add)
+                .output_sync()
+                .context("Failed to clear intent-to-add changes")?;
         }
         self.patch = SavedPatch::save(root, patch_dir)?;
-        if self.patch.is_some() {
+        if let Some(patch) = &self.patch {
             debug!("Cleaning working tree");
-            SavedPatch::checkout_working_tree(root)?;
+            patch.checkout()?;
         }
         Ok(())
     }
@@ -252,12 +230,11 @@ impl PendingChanges {
 
     fn restore_intent(&self) -> Result<()> {
         if !self.intent_to_add.is_empty() {
-            run_git(
-                git_command()?
-                    .args(["add", "--intent-to-add", "--"])
-                    .args(&self.intent_to_add),
-                "Failed to restore intent-to-add changes",
-            )?;
+            git_command()?
+                .args(["add", "--intent-to-add", "--"])
+                .args(&self.intent_to_add)
+                .output_sync()
+                .context("Failed to restore intent-to-add changes")?;
         }
         Ok(())
     }
@@ -289,8 +266,8 @@ impl WorktreeStash {
         state.restore()
     }
 
-    /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
-    /// Restore them when the instance is dropped.
+    /// Save unstaged changes and intent-to-add markers, then prepare the worktree for hooks.
+    ///
     /// Intent-to-add paths must be absolute; only paths under `root` are cleared.
     pub fn save(store: &Store, root: &Path, mut intent_to_add: Vec<PathBuf>) -> Result<Self> {
         intent_to_add.retain(|path| path.starts_with(root));
