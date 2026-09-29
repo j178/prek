@@ -24,21 +24,8 @@ pub(crate) async fn install_hooks(
     cache: &mut InstallCache,
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
-    let mut installed_hooks = Vec::with_capacity(hooks.len());
-    let mut hooks_to_install = Vec::new();
-
-    for hook in hooks {
-        if !hook.needs_install_env() {
-            installed_hooks.push(InstalledHook::NoNeedInstall(hook));
-            continue;
-        }
-
-        if let Some(installed_hook) = cache.installed_hook(store, hook.clone()).await {
-            installed_hooks.push(installed_hook);
-        } else {
-            hooks_to_install.push(hook);
-        }
-    }
+    let (mut installed_hooks, hooks_to_install) =
+        cache.partition_installed_hooks(store, hooks).await;
 
     let semaphore = Rc::new(Semaphore::new(*INTERNAL_CONCURRENCY));
     let mut futures = FuturesUnordered::new();
@@ -248,16 +235,41 @@ impl InstallCache {
         store_hooks.iter()
     }
 
+    /// Resolve cached environments concurrently, preserving hook order in each output.
+    pub(crate) async fn partition_installed_hooks(
+        &self,
+        store: &Store,
+        hooks: Vec<Arc<Hook>>,
+    ) -> (Vec<InstalledHook>, Vec<Arc<Hook>>) {
+        let mut installed = Vec::with_capacity(hooks.len());
+        let mut missing = Vec::new();
+        let mut queries = futures_util::stream::iter(hooks)
+            .map(async |hook| {
+                let installed = if hook.needs_install_env() {
+                    self.installed_hook(store, hook.clone()).await
+                } else {
+                    Some(InstalledHook::NoNeedInstall(hook.clone()))
+                };
+                (hook, installed)
+            })
+            .buffered(*INTERNAL_CONCURRENCY);
+
+        while let Some((hook, cached)) = queries.next().await {
+            if let Some(cached) = cached {
+                installed.push(cached);
+            } else {
+                missing.push(hook);
+            }
+        }
+        (installed, missing)
+    }
+
     /// Return a healthy installed environment from the store cache for this hook.
     ///
     /// This only looks at environments loaded from `store.hooks_dir()`. Environments created
     /// during the current install call are reused inside `install_partition`, where hooks in the
     /// same install partition are processed sequentially.
-    pub(crate) async fn installed_hook(
-        &self,
-        store: &Store,
-        hook: Arc<Hook>,
-    ) -> Option<InstalledHook> {
+    async fn installed_hook(&self, store: &Store, hook: Arc<Hook>) -> Option<InstalledHook> {
         let requirement = hook.environment_requirement()?;
         for env in self.installed_hooks(store).await {
             if requirement.is_satisfied_by(env.info_ref()) && env.ensure_healthy().await {
