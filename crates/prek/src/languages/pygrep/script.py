@@ -4,15 +4,12 @@ import json
 import io
 import re
 import sys
-from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
 from re import Pattern
-from threading import Thread
 
 
 def process_file(
-    filename: str, pattern: Pattern[bytes], multiline: bool, negate: bool, queue: Queue
-) -> None:
+    filename: str, pattern: Pattern[bytes], multiline: bool, negate: bool
+) -> tuple[int, bytes]:
     try:
         if multiline:
             if negate:
@@ -24,10 +21,9 @@ def process_file(
                 ret, output = _process_filename_by_line_negated(pattern, filename)
             else:
                 ret, output = _process_filename_by_line(pattern, filename)
-        queue.put((ret, output))
+        return ret, output
     except Exception as e:
-        # Put error result in queue so consumer can handle it
-        queue.put((1, f"Error processing {filename}: {e}\n".encode()))
+        return 1, f"Error processing {filename}: {e}\n".encode()
 
 
 def _process_filename_by_line(
@@ -97,60 +93,33 @@ def run(
         flags |= re.MULTILINE | re.DOTALL
     pattern = re.compile(pattern, flags)
 
-    queue = Queue()
-    pool = ThreadPoolExecutor(max_workers=concurrency)
+    filenames = []
+    for line in sys.stdin:
+        filename = line.strip()
+        if not filename:
+            break
+        filenames.append(filename)
 
-    # Use a sentinel value to signal completion
-    SENTINEL = (None, None)
+    def check(filename):
+        return process_file(filename, pattern, multiline, negate)
 
-    def producer():
-        try:
-            for line in sys.stdin:
-                line = line.strip()
-                if not line:
-                    break
-                pool.submit(
-                    process_file, line.strip(), pattern, multiline, negate, queue
-                )
+    def results():
+        # Keep single-file runs on the main thread to avoid worker startup.
+        if len(filenames) <= 1:
+            yield from map(check, filenames)
+            return
 
-            # Wait for all tasks to complete
-            pool.shutdown(wait=True)
-        finally:
-            # Ensure sentinel is sent even if there's an error
-            queue.put(SENTINEL)
+        from concurrent.futures import ThreadPoolExecutor
 
-    def consumer():
-        retv = 0
-        try:
-            while True:
-                ret, output = queue.get()
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            yield from pool.map(check, filenames)
 
-                # Check for sentinel value
-                if ret is None and output is None:
-                    queue.task_done()
-                    break
+    retv = 0
+    for ret, output in results():
+        retv |= ret
+        sys.stdout.buffer.write(output)
 
-                retv |= ret
-                if output:
-                    sys.stdout.buffer.write(output)
-                    sys.stdout.buffer.flush()
-
-                queue.task_done()
-        except Exception:
-            pass
-
-        # Write final return code
-        sys.stderr.buffer.write(f'{{"code": {retv}}}\n'.encode())
-        sys.stderr.buffer.flush()
-
-    t1 = Thread(target=producer)
-    t2 = Thread(target=consumer)
-    t1.start()
-    t2.start()
-
-    # Wait for both threads to complete
-    t1.join()
-    t2.join()
+    sys.stderr.buffer.write(f'{{"code": {retv}}}\n'.encode())
 
 
 def main():
