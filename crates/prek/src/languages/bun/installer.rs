@@ -5,8 +5,10 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use rustc_hash::FxBuildHasher;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
@@ -50,12 +52,19 @@ impl BunResult {
     }
 
     pub(crate) async fn from_executable(bun: PathBuf) -> Result<Self> {
-        let output = Cmd::new(&bun).arg("--version").check(true).output().await?;
-        let output_str = str::from_utf8(&output.stdout)?;
-        let version: BunVersion = output_str
-            .trim()
-            .parse()
-            .context("Failed to parse bun version")?;
+        static VERSIONS: LazyLock<OnceMap<PathBuf, BunVersion, FxBuildHasher>> =
+            LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+
+        let version = VERSIONS
+            .try_compute(bun.clone(), async || {
+                let output = Cmd::new(&bun).arg("--version").check(true).output().await?;
+                let output_str = str::from_utf8(&output.stdout)?;
+                output_str
+                    .trim()
+                    .parse()
+                    .context("Failed to parse bun version")
+            })
+            .await?;
 
         Ok(Self { bun, version })
     }
@@ -285,5 +294,35 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
         prefix.join("node_modules")
     } else {
         prefix.join("lib").join("node_modules")
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn concurrent_version_queries_share_one_process() -> Result<()> {
+        let dir = tempfile::TempDir::new()?;
+        let bun = dir.path().join("bun");
+        fs_err::write(
+            &bun,
+            "#!/bin/sh\necho query >> \"$0.calls\"\nprintf '1.3.0\\n'\n",
+        )?;
+        fs_err::set_permissions(&bun, std::fs::Permissions::from_mode(0o755))?;
+
+        let (first, second) = tokio::try_join!(
+            BunResult::from_executable(bun.clone()),
+            BunResult::from_executable(bun),
+        )?;
+        assert_eq!(**first.version(), semver::Version::new(1, 3, 0));
+        assert_eq!(**second.version(), **first.version());
+        assert_eq!(
+            fs_err::read_to_string(dir.path().join("bun.calls"))?,
+            "query\n"
+        );
+        Ok(())
     }
 }
