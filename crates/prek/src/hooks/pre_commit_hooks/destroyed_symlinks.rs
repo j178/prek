@@ -63,6 +63,7 @@ async fn git_status_output(work_dir: &Path) -> Result<Vec<u8>> {
         .current_dir(work_dir)
         .arg("status")
         .arg("--porcelain=v2")
+        .arg("--untracked-files=no")
         .arg("-z")
         // Query the whole project with a single pathspec to avoid one-argv-entry-per-file
         // command lines that can exceed the platform limit for very large commits.
