@@ -17,15 +17,16 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let work_dir = hook.work_dir();
 
-    // Get all files in the repo.
-    let repo_files = git::ls_files(work_dir, [Path::new(".")]).await?;
+    let (repo_files, added) = tokio::try_join!(
+        git::ls_files(work_dir, [Path::new(".")]),
+        git::staged_added_files(work_dir),
+    )?;
     let mut repo_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for path in &repo_files {
         insert_path_and_parents(&mut repo_files_with_dirs, path);
     }
 
     // Get relevant files (filenames + added files) and include their parent directories.
-    let added = git::staged_added_files(work_dir).await?;
     let mut relevant_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for filename in &filenames {
         insert_path_and_parents(&mut relevant_files_with_dirs, filename);
