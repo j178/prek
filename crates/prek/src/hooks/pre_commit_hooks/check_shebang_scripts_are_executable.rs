@@ -8,9 +8,9 @@ use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
-use crate::hooks::run_concurrent_file_checks;
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{
+    FilenamesArgs, hook_filenames, parse_hook_args, run_blocking_file_checks,
+};
 use rustc_hash::FxHashSet;
 
 /// Runs the `check-shebang-scripts-are-executable` hook.
@@ -24,11 +24,11 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
     let file_base = hook.project().relative_path();
     let stdout = git_index_stage_output(file_base).await?;
     let filenames: FxHashSet<_> = filenames.into_iter().collect();
-    let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, &filenames, false);
+    let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, &filenames, false)
+        .collect::<Vec<_>>();
 
-    run_concurrent_file_checks(entries, *INTERNAL_CONCURRENCY, |file| async move {
-        let file_path = file_base.join(file);
-        if file_has_shebang(&file_path).await? {
+    run_blocking_file_checks(file_base, &[], &entries, |file_path, file| {
+        if file_has_shebang(file_path)? {
             Ok(HookOutput::unchanged(
                 1,
                 build_non_executable_shebang_warning(file)?.into_bytes(),
