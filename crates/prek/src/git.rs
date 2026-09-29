@@ -234,28 +234,6 @@ fn path_to_git_bytes(path: &Path) -> std::io::Result<&[u8]> {
     })
 }
 
-/// Return intent-to-add paths under `root`, relative to the repository root.
-///
-/// `root` must be absolute. If it is a subdirectory, its repository-relative prefix
-/// is retained in the returned paths.
-pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd()?
-        .current_dir(root)
-        .arg("diff")
-        .hidden_args(["--no-ext-diff", "--ignore-submodules"])
-        // Callers resolve these paths from the repository root, regardless of `diff.relative`.
-        .arg("--no-relative")
-        .arg("--diff-filter=A")
-        .arg("--name-only")
-        .arg("-z")
-        .arg("--")
-        .arg(root)
-        .check(true)
-        .output()
-        .await?;
-    Ok(zsplit(&output.stdout)?)
-}
-
 /// Return newly staged paths under `root`, relative to `root` (the hook's working directory).
 ///
 /// For example, with `root = <repo>/project`, `<repo>/project/file.rs` is returned as `file.rs`.
@@ -432,9 +410,10 @@ pub(crate) async fn staged_files(
 pub(crate) struct WorktreeStatus {
     pub(crate) unmerged: bool,
     pub(crate) unstaged: Vec<PathBuf>,
+    pub(crate) intent_to_add: Vec<PathBuf>,
 }
 
-/// Check conflicts and unstaged changes together. Unstaged paths are absolute.
+/// Check conflicts and unstaged changes together. Returned paths are absolute.
 pub(crate) async fn worktree_status(root: &Path) -> Result<WorktreeStatus, Error> {
     let output = git_cmd()?
         .current_dir(root)
@@ -457,6 +436,7 @@ fn parse_worktree_status(output: &[u8], root: &Path) -> Result<WorktreeStatus, E
     let mut status = WorktreeStatus {
         unmerged: false,
         unstaged: Vec::new(),
+        intent_to_add: Vec::new(),
     };
     // Disabling renames gives each status exactly one NUL-terminated, unquoted path.
     let mut fields = output.split(|&byte| byte == b'\0');
@@ -465,8 +445,14 @@ fn parse_worktree_status(output: &[u8], root: &Path) -> Result<WorktreeStatus, E
             .next()
             .filter(|path| !path.is_empty())
             .ok_or(Error::InvalidDiffFile)?;
-        status.unmerged |= change == b"U";
-        status.unstaged.push(root.join(path_from_git_bytes(path)?));
+        let path = root.join(path_from_git_bytes(path)?);
+        match change {
+            b"U" => status.unmerged = true,
+            // Unstaged additions are intent-to-add entries; untracked files are omitted.
+            b"A" => status.intent_to_add.push(path.clone()),
+            _ => {}
+        }
+        status.unstaged.push(path);
     }
     Ok(status)
 }
@@ -604,15 +590,6 @@ pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
         );
     }
     Ok(output.stdout)
-}
-
-/// Create a tree object from the current index.
-///
-/// The name of the new tree object is printed to standard output.
-/// The index must be in a fully merged state.
-pub(crate) async fn write_tree() -> Result<String, Error> {
-    let output = git_cmd()?.arg("write-tree").check(true).output().await?;
-    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_string())
 }
 
 impl Repo {
@@ -1257,6 +1234,7 @@ mod tests {
             status.unstaged,
             ["deleted.txt", "intent.txt", "modified.txt"].map(|name| root.join(name))
         );
+        assert_eq!(status.intent_to_add, [root.join("intent.txt")]);
         Ok(())
     }
 

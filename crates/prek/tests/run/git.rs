@@ -101,6 +101,58 @@ fn staged_files_only() {
 }
 
 #[test]
+fn staged_files_only_restores_binary_changes_and_deletions() -> Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-staged
+                name: check staged
+                language: system
+                entry: python3 check_staged.py
+                pass_filenames: false
+        "})
+        .with_file(
+            "check_staged.py",
+            indoc::indoc! {r"
+            from pathlib import Path
+            assert Path('binary.dat').read_bytes() == b'\0staged\n'
+            assert Path('deleted.txt').read_text() == 'staged\n'
+            "},
+        )
+        .with_file("binary.dat", b"\0staged\n")
+        .with_file("deleted.txt", "staged\n")
+        .init_git();
+
+    context.write_file("binary.dat", b"\0unstaged\n");
+    fs_err::remove_file(context.child("deleted.txt"))?;
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check staged.............................................................Passed
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    "#);
+
+    assert_eq!(fs_err::read(context.child("binary.dat"))?, b"\0unstaged\n");
+    assert!(!context.child("deleted.txt").path().exists());
+    cmd_snapshot!(context, context.git().command().args(["show", ":deleted.txt"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    staged
+
+    ----- stderr -----
+    "#);
+    Ok(())
+}
+
+#[test]
 fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"

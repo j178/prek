@@ -35,8 +35,8 @@ fn ensure_patches_dir(path: &Path) -> Result<()> {
 }
 
 impl IntentToAddRestorer {
-    async fn clean(root: &Path) -> Result<Self> {
-        let files = git::intent_to_add_files(root).await?;
+    async fn clean(root: &Path, mut files: Vec<PathBuf>) -> Result<Self> {
+        files.retain(|path| path.starts_with(root));
         if files.is_empty() {
             return Ok(Self(vec![]));
         }
@@ -89,12 +89,10 @@ impl Drop for IntentToAddRestorer {
 
 impl UnstagedChangesRestorer {
     async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
-        let tree = git::write_tree().await?;
-
         let mut cmd = git_cmd()?;
         let output = cmd
             .current_dir(git::root()?)
-            .arg("diff-index")
+            .arg("diff-files")
             .arg("--binary")
             .arg("--exit-code")
             .hidden_args([
@@ -104,7 +102,6 @@ impl UnstagedChangesRestorer {
                 "--no-textconv",
                 "--no-relative",
             ])
-            .arg(tree)
             .arg("--")
             .arg(root)
             .check(false)
@@ -120,7 +117,7 @@ impl UnstagedChangesRestorer {
             })
         } else if output.status.code() == Some(1) {
             if output.stdout.trim_ascii().is_empty() {
-                trace!("diff-index status code 1 with empty stdout");
+                trace!("diff-files status code 1 with empty stdout");
                 // probably git auto crlf behavior quirks
                 Ok(Self {
                     root: root.to_path_buf(),
@@ -260,8 +257,9 @@ impl Drop for WorkTreeKeeper {
 impl WorkTreeKeeper {
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
-    pub async fn clean(store: &Store, root: &Path) -> Result<Self> {
-        let intent_to_add = IntentToAddRestorer::clean(root).await?;
+    /// Intent-to-add paths must be absolute; only paths under `root` are cleared.
+    pub async fn clean(store: &Store, root: &Path, intent_to_add: Vec<PathBuf>) -> Result<Self> {
+        let intent_to_add = IntentToAddRestorer::clean(root, intent_to_add).await?;
         let unstaged_changes = UnstagedChangesRestorer::clean(root, &store.patches_dir()).await?;
         let state = WorkTreeState {
             unstaged_changes,
