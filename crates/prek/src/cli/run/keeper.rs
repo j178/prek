@@ -89,10 +89,12 @@ impl Drop for IntentToAddRestorer {
 
 impl UnstagedChangesRestorer {
     async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
+        let tree = git::write_tree().await?;
+
         let mut cmd = git_cmd()?;
         let output = cmd
             .current_dir(git::root()?)
-            .arg("diff-files")
+            .arg("diff-index")
             .arg("--binary")
             .arg("--exit-code")
             .hidden_args([
@@ -102,6 +104,7 @@ impl UnstagedChangesRestorer {
                 "--no-textconv",
                 "--no-relative",
             ])
+            .arg(tree)
             .arg("--")
             .arg(root)
             .check(false)
@@ -117,7 +120,7 @@ impl UnstagedChangesRestorer {
             })
         } else if output.status.code() == Some(1) {
             if output.stdout.trim_ascii().is_empty() {
-                trace!("diff-files status code 1 with empty stdout");
+                trace!("diff-index status code 1 with empty stdout");
                 // probably git auto crlf behavior quirks
                 Ok(Self {
                     root: root.to_path_buf(),

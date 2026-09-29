@@ -592,6 +592,15 @@ pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
     Ok(output.stdout)
 }
 
+/// Create a tree object from the current index.
+///
+/// The name of the new tree object is printed to standard output.
+/// The index must be in a fully merged state.
+pub(crate) async fn write_tree() -> Result<String, Error> {
+    let output = git_cmd()?.arg("write-tree").check(true).output().await?;
+    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_string())
+}
+
 impl Repo {
     /// Discover repository directories from an absolute `cwd`, storing absolute paths.
     #[instrument(level = "trace")]
