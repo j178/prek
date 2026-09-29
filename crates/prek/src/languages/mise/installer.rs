@@ -4,8 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use rustc_hash::FxBuildHasher;
 use semver::Version;
 use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
@@ -52,42 +54,48 @@ impl MiseResult {
     }
 
     pub(crate) async fn from_executable(mise: PathBuf) -> Result<Self> {
-        let isolated = tempfile::tempdir()?;
-        let mut command = Cmd::new(&mise);
-        for key in inherited_mise_vars() {
-            command.env_remove(key);
-        }
-        // Even `mise --version` discovers miserc files, initializes backend state,
-        // runs migrations and cache pruning, then checks for updates. CI disables
-        // the update check; disposable roots keep the probe away from user state.
-        let output = command
-            .current_dir(isolated.path())
-            .env(EnvVars::CI, "1")
-            .env(EnvVars::MISE_DATA_DIR, isolated.path().join("data"))
-            .env(EnvVars::MISE_CACHE_DIR, isolated.path().join("cache"))
-            .env(EnvVars::MISE_CONFIG_DIR, isolated.path().join("config"))
-            .env(EnvVars::MISE_STATE_DIR, isolated.path().join("state"))
-            .env(
-                EnvVars::MISE_SYSTEM_CONFIG_DIR,
-                isolated.path().join("system-config"),
-            )
-            .env(
-                EnvVars::MISE_SYSTEM_DATA_DIR,
-                isolated.path().join("system-data"),
-            )
-            .env(EnvVars::MISE_CEILING_PATHS, mise_ceiling(isolated.path())?)
-            .env(EnvVars::MISE_NO_CONFIG, "1")
-            .arg("--version")
-            .check(true)
-            .output()
+        static CACHE: LazyLock<OnceMap<PathBuf, Version, FxBuildHasher>> =
+            LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+        let version = CACHE
+            .try_compute(mise.clone(), async || {
+                let isolated = tempfile::tempdir()?;
+                let mut command = Cmd::new(&mise);
+                for key in inherited_mise_vars() {
+                    command.env_remove(key);
+                }
+                // Even `mise --version` discovers miserc files, initializes backend state,
+                // runs migrations and cache pruning, then checks for updates. CI disables
+                // the update check; disposable roots keep the probe away from user state.
+                let output = command
+                    .current_dir(isolated.path())
+                    .env(EnvVars::CI, "1")
+                    .env(EnvVars::MISE_DATA_DIR, isolated.path().join("data"))
+                    .env(EnvVars::MISE_CACHE_DIR, isolated.path().join("cache"))
+                    .env(EnvVars::MISE_CONFIG_DIR, isolated.path().join("config"))
+                    .env(EnvVars::MISE_STATE_DIR, isolated.path().join("state"))
+                    .env(
+                        EnvVars::MISE_SYSTEM_CONFIG_DIR,
+                        isolated.path().join("system-config"),
+                    )
+                    .env(
+                        EnvVars::MISE_SYSTEM_DATA_DIR,
+                        isolated.path().join("system-data"),
+                    )
+                    .env(EnvVars::MISE_CEILING_PATHS, mise_ceiling(isolated.path())?)
+                    .env(EnvVars::MISE_NO_CONFIG, "1")
+                    .arg("--version")
+                    .check(true)
+                    .output()
+                    .await?;
+                let output = str::from_utf8(&output.stdout)?;
+                output
+                    .split_whitespace()
+                    .next()
+                    .context("Failed to parse mise version output")?
+                    .parse()
+                    .context("Failed to parse mise version")
+            })
             .await?;
-        let output = str::from_utf8(&output.stdout)?;
-        let version = output
-            .split_whitespace()
-            .next()
-            .context("Failed to parse mise version output")?
-            .parse()
-            .context("Failed to parse mise version")?;
 
         Ok(Self { mise, version })
     }
@@ -315,4 +323,53 @@ fn release_platform(host: &Triple) -> Result<(String, &'static str)> {
 
 fn bin_dir(prefix: &Path) -> PathBuf {
     prefix.join("bin")
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn version_queries_share_successes_and_retry_failures() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mise = dir.path().join("mise");
+        fs_err::write(
+            &mise,
+            "#!/bin/sh\necho query >> \"$0.calls\"\necho invalid\n",
+        )?;
+        fs_err::set_permissions(&mise, std::fs::Permissions::from_mode(0o755))?;
+        assert!(MiseResult::from_executable(mise.clone()).await.is_err());
+
+        fs_err::write(
+            &mise,
+            "#!/bin/sh\n\
+             test \"$CI\" = 1 && test \"${MISE_DATA_DIR%/data}\" -ef . || exit 1\n\
+             echo query >> \"$0.calls\"\n\
+             printf '%s' \"$PWD\" > \"$0.cwd\"\n\
+             echo '2026.7.18 macos-arm64 (2026-07-18)'\n",
+        )?;
+        let (first, second) = tokio::try_join!(
+            MiseResult::from_executable(mise.clone()),
+            MiseResult::from_executable(mise.clone()),
+        )?;
+        assert_eq!(first.version(), &Version::new(2026, 7, 18));
+        assert_eq!(second.version(), first.version());
+        assert_eq!(
+            fs_err::read_to_string(mise.with_extension("calls"))?,
+            "query\nquery\n"
+        );
+        let isolated = fs_err::read_to_string(mise.with_extension("cwd"))?;
+        assert!(!Path::new(&isolated).exists());
+
+        let other = dir.path().join("other-mise");
+        fs_err::write(&other, "#!/bin/sh\necho '2026.8.0 linux-x64'\n")?;
+        fs_err::set_permissions(&other, std::fs::Permissions::from_mode(0o755))?;
+        assert_eq!(
+            MiseResult::from_executable(other).await?.version(),
+            &Version::new(2026, 8, 0)
+        );
+        Ok(())
+    }
 }
