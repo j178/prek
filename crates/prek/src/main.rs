@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
@@ -458,20 +459,32 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 }
 
+fn exit_interrupted() -> ! {
+    // The cleanup lock also waits for restoration already running on the Ctrl-C thread.
+    cleanup();
+
+    #[expect(
+        clippy::exit,
+        clippy::cast_possible_wrap,
+        reason = "Preserve the Windows NTSTATUS value when exiting after Ctrl-C"
+    )]
+    std::process::exit(if cfg!(windows) {
+        0xC000_013A_u32 as i32
+    } else {
+        130
+    });
+}
+
 fn main() -> ExitCode {
+    static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
     CompleteEnv::with_factory(Cli::command)
         .completer("prek")
         .complete();
 
     ctrlc::set_handler(move || {
-        cleanup();
-
-        #[allow(clippy::exit, clippy::cast_possible_wrap)]
-        std::process::exit(if cfg!(windows) {
-            0xC000_013A_u32 as i32
-        } else {
-            130
-        });
+        INTERRUPTED.store(true, Ordering::Relaxed);
+        exit_interrupted();
     })
     .expect("Error setting Ctrl-C handler");
 
@@ -493,6 +506,11 @@ fn main() -> ExitCode {
     // Report the profiler if the feature is enabled
     #[cfg(all(unix, feature = "profiler"))]
     profiler::finish_profiling(_profiler_guard);
+
+    // Normal completion must not hide an interrupt while the handler waits for restoration.
+    if INTERRUPTED.load(Ordering::Relaxed) {
+        exit_interrupted();
+    }
 
     match result {
         Ok(code) => code.into(),

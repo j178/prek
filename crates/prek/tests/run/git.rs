@@ -499,7 +499,7 @@ fn restore_when_interrupted_during_git_operations() -> Result<()> {
 
     use prek_consts::env_vars::EnvVarsRead;
 
-    for operation in ["rm", "write-tree", "checkout", "apply"] {
+    for operation in ["rm", "write-tree", "checkout", "apply", "add"] {
         let context = TestEnv::new()
             .with_config(indoc::indoc! {r"
                 repos:
@@ -579,11 +579,18 @@ fn restore_when_interrupted_during_git_operations() -> Result<()> {
         socket.read_exact(&mut ready)?;
         let child_id = i32::try_from(child.id())?;
         // Git has changed the repository but has not returned to prek yet.
-        unsafe {
-            libc::kill(child_id, libc::SIGINT);
-        }
+        let signaled = unsafe { libc::kill(child_id, libc::SIGINT) };
+        anyhow::ensure!(
+            signaled == 0,
+            "Failed to interrupt Git {operation}: {}",
+            std::io::Error::last_os_error()
+        );
         socket.write_all(b"x")?;
-        child.wait_with_output()?.assert().code(130);
+        child
+            .wait_with_output()?
+            .assert()
+            .append_context("operation", operation)
+            .code(130);
 
         assert_eq!(context.read("file.txt"), "unstaged\n", "{operation}");
         assert_eq!(context.read("intent.txt"), "intent\n", "{operation}");
