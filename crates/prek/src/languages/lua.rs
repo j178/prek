@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceCell;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use semver::Version;
@@ -21,30 +22,35 @@ pub(crate) struct LuaInfo {
     pub(crate) executable: std::path::PathBuf,
 }
 
-pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
-    let stdout = Cmd::new("lua").arg("-v").check(true).output().await?.stdout;
-    // Lua 5.4.8  Copyright (C) 1994-2025 Lua.org, PUC-Rio
-    let version = str::from_utf8(&stdout)?
-        .split_whitespace()
-        .nth(1)
-        .context("Failed to get Lua version")?
-        .parse::<Version>()
-        .context("Failed to parse Lua version")?;
+pub(crate) async fn query_lua_info() -> Result<&'static LuaInfo> {
+    static INFO: OnceCell<LuaInfo> = OnceCell::new();
 
-    let stdout = Cmd::new("luarocks")
-        .arg("config")
-        .arg("variables.LUA")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
+    INFO.get_or_try_init(async || {
+        let stdout = Cmd::new("lua").arg("-v").check(true).output().await?.stdout;
+        // Lua 5.4.8  Copyright (C) 1994-2025 Lua.org, PUC-Rio
+        let version = str::from_utf8(&stdout)?
+            .split_whitespace()
+            .nth(1)
+            .context("Failed to get Lua version")?
+            .parse::<Version>()
+            .context("Failed to parse Lua version")?;
 
-    let executable = PathBuf::from(String::from_utf8_lossy(&stdout).trim());
+        let stdout = Cmd::new("luarocks")
+            .arg("config")
+            .arg("variables.LUA")
+            .check(true)
+            .output()
+            .await?
+            .stdout;
 
-    Ok(LuaInfo {
-        version,
-        executable,
+        let executable = PathBuf::from(String::from_utf8_lossy(&stdout).trim());
+
+        Ok(LuaInfo {
+            version,
+            executable,
+        })
     })
+    .await
 }
 
 #[async_trait::async_trait(?Send)]
@@ -77,8 +83,8 @@ impl LanguageBackend for Lua {
             Self::install_dependency(&info.env_path, install_cwd, dep).await?;
         }
 
-        info.with_toolchain(lua_info.executable)
-            .with_language_version(lua_info.version);
+        info.with_toolchain(lua_info.executable.clone())
+            .with_language_version(lua_info.version.clone());
 
         info.persist_env_path();
 
