@@ -380,14 +380,11 @@ async fn ensure_hooks_installed<'paths>(
     if !runnable_env_hooks.is_empty() {
         let _lock = store.lock_async().await?;
         let mut install_cache = InstallCache::new();
-        let mut missing_env_hooks = Vec::new();
-
-        for hook in runnable_env_hooks {
-            if let Some(installed_hook) = install_cache.installed_hook(store, hook.clone()).await {
-                installed_by_hook.insert(hook.key(), installed_hook);
-            } else {
-                missing_env_hooks.push(hook.clone());
-            }
+        let (installed_hooks, missing_env_hooks) = install_cache
+            .partition_installed_hooks(store, runnable_env_hooks)
+            .await;
+        for installed_hook in installed_hooks {
+            installed_by_hook.insert(installed_hook.key(), installed_hook);
         }
 
         if !missing_env_hooks.is_empty() {
