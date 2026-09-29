@@ -201,6 +201,7 @@ fn invalid_config() {
 fn config_not_staged() {
     let context = TestEnv::new()
         .with_file(PRE_COMMIT_CONFIG_YAML, "")
+        .with_file("nested/.gitkeep", "")
         .init_git();
 
     context.write_config(indoc::indoc! {r"
@@ -214,6 +215,16 @@ fn config_not_staged() {
     "});
 
     cmd_snapshot!(context, context.run().arg("invalid-hook-id"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Configuration file `.pre-commit-config.yaml` is not staged. Stage it with `git add` and try again
+    "#);
+
+    cmd_snapshot!(context, context.run().arg("invalid-hook-id")
+        .arg("--config").arg("nested/../.pre-commit-config.yaml"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
