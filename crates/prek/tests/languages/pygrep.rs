@@ -54,6 +54,39 @@ fn basic_case_sensitive() {
     ");
 }
 
+#[test]
+fn multiple_files_report_each_match() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-todo
+                name: check-todo
+                language: pygrep
+                entry: "TODO"
+                files: "\\.py$"
+        "#})
+        .with_file("first.py", "# TODO: first\n")
+        .with_file("second.py", "# TODO: second\n")
+        .with_file("clean.py", "print('done')\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r##"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check-todo...............................................................Failed
+    - hook id: check-todo
+    - exit code: 1
+
+      first.py:1:# TODO: first
+      second.py:1:# TODO: second
+
+    ----- stderr -----
+    "##);
+}
+
 /// Test case-insensitive matching
 #[test]
 fn case_insensitive() {
