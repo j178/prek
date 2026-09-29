@@ -122,14 +122,14 @@ pub(crate) async fn run(
     let filesystem = FilesystemOptions::user()?;
 
     let requires_clean_worktree = selection.requires_clean_worktree();
-    let unstaged = if requires_clean_worktree {
+    let worktree = if requires_clean_worktree {
         let status = git::worktree_status(git_root).await?;
         if status.unmerged {
             anyhow::bail!(
                 "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
             );
         }
-        Some(status.unstaged)
+        Some(status)
     } else {
         None
     };
@@ -140,8 +140,8 @@ pub(crate) async fn run(
     let has_group_filters = group_filters.has_filters();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    if let Some(unstaged) = &unstaged {
-        workspace.check_configs_staged(unstaged)?;
+    if let Some(status) = &worktree {
+        workspace.check_configs_staged(&status.unstaged)?;
     }
 
     let reporter = HookInitReporter::new(printer);
@@ -220,13 +220,14 @@ pub(crate) async fn run(
     );
 
     // Clear any unstaged changes from the git working directory.
-    let _guard = if let Some(unstaged) = &unstaged
-        && unstaged
+    let _guard = if let Some(status) = worktree
+        && status
+            .unstaged
             .iter()
             .any(|path| path.starts_with(workspace.root()))
     {
         Some(
-            WorkTreeKeeper::clean(store, workspace.root())
+            WorkTreeKeeper::clean(store, workspace.root(), status.intent_to_add)
                 .await
                 .context("Failed to clean work tree")?,
         )
