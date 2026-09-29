@@ -1,10 +1,13 @@
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use reqwest::Url;
+use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
@@ -529,19 +532,23 @@ fn find_gem_for_ruby(ruby_path: &Path) -> Result<PathBuf> {
 
 /// Query the Ruby version.
 pub(crate) async fn query_ruby_version(ruby_path: &Path) -> Result<semver::Version> {
-    let script = "puts RUBY_VERSION";
-    let output = Cmd::new(ruby_path)
-        .arg("-e")
-        .arg(script)
-        .check(true)
-        .output()
-        .await?;
+    static VERSIONS: LazyLock<OnceMap<PathBuf, semver::Version, FxBuildHasher>> =
+        LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
-    let version_str = str::from_utf8(&output.stdout)?.trim_ascii();
-    let version = semver::Version::parse(version_str)
-        .with_context(|| format!("Failed to parse Ruby version: {version_str}"))?;
+    VERSIONS
+        .try_compute(ruby_path.to_path_buf(), async || {
+            let output = Cmd::new(ruby_path)
+                .arg("-e")
+                .arg("puts RUBY_VERSION")
+                .check(true)
+                .output()
+                .await?;
 
-    Ok(version)
+            let version_str = str::from_utf8(&output.stdout)?.trim_ascii();
+            semver::Version::parse(version_str)
+                .with_context(|| format!("Failed to parse Ruby version: {version_str}"))
+        })
+        .await
 }
 
 #[cfg(test)]
@@ -551,6 +558,40 @@ mod tests {
     use std::str::FromStr;
     use target_lexicon::Triple;
     use tempfile::TempDir;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ruby_version_queries_share_success_and_retry_errors() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new()?;
+        let ruby = dir.path().join("ruby");
+        fs::write(&ruby, "#!/bin/sh\necho query >> \"$0.calls\"\nexit 1\n")?;
+        fs::set_permissions(&ruby, std::fs::Permissions::from_mode(0o755))?;
+        assert!(query_ruby_version(&ruby).await.is_err());
+
+        fs::write(
+            &ruby,
+            "#!/bin/sh\necho query >> \"$0.calls\"\nprintf '3.4.1\\n'\n",
+        )?;
+        let (first, second) =
+            tokio::try_join!(query_ruby_version(&ruby), query_ruby_version(&ruby))?;
+        assert_eq!(first, semver::Version::new(3, 4, 1));
+        assert_eq!(second, first);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("ruby.calls"))?,
+            "query\nquery\n"
+        );
+
+        let other = dir.path().join("other-ruby");
+        fs::write(&other, "#!/bin/sh\nprintf '3.3.0\\n'\n")?;
+        fs::set_permissions(&other, std::fs::Permissions::from_mode(0o755))?;
+        assert_eq!(
+            query_ruby_version(&other).await?,
+            semver::Version::new(3, 3, 0)
+        );
+        Ok(())
+    }
 
     fn test_gem_executable() -> &'static str {
         if cfg!(windows) { "gem.bat" } else { "gem" }
