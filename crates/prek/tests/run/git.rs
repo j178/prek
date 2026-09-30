@@ -574,6 +574,8 @@ fn restore_when_interrupted_during_git_operations() -> Result<()> {
             }
             std::thread::sleep(Duration::from_millis(10));
         };
+        // Accepted sockets inherit nonblocking mode on macOS.
+        socket.set_nonblocking(false)?;
         socket.set_read_timeout(Some(Duration::from_secs(30)))?;
         let mut ready = [0; 5];
         socket.read_exact(&mut ready)?;
