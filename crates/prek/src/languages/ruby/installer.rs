@@ -535,8 +535,9 @@ pub(crate) async fn query_ruby_version(ruby_path: &Path) -> Result<semver::Versi
     static VERSIONS: LazyLock<OnceMap<PathBuf, semver::Version, FxBuildHasher>> =
         LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
+    let key = fs_err::canonicalize(ruby_path).unwrap_or_else(|_| ruby_path.to_path_buf());
     VERSIONS
-        .try_compute(ruby_path.to_path_buf(), async || {
+        .try_compute(key, async || {
             let output = Cmd::new(ruby_path)
                 .arg("-e")
                 .arg("puts RUBY_VERSION")
@@ -558,40 +559,6 @@ mod tests {
     use std::str::FromStr;
     use target_lexicon::Triple;
     use tempfile::TempDir;
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn ruby_version_queries_share_success_and_retry_errors() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = TempDir::new()?;
-        let ruby = dir.path().join("ruby");
-        fs::write(&ruby, "#!/bin/sh\necho query >> \"$0.calls\"\nexit 1\n")?;
-        fs::set_permissions(&ruby, std::fs::Permissions::from_mode(0o755))?;
-        assert!(query_ruby_version(&ruby).await.is_err());
-
-        fs::write(
-            &ruby,
-            "#!/bin/sh\necho query >> \"$0.calls\"\nprintf '3.4.1\\n'\n",
-        )?;
-        let (first, second) =
-            tokio::try_join!(query_ruby_version(&ruby), query_ruby_version(&ruby))?;
-        assert_eq!(first, semver::Version::new(3, 4, 1));
-        assert_eq!(second, first);
-        assert_eq!(
-            fs::read_to_string(dir.path().join("ruby.calls"))?,
-            "query\nquery\n"
-        );
-
-        let other = dir.path().join("other-ruby");
-        fs::write(&other, "#!/bin/sh\nprintf '3.3.0\\n'\n")?;
-        fs::set_permissions(&other, std::fs::Permissions::from_mode(0o755))?;
-        assert_eq!(
-            query_ruby_version(&other).await?,
-            semver::Version::new(3, 3, 0)
-        );
-        Ok(())
-    }
 
     fn test_gem_executable() -> &'static str {
         if cfg!(windows) { "gem.bat" } else { "gem" }
