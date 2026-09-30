@@ -233,6 +233,47 @@ jobs:
             *.tar.gz
             *.sha256
 
+  linux-ppc64le:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TARGET: powerpc64le-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ env.TARGET }}
+          manylinux: 2_28
+          args: --release --locked --out dist --features self-update
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ env.TARGET }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ARCHIVE_NAME="prek-$TARGET"
+          ARCHIVE_FILE="$ARCHIVE_NAME.tar.gz"
+
+          mkdir -p "$ARCHIVE_NAME"
+          cp "target/$TARGET/release/prek" "$ARCHIVE_NAME/prek"
+          tar czvf "$ARCHIVE_FILE" "$ARCHIVE_NAME"
+          shasum -a 256 "$ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: artifacts-${{ env.TARGET }}
+          path: |
+            *.tar.gz
+            *.sha256
+
   musllinux:
     runs-on: ubuntu-latest
     env:
