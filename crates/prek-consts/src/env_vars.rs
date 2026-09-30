@@ -48,23 +48,11 @@ pub struct EnvVarsMap<'a> {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-impl EnvVarsMap<'_> {
-    fn direct_var_os(&self, name: &str) -> Option<OsString> {
+impl EnvVarsRead for EnvVarsMap<'_> {
+    fn var_os(&self, name: &str) -> Option<OsString> {
         self.values
             .iter()
             .find_map(|(key, value)| (*key == name).then(|| OsString::from(value)))
-    }
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-impl EnvVarsRead for EnvVarsMap<'_> {
-    fn var_os(&self, name: &str) -> Option<OsString> {
-        self.direct_var_os(name).or_else(|| {
-            let name = EnvVars::pre_commit_name(name)?;
-            let val = self.direct_var_os(name)?;
-            info!("Falling back to pre-commit environment variable for {name}");
-            Some(val)
-        })
     }
 }
 
@@ -256,8 +244,72 @@ fn parse_boolish(val: &str) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::io::Write;
+    use std::process::Command;
 
     use super::{EnvVars, EnvVarsRead, parse_boolish};
+
+    #[test]
+    fn test_process_environment_fallback() -> Result<(), Box<dyn std::error::Error>> {
+        const CHILD_CASE: &str = "PREK_TEST_ENVIRONMENT_CASE";
+        const VERIFIED: &str = "environment fallback verified";
+        let names = [
+            ("PREK_ALLOW_NO_CONFIG", "PRE_COMMIT_ALLOW_NO_CONFIG"),
+            ("PREK_NO_CONCURRENCY", "PRE_COMMIT_NO_CONCURRENCY"),
+        ];
+        let cases = [
+            (None, None, None),
+            (None, Some("legacy"), Some("legacy")),
+            (Some("primary"), None, Some("primary")),
+            (Some("primary"), Some("legacy"), Some("primary")),
+            (Some(""), Some("legacy"), Some("")),
+        ];
+
+        // A child owns its environment, so parallel tests never mutate shared process state.
+        #[expect(clippy::disallowed_methods, reason = "test subprocess dispatch")]
+        if let Ok(case) = std::env::var(CHILD_CASE) {
+            let index: usize = case.parse()?;
+            let (name, _) = names[index / cases.len()];
+            let (_, _, expected) = cases[index % cases.len()];
+            assert_eq!(EnvVars.var_os(name), expected.map(Into::into));
+            writeln!(std::io::stdout(), "\n{VERIFIED}")?;
+            return Ok(());
+        }
+
+        let executable = std::env::current_exe()?;
+        for (name_index, (name, fallback)) in names.into_iter().enumerate() {
+            for (case_index, (primary, legacy, _)) in cases.into_iter().enumerate() {
+                let mut command = Command::new(&executable);
+                command
+                    .args([
+                        "--exact",
+                        "env_vars::tests::test_process_environment_fallback",
+                        "--nocapture",
+                    ])
+                    .env(
+                        CHILD_CASE,
+                        (name_index * cases.len() + case_index).to_string(),
+                    )
+                    .env_remove(name)
+                    .env_remove(fallback);
+                if let Some(value) = primary {
+                    command.env(name, value);
+                }
+                if let Some(value) = legacy {
+                    command.env(fallback, value);
+                }
+                let output = command.output()?;
+                // A stale test filter must not pass by running zero assertions.
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    output.status.success() && stdout.lines().any(|line| line == VERIFIED),
+                    "{name}: primary={primary:?}, legacy={legacy:?}\n{stdout}\n{}",
+                    String::from_utf8_lossy(&output.stderr),
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_parse_boolish() {
@@ -288,15 +340,6 @@ mod tests {
             Err(std::env::VarError::NotPresent)
         );
         assert!(!env_vars.is_set(EnvVars::PREK_COLOR));
-
-        let env_vars = EnvVars::from_map(&[(EnvVars::PRE_COMMIT_NO_CONCURRENCY, "1")]);
-        assert_eq!(env_vars.var(EnvVars::PREK_NO_CONCURRENCY).unwrap(), "1");
-
-        let env_vars = EnvVars::from_map(&[
-            (EnvVars::PREK_NO_CONCURRENCY, "prek"),
-            (EnvVars::PRE_COMMIT_NO_CONCURRENCY, "pre-commit"),
-        ]);
-        assert_eq!(env_vars.var(EnvVars::PREK_NO_CONCURRENCY).unwrap(), "prek");
 
         let env_vars = EnvVars::from_map(&[
             (EnvVars::PREK_DOCKER_NO_INIT, "yes"),
