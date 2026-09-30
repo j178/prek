@@ -8,6 +8,7 @@ on:
         type: string
 
 env:
+  ACTIONS_CACHE_MODE: none
   UV_VERSION: "0.12.17"
 
 jobs:
@@ -33,11 +34,14 @@ jobs:
           merge-multiple: true
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          cache: ""
+          package-manager-cache: false
           node-version: "24.x"
           registry-url: "https://registry.npmjs.org"
       - name: "Install uv"
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          enable-cache: false
           version: ${{ env.UV_VERSION }}
       - name: Build npm packages
         run: |

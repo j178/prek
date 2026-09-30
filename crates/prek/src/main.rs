@@ -460,7 +460,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 }
 
 fn exit_interrupted() -> ! {
-    // The cleanup lock also waits for restoration already running on the Ctrl-C thread.
+    static EXIT_LOCK: Mutex<()> = Mutex::new(());
+
+    // Hold the lock through process::exit so concurrent exits on macOS cannot
+    // terminate another thread's exit handlers while they flush coverage data.
+    let _exit = EXIT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     cleanup();
 
     #[expect(
