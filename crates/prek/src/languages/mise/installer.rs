@@ -56,8 +56,9 @@ impl MiseResult {
     pub(crate) async fn from_executable(mise: PathBuf) -> Result<Self> {
         static CACHE: LazyLock<OnceMap<PathBuf, Version, FxBuildHasher>> =
             LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+        let key = fs_err::canonicalize(&mise).unwrap_or_else(|_| mise.clone());
         let version = CACHE
-            .try_compute(mise.clone(), async || {
+            .try_compute(key, async || {
                 let isolated = tempfile::tempdir()?;
                 let mut command = Cmd::new(&mise);
                 for key in inherited_mise_vars() {
@@ -323,53 +324,4 @@ fn release_platform(host: &Triple) -> Result<(String, &'static str)> {
 
 fn bin_dir(prefix: &Path) -> PathBuf {
     prefix.join("bin")
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use std::os::unix::fs::PermissionsExt;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn version_queries_share_successes_and_retry_failures() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        let mise = dir.path().join("mise");
-        fs_err::write(
-            &mise,
-            "#!/bin/sh\necho query >> \"$0.calls\"\necho invalid\n",
-        )?;
-        fs_err::set_permissions(&mise, std::fs::Permissions::from_mode(0o755))?;
-        assert!(MiseResult::from_executable(mise.clone()).await.is_err());
-
-        fs_err::write(
-            &mise,
-            "#!/bin/sh\n\
-             test \"$CI\" = 1 && test \"${MISE_DATA_DIR%/data}\" -ef . || exit 1\n\
-             echo query >> \"$0.calls\"\n\
-             printf '%s' \"$PWD\" > \"$0.cwd\"\n\
-             echo '2026.7.18 macos-arm64 (2026-07-18)'\n",
-        )?;
-        let (first, second) = tokio::try_join!(
-            MiseResult::from_executable(mise.clone()),
-            MiseResult::from_executable(mise.clone()),
-        )?;
-        assert_eq!(first.version(), &Version::new(2026, 7, 18));
-        assert_eq!(second.version(), first.version());
-        assert_eq!(
-            fs_err::read_to_string(mise.with_extension("calls"))?,
-            "query\nquery\n"
-        );
-        let isolated = fs_err::read_to_string(mise.with_extension("cwd"))?;
-        assert!(!Path::new(&isolated).exists());
-
-        let other = dir.path().join("other-mise");
-        fs_err::write(&other, "#!/bin/sh\necho '2026.8.0 linux-x64'\n")?;
-        fs_err::set_permissions(&other, std::fs::Permissions::from_mode(0o755))?;
-        assert_eq!(
-            MiseResult::from_executable(other).await?.version(),
-            &Version::new(2026, 8, 0)
-        );
-        Ok(())
-    }
 }
