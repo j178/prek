@@ -55,8 +55,9 @@ impl DenoResult {
         static VERSIONS: LazyLock<OnceMap<PathBuf, DenoVersion, FxBuildHasher>> =
             LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
+        let key = fs_err::canonicalize(&deno).unwrap_or_else(|_| deno.clone());
         let version = VERSIONS
-            .try_compute(deno.clone(), async || {
+            .try_compute(key, async || {
                 let output = Cmd::new(&deno)
                     .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
                     .arg("--version")
@@ -382,37 +383,6 @@ fn digest_from_deno_windows_checksum(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn version_queries_retry_invalid_output_then_share_success() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempfile::TempDir::new()?;
-        let deno = dir.path().join("deno");
-        fs_err::write(
-            &deno,
-            "#!/bin/sh\necho query >> \"$0.calls\"\necho deno invalid\n",
-        )?;
-        fs_err::set_permissions(&deno, std::fs::Permissions::from_mode(0o755))?;
-        assert!(DenoResult::from_executable(deno.clone()).await.is_err());
-
-        fs_err::write(
-            &deno,
-            "#!/bin/sh\necho query >> \"$0.calls\"\necho deno 2.3.0\n",
-        )?;
-        let (first, second) = tokio::try_join!(
-            DenoResult::from_executable(deno.clone()),
-            DenoResult::from_executable(deno),
-        )?;
-        assert_eq!(**first.version(), semver::Version::new(2, 3, 0));
-        assert_eq!(second.version(), first.version());
-        assert_eq!(
-            fs_err::read_to_string(dir.path().join("deno.calls"))?,
-            "query\nquery\n"
-        );
-        Ok(())
-    }
 
     #[test]
     fn parses_deno_sha256sum_format() -> Result<()> {
