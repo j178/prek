@@ -14,6 +14,7 @@ on:
         type: string
 
 env:
+  ACTIONS_CACHE_MODE: none
   PREK_BASE_IMG: ghcr.io/${{ github.repository_owner }}/prek
   ALPINE_VERSION: "3.24"
 
@@ -73,6 +74,8 @@ jobs:
           persist-credentials: false
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          cache-binary: false
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: ${{ needs.plan.outputs.push == 'true' }}
@@ -115,8 +118,6 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha,scope=prek
-          cache-to: type=gha,mode=min,scope=prek
           push: ${{ needs.plan.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -155,8 +156,11 @@ jobs:
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
+          cache-image: false
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          cache-binary: false
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: ${{ needs.plan.outputs.push == 'true' }}
@@ -207,8 +211,6 @@ jobs:
           context: .
           file: Dockerfile.alpine
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha,scope=prek-alpine
-          cache-to: type=gha,mode=min,scope=prek-alpine
           push: ${{ needs.plan.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

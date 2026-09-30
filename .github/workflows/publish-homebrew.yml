@@ -10,6 +10,9 @@ on:
       HOMEBREW_TAP_TOKEN:
         required: true
 
+env:
+  ACTIONS_CACHE_MODE: none
+
 jobs:
   publish:
     name: Publish Homebrew formula

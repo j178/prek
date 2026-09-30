@@ -18,6 +18,7 @@ on:
 permissions: {}
 
 env:
+  ACTIONS_CACHE_MODE: none
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
@@ -35,6 +36,7 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           command: sdist
           args: --out dist
@@ -68,10 +70,10 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update --compatibility pypi
-          sccache: 'true'
         env:
           # Disable prebuilt NASM objects so we always compile assembly from source.
           AWS_LC_SYS_PREBUILT_NASM: "0"
@@ -110,10 +112,10 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update --compatibility pypi
-          sccache: 'true'
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -148,11 +150,11 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
-          sccache: 'true'
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -190,6 +192,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: 2_28
@@ -231,6 +234,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: 2_17
@@ -271,6 +275,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
@@ -311,6 +316,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
