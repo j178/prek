@@ -70,7 +70,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update --compatibility pypi
           sccache: 'true'
         env:
           # Disable prebuilt NASM objects so we always compile assembly from source.
@@ -112,7 +112,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update --compatibility pypi
           sccache: 'true'
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -150,20 +150,9 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
-          container: quay.io/pypa/manylinux2014
-          args: --release --locked --out dist --features self-update
-          # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
-          before-script-linux: |
-            rustup target add ${{ env.TARGET }}
-            # If we're running on rhel centos, install needed packages.
-            if command -v yum &> /dev/null; then
-                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
-            else
-                # If we're running on debian-based system.
-                apt update -y && apt-get install -y libssl-dev openssl pkg-config
-            fi
+          manylinux: 2_17
+          args: --release --locked --out dist --features self-update --compatibility pypi
           sccache: 'true'
-          manylinux: auto
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -204,10 +193,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: 2_28
-          # See https://github.com/astral-sh/ruff/issues/3791
-          # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963.
-          docker-options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-          args: --release --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update --compatibility pypi
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -288,7 +274,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
-          args: --release --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update --compatibility pypi
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -328,8 +314,8 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
-          args: --release --locked --out dist --features self-update --compatibility 2_17
-          docker-options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+          # Also support glibc systems older than the aarch64 GNU build's baseline.
+          args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
