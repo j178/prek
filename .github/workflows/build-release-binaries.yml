@@ -247,8 +247,8 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ env.TARGET }}
-          manylinux: 2_28
-          args: --release --locked --out dist --features self-update
+          manylinux: 2_17
+          args: --release --locked --out dist --features self-update --compatibility pypi
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
