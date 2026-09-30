@@ -304,4 +304,20 @@ fn check_useless_excludes_workspace_paths_are_project_relative() {
 
     ----- stderr -----
     "#);
+
+    context.git().rm("app/global_excluded");
+
+    cmd_snapshot!(context, context.run().arg("check-useless-excludes"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    × app
+      Check useless excludes.................................................Failed
+      - hook id: check-useless-excludes
+      - exit code: 1
+
+        The global exclude pattern `regex: ^global_excluded$` does not match any files
+
+    ----- stderr -----
+    ");
 }
