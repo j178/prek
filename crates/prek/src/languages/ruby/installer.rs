@@ -1,10 +1,13 @@
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use reqwest::Url;
+use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
@@ -529,19 +532,24 @@ fn find_gem_for_ruby(ruby_path: &Path) -> Result<PathBuf> {
 
 /// Query the Ruby version.
 pub(crate) async fn query_ruby_version(ruby_path: &Path) -> Result<semver::Version> {
-    let script = "puts RUBY_VERSION";
-    let output = Cmd::new(ruby_path)
-        .arg("-e")
-        .arg(script)
-        .check(true)
-        .output()
-        .await?;
+    static VERSIONS: LazyLock<OnceMap<PathBuf, semver::Version, FxBuildHasher>> =
+        LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
-    let version_str = str::from_utf8(&output.stdout)?.trim_ascii();
-    let version = semver::Version::parse(version_str)
-        .with_context(|| format!("Failed to parse Ruby version: {version_str}"))?;
+    let key = fs_err::canonicalize(ruby_path).unwrap_or_else(|_| ruby_path.to_path_buf());
+    VERSIONS
+        .try_compute(key, async || {
+            let output = Cmd::new(ruby_path)
+                .arg("-e")
+                .arg("puts RUBY_VERSION")
+                .check(true)
+                .output()
+                .await?;
 
-    Ok(version)
+            let version_str = str::from_utf8(&output.stdout)?.trim_ascii();
+            semver::Version::parse(version_str)
+                .with_context(|| format!("Failed to parse Ruby version: {version_str}"))
+        })
+        .await
 }
 
 #[cfg(test)]
