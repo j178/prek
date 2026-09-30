@@ -138,34 +138,4 @@ mod tests {
         assert!(output_str.contains("Broken symlink"));
         Ok(())
     }
-
-    #[tokio::test]
-    #[cfg(target_os = "macos")]
-    async fn test_valid_symlink_macos() -> Result<()> {
-        let dir = tempdir()?;
-        let target = create_test_file(&dir, "target.txt", b"content").await?;
-        let link_path = dir.path().join("link.txt");
-        fs_err::tokio::symlink(&target, &link_path).await?;
-
-        let result = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[cfg(target_os = "macos")]
-    async fn test_broken_symlink_macos() -> Result<()> {
-        let dir = tempdir()?;
-        let link_path = dir.path().join("broken_link.txt");
-        let nonexistent = dir.path().join("nonexistent.txt");
-        fs_err::tokio::symlink(&nonexistent, &link_path).await?;
-
-        let result = check_file(Path::new(""), &link_path).await?;
-        assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
-        let output_str = String::from_utf8_lossy(&result.output);
-        assert!(output_str.contains("Broken symlink"));
-        Ok(())
-    }
 }
