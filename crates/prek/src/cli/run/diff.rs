@@ -49,7 +49,7 @@ impl<'a> DiffTracker<'a> {
 
         match &mut self.baseline {
             DiffBaseline::Clean => {
-                // `WorkTreeKeeper` already removed unstaged changes. A quiet
+                // `WorktreeStash` already removed unstaged changes. A quiet
                 // worktree check keeps the common no-op path cheap.
                 if !git::has_worktree_diff(self.path).await? {
                     return Ok(false);

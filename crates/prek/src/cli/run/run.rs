@@ -22,7 +22,7 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::diff::DiffTracker;
 use crate::cli::run::filter::{RunInputMode, stage_uses_message_file_input};
 use crate::cli::run::install::{InstallCache, install_hooks};
-use crate::cli::run::keeper::WorkTreeKeeper;
+use crate::cli::run::stash::{RestoreOutcome, WorktreeStash};
 use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
     ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
@@ -220,15 +220,14 @@ pub(crate) async fn run(
     );
 
     // Clear any unstaged changes from the git working directory.
-    let _guard = if let Some(status) = worktree
+    let stash = if let Some(status) = worktree
         && status
             .unstaged
             .iter()
             .any(|path| path.starts_with(workspace.root()))
     {
         Some(
-            WorkTreeKeeper::clean(store, workspace.root(), status.intent_to_add)
-                .await
+            WorktreeStash::save(store, workspace.root(), status.intent_to_add)
                 .context("Failed to clean work tree")?,
         )
     } else {
@@ -238,56 +237,71 @@ pub(crate) async fn run(
     let (from_ref, to_ref) = selection.refs();
     set_env_vars(from_ref, to_ref, &extra_args);
 
-    let input = collect_run_input(
-        workspace.root(),
-        CollectOptions {
-            input_mode,
-            selection,
-            commit_msg_filename: extra_args.commit_msg_filename,
-            include_deleted: selected_hooks
-                .iter()
-                .filter_map(HookPlan::as_run)
-                .any(|hook| hook.include_deleted),
-        },
-    )
-    .await
-    .context("Failed to collect files")?;
-
-    // Change to the workspace root directory.
-    std::env::set_current_dir(workspace.root()).with_context(|| {
-        format!(
-            "Failed to change directory to `{}`",
-            workspace.root().display()
+    let result = async {
+        let input = collect_run_input(
+            workspace.root(),
+            CollectOptions {
+                input_mode,
+                selection,
+                commit_msg_filename: extra_args.commit_msg_filename,
+                include_deleted: selected_hooks
+                    .iter()
+                    .filter_map(HookPlan::as_run)
+                    .any(|hook| hook.include_deleted),
+            },
         )
-    })?;
+        .await
+        .context("Failed to collect files")?;
 
-    let file_index = RunFileIndex::new(&input, workspace.all_projects());
-    let installed_hooks = ensure_hooks_installed(
-        store,
-        printer,
-        &workspace,
-        &input,
-        &file_index,
-        selected_hooks,
-    )
-    .await?;
+        // Change to the workspace root directory.
+        std::env::set_current_dir(workspace.root()).with_context(|| {
+            format!(
+                "Failed to change directory to `{}`",
+                workspace.root().display()
+            )
+        })?;
 
-    run_hooks(
-        &workspace,
-        &input,
-        &file_index,
-        &installed_hooks,
-        store,
-        show_diff_on_failure,
-        fail_fast,
-        dry_run,
-        hide_status,
-        filesystem.as_ref(),
-        requires_clean_worktree,
-        verbose,
-        printer,
-    )
-    .await
+        let file_index = RunFileIndex::new(&input, workspace.all_projects());
+        let installed_hooks = ensure_hooks_installed(
+            store,
+            printer,
+            &workspace,
+            &input,
+            &file_index,
+            selected_hooks,
+        )
+        .await?;
+
+        run_hooks(
+            &workspace,
+            &input,
+            &file_index,
+            &installed_hooks,
+            store,
+            show_diff_on_failure,
+            fail_fast,
+            dry_run,
+            hide_status,
+            filesystem.as_ref(),
+            requires_clean_worktree,
+            verbose,
+            printer,
+        )
+        .await
+    }
+    .await;
+
+    let Some(stash) = stash else {
+        return result;
+    };
+    match (result, stash.restore()) {
+        (result, Ok(RestoreOutcome::Restored)) => result,
+        (result, Ok(RestoreOutcome::HookChangesReverted)) => result.map(|_| ExitStatus::Failure),
+        (Ok(_), Err(err)) => Err(err),
+        (Err(err), Err(restore_err)) => Err(anyhow::anyhow!(
+            "{err:#}\n\nWorktree restoration also failed:\n{restore_err:#}"
+        )),
+    }
 }
 
 fn infer_stage_and_input_mode(

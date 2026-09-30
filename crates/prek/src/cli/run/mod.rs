@@ -12,11 +12,11 @@ pub(crate) use selector::{ConfiguredHook, GroupFilters, SelectorSource, Selector
 mod diff;
 mod filter;
 mod install;
-mod keeper;
 mod reporter;
 #[allow(clippy::module_inception)]
 mod run;
 mod selector;
+mod stash;
 
 const PASSED: Styled<&str> = Style::new().green().reversed().style("Passed");
 const FAILED: Styled<&str> = Style::new().red().reversed().style("Failed");

@@ -164,6 +164,225 @@ fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
 }
 
 #[test]
+fn restaging_hook_preserves_conflicted_stash() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: restage
+                name: restage
+                language: system
+                entry: python3 hook.py
+                files: ^doc\.md$
+                pass_filenames: false
+        "})
+        .with_file(
+            "hook.py",
+            indoc::indoc! {r"
+                from pathlib import Path
+                import subprocess
+
+                Path('doc.md').write_bytes(b'NORMALISED\nbody\nstaged edit\n')
+                Path('hook-added.txt').write_bytes(b'hook output\n')
+                subprocess.run(['git', 'add', '.'], check=True)
+                subprocess.run(['git', 'rm', '-q', 'removed.txt'], check=True)
+            "},
+        )
+        .with_file("doc.md", "ORIGINAL\nbody\n")
+        .with_file("other.txt", "other original\n")
+        .with_file("removed.txt", "keep this file\n")
+        .init_git();
+    context.git().commit("Initial commit");
+    context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\n");
+    context.git().add("doc.md");
+    context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n");
+    context.write_file("other.txt", "other original\nother unstaged\n");
+    context.write_file("intent.txt", "intent to add\n");
+    context.git().run(["add", "--intent-to-add", "intent.txt"]);
+    context.write_file("untracked.txt", "keep untracked content\n");
+    context.command().arg("install").assert().success();
+
+    cmd_snapshot!(context, context.git().command().env_remove("RUST_LOG").args(["commit", "-m", "Must not commit rolled-back fixes"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    restage..................................................................Passed
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    "#);
+    cmd_snapshot!(context, context.git().command().args(["status", "--short"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    MM doc.md
+     A intent.txt
+     M other.txt
+    ?? hook-added.txt
+    ?? untracked.txt
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.git().command().args(["show", ":doc.md"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ORIGINAL
+    body
+    staged edit
+
+    ----- stderr -----
+    "#);
+    assert_eq!(
+        context.read("doc.md"),
+        "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n"
+    );
+    assert_eq!(
+        context.read("other.txt"),
+        "other original\nother unstaged\n"
+    );
+    assert_eq!(context.read("removed.txt"), "keep this file\n");
+    assert_eq!(context.read("intent.txt"), "intent to add\n");
+    assert_eq!(context.read("hook-added.txt"), "hook output\n");
+    assert_eq!(context.read("untracked.txt"), "keep untracked content\n");
+}
+
+#[test]
+fn failed_stash_restore_aborts_commit_and_allows_recovery() -> Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: restage
+                name: restage
+                language: system
+                entry: python3 hook.py
+                files: ^doc\.md$
+                pass_filenames: false
+        "})
+        .with_file(
+            "hook.py",
+            indoc::indoc! {r"
+                from pathlib import Path
+                import subprocess
+
+                Path('doc.md').write_bytes(b'NORMALISED\nbody\nstaged edit\n')
+                subprocess.run(['git', 'add', 'doc.md'], check=True)
+                Path('.git/index.lock').touch()
+            "},
+        )
+        .with_file("doc.md", "ORIGINAL\nbody\n")
+        .with_file("other.txt", "other original\n")
+        .with_filter(r"\b[a-f0-9]{40,64}\b", "[TREE]")
+        .with_filter(r"Command `[^`]*git(?:\.exe)? ", "Command `[GIT] ")
+        .with_filter(
+            r"(?s)Another git process seems to be running in this repository.*",
+            "[GIT_LOCK_HINT]",
+        )
+        .init_git();
+    context.git().commit("Initial commit");
+    context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\n");
+    context.git().add("doc.md");
+    context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n");
+    context.write_file("other.txt", "other original\nother unstaged\n");
+    context.command().arg("install").assert().success();
+
+    cmd_snapshot!(context, context.git().command().env_remove("RUST_LOG").args(["commit", "-m", "Must not commit after failed restoration"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    restage..................................................................Passed
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
+    error: Failed to restore unstaged changes.
+    Your changes are saved in `[HOME]/patches/[TIME]-[PID].patch`.
+    Pre-hook index tree: [TREE]
+      caused by: Failed to restore the pre-hook index
+      caused by: Command `[GIT] reset --quiet [TREE] -- [TEMP_DIR]/` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
+    [GIT_LOCK_HINT]
+    "#);
+    cmd_snapshot!(context, context.git().command().args(["log", "-1", "--format=%s"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Initial commit
+
+    ----- stderr -----
+    "#);
+
+    // Keep the checkout locked to verify recovery uses an independent index.
+    let patch = fs_err::read_dir(context.home_dir().join("patches"))?
+        .next()
+        .transpose()?
+        .ok_or_else(|| anyhow::anyhow!("Missing recovery patch"))?
+        .path();
+    let patch_content = fs_err::read_to_string(&patch)?;
+    let tree = patch_content
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("# prek pre-hook index tree: "))
+        .ok_or_else(|| anyhow::anyhow!("Missing recovery tree"))?;
+    let index = context.home_dir().join("recovery.index");
+    let recovered = context.home_dir().join("recovered files");
+    context
+        .git()
+        .command()
+        .env("GIT_INDEX_FILE", &index)
+        .arg("read-tree")
+        .arg(tree)
+        .assert()
+        .success();
+    context
+        .git()
+        .command()
+        .env("GIT_INDEX_FILE", &index)
+        .args(["checkout-index", "--all"])
+        .arg(format!("--prefix={}/", recovered.display()))
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(recovered.join("doc.md"))?,
+        "ORIGINAL\nbody\nstaged edit\n"
+    );
+    context
+        .git_at(&recovered)
+        .command()
+        .args(["apply", "--check"])
+        .arg(&patch)
+        .assert()
+        .success();
+    context
+        .git_at(&recovered)
+        .command()
+        .arg("apply")
+        .arg(&patch)
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(recovered.join("doc.md"))?,
+        "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n"
+    );
+    assert_eq!(
+        fs_err::read_to_string(recovered.join("other.txt"))?,
+        "other original\nother unstaged\n"
+    );
+    assert_eq!(context.read("doc.md"), "NORMALISED\nbody\nstaged edit\n");
+    Ok(())
+}
+
+#[test]
 fn restore_intent_and_unstaged_changes_from_subdirectory() {
     let context = TestEnv::new()
         .with_file(
@@ -213,10 +432,253 @@ fn restore_intent_and_unstaged_changes_from_subdirectory() {
     "#);
 }
 
+#[test]
+fn restore_after_checkout_failure() {
+    let context = TestEnv::new()
+        .with_filter(r"Command `[^`]*git(?:\.exe)? ", "Command `[GIT] ")
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: check
+                    name: check
+                    language: system
+                    entry: python3 -c 'pass'
+        "})
+        .with_file("file.txt", "original\n")
+        .init_git();
+    context.git().commit("Initial commit");
+    context.write_file("file.txt", "staged\n");
+    context.git().add("file.txt");
+    context.write_file("file.txt", "unstaged\n");
+    context.write_file("intent.txt", "intent\n");
+    context.git().run(["add", "--intent-to-add", "intent.txt"]);
+    context.write_executable_file(
+        ".git/hooks/post-checkout",
+        "#!/bin/sh\necho 'checkout hook failed' >&2\nexit 1\n",
+    );
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    error: Failed to clean work tree
+      caused by: Failed to checkout working tree
+      caused by: Command `[GIT] -c submodule.recurse=0 checkout -- [TEMP_DIR]/` exited with an error:
+
+    [status]
+    exit status: 1
+
+    [stderr]
+    checkout hook failed
+    "#);
+    assert_eq!(context.read("file.txt"), "unstaged\n");
+    assert_eq!(context.read("intent.txt"), "intent\n");
+    cmd_snapshot!(context, context.git().command().args(["status", "--porcelain"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    MM file.txt
+     A intent.txt
+
+    ----- stderr -----
+    "#);
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_when_interrupted_during_git_operations() -> Result<()> {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    use prek_consts::env_vars::EnvVarsRead;
+
+    for operation in ["rm", "write-tree", "checkout", "apply", "add"] {
+        let context = TestEnv::new()
+            .with_config(indoc::indoc! {r"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: check
+                        name: check
+                        language: system
+                        entry: python3 -c 'pass'
+            "})
+            .with_file("file.txt", "original\n")
+            .init_git();
+        context.git().commit("Initial commit");
+        context.write_file("file.txt", "staged\n");
+        context.git().add("file.txt");
+        context.write_file("file.txt", "unstaged\n");
+        context.write_file("intent.txt", "intent\n");
+        context.git().run(["add", "--intent-to-add", "intent.txt"]);
+        context.write_executable_file(
+            ".git/bin/git",
+            indoc::indoc! {r"
+                #!/usr/bin/env python3
+                import os
+                import socket
+                import subprocess
+                import sys
+
+                args = sys.argv[1:]
+                result = subprocess.run([os.environ['REAL_GIT'], *args])
+                if 'apply' in args:
+                    with open('.git/apply-calls', 'a') as calls:
+                        calls.write('apply\n')
+                if os.environ['INTERRUPT_OPERATION'] in args:
+                    host, port = os.environ['INTERRUPT_ADDRESS'].split(':')
+                    with socket.create_connection((host, int(port)), timeout=30) as sock:
+                        sock.sendall(b'ready')
+                        assert sock.recv(1) == b'x'
+                sys.exit(result.returncode)
+            "},
+        );
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let path = std::env::join_paths(
+            std::iter::once(context.child(".git/bin").path().to_path_buf()).chain(
+                std::env::split_paths(&EnvVars.var_os(EnvVars::PATH).unwrap_or_default()),
+            ),
+        )?;
+        let mut child = context
+            .run()
+            .env("PATH", path)
+            .env("REAL_GIT", which::which("git")?)
+            .env("INTERRUPT_OPERATION", operation)
+            .env("INTERRUPT_ADDRESS", listener.local_addr()?.to_string())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut socket = loop {
+            match listener.accept() {
+                Ok((socket, _)) => break socket,
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err.into()),
+            }
+            if child.try_wait()?.is_some() || Instant::now() >= deadline {
+                let _ = child.kill();
+                let output = child.wait_with_output()?;
+                anyhow::bail!(
+                    "Git {operation} did not reach the barrier: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        socket.set_read_timeout(Some(Duration::from_secs(30)))?;
+        let mut ready = [0; 5];
+        socket.read_exact(&mut ready)?;
+        let child_id = i32::try_from(child.id())?;
+        // Git has changed the repository but has not returned to prek yet.
+        let signaled = unsafe { libc::kill(child_id, libc::SIGINT) };
+        anyhow::ensure!(
+            signaled == 0,
+            "Failed to interrupt Git {operation}: {}",
+            std::io::Error::last_os_error()
+        );
+        socket.write_all(b"x")?;
+        child
+            .wait_with_output()?
+            .assert()
+            .append_context("operation", operation)
+            .code(130);
+
+        assert_eq!(context.read("file.txt"), "unstaged\n", "{operation}");
+        assert_eq!(context.read("intent.txt"), "intent\n", "{operation}");
+        assert_eq!(context.read(".git/apply-calls"), "apply\n", "{operation}");
+        insta::allow_duplicates! {
+        cmd_snapshot!(context, context.git().command().args(["status", "--porcelain"]), @r#"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        MM file.txt
+         A intent.txt
+
+        ----- stderr -----
+        "#);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn restore_reports_hook_and_recovery_errors() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: modify
+                    name: modify
+                    language: system
+                    entry: python3 -c "from pathlib import Path; Path('file.txt').write_bytes(b'hook\n'); Path('.git/index.lock').touch()"
+                    pass_filenames: false
+                    priority: 0
+                  - id: invalid
+                    name: invalid
+                    language: system
+                    entry: ''
+                    priority: 1
+        "#})
+        .with_file("file.txt", "original\n")
+        .with_filter(r"\b[a-f0-9]{40,64}\b", "[TREE]")
+        .with_filter(r"Command `[^`]*git(?:\.exe)? ", "Command `[GIT] ")
+        .with_filter(
+            r"(?m)Another git process[^\n]*(?:\n(?:e\.g\.|make sure|persist|remove the file)[^\n]*)*",
+            "[GIT_LOCK_HINT]",
+        )
+        .init_git();
+    context.write_file("file.txt", "unstaged\n");
+    context.write_file("intent.txt", "intent\n");
+    context.git().run(["add", "--intent-to-add", "intent.txt"]);
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
+    error: Failed to run hook `invalid`: Invalid hook `invalid`: Failed to parse entry: entry is empty
+
+    Worktree restoration also failed:
+    Failed to restore unstaged changes.
+    Your changes are saved in `[HOME]/patches/[TIME]-[PID].patch`.
+    Pre-hook index tree: [TREE]: Failed to restore the pre-hook index: Command `[GIT] reset --quiet [TREE] -- [TEMP_DIR]/` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
+    [GIT_LOCK_HINT]
+
+
+    Additionally:
+    Failed to restore intent-to-add changes: Command `[GIT] add --intent-to-add -- [TEMP_DIR]/intent.txt` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
+    [GIT_LOCK_HINT]
+    "#);
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {
-    // The hook will sleep for 3 seconds.
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
@@ -236,18 +698,25 @@ fn restore_on_interrupt() -> Result<()> {
     context.write_file("file.txt", "Hello world again!");
 
     let mut child = context.run().spawn()?;
-    let child_id = child.id();
-
-    // Send an interrupt signal to the process.
-    let handle = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        #[allow(clippy::cast_possible_wrap)]
-        unsafe {
-            libc::kill(child_id as i32, libc::SIGINT)
-        };
-    });
-
-    handle.join().unwrap();
+    // Wait for the hook to observe the cleaned worktree before interrupting it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !fs_err::read(context.child("out.txt")).is_ok_and(|contents| contents == b"Hello, world!")
+    {
+        anyhow::ensure!(
+            child.try_wait()?.is_none(),
+            "prek exited before the hook ran"
+        );
+        if std::time::Instant::now() >= deadline {
+            child.kill()?;
+            child.wait()?;
+            anyhow::bail!("Timed out waiting for the hook to start");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let child_id = i32::try_from(child.id())?;
+    unsafe {
+        libc::kill(child_id, libc::SIGINT);
+    }
     child.wait()?;
 
     let content = context.read("out.txt");

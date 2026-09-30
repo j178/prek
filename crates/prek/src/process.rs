@@ -262,6 +262,17 @@ impl Cmd {
         self.maybe_check_output(output)
     }
 
+    /// Run the command to completion, blocking the current thread.
+    pub fn output_sync(&mut self) -> Result<Output, Error> {
+        self.log_command();
+        let output = self
+            .inner
+            .as_std_mut()
+            .output()
+            .map_err(|cause| self.exec_error(cause))?;
+        self.maybe_check_output(output)
+    }
+
     /// Captures stdout and stderr through the same pipe and streams chunks into
     /// `sink` as they are read.
     pub(crate) async fn output_with_sink<S: OutputSink>(
