@@ -5,8 +5,10 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use rustc_hash::FxBuildHasher;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
@@ -50,12 +52,20 @@ impl BunResult {
     }
 
     pub(crate) async fn from_executable(bun: PathBuf) -> Result<Self> {
-        let output = Cmd::new(&bun).arg("--version").check(true).output().await?;
-        let output_str = str::from_utf8(&output.stdout)?;
-        let version: BunVersion = output_str
-            .trim()
-            .parse()
-            .context("Failed to parse bun version")?;
+        static VERSIONS: LazyLock<OnceMap<PathBuf, BunVersion, FxBuildHasher>> =
+            LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+
+        let key = fs_err::canonicalize(&bun).unwrap_or_else(|_| bun.clone());
+        let version = VERSIONS
+            .try_compute(key, async || {
+                let output = Cmd::new(&bun).arg("--version").check(true).output().await?;
+                let output_str = str::from_utf8(&output.stdout)?;
+                output_str
+                    .trim()
+                    .parse()
+                    .context("Failed to parse bun version")
+            })
+            .await?;
 
         Ok(Self { bun, version })
     }

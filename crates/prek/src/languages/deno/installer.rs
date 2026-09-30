@@ -5,8 +5,10 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
@@ -50,24 +52,30 @@ impl DenoResult {
     }
 
     pub(crate) async fn from_executable(deno: PathBuf) -> Result<Self> {
-        let output = Cmd::new(&deno)
-            .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
-            .arg("--version")
-            .check(true)
-            .output()
-            .await?;
-        // Output format: "deno 2.1.0 (release, x86_64-unknown-linux-gnu)\n..."
-        let output_str = str::from_utf8(&output.stdout)?;
-        let version_str = output_str
-            .lines()
-            .next()
-            .and_then(|line| line.strip_prefix("deno "))
-            .and_then(|rest| rest.split_whitespace().next())
-            .context("Failed to parse deno version output")?;
+        static VERSIONS: LazyLock<OnceMap<PathBuf, DenoVersion, FxBuildHasher>> =
+            LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
-        let version = version_str
-            .parse()
-            .context("Failed to parse deno version")?;
+        let key = fs_err::canonicalize(&deno).unwrap_or_else(|_| deno.clone());
+        let version = VERSIONS
+            .try_compute(key, async || {
+                let output = Cmd::new(&deno)
+                    .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
+                    .arg("--version")
+                    .check(true)
+                    .output()
+                    .await?;
+                // Output format: "deno 2.1.0 (release, x86_64-unknown-linux-gnu)\n..."
+                let output_str = str::from_utf8(&output.stdout)?;
+                let version_str = output_str
+                    .lines()
+                    .next()
+                    .and_then(|line| line.strip_prefix("deno "))
+                    .and_then(|rest| rest.split_whitespace().next())
+                    .context("Failed to parse deno version output")?;
+
+                version_str.parse().context("Failed to parse deno version")
+            })
+            .await?;
 
         Ok(Self { deno, version })
     }
