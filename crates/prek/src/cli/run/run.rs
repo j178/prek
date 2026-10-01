@@ -237,6 +237,21 @@ pub(crate) async fn run(
     let (from_ref, to_ref) = selection.refs();
     set_env_vars(from_ref, to_ref, &extra_args);
 
+    let input_mode = if input_mode == RunInputMode::Files
+        && matches!(
+            selection,
+            FileSelection::Default | FileSelection::All { .. }
+        )
+        && selected_hooks
+            .iter()
+            .filter_map(HookPlan::as_run)
+            .all(|hook| hook.always_run && hook.pass_filenames == PassFilenames::None)
+    {
+        RunInputMode::NoFiles
+    } else {
+        input_mode
+    };
+
     let result = async {
         let input = collect_run_input(
             workspace.root(),
