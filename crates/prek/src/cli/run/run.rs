@@ -237,6 +237,9 @@ pub(crate) async fn run(
     let (from_ref, to_ref) = selection.refs();
     set_env_vars(from_ref, to_ref, &extra_args);
 
+    // These hooks run even without matching files and never receive filenames,
+    // so discovery and tagging cannot affect execution. Keep explicit paths and
+    // diff refs on their normal collection path to preserve validation.
     let input_mode = if input_mode == RunInputMode::Files
         && matches!(
             selection,
