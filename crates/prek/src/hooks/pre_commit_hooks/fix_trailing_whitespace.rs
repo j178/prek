@@ -354,7 +354,7 @@ mod tests {
         // file already trimmed -> no changes
         let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "already_trimmed\nline_two\n");
@@ -371,7 +371,7 @@ mod tests {
 
         let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "");
 
@@ -514,7 +514,7 @@ mod tests {
 
         let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         let content = fs_err::tokio::read_to_string(&path).await?;
         assert_eq!(content, "foo\nbar");

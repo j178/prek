@@ -1203,7 +1203,7 @@ mod tests {
         // A new repository has no HEAD but can still have a clean worktree.
         let status = super::worktree_status(root).await?;
         assert!(!status.unmerged);
-        assert!(status.unstaged.is_empty());
+        assert_eq!(status.unstaged, Vec::<PathBuf>::new());
 
         fs_err::write(root.join("modified.txt"), "unstaged\n")?;
         fs_err::remove_file(root.join("deleted.txt"))?;

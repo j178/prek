@@ -99,7 +99,7 @@ mod tests {
 
         let new_submodules = super::collect_new_submodules(stdout);
 
-        assert!(new_submodules.is_empty());
+        assert_eq!(new_submodules, Vec::<&str>::new());
     }
 
     #[test]

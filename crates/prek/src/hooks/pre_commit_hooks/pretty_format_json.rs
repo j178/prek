@@ -580,7 +580,7 @@ mod tests {
         let result = check_file(&file_path, &file_path, &args)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -601,7 +601,7 @@ mod tests {
         let result = check_file(&file_path, &file_path, &args)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -622,7 +622,7 @@ mod tests {
         let result = check_file(&file_path, &file_path, &args)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -688,7 +688,7 @@ mod tests {
 
         // With sorting disabled, no changes needed
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }

@@ -120,7 +120,7 @@ mod tests {
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -155,7 +155,7 @@ mod tests {
         let file_path = create_test_file(&dir, "false_positive.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -166,7 +166,7 @@ mod tests {
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 

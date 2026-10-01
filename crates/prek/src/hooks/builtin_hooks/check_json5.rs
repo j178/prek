@@ -69,7 +69,7 @@ mod tests {
         let file_path = create_test_file(&dir, "valid.json5", content.as_bytes()).await?;
         let result = check_file(dir.path(), &file_path).await?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -100,7 +100,7 @@ mod tests {
         let file_path = create_test_file(&dir, "invalid.json5", b"{ key: 'value' ").await?;
         let result = check_file(dir.path(), &file_path).await?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
 
         Ok(())
     }

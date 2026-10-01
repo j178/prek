@@ -375,7 +375,7 @@ mod tests {
 
         let executables = find_system_executables(&binary, &managed_root).unwrap();
 
-        assert!(executables.is_empty());
+        assert_eq!(executables, Vec::<std::path::PathBuf>::new());
     }
 
     #[test]
@@ -411,6 +411,6 @@ mod tests {
 
         let executables = find_system_executables(link, &managed_root).unwrap();
 
-        assert!(executables.is_empty());
+        assert_eq!(executables, Vec::<std::path::PathBuf>::new());
     }
 }

@@ -474,6 +474,6 @@ mod tests {
             None,
         );
 
-        assert!(settings.tag_filters.include.is_empty());
+        assert_eq!(settings.tag_filters.include, Vec::<Glob>::new());
     }
 }

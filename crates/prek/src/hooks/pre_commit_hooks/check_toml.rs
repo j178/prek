@@ -77,7 +77,7 @@ key2 = "value2"
         let file_path = create_test_file(&dir, "valid.toml", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -90,7 +90,7 @@ key2 = "value2"
         let file_path = create_test_file(&dir, "invalid.toml", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -103,7 +103,7 @@ key1 = "value2"
         let file_path = create_test_file(&dir, "duplicate.toml", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -114,7 +114,7 @@ key1 = "value2"
         let file_path = create_test_file(&dir, "empty.toml", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 

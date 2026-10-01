@@ -232,9 +232,9 @@ impl<'a> Iterator for Partitions<'a> {
                 "Filename `{}` is too long ({length} bytes) to fit in command line (remaining {remaining_length} bytes).",
                 filename.display(),
             );
-        } else {
-            Some(&self.filenames[start_index..self.current_index])
         }
+
+        Some(&self.filenames[start_index..self.current_index])
     }
 }
 

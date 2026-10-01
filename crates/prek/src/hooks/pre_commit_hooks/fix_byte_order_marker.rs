@@ -113,7 +113,7 @@ mod tests {
         let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -130,7 +130,7 @@ mod tests {
         let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -147,7 +147,7 @@ mod tests {
         let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);
@@ -164,7 +164,7 @@ mod tests {
         let result = fix_file(&file_path, &file_path, false)?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         let new_content = fs_err::tokio::read(&file_path).await?;
         assert_eq!(new_content, content);

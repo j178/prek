@@ -194,7 +194,7 @@ mod tests {
         )?;
 
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         assert_eq!(fs_err::tokio::read(&file_path).await?, b"alpha\nbeta\n");
 
         Ok(())

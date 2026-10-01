@@ -759,7 +759,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["run", "hook-id", "file-0.rs", "file-1.rs"]
         );
-        assert!(cmd.hidden_arg_ranges.is_empty());
+        assert_eq!(cmd.hidden_arg_ranges, Vec::<std::ops::Range<usize>>::new());
         assert_eq!(cmd.file_arg_boundary, 2);
     }
 
