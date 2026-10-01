@@ -359,7 +359,7 @@ mod tests {
         let file_path = create_test_file(&dir, "no_endings.txt", content).await?;
         let result = fix_file(&file_path, &file_path, FixMode::Auto)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }

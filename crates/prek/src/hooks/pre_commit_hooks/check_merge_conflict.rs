@@ -206,7 +206,7 @@ mod tests {
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -217,7 +217,7 @@ mod tests {
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("<<<<<<< "));
         assert!(output_str.contains("conflict.txt:2"));
@@ -231,7 +231,7 @@ mod tests {
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains(">>>>>>> "));
         Ok(())
@@ -244,7 +244,7 @@ mod tests {
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         // Should find all three markers
         assert!(output_str.contains("<<<<<<< "));
@@ -260,7 +260,7 @@ mod tests {
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("<<<<<<< "));
         assert!(output_str.contains("||||||| "));
@@ -277,7 +277,7 @@ mod tests {
         let result = check_file(&file_path, &file_path)?;
         // Should not detect conflict since marker is not at line start
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -288,7 +288,7 @@ mod tests {
         let file_path = create_test_file(&dir, "conflict_crlf.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -300,7 +300,7 @@ mod tests {
         let file_path = create_test_file(&dir, "conflict_lf.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -324,7 +324,7 @@ mod tests {
         let file_path = create_test_file(&dir, "partial_conflict.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -335,7 +335,7 @@ mod tests {
         let file_path = create_test_file(&dir, "doc.rst", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -346,7 +346,7 @@ mod tests {
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -372,7 +372,7 @@ mod tests {
         let file_path = create_test_file(&dir, "binary.bin", &content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 }

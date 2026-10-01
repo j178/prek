@@ -1067,7 +1067,7 @@ mod tests {
 
         let collapsed = completed.collapse_one_line().unwrap();
         assert_eq!(collapsed.removed.len(), 1);
-        assert!(visible_hook_indices(&completed).is_empty());
+        assert_eq!(visible_hook_indices(&completed), Vec::<usize>::new());
         assert_eq!(
             completed.hidden_summary().as_deref(),
             Some("⋮ 3 hooks hidden: 2 passed, 1 failed")

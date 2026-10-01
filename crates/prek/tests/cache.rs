@@ -763,7 +763,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     // Tracking file should be updated to drop the missing config.
     let content = fs_err::read_to_string(home.child("config-tracking.json").path())?;
     let tracked: Vec<String> = serde_json::from_str(&content)?;
-    assert!(tracked.is_empty());
+    assert_eq!(tracked, Vec::<String>::new());
 
     // Scratch is always cleared. Patch directories remain unless they contain stale patch files.
     home.child("scratch").assert(predicates::path::missing());

@@ -65,7 +65,7 @@ mod tests {
         let file_path = create_test_file(&dir, "valid.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -76,7 +76,7 @@ mod tests {
         let file_path = create_test_file(&dir, "processing_instruction.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -90,7 +90,7 @@ mod tests {
         let file_path = create_test_file(&dir, "invalid.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Failed to xml parse"));
         Ok(())
@@ -106,7 +106,7 @@ mod tests {
         let file_path = create_test_file(&dir, "mismatched.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -120,7 +120,7 @@ mod tests {
         let file_path = create_test_file(&dir, "syntax_error.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -130,7 +130,7 @@ mod tests {
         let file_path = create_test_file(&dir, "trailing.xml", b"<root/>junk")?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -141,7 +141,7 @@ mod tests {
         let file_path = create_test_file(&dir, "empty.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("no root element found"));
         Ok(())
@@ -153,7 +153,7 @@ mod tests {
         let file_path = create_test_file(&dir, "whitespace.xml", b" \n\t")?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -168,7 +168,7 @@ mod tests {
         let file_path = create_test_file(&dir, "attributes.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -182,7 +182,7 @@ mod tests {
         )?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -192,7 +192,7 @@ mod tests {
         let file_path = create_test_file(&dir, "invalid_name.xml", b"<1root/>")?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -206,7 +206,7 @@ mod tests {
         let file_path = create_test_file(&dir, "cdata.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -222,7 +222,7 @@ mod tests {
         let file_path = create_test_file(&dir, "comments.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -237,7 +237,7 @@ mod tests {
         let file_path = create_test_file(&dir, "doctype.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -248,7 +248,7 @@ mod tests {
         let file_path = create_test_file(&dir, "external_entity.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -258,7 +258,7 @@ mod tests {
         let file_path = create_test_file(&dir, "unknown_entity.xml", b"<root>&unknown;</root>")?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 
@@ -270,7 +270,7 @@ mod tests {
         let file_path = create_test_file(&dir, "internal_entity.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -284,7 +284,7 @@ mod tests {
         let file_path = create_test_file(&dir, "utf16.xml", &content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -297,7 +297,7 @@ mod tests {
         let file_path = create_test_file(&dir, "no_root.xml", content)?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         Ok(())
     }
 }

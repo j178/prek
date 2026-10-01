@@ -108,7 +108,7 @@ mod tests {
         let files = vec![file.path()];
         let result = check_shebangs(Path::new(""), &files).await?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -131,7 +131,7 @@ mod tests {
     async fn test_check_shebangs_empty_input() -> Result<(), anyhow::Error> {
         let result = check_shebangs(Path::new(""), &[]).await?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 }

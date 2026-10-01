@@ -58,7 +58,7 @@ mod tests {
         let file_path = create_test_file(&dir, "regular.txt", content).await?;
         let result = check_file(Path::new(""), &file_path).await?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -72,7 +72,7 @@ mod tests {
 
         let result = check_file(Path::new(""), &link_path).await?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -86,7 +86,7 @@ mod tests {
 
         let result = check_file(Path::new(""), &link_path).await?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Broken symlink"));
         Ok(())
@@ -110,7 +110,7 @@ mod tests {
 
         let result = check_file(Path::new(""), &link_path).await?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
         Ok(())
     }
 
@@ -133,7 +133,7 @@ mod tests {
 
         let result = check_file(Path::new(""), &link_path).await?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Broken symlink"));
         Ok(())

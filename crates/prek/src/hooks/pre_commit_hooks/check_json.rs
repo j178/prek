@@ -213,7 +213,7 @@ mod tests {
         let file_path = create_test_file(&dir, "valid.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -225,7 +225,7 @@ mod tests {
         let file_path = create_test_file(&dir, "invalid.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
 
         Ok(())
     }
@@ -237,7 +237,7 @@ mod tests {
         let file_path = create_test_file(&dir, "duplicate.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
 
         Ok(())
     }
@@ -249,7 +249,7 @@ mod tests {
         let file_path = create_test_file(&dir, "empty.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -272,7 +272,7 @@ mod tests {
         let file_path = create_test_file(&dir, "valid_array.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 0);
-        assert!(result.output.is_empty());
+        assert_eq!(result.output, b"");
 
         Ok(())
     }
@@ -284,7 +284,7 @@ mod tests {
         let file_path = create_test_file(&dir, "nested_duplicate.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
         assert_eq!(result.exit_status, 1);
-        assert!(!result.output.is_empty());
+        assert_ne!(result.output, b"");
 
         Ok(())
     }
@@ -298,7 +298,7 @@ mod tests {
             let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await?;
             let result = check_file(&file_path, &file_path)?;
             assert_eq!(result.exit_status, 0);
-            assert!(result.output.is_empty());
+            assert_eq!(result.output, b"");
         }
 
         Ok(())
