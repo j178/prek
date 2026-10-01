@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="67" height="20" viewBox="0 0 67 20" role="img" aria-label="prek">
+  <title>prek</title>
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#fff" stop-opacity=".08"/>
+    <stop offset="1" stop-opacity=".08"/>
+  </linearGradient>
+  <clipPath id="r">
+    <rect width="67" height="20" rx="3"/>
+  </clipPath>
+  <g clip-path="url(#r)">
+    <path fill="#102034" d="M0 0h30v20H0z"/>
+    <path fill="#77c84c" d="M30 0h37v20H30z"/>
+    <path fill="url(#s)" d="M0 0h67v20H0z"/>
+  </g>
+  <svg x="2" y="2" width="26" height="16" viewBox="35 70 555 355">
+    <g fill="#ff600a">
+      <path d="M120 291C79 284 54 314 47 353c-4 27 5 17 11 3 12-24 26-35 54-35ZM146 308c-40 3-59 32-66 64-7 32 2 24 12 7 13-24 22-35 43-40ZM164 327c-25 15-35 38-38 60-3 29 8 27 14 6l26-48Z"/>
+      <path d="M91 265c39-51 93-86 151-93 9-20 23-10 34 0 17 0 32 2 46 7 10-38 34-26 45 6l32 65c-7 25-28 40-55 56l-27 28c-47 28-124 23-170 10-29-8-46-20-48-40-23-17-15-28-8-39Z"/>
+    </g>
+    <path d="M429 247 317 400" fill="none" stroke="#f5f7fa" stroke-width="27" stroke-linecap="round"/>
+    <g fill="#ff600a" stroke="#102034" stroke-width="5" stroke-linejoin="round">
+      <path d="M298 307c-30 27-49 6-61-4-14-11-15 6-5 22 12 22 30 31 60 39Z"/>
+      <path d="m402 300 27 7c11-26 35-37 69-39l-12 33c14-7 27-16 35-24 16 27-13 69-52 74-34 5-46-11-42-31l-27-8Z"/>
+      <path d="M399 302c-20-16-43-20-65-15-37 7-57 28-54 55 3 33 31 49 62 46 31-2 59-17 64-43 2-8-3-14-9-10-12 6-25 7-37 3l37-15c7-5 8-15 2-21Z"/>
+    </g>
+    <path d="M235 143c1-15 14-18 23-9m68 0c7-11 18-8 23-1" fill="none" stroke="#f5f7fa" stroke-width="10" stroke-linecap="round"/>
+    <g fill="#fff">
+      <ellipse cx="260" cy="200" rx="21" ry="29" transform="rotate(-10 260 200)"/>
+      <ellipse cx="348" cy="191" rx="21" ry="29" transform="rotate(-10 348 191)"/>
+    </g>
+    <g fill="#102034">
+      <ellipse cx="266" cy="207" rx="14" ry="21"/>
+      <ellipse cx="354" cy="198" rx="14" ry="21"/>
+    </g>
+    <g fill="#fff">
+      <ellipse cx="272" cy="197" rx="5" ry="7"/>
+      <ellipse cx="360" cy="188" rx="5" ry="7"/>
+    </g>
+    <path d="M294 247c8 14 29 17 38-3" fill="none" stroke="#102034" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="488" cy="175" r="86" fill="none" stroke="#f5f7fa" stroke-width="20"/>
+    <path d="m448 163 28-28m-12 40 19-19" fill="none" stroke="#f5f7fa" stroke-opacity=".7" stroke-width="10" stroke-linecap="round"/>
+  </svg>
+  <text x="48.5" y="14" fill="#102034" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" text-rendering="geometricPrecision">prek</text>
+</svg>
