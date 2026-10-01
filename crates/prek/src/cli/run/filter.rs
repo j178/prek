@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use globset::Glob;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags, tags_from_filename, tags_from_path};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
@@ -160,12 +160,18 @@ impl FileTagCache {
         Self { tags_by_file }
     }
 
-    fn from_files(files: &[FileEntry]) -> Self {
+    fn from_files(files: &[FileEntry], needs_tags: &[bool]) -> Self {
         let tags_by_file = files
             .par_iter()
-            .map(|file| match file.deleted_mode {
-                Some(mode) => Some(deleted_file_tags(&file.path, mode)),
-                None => identify_file(&file.path),
+            .zip(needs_tags)
+            .map(|(file, &needs_tags)| {
+                if !needs_tags {
+                    return None;
+                }
+                match file.deleted_mode {
+                    Some(mode) => Some(deleted_file_tags(&file.path, mode)),
+                    None => identify_file(&file.path),
+                }
             })
             .collect();
         Self { tags_by_file }
@@ -405,6 +411,9 @@ impl<'a> RunFileIndex<'a> {
             .collect::<Vec<_>>();
 
         let mut matching_projects = Vec::new();
+        // Keep workspace indices stable while skipping identification for excluded files.
+        // A parent can still need a file excluded by a nested project.
+        let mut needs_tags = vec![false; filenames.len()];
         for (file_idx, file) in filenames.iter().enumerate() {
             project_tree.matching_projects(&file.path, &mut matching_projects);
 
@@ -417,6 +426,7 @@ impl<'a> RunFileIndex<'a> {
                     .strip_prefix(project.relative_path())
                     .expect("matched project path must be a file prefix");
                 if project_filters[project_idx].matches(hook_path) {
+                    needs_tags[file_idx] = true;
                     project_files[project_idx].files.push(ProjectFile {
                         file_idx,
                         hook_path,
@@ -431,7 +441,7 @@ impl<'a> RunFileIndex<'a> {
 
         Self {
             projects: project_files,
-            tag_cache: FileTagCache::from_files(filenames),
+            tag_cache: FileTagCache::from_files(filenames, &needs_tags),
         }
     }
 
