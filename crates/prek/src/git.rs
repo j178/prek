@@ -530,32 +530,6 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
     Ok(conflicts)
 }
 
-/// Check for unstaged changes under the absolute directory `path`, ignoring submodules.
-#[instrument(level = "trace")]
-pub(crate) async fn has_worktree_diff(path: &Path) -> Result<bool, Error> {
-    let mut cmd = git_cmd()?;
-    let status = cmd
-        .current_dir(path)
-        .arg("diff-files")
-        .arg("--quiet")
-        .hidden_args(["--no-ext-diff", "--no-textconv", "--ignore-submodules"])
-        .arg("--")
-        .arg(path)
-        .check(false)
-        .status()
-        .await?;
-
-    if status.success() {
-        return Ok(false);
-    }
-    if status.code() == Some(1) {
-        return Ok(true);
-    }
-
-    cmd.check_status(status)?;
-    Ok(true)
-}
-
 /// Return a patch for unstaged changes under the absolute directory `path`.
 ///
 /// File names are repository-relative by default, or relative to `path` when
