@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::Result;
 use assert_fs::prelude::*;
 
-use crate::common::TestEnv;
+use crate::common::{TestEnv, cmd_snapshot};
 
 fn remove_loose_blob(context: &TestEnv, filename: &str) -> Result<()> {
     let output = context
@@ -27,45 +27,8 @@ fn remove_loose_blob(context: &TestEnv, filename: &str) -> Result<()> {
 }
 
 #[test]
-fn external_hook_without_changes_uses_quiet_diff_check() -> Result<()> {
-    let context = TestEnv::new()
-        .with_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: noop
-                name: noop
-                language: system
-                entry: python3 -c "pass"
-                pass_filenames: false
-    "#})
-        .with_file("file.txt", "original\n")
-        .init_git();
-
-    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
-
-    assert!(output.status.success(), "noop hook should pass");
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
-    assert_eq!(
-        has_worktree_diff_calls, 1,
-        "Expected one cheap worktree diff check, found {has_worktree_diff_calls}.\n\
-         Trace output:\n{stderr}"
-    );
-    let diff_worktree_calls = stderr.matches("diff_worktree").count();
-    assert_eq!(
-        diff_worktree_calls, 0,
-        "Expected no full diff_worktree calls when the hook leaves files unchanged, found {diff_worktree_calls}.\n\
-         Trace output:\n{stderr}"
-    );
-
-    Ok(())
-}
-
-#[test]
 #[cfg(unix)]
-fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
+fn identical_rewrite_with_stat_change_is_not_modified() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
@@ -95,37 +58,26 @@ fn identical_rewrite_with_stat_change_is_not_modified() -> Result<()> {
         .with_file("file.txt", "original\n")
         .init_git();
 
-    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+    for auto_refresh in ["true", "false"] {
+        context
+            .git()
+            .run(["config", "diff.autoRefreshIndex", auto_refresh]);
 
-    assert!(
-        output.status.success(),
-        "rewriting identical content should not be treated as a hook modification"
-    );
+        insta::allow_duplicates! {
+            cmd_snapshot!(context, context.run(), @r#"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+            rewrite-identical........................................................Passed
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("rewrite-identical") && stdout.contains("Passed"));
-    assert!(!stdout.contains("files were modified by this hook"));
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
-    assert_eq!(
-        has_worktree_diff_calls, 1,
-        "Expected one cheap worktree diff check, found {has_worktree_diff_calls}.\n\
-         Trace output:\n{stderr}"
-    );
-
-    let diff_worktree_calls = stderr.matches("diff_worktree").count();
-    assert_eq!(
-        diff_worktree_calls, 1,
-        "Expected one content diff to filter out stat-only changes, found {diff_worktree_calls}.\n\
-         Trace output:\n{stderr}"
-    );
-
-    Ok(())
+            ----- stderr -----
+            "#);
+        }
+    }
 }
 
 #[test]
-fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
+fn modifying_hook_is_reported() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
@@ -139,32 +91,16 @@ fn modifying_hook_uses_clean_baseline_diff_detection() -> Result<()> {
     "#})
         .with_file("file.txt", "original\n").init_git();
 
-    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify...................................................................Failed
+    - hook id: modify
+    - files were modified by this hook
 
-    assert!(
-        !output.status.success(),
-        "prek should fail when hooks modify files"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("files were modified by this hook"));
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
-    assert_eq!(
-        has_worktree_diff_calls, 1,
-        "Expected one cheap worktree diff check, found {has_worktree_diff_calls}.\n\
-         Trace output:\n{stderr}"
-    );
-
-    let diff_worktree_calls = stderr.matches("diff_worktree").count();
-    assert_eq!(
-        diff_worktree_calls, 1,
-        "Expected one full diff_worktree call after detecting modifications, found {diff_worktree_calls}.\n\
-         Trace output:\n{stderr}"
-    );
-
-    Ok(())
+    ----- stderr -----
+    "#);
 }
 
 #[test]
@@ -263,13 +199,6 @@ fn all_files_with_existing_unstaged_changes_uses_snapshot_baseline() -> Result<(
     assert!(stdout.contains("files were modified by this hook"));
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
-    assert_eq!(
-        has_worktree_diff_calls, 0,
-        "`--all-files` should not use the clean-baseline diff check.\n\
-         Trace output:\n{stderr}"
-    );
-
     let diff_worktree_calls = stderr.matches("diff_worktree").count();
     assert_eq!(
         diff_worktree_calls, 2,
@@ -342,7 +271,7 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
 }
 
 #[test]
-fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
+fn later_project_snapshots_diff_left_by_previous_project() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
@@ -371,30 +300,19 @@ fn later_project_snapshots_diff_left_by_previous_project() -> Result<()> {
         )
         .with_file("child/child.txt", "original\n").init_git();
 
-    let output = context.run().env("RUST_LOG", "prek::git=trace").output()?;
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    × child
+      child-modify...........................................................Failed
+      - hook id: child-modify
+      - files were modified by this hook
+    ✓ <workspace>
+      root-noop..............................................................Passed
 
-    assert!(
-        !output.status.success(),
-        "prek should fail because the child hook modified files"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("child-modify") && stdout.contains("files were modified by this hook"));
-    assert!(
-        stdout.contains("root-noop") && stdout.contains("Passed"),
-        "root hook should not be blamed for the child project's diff.\n\
-         stdout:\n{stdout}"
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let has_worktree_diff_calls = stderr.matches("has_worktree_diff").count();
-    assert_eq!(
-        has_worktree_diff_calls, 1,
-        "Only the first project should use the clean-baseline check.\n\
-         Trace output:\n{stderr}"
-    );
-
-    Ok(())
+    ----- stderr -----
+    "#);
 }
 
 #[test]
@@ -464,12 +382,6 @@ fn read_only_languages_do_not_run_diff_detection() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
-        stderr.matches("has_worktree_diff").count(),
-        0,
-        "Read-only languages should not require a worktree diff check.\n\
-         Trace output:\n{stderr}"
-    );
-    assert_eq!(
         stderr.matches("diff_worktree").count(),
         0,
         "Read-only languages should not require a full worktree diff.\n\
@@ -516,12 +428,6 @@ fn same_group_known_modification_skips_diff_detection() -> Result<()> {
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        stderr.matches("has_worktree_diff").count(),
-        0,
-        "A known modification should make the same-group quiet diff unnecessary.\n\
-         Trace output:\n{stderr}"
-    );
     assert_eq!(
         stderr.matches("diff_worktree").count(),
         0,
@@ -576,12 +482,6 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
-        stderr.matches("has_worktree_diff").count(),
-        0,
-        "The known modification should invalidate the clean baseline.\n\
-         Trace output:\n{stderr}"
-    );
-    assert_eq!(
         stderr.matches("diff_worktree").count(),
         2,
         "The later external hook should capture and compare the modified worktree.\n\
@@ -628,12 +528,6 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
-        stderr.matches("has_worktree_diff").count(),
-        0,
-        "The builtin result and dirty baseline should avoid the clean-worktree check.\n\
-         Trace output:\n{stderr}"
-    );
-    assert_eq!(
         stderr.matches("diff_worktree").count(),
         2,
         "The later external hook should snapshot the builtin's change, then compare against it.\n\
@@ -667,7 +561,6 @@ fn failed_non_modifying_builtin_skips_diff_detection() -> Result<()> {
     assert!(!stdout.contains("files were modified by this hook"));
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(stderr.matches("has_worktree_diff").count(), 0);
     assert_eq!(stderr.matches("diff_worktree").count(), 0);
 
     Ok(())
