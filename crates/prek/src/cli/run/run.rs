@@ -846,8 +846,21 @@ impl<'a> HookRunSession<'a> {
         let mut groups = Vec::new();
         let mut stop_after_level = false;
 
+        // Don't capture a baseline when every hook requiring change detection will skip.
+        let project_requires_diff_tracking = !self.dry_run
+            && project_run
+                .groups
+                .iter()
+                .flatten()
+                .filter_map(HookPlan::as_run)
+                .any(|hook| {
+                    hooks::requires_diff_tracking(hook)
+                        && (hook.always_run
+                            || project_input.matches_hook(hook, file_index.tag_cache()))
+                });
+
         for group_hooks in project_run.groups {
-            let group_requires_diff_tracking = !self.dry_run
+            let group_requires_diff_tracking = project_requires_diff_tracking
                 && group_hooks
                     .iter()
                     .filter_map(HookPlan::as_run)
