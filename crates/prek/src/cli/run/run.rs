@@ -227,7 +227,7 @@ pub(crate) async fn run(
             .any(|path| path.starts_with(workspace.root()))
     {
         Some(
-            WorktreeStash::save(store, workspace.root(), status.intent_to_add)
+            WorktreeStash::save(store, workspace.root(), status)
                 .context("Failed to clean work tree")?,
         )
     } else {

@@ -400,9 +400,11 @@ fn restore_intent_and_unstaged_changes_from_subdirectory() {
         )
         .with_file("project/tracked.txt", "staged\n")
         .with_file("project/nested/.gitkeep", "")
+        .with_file("outside-tracked.txt", "staged outside\n")
         .init_git();
     context.git().run(["config", "diff.relative", "true"]);
     context.write_file("project/tracked.txt", "unstaged\n");
+    context.write_file("outside-tracked.txt", "unstaged outside\n");
     context.write_file("project/intent.txt", "intent\n");
     context.write_file("outside.txt", "outside\n");
     context.git().run(["add", "--intent-to-add", "."]);
@@ -421,6 +423,28 @@ fn restore_intent_and_unstaged_changes_from_subdirectory() {
     assert_eq!(context.read("project/tracked.txt"), "unstaged\n");
     assert_eq!(context.read("project/intent.txt"), "intent\n");
     assert_eq!(context.read("outside.txt"), "outside\n");
+    cmd_snapshot!(context, context.git().command().args(["diff", "--name-only", "--diff-filter=A"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    outside.txt
+    project/intent.txt
+
+    ----- stderr -----
+    "#);
+
+    // Only intent-to-add paths remain unstaged inside the workspace.
+    context.write_file("project/tracked.txt", "staged\n");
+    cmd_snapshot!(context, context.run().current_dir(context.child("project/nested")), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check staged.............................................................Passed
+
+    ----- stderr -----
+    "#);
+    assert_eq!(context.read("project/intent.txt"), "intent\n");
+    assert_eq!(context.read("outside-tracked.txt"), "unstaged outside\n");
     cmd_snapshot!(context, context.git().command().args(["diff", "--name-only", "--diff-filter=A"]), @r#"
     success: true
     exit_code: 0

@@ -196,7 +196,7 @@ struct PendingChanges {
 }
 
 impl PendingChanges {
-    fn prepare(&mut self, root: &Path, patch_dir: &Path) -> Result<()> {
+    fn prepare(&mut self, root: &Path, patch_dir: &Path, save_patch: bool) -> Result<()> {
         if !self.intent_to_add.is_empty() {
             git_command()?
                 .args(["rm", "--cached", "--"])
@@ -204,7 +204,9 @@ impl PendingChanges {
                 .output_sync()
                 .context("Failed to clear intent-to-add changes")?;
         }
-        self.patch = SavedPatch::save(root, patch_dir)?;
+        if save_patch {
+            self.patch = SavedPatch::save(root, patch_dir)?;
+        }
         if let Some(patch) = &self.patch {
             debug!("Cleaning working tree");
             patch.checkout()?;
@@ -268,12 +270,20 @@ impl WorktreeStash {
 
     /// Save unstaged changes and intent-to-add markers, then prepare the worktree for hooks.
     ///
-    /// Intent-to-add paths must be absolute; only paths under `root` are cleared.
-    pub fn save(store: &Store, root: &Path, mut intent_to_add: Vec<PathBuf>) -> Result<Self> {
-        intent_to_add.retain(|path| path.starts_with(root));
+    /// Only changes under `root` are saved; status paths must be absolute.
+    pub fn save(store: &Store, root: &Path, mut status: git::WorktreeStatus) -> Result<Self> {
+        status.intent_to_add.retain(|path| path.starts_with(root));
+        let unstaged_count = status
+            .unstaged
+            .iter()
+            .filter(|path| path.starts_with(root))
+            .count();
+        // Intent-to-add paths are also counted as unstaged. After removing their
+        // index entries, only the other paths need a saved patch.
+        let save_patch = unstaged_count > status.intent_to_add.len();
         let stash = Self {
             state: Arc::new(Mutex::new(Some(PendingChanges {
-                intent_to_add,
+                intent_to_add: status.intent_to_add,
                 patch: None,
             }))),
         };
@@ -292,7 +302,7 @@ impl WorktreeStash {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let state = guard.as_mut().context("Worktree cleanup was interrupted")?;
-            state.prepare(root, &store.patches_dir())
+            state.prepare(root, &store.patches_dir(), save_patch)
         };
         if let Err(err) = result {
             return match stash.restore() {
