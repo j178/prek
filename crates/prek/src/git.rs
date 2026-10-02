@@ -10,7 +10,6 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxHashSet;
 use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::OnceCell;
 use tracing::{debug, instrument, warn};
 
 use crate::fs::PathClean;
@@ -99,28 +98,22 @@ struct Repo {
     hooks_dir: PathBuf,
 }
 
-static REPO: OnceCell<Result<Repo, Error>> = OnceCell::const_new();
-
-async fn repo() -> Result<&'static Repo, &'static Error> {
-    // Cache errors too, so all callers observe the same discovery result.
-    REPO.get_or_init(|| async { Repo::discover(&std::env::current_dir()?).await })
-        .await
-        .as_ref()
-}
+static REPO: LazyLock<Result<Repo, Error>> =
+    LazyLock::new(|| Repo::discover(&std::env::current_dir()?));
 
 /// Return the absolute path of the current repository's working tree.
-pub(crate) async fn root() -> Result<&'static Path, &'static Error> {
-    repo().await?.root.as_deref()
+pub(crate) fn root() -> Result<&'static Path, &'static Error> {
+    REPO.as_ref()?.root.as_deref()
 }
 
 /// Return the absolute Git directory of the current worktree, even after changing directory.
-pub(crate) async fn git_dir() -> Result<&'static Path, &'static Error> {
-    Ok(&repo().await?.git_dir)
+pub(crate) fn git_dir() -> Result<&'static Path, &'static Error> {
+    Ok(&REPO.as_ref()?.git_dir)
 }
 
 /// Return the absolute Git directory shared by the current repository's worktrees.
-pub(crate) async fn common_dir() -> Result<&'static Path, &'static Error> {
-    Ok(&repo().await?.common_dir)
+pub(crate) fn common_dir() -> Result<&'static Path, &'static Error> {
+    Ok(&REPO.as_ref()?.common_dir)
 }
 
 /// Repository-local environment variables cleared before operating on another repository.
@@ -383,7 +376,7 @@ where
 
 /// Return the absolute hooks directory, including any `core.hooksPath` override.
 pub(crate) async fn hooks_dir() -> Result<&'static Path> {
-    let hooks_dir = &repo().await?.hooks_dir;
+    let hooks_dir = &REPO.as_ref()?.hooks_dir;
     // `core.hooksPath=` is a particularly dangerous case: Git treats it as
     // configured, but resolves `--git-path hooks` to the current directory. If
     // we accepted that value, install/uninstall would write or remove hook
@@ -481,8 +474,8 @@ pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
     Ok(status.code() == Some(1))
 }
 
-pub(crate) async fn is_in_merge_conflict() -> Result<bool> {
-    let git_dir = git_dir().await?;
+pub(crate) fn is_in_merge_conflict() -> Result<bool> {
+    let git_dir = git_dir()?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
@@ -523,7 +516,7 @@ pub(crate) async fn conflicted_files(root: &Path) -> Result<Vec<PathBuf>> {
 
 /// Return conflict paths recorded in `MERGE_MSG`, relative to the repository root.
 async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
-    let git_dir = git_dir().await?;
+    let git_dir = git_dir()?;
     let merge_msg = git_dir.join("MERGE_MSG");
     let content = fs_err::tokio::read_to_string(&merge_msg).await?;
     let conflicts = content
@@ -585,15 +578,15 @@ pub(crate) fn write_tree() -> Result<String, Error> {
 impl Repo {
     /// Discover repository directories from an absolute `cwd`, storing absolute paths.
     #[instrument(level = "trace")]
-    async fn discover(cwd: &Path) -> Result<Self, Error> {
-        let rev_parse = async |args: &[&str]| -> Result<_, Error> {
+    fn discover(cwd: &Path) -> Result<Self, Error> {
+        let rev_parse = |args: &[&str]| -> Result<_, Error> {
             let mut cmd = git_cmd()?;
             cmd.current_dir(cwd)
                 .arg("rev-parse")
                 .args(args)
                 // Keep diagnostics stable so discovery errors can be identified.
                 .env(EnvVars::LC_ALL, "C");
-            let output = cmd.inner.output().await?;
+            let output = cmd.inner.as_std_mut().output()?;
             // Preserve errors from an invalid GIT_DIR or .git file.
             if !output.status.success()
                 && output
@@ -616,8 +609,7 @@ impl Repo {
             "--git-path",
             "hooks",
             "--show-toplevel",
-        ])
-        .await?;
+        ])?;
         let output = if output.stdout.is_empty() {
             cmd.check_output(output)?
         } else {
@@ -638,17 +630,17 @@ impl Repo {
         } else {
             // rev-parse cannot NUL-delimit these paths. Query them separately
             // for paths containing newlines or a repository without a worktree.
-            let path = async |args: &[&str]| -> Result<PathBuf, Error> {
-                let (cmd, output) = rev_parse(args).await?;
+            let path = |args: &[&str]| -> Result<PathBuf, Error> {
+                let (cmd, output) = rev_parse(args)?;
                 let output = cmd.check_output(output)?;
                 let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
                 path_from_git_bytes(stdout).map_err(Error::from)
             };
             (
-                path(&["--absolute-git-dir"]).await?,
-                path(&["--git-common-dir"]).await?,
-                path(&["--git-path", "hooks"]).await?,
-                path(&["--show-toplevel"]).await,
+                path(&["--absolute-git-dir"])?,
+                path(&["--git-common-dir"])?,
+                path(&["--git-path", "hooks"])?,
+                path(&["--show-toplevel"]),
             )
         };
         let state = Self {
@@ -1250,8 +1242,8 @@ mod tests {
     }
 
     #[cfg(unix)]
-    #[tokio::test]
-    async fn repository_paths_preserve_special_characters() {
+    #[test]
+    fn repository_paths_preserve_special_characters() {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt as _;
 
@@ -1268,7 +1260,7 @@ mod tests {
             fs_err::create_dir_all(&subdir).unwrap();
             run_git(&repo, &["init"]);
 
-            let state = Repo::discover(&subdir).await.unwrap();
+            let state = Repo::discover(&subdir).unwrap();
             assert_eq!(state.root.unwrap(), dunce::canonicalize(&repo).unwrap());
             assert_eq!(
                 state.git_dir,
@@ -1279,13 +1271,13 @@ mod tests {
 
             for hooks_dir in ["custom\nhooks ", " "] {
                 run_git(&repo, &["config", "core.hooksPath", hooks_dir]);
-                let state = Repo::discover(&subdir).await.unwrap();
+                let state = Repo::discover(&subdir).unwrap();
                 assert_eq!(state.hooks_dir.clean(), repo.join(hooks_dir));
             }
 
             let bare = repo.join("bare\n");
             run_git(&repo, &["init", "--bare", "bare\n"]);
-            let state = Repo::discover(&bare).await.unwrap();
+            let state = Repo::discover(&bare).unwrap();
             assert!(state.root.is_err());
             assert_eq!(state.git_dir, dunce::canonicalize(&bare).unwrap());
             assert_eq!(state.common_dir.clean(), bare);

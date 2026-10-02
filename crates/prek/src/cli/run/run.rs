@@ -122,8 +122,11 @@ pub(crate) async fn run(
     let worktree = if requires_clean_worktree {
         // Status paths are repository-relative, so the worktree query can start
         // before repository discovery finishes. Preserve discovery errors first.
-        let (root, status) = tokio::join!(git::root(), git::worktree_status(&CWD));
-        let root = root?;
+        let (root, status) = tokio::join!(
+            tokio::task::spawn_blocking(git::root),
+            git::worktree_status(&CWD),
+        );
+        let root = root??;
         let mut status = status?;
         if status.unmerged {
             anyhow::bail!(
@@ -135,17 +138,16 @@ pub(crate) async fn run(
         }
         Some(status)
     } else {
-        git::root().await?;
+        git::root()?;
         None
     };
     let filesystem = FilesystemOptions::user()?;
 
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD).await?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
     let group_filters = GroupFilters::parse(&groups, &required_groups, &no_groups)?;
     let has_group_filters = group_filters.has_filters();
-    let workspace =
-        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh).await?;
+    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     if let Some(status) = &worktree {
         workspace.check_configs_staged(&status.unstaged)?;
@@ -235,7 +237,6 @@ pub(crate) async fn run(
     {
         Some(
             WorktreeStash::save(store, workspace.root(), status.intent_to_add)
-                .await
                 .context("Failed to clean work tree")?,
         )
     } else {

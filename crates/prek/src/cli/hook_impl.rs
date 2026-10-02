@@ -79,7 +79,7 @@ pub(crate) async fn hook_impl(
         writeln!(printer.stdout(), "Using config file: {}", config.display())?;
     } else {
         // Try to discover a project from current directory (after `--cd`)
-        match Project::discover(config.as_deref(), &CWD).await {
+        match Project::discover(config.as_deref(), &CWD) {
             Err(e @ workspace::Error::MissingConfigFile) => {
                 return if allow_missing_config {
                     Ok(legacy_code.into())
@@ -91,7 +91,7 @@ pub(crate) async fn hook_impl(
                 };
             }
             Ok(project) => {
-                if project.path() != git::root().await? {
+                if project.path() != git::root()? {
                     writeln!(
                         printer.stdout(),
                         "Running in workspace: `{}`",
