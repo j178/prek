@@ -55,7 +55,14 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     let Some(current) = current.to_str() else {
         return Vec::new();
     };
-    let Some(completer) = SelectorCompleter::load() else {
+    // Clap invokes this callback before the main runtime is created.
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return Vec::new();
+    };
+    let Some(completer) = runtime.block_on(SelectorCompleter::load()) else {
         return Vec::new();
     };
 
@@ -93,10 +100,12 @@ struct SelectorCompleter {
 }
 
 impl SelectorCompleter {
-    fn load() -> Option<Self> {
+    async fn load() -> Option<Self> {
         let store = Store::from_settings().ok()?;
-        let root = Workspace::find_root(None, &CWD).ok()?;
-        let workspace = Workspace::discover(&store, root, None, None, false).ok()?;
+        let root = Workspace::find_root(None, &CWD).await.ok()?;
+        let workspace = Workspace::discover(&store, root, None, None, false)
+            .await
+            .ok()?;
 
         Some(Self { workspace })
     }

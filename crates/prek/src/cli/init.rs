@@ -20,7 +20,7 @@ pub(crate) async fn init(
     no_install: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let git_root = git::root()?;
+    let git_root = git::root().await?;
     let target = resolve_target(path, git_root)?;
     let (project, created) = load_or_create_project(&target, format)?;
 

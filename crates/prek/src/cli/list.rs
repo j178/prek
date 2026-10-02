@@ -40,10 +40,11 @@ pub(crate) async fn list(
     verbose: bool,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD).await?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
     let group_filters = GroupFilters::parse(&groups, &required_groups, &no_groups)?;
-    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+    let workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh).await?;
 
     let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;

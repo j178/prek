@@ -83,7 +83,7 @@ pub(crate) async fn install(
             );
         }
 
-        let hooks_path = git::common_dir()?.join("hooks");
+        let hooks_path = git::common_dir().await?.join("hooks");
         warn_user!(
             "`core.hooksPath` is configured outside this repository. Installing Git shims to `{}` because `--force` was used.",
             hooks_path.user_display().cyan()
@@ -97,7 +97,7 @@ pub(crate) async fn install(
         .await
         .unwrap_or(0o755);
 
-    let project = match Project::discover(config.as_deref(), project_dir) {
+    let project = match Project::discover(config.as_deref(), project_dir).await {
         Ok(project) => Some(project),
         Err(err) => {
             if let WorkspaceError::Config(err) = &err {
@@ -148,9 +148,10 @@ pub(crate) async fn prepare_hooks(
     refresh: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD).await?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+    let workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh).await?;
 
     let reporter = HookInitReporter::new(printer);
     let _lock = store.lock_async().await?;
@@ -309,7 +310,7 @@ async fn install_hook_script(
 
         write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
-        let git_root = git::root()?;
+        let git_root = git::root().await?;
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.as_os_str().is_empty() {
@@ -427,7 +428,7 @@ pub(crate) async fn uninstall(
         );
     }
 
-    let project = Project::discover(config.as_deref(), &CWD).ok();
+    let project = Project::discover(config.as_deref(), &CWD).await.ok();
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {

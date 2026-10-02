@@ -290,14 +290,14 @@ impl Project {
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
-    pub(crate) fn discover(config_file: Option<&Path>, dir: &Path) -> Result<Project, Error> {
-        let git_root = git::root().map_err(|e| Error::Git(e.into()))?;
+    pub(crate) async fn discover(config_file: Option<&Path>, dir: &Path) -> Result<Project, Error> {
+        let git_root = git::root().await.map_err(|e| Error::Git(e.into()))?;
 
         if let Some(config) = config_file {
             return Project::from_config_file(config.into(), Some(git_root.to_path_buf()));
         }
 
-        let workspace_root = Workspace::find_root(None, dir)?;
+        let workspace_root = Workspace::find_root(None, dir).await?;
         debug!("Found project root at `{}`", workspace_root.user_display());
 
         Project::from_directory(&workspace_root)
@@ -619,8 +619,11 @@ impl Workspace {
 
     /// Find the workspace root.
     /// `dir` must be an absolute path.
-    pub(crate) fn find_root(config_file: Option<&Path>, dir: &Path) -> Result<PathBuf, Error> {
-        let git_root = git::root().map_err(|e| Error::Git(e.into()))?;
+    pub(crate) async fn find_root(
+        config_file: Option<&Path>,
+        dir: &Path,
+    ) -> Result<PathBuf, Error> {
+        let git_root = git::root().await.map_err(|e| Error::Git(e.into()))?;
 
         if config_file.is_some() {
             // For `--config <path>`, the workspace root is the git root.
@@ -641,7 +644,7 @@ impl Workspace {
 
     /// Discover the workspace from the given workspace root.
     #[instrument(level = "trace", skip(store, selectors))]
-    pub(crate) fn discover(
+    pub(crate) async fn discover(
         store: &Store,
         root: PathBuf,
         config: Option<PathBuf>,
@@ -702,7 +705,7 @@ impl Workspace {
         } else {
             // Cache miss or invalid, perform fresh discovery
             debug!("Performing fresh workspace discovery");
-            let projects = Self::discover_fresh(&root, selectors)?;
+            let projects = Self::discover_fresh(&root, selectors).await?;
 
             // Save to cache
             let cache = WorkspaceCache::new(root.clone(), &projects);
@@ -741,10 +744,13 @@ impl Workspace {
     }
 
     /// Perform fresh workspace discovery without cache
-    fn discover_fresh(root: &Path, selectors: Option<&Selectors>) -> Result<Vec<Project>, Error> {
+    async fn discover_fresh(
+        root: &Path,
+        selectors: Option<&Selectors>,
+    ) -> Result<Vec<Project>, Error> {
         let projects = Mutex::new(Ok(Vec::new()));
 
-        let git_root = git::root().map_err(|e| Error::Git(e.into()))?;
+        let git_root = git::root().await.map_err(|e| Error::Git(e.into()))?;
         let submodules = git::list_submodules(git_root).unwrap_or_else(|e| {
             error!("Failed to list git submodules: {e}");
             Vec::new()

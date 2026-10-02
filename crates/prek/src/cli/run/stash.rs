@@ -15,6 +15,7 @@ use crate::process::Cmd;
 use crate::store::Store;
 
 struct SavedPatch {
+    git_root: &'static Path,
     root: PathBuf,
     tree: String,
     path: PathBuf,
@@ -35,17 +36,17 @@ fn ensure_patches_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn git_command() -> Result<Cmd> {
+fn git_command(git_root: &Path) -> Result<Cmd> {
     let mut cmd = git_cmd()?;
-    cmd.current_dir(git::root()?);
+    cmd.current_dir(git_root);
     Ok(cmd)
 }
 
 impl SavedPatch {
-    fn save(root: &Path, patch_dir: &Path) -> Result<Option<Self>> {
+    fn save(git_root: &'static Path, root: &Path, patch_dir: &Path) -> Result<Option<Self>> {
         let tree = git::write_tree()?;
 
-        let output = git_command()?
+        let output = git_command(git_root)?
             .arg("diff-index")
             .arg("--binary")
             .arg("--exit-code")
@@ -104,6 +105,7 @@ impl SavedPatch {
         patch_file.write_all(&output.stdout)?;
 
         Ok(Some(Self {
+            git_root,
             root: root.to_path_buf(),
             tree,
             path: patch_path,
@@ -111,7 +113,7 @@ impl SavedPatch {
     }
 
     fn checkout(&self) -> Result<()> {
-        git_command()?
+        git_command(self.git_root)?
             .args(["-c", "submodule.recurse=0", "checkout", "--"])
             .arg(&self.root)
             // Prevent recursive post-checkout hooks.
@@ -123,7 +125,7 @@ impl SavedPatch {
 
     fn restore_from_tree(&self) -> Result<()> {
         // Unstage hook additions without deleting files that were previously untracked.
-        git_command()?
+        git_command(self.git_root)?
             .args(["reset", "--quiet", &self.tree, "--"])
             .arg(&self.root)
             .output_sync()
@@ -133,7 +135,7 @@ impl SavedPatch {
     }
 
     fn apply(&self) -> Result<()> {
-        git_command()?
+        git_command(self.git_root)?
             .args(["apply", "--whitespace=nowarn"])
             .arg(&self.path)
             .output_sync()
@@ -190,6 +192,7 @@ pub(super) struct WorktreeStash {
 }
 
 struct PendingChanges {
+    git_root: &'static Path,
     intent_to_add: Vec<PathBuf>,
     // Recorded before checkout, so a failed checkout is also recoverable.
     patch: Option<SavedPatch>,
@@ -198,13 +201,13 @@ struct PendingChanges {
 impl PendingChanges {
     fn prepare(&mut self, root: &Path, patch_dir: &Path) -> Result<()> {
         if !self.intent_to_add.is_empty() {
-            git_command()?
+            git_command(self.git_root)?
                 .args(["rm", "--cached", "--"])
                 .args(&self.intent_to_add)
                 .output_sync()
                 .context("Failed to clear intent-to-add changes")?;
         }
-        self.patch = SavedPatch::save(root, patch_dir)?;
+        self.patch = SavedPatch::save(self.git_root, root, patch_dir)?;
         if let Some(patch) = &self.patch {
             debug!("Cleaning working tree");
             patch.checkout()?;
@@ -230,7 +233,7 @@ impl PendingChanges {
 
     fn restore_intent(&self) -> Result<()> {
         if !self.intent_to_add.is_empty() {
-            git_command()?
+            git_command(self.git_root)?
                 .args(["add", "--intent-to-add", "--"])
                 .args(&self.intent_to_add)
                 .output_sync()
@@ -269,10 +272,13 @@ impl WorktreeStash {
     /// Save unstaged changes and intent-to-add markers, then prepare the worktree for hooks.
     ///
     /// Intent-to-add paths must be absolute; only paths under `root` are cleared.
-    pub fn save(store: &Store, root: &Path, mut intent_to_add: Vec<PathBuf>) -> Result<Self> {
+    pub async fn save(store: &Store, root: &Path, mut intent_to_add: Vec<PathBuf>) -> Result<Self> {
+        // Resolve this before any mutation: Drop and Ctrl-C cleanup cannot await discovery.
+        let git_root = git::root().await?;
         intent_to_add.retain(|path| path.starts_with(root));
         let stash = Self {
             state: Arc::new(Mutex::new(Some(PendingChanges {
+                git_root,
                 intent_to_add,
                 patch: None,
             }))),

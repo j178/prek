@@ -447,10 +447,11 @@ pub(crate) async fn update(
     filesystem: Option<FilesystemOptions>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD).await?;
     // TODO: support selectors?
     let selectors = Selectors::default();
-    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
+    let workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), true).await?;
 
     let cli_tag_filters = CliTagFilterOptions {
         include: include_tag,

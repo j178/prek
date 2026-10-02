@@ -20,9 +20,10 @@ pub(crate) async fn exec(
     refresh: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD).await?;
     let selectors = Selectors::from_include(&selector, &workspace_root)?;
-    let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
+    let workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh).await?;
 
     let init_reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;

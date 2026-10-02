@@ -550,7 +550,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         include_deleted,
     } = opts;
 
-    let git_root = git::root()?;
+    let git_root = git::root().await?;
 
     match input_mode {
         RunInputMode::Files => {}
@@ -738,7 +738,7 @@ async fn collect_files_for_selection(
             Ok(files.into_iter().map(FileEntry::from).collect())
         }
         FileSelection::Default => {
-            if git::is_in_merge_conflict()? {
+            if git::is_in_merge_conflict().await? {
                 // TODO: Support include_deleted during merge conflict resolution,
                 // including files whose previous mode only exists in the other parent.
                 let files = git::conflicted_files(workspace_root).await?;
