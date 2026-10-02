@@ -1090,6 +1090,7 @@
         "check-jsonc",
         "check-merge-conflict",
         "check-shebang-scripts-are-executable",
+        "check-signed-commit",
         "check-symlinks",
         "check-toml",
         "check-vcs-permalinks",
