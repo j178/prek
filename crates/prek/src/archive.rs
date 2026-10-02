@@ -130,8 +130,8 @@ pub async fn extract_archive(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
     let extract_dir = path.with_file_name("extract");
     fs_err::tokio::create_dir_all(&extract_dir).await?;
 
-    let file = fs_err::tokio::File::open(path).await?;
-    unpack(file, ext, &extract_dir).await?;
+    let mut file = fs_err::tokio::File::open(path).await?;
+    unpack(&mut file, ext, &extract_dir).await?;
 
     match strip_component(&extract_dir) {
         Ok(top_level) => Ok(top_level),
@@ -303,24 +303,79 @@ pub async fn untar_xz<R: AsyncRead + Unpin>(
     Ok(())
 }
 
-/// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
-/// without requiring `Seek`.
-pub async fn unpack<R: AsyncRead + Unpin>(
-    reader: R,
+/// Unpack a `.zip`, `.tar.gz`, or `.tar.xz` archive into the target directory, without requiring `Seek`.
+pub async fn unpack(
+    // Share archive decoding across reader types.
+    reader: &mut (dyn AsyncRead + Unpin),
     ext: ArchiveExtension,
-    target: impl AsRef<Path>,
+    target: &Path,
 ) -> Result<(), Error> {
     match ext {
         ArchiveExtension::Zip => unzip(reader, target).await,
         ArchiveExtension::TarGz => untar_gz(reader, target).await,
         ArchiveExtension::TarXz => untar_xz(reader, target).await,
-        _ => Err(Error::UnsupportedArchive(target.as_ref().to_path_buf())),
+        _ => Err(Error::UnsupportedArchive(target.to_path_buf())),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use async_compression::tokio::bufread::{GzipEncoder, XzEncoder};
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use tokio::io::{AsyncRead, AsyncReadExt};
+    use tokio_tar::{Builder, Header};
+
+    use super::{ArchiveExtension, unpack};
+
+    #[tokio::test]
+    async fn unpack_formats_with_memory_and_file_readers() -> Result<()> {
+        let files: &[(&str, &[u8])] = &[
+            ("package/script.sh", b"echo hello\n"),
+            ("package/data.bin", b"\x00\x01\x02\xff"),
+        ];
+        let mut tar = Builder::new(Vec::new());
+        let mut zip = ZipFileWriter::new(Vec::new());
+        for (path, contents) in files {
+            let mut header = Header::new_gnu();
+            header.set_mode(0o644);
+            header.set_size(contents.len().try_into()?);
+            tar.append_data(&mut header, path, *contents).await?;
+            zip.write_entry_whole(
+                ZipEntryBuilder::new((*path).into(), Compression::Deflate).unix_permissions(0o644),
+                contents,
+            )
+            .await?;
+        }
+        let tar = tar.into_inner().await?;
+        let mut gzip = Vec::new();
+        GzipEncoder::new(tar.as_slice())
+            .read_to_end(&mut gzip)
+            .await?;
+        let mut xz = Vec::new();
+        XzEncoder::new(tar.as_slice()).read_to_end(&mut xz).await?;
+
+        for (ext, bytes) in [
+            (ArchiveExtension::Zip, zip.close().await?),
+            (ArchiveExtension::TarGz, gzip),
+            (ArchiveExtension::TarXz, xz),
+        ] {
+            let archive_file = tempfile::NamedTempFile::new()?;
+            fs_err::write(archive_file.path(), &bytes)?;
+            let mut file = fs_err::tokio::File::open(archive_file.path()).await?;
+            let mut memory = bytes.as_slice();
+            let readers: [&mut (dyn AsyncRead + Unpin); 2] = [&mut memory, &mut file];
+            for reader in readers {
+                let target = tempfile::tempdir()?;
+                unpack(reader, ext, target.path()).await?;
+                for (path, contents) in files {
+                    assert_eq!(fs_err::read(target.path().join(path))?, *contents);
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn extract_archive_rejects_unsupported_archive() -> Result<()> {
