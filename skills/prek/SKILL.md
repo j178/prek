@@ -204,6 +204,7 @@ Builtin hooks called out by the docs include:
 - `check-merge-conflict`
 - `detect-private-key`
 - `no-commit-to-branch`
+- `check-dco-signoff`
 - `check-shebang-scripts-are-executable`
 - `check-executables-have-shebangs`
 
