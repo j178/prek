@@ -413,10 +413,10 @@ pub(crate) struct WorktreeStatus {
     pub(crate) intent_to_add: Vec<PathBuf>,
 }
 
-/// Check conflicts and unstaged changes together. Returned paths are absolute.
-pub(crate) async fn worktree_status(root: &Path) -> Result<WorktreeStatus, Error> {
+/// Check conflicts and unstaged changes together. Paths are relative to the repository root.
+pub(crate) async fn worktree_status(cwd: &Path) -> Result<WorktreeStatus, Error> {
     let output = git_cmd()?
-        .current_dir(root)
+        .current_dir(cwd)
         .args([
             "diff",
             "--name-status",
@@ -429,10 +429,10 @@ pub(crate) async fn worktree_status(root: &Path) -> Result<WorktreeStatus, Error
         .check(true)
         .output()
         .await?;
-    parse_worktree_status(&output.stdout, root)
+    parse_worktree_status(&output.stdout)
 }
 
-fn parse_worktree_status(output: &[u8], root: &Path) -> Result<WorktreeStatus, Error> {
+fn parse_worktree_status(output: &[u8]) -> Result<WorktreeStatus, Error> {
     let mut status = WorktreeStatus {
         unmerged: false,
         unstaged: Vec::new(),
@@ -445,7 +445,7 @@ fn parse_worktree_status(output: &[u8], root: &Path) -> Result<WorktreeStatus, E
             .next()
             .filter(|path| !path.is_empty())
             .ok_or(Error::InvalidDiffFile)?;
-        let path = root.join(path_from_git_bytes(path)?);
+        let path = path_from_git_bytes(path)?;
         match change {
             b"U" => status.unmerged = true,
             // Unstaged additions are intent-to-add entries; untracked files are omitted.
@@ -1215,9 +1215,9 @@ mod tests {
         assert!(!status.unmerged);
         assert_eq!(
             status.unstaged,
-            ["deleted.txt", "intent.txt", "modified.txt"].map(|name| root.join(name))
+            ["deleted.txt", "intent.txt", "modified.txt"].map(PathBuf::from)
         );
-        assert_eq!(status.intent_to_add, [root.join("intent.txt")]);
+        assert_eq!(status.intent_to_add, [PathBuf::from("intent.txt")]);
         Ok(())
     }
 
@@ -1226,10 +1226,8 @@ mod tests {
     fn worktree_status_preserves_unquoted_path_bytes() -> anyhow::Result<()> {
         use std::os::unix::ffi::OsStrExt as _;
 
-        let status = super::parse_worktree_status(
-            b"M\0 leading\nname-\xff.txt \0D\0deleted.txt\0",
-            Path::new("/repo"),
-        )?;
+        let status =
+            super::parse_worktree_status(b"M\0 leading\nname-\xff.txt \0D\0deleted.txt\0")?;
         assert!(!status.unmerged);
         let paths = status
             .unstaged
@@ -1238,10 +1236,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             paths,
-            [
-                b"/repo/ leading\nname-\xff.txt ".as_slice(),
-                b"/repo/deleted.txt"
-            ]
+            [b" leading\nname-\xff.txt ".as_slice(), b"deleted.txt"]
         );
         Ok(())
     }

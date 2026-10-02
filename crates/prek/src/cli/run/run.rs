@@ -118,21 +118,30 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    let git_root = git::root()?;
-    let filesystem = FilesystemOptions::user()?;
-
     let requires_clean_worktree = selection.requires_clean_worktree();
     let worktree = if requires_clean_worktree {
-        let status = git::worktree_status(git_root).await?;
+        // Status paths are repository-relative, so the worktree query can start
+        // before repository discovery finishes. Preserve discovery errors first.
+        let (root, status) = tokio::join!(
+            tokio::task::spawn_blocking(git::root),
+            git::worktree_status(&CWD),
+        );
+        let root = root??;
+        let mut status = status?;
         if status.unmerged {
             anyhow::bail!(
                 "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
             );
         }
+        for path in status.unstaged.iter_mut().chain(&mut status.intent_to_add) {
+            *path = root.join(&*path);
+        }
         Some(status)
     } else {
+        git::root()?;
         None
     };
+    let filesystem = FilesystemOptions::user()?;
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
