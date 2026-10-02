@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 400" role="img" aria-labelledby="title desc">
   <title id="title">Framework-dominated runtime with no-op hooks</title>
-  <desc id="desc">Horizontal bars compare one no-op hook at 224 milliseconds for pre-commit and 68 milliseconds for prek, and ten sequential no-op hooks at 458 milliseconds for pre-commit and 255 milliseconds for prek. Lower is better.</desc>
+  <desc id="desc">Horizontal bars compare one no-op hook at 185 milliseconds for pre-commit and 47 milliseconds for prek, and ten sequential no-op hooks at 360 milliseconds for pre-commit and 126 milliseconds for prek. Lower is better.</desc>
   <style>
     text {
       fill: #0f172a;
@@ -40,20 +40,20 @@
   <line class="axis" x1="250" y1="322" x2="750" y2="322" />
 
   <text class="label" x="20" y="104">1 hook · pre-commit</text>
-  <rect class="reference" x="250" y="82" width="224" height="30" rx="4" />
-  <text class="value" x="486" y="103">224 ms</text>
+  <rect class="reference" x="250" y="82" width="185" height="30" rx="4" />
+  <text class="value" x="447" y="103">185 ms</text>
 
   <text class="label" x="20" y="154">1 hook · prek</text>
-  <rect class="prek" x="250" y="132" width="68" height="30" rx="4" />
-  <text class="value" x="330" y="153">68 ms · 3.30x faster</text>
+  <rect class="prek" x="250" y="132" width="47" height="30" rx="4" />
+  <text class="value" x="309" y="153">47 ms · 3.96x faster</text>
 
   <text class="label" x="20" y="234">10 hooks · pre-commit</text>
-  <rect class="reference" x="250" y="212" width="458" height="30" rx="4" />
-  <text class="value" x="720" y="233">458 ms</text>
+  <rect class="reference" x="250" y="212" width="360" height="30" rx="4" />
+  <text class="value" x="622" y="233">360 ms</text>
 
   <text class="label" x="20" y="284">10 hooks · prek</text>
-  <rect class="prek" x="250" y="262" width="255" height="30" rx="4" />
-  <text class="value" x="517" y="283">255 ms · 1.80x faster</text>
+  <rect class="prek" x="250" y="262" width="126" height="30" rx="4" />
+  <text class="value" x="388" y="283">126 ms · 2.85x faster</text>
 
   <text class="tick" x="250" y="343" text-anchor="middle">0</text>
   <text class="tick" x="350" y="343" text-anchor="middle">100</text>

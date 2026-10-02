@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 270" role="img" aria-labelledby="title desc">
   <title id="title">Baseline runtime without the fast path</title>
-  <desc id="desc">Horizontal bars compare pre-commit at 1737 milliseconds with prek running the original hook implementations at 1438 milliseconds. prek takes 17 percent less time. Lower is better.</desc>
+  <desc id="desc">Horizontal bars compare pre-commit at 1532 milliseconds with prek running the original hook implementations at 1165 milliseconds. prek takes 24 percent less time. Lower is better.</desc>
   <style>
     text {
       fill: #0f172a;
@@ -37,12 +37,12 @@
   <line class="axis" x1="250" y1="200" x2="810" y2="200" />
 
   <text class="label" x="20" y="105">pre-commit</text>
-  <rect class="reference" x="250" y="82" width="486" height="32" rx="4" />
-  <text class="value" x="748" y="104">1,737 ms · reference</text>
+  <rect class="reference" x="250" y="82" width="429" height="32" rx="4" />
+  <text class="value" x="691" y="104">1,532 ms · reference</text>
 
   <text class="label" x="20" y="165">prek: no fast path</text>
-  <rect class="baseline" x="250" y="142" width="403" height="32" rx="4" />
-  <text class="value" x="665" y="164">1,438 ms · 17% lower</text>
+  <rect class="baseline" x="250" y="142" width="326" height="32" rx="4" />
+  <text class="value" x="588" y="164">1,165 ms · 24% lower</text>
 
   <text class="tick" x="250" y="221" text-anchor="middle">0</text>
   <text class="tick" x="390" y="221" text-anchor="middle">500</text>
