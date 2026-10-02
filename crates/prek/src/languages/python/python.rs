@@ -64,6 +64,7 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
 
     let stdout = Cmd::new(python)
         .arg("-I")
+        .arg("-S")
         .arg("-c")
         .arg(QUERY_PYTHON_INFO)
         .check(true)
