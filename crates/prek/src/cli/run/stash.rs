@@ -43,10 +43,8 @@ fn git_command() -> Result<Cmd> {
 
 impl SavedPatch {
     fn save(root: &Path, patch_dir: &Path) -> Result<Option<Self>> {
-        let tree = git::write_tree()?;
-
-        let output = git_command()?
-            .arg("diff-index")
+        let mut diff = git_command()?;
+        diff.arg("diff-files")
             .arg("--binary")
             .arg("--exit-code")
             .hidden_args([
@@ -56,11 +54,20 @@ impl SavedPatch {
                 "--no-textconv",
                 "--no-relative",
             ])
-            .arg(&tree)
             .arg("--")
             .arg(root)
-            .check(false)
-            .output_sync()?;
+            .check(false);
+
+        // The tree is only needed for conflict recovery. diff-files can read the
+        // same index in parallel without competing for write-tree's index lock.
+        let (tree, output) = std::thread::scope(|scope| -> Result<_> {
+            let tree = std::thread::Builder::new().spawn_scoped(scope, git::write_tree)?;
+            let output = diff.output_sync();
+            let tree = tree
+                .join()
+                .map_err(|_| anyhow::anyhow!("Index snapshot thread panicked"))??;
+            Ok((tree, output?))
+        })?;
 
         match output.status.code() {
             Some(0) => {
@@ -68,7 +75,7 @@ impl SavedPatch {
                 return Ok(None);
             }
             Some(1) if output.stdout.trim_ascii().is_empty() => {
-                trace!("diff-index status code 1 with empty stdout");
+                trace!("diff-files status code 1 with empty stdout");
                 // Git can report CRLF-only differences without producing a patch.
                 return Ok(None);
             }
