@@ -71,7 +71,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
     let force_markdown = args.force_markdown();
     let markdown_exts = args.markdown_exts()?;
-    let chars = args.chars.map_or_else(Vec::new, |chars| chars.0);
+    let chars = args.chars.map(|chars| chars.0);
 
     run_blocking_file_checks(
         hook.project().relative_path(),
@@ -81,7 +81,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
             fix_file(
                 file_path,
                 display_path,
-                &chars,
+                chars.as_deref(),
                 force_markdown,
                 &markdown_exts,
                 args.check,
@@ -94,7 +94,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 fn fix_file(
     file_path: &Path,
     display_path: &Path,
-    chars: &[char],
+    chars: Option<&[char]>,
     force_markdown: bool,
     markdown_exts: &[String],
     check: bool,
@@ -102,7 +102,7 @@ fn fix_file(
     let is_markdown = force_markdown || is_markdown_file(display_path, markdown_exts);
 
     let mut content = fs_err::read(file_path)?;
-    let mut line_start = if chars.is_empty() && !is_markdown {
+    let mut line_start = if chars.is_none() && !is_markdown {
         let Some(start) = first_line_with_trailing_whitespace(&content) else {
             return Ok(HookOutput::unchanged(0, Vec::new()));
         };
@@ -125,10 +125,10 @@ fn fix_file(
             trimmed = &trimmed[..trimmed.len() - MARKDOWN_LINE_BREAK.len()];
         }
         let suffix_start = line_start + trimmed.len();
-        if chars.is_empty() {
-            trimmed = trimmed.trim_ascii_end();
-        } else {
+        if let Some(chars) = chars {
             trimmed = trimmed.trim_end_with(|c| chars.contains(&c));
+        } else {
+            trimmed = trimmed.trim_ascii_end();
         }
         let trimmed_end = line_start + trimmed.len();
 
@@ -218,12 +218,12 @@ mod tests {
             fs_err::write(&path, &original)?;
 
             assert_eq!(
-                fix_file(&path, &path, &[], false, &[], true)?.exit_status,
+                fix_file(&path, &path, None, false, &[], true)?.exit_status,
                 1
             );
             assert_eq!(fs_err::read(&path)?, original);
             assert_eq!(
-                fix_file(&path, &path, &[], false, &[], false)?.exit_status,
+                fix_file(&path, &path, None, false, &[], false)?.exit_status,
                 1
             );
             assert_eq!(
@@ -231,7 +231,7 @@ mod tests {
                 [prefix.as_slice(), b"\xfflast", ending].concat()
             );
             assert_eq!(
-                fix_file(&path, &path, &[], false, &[], false)?.exit_status,
+                fix_file(&path, &path, None, false, &[], false)?.exit_status,
                 0
             );
         }
@@ -246,18 +246,18 @@ mod tests {
         let original = [b"first   \r\n", middle.as_slice(), b"\xfflast\t  \n   "].concat();
         fs_err::write(&path, &original)?;
 
-        let result = fix_file(&path, &path, &[], true, &[], true)?;
+        let result = fix_file(&path, &path, None, true, &[], true)?;
         assert_eq!(result.exit_status, 1);
         assert_eq!(fs_err::read(&path)?, original);
 
-        let result = fix_file(&path, &path, &[], true, &[], false)?;
+        let result = fix_file(&path, &path, None, true, &[], false)?;
         assert_eq!(result.exit_status, 1);
         assert_eq!(
             fs_err::read(&path)?,
             [b"first  \r\n", middle.as_slice(), b"\xfflast  \n"].concat()
         );
         assert_eq!(
-            fix_file(&path, &path, &[], true, &[], false)?.exit_status,
+            fix_file(&path, &path, None, true, &[], false)?.exit_status,
             0
         );
         Ok(())
@@ -278,7 +278,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md".to_owned()];
 
-        let result = fix_file(&file_path, &file_path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&file_path, &file_path, Some(&chars), false, &md_exts, false)?;
 
         // modified
         assert_eq!(result.exit_status, 1);
@@ -306,7 +306,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md".to_owned()];
 
-        let result = fix_file(&file_path, &file_path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&file_path, &file_path, Some(&chars), false, &md_exts, false)?;
 
         // second line changed 3 -> 2 spaces, so modified
         assert_eq!(result.exit_status, 1);
@@ -332,7 +332,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![]; // irrelevant because force_markdown = true
 
-        let result = fix_file(&file_path, &file_path, &chars, true, &md_exts, false)?;
+        let result = fix_file(&file_path, &file_path, Some(&chars), true, &md_exts, false)?;
 
         // modified because one line had 3 spaces -> reduced to 2
         assert_eq!(result.exit_status, 1);
@@ -352,7 +352,7 @@ mod tests {
         let md_exts = vec!["md".to_owned()];
 
         // file already trimmed -> no changes
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -369,7 +369,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -386,7 +386,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md".to_owned()];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         // trimming whitespace-only lines will change them to empty lines -> modified true
         assert_eq!(result.exit_status, 1);
 
@@ -398,14 +398,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_chars_empty_uses_trim_ascii_end() -> Result<()> {
+    async fn test_default_chars_trim_whitespace() -> Result<()> {
         let dir = TempDir::new()?;
-        // trailing ascii spaces should be removed by trim_ascii_end when chars is empty
         let path = create_test_file(&dir, "ascii.txt", b"foo   \nbar \t\n").await?;
-        let chars = vec![]; // will hit trim_ascii_end()
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, None, false, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -423,7 +421,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["txt".to_owned()]; // treat as markdown for this test
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         // read file and check logical lines presence (line endings may be normalized by lines())
@@ -442,7 +440,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -460,7 +458,7 @@ mod tests {
         let chars = vec!['。', '　'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -477,7 +475,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["md".to_owned()];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -494,7 +492,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -512,7 +510,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -530,7 +528,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["*".to_owned()];
 
-        let result = fix_file(&path, &path, &chars, true, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), true, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let expected = "foo  \nbar\nbaz  \n\n\n";
@@ -547,7 +545,7 @@ mod tests {
         let chars = vec![' '];
         let md_exts = vec!["*".to_owned()];
 
-        let result = fix_file(&path, &path, &chars, true, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), true, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let expected = "\ta \t  \n";
@@ -564,7 +562,7 @@ mod tests {
         let chars = vec!['x'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, true, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), true, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
 
         let expected = "a\nb\r\r\r\n";
@@ -581,7 +579,7 @@ mod tests {
         let chars = vec!['x'];
         let md_exts = vec!["md".to_owned()];
 
-        let result = fix_file(&path, &path, &chars, true, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), true, &md_exts, false)?;
         assert_eq!(result.exit_status, 1);
 
         let expected = "a  \n";
@@ -609,7 +607,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let result = fix_file(&path, &path, &chars, false, &md_exts, false)?;
+        let result = fix_file(&path, &path, Some(&chars), false, &md_exts, false)?;
         assert_eq!(result.exit_status, 0);
 
         let new_content = fs_err::tokio::read(&path).await?;
