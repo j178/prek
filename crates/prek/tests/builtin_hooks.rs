@@ -3177,15 +3177,17 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     Ok(())
 }
 
-#[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs_win() {
+fn check_executables_have_shebangs_git_index() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-executables-have-shebangs
+                args: [./win_script_with_shebang.sh, ./win_script_without_shebang.sh]
+                pass_filenames: false
+                types: [file]
     "})
         .with_file("win_script_with_shebang.sh", "#!/bin/bash\necho ok\n")
         .with_file("win_script_without_shebang.sh", "missing shebang\n")
@@ -3193,6 +3195,7 @@ fn check_executables_have_shebangs_win() {
 
     context
         .git()
+        .run(["config", "core.fileMode", "false"])
         .run(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
         .run([
             "update-index",
@@ -3344,6 +3347,8 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
           - repo: builtin
             hooks:
               - id: check-shebang-scripts-are-executable
+                args: [./plain.txt, ./script.sh, ./script_exec.sh]
+                pass_filenames: false
     "})
         .with_file("plain.txt", "plain text\n")
         .with_file("script.sh", "#!/bin/sh\necho hi\n")
