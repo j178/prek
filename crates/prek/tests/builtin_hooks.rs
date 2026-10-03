@@ -388,6 +388,34 @@ fn require_pattern_hook_reports_files_without_any_match() {
 }
 
 #[test]
+fn trailing_whitespace_empty_chars() {
+    let files = [("plain.txt", "hello \t\n"), ("doc.md", "hello   \r\n  \n")];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: trailing-whitespace
+                args: ['--chars=', --markdown-linebreak-ext=md]
+    "})
+        .with_files(files)
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trim trailing whitespace.................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    for (name, contents) in files {
+        assert_eq!(context.read(name), contents);
+    }
+}
+
+#[test]
 fn trailing_whitespace_check() -> Result<()> {
     let files = [
         ("extra.md", "trim   \r\n"),
