@@ -3133,8 +3133,12 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
         .with_executable_file("empty.sh", "")
         .init_git();
 
+    context.git().run(["config", "--unset", "core.fileMode"]);
+
     // First run: should fail for script_without_shebang.sh and empty.sh
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run()
+        .env("GIT_CONFIG_GLOBAL", context.home_dir().join("gitconfig"))
+        .env("GIT_CONFIG_NOSYSTEM", "1"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3165,7 +3169,9 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     context.git().add(".");
 
     // Second run: should now pass
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run()
+        .env("GIT_CONFIG_GLOBAL", context.home_dir().join("gitconfig"))
+        .env("GIT_CONFIG_NOSYSTEM", "1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

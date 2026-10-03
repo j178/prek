@@ -24,6 +24,8 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
 
     let stdout = git::git_cmd()?
         .arg("config")
+        .arg("--default=true")
+        .arg("--get")
         .arg("core.fileMode")
         .check(true)
         .output()
