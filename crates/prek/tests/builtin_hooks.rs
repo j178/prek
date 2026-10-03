@@ -2991,7 +2991,7 @@ fn no_commit_to_branch_hook_with_patterns() {
           - repo: builtin
             hooks:
               - id: no-commit-to-branch
-                args: ['--pattern', '^feature/.*', '--pattern', '.*-wip$']
+                args: ['--pattern', 'feature/.*', '--pattern', '.*-wip$']
     "})
         .with_file("test.txt", "Hello World")
         .init_git();
@@ -3059,11 +3059,11 @@ fn no_commit_to_branch_hook_with_patterns() {
     ----- stderr -----
     ");
 
-    // Test 4: Create and switch to normal branch (should pass - doesn't match patterns)
+    // Test 4: A match in the middle of a branch name must not protect it
     context
         .git()
-        .branch("normal-branch")
-        .checkout("normal-branch");
+        .branch("fix/feature/new-feature")
+        .checkout("fix/feature/new-feature");
 
     context.write_file("normal.txt", "Normal content");
     context.git().add(".").commit("Add normal content");
