@@ -446,6 +446,32 @@ fn trailing_whitespace_check() -> Result<()> {
 }
 
 #[test]
+fn trailing_whitespace_empty_markdown_extension() {
+    let content = "hello  \n";
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: trailing-whitespace
+                args: ['--markdown-linebreak-ext=']
+    "})
+        .with_file("input.txt", content)
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `trailing-whitespace`
+      caused by: error: a value is required for '--markdown-linebreak-ext <EXT>' but none was supplied
+    "#);
+    assert_eq!(context.read("input.txt"), content);
+}
+
+#[test]
 fn end_of_file_fixer_hook() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"

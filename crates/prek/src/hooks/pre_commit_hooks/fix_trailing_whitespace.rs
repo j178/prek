@@ -31,7 +31,7 @@ pub(crate) struct Args {
     #[arg(long)]
     check: bool,
     /// Preserve Markdown hard line breaks for EXT (repeatable).
-    #[arg(long, value_name = "EXT")]
+    #[arg(long, value_name = "EXT", value_parser = clap::builder::NonEmptyStringValueParser::new())]
     markdown_linebreak_ext: Vec<String>,
     // `clap` cannot parse `--chars= \t` into vec<char> correctly.
     // so, we use Chars to achieve it.
