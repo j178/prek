@@ -12,7 +12,6 @@ use crate::hooks::pre_commit_hooks::shebangs::{
 use crate::hooks::pre_commit_hooks::{
     FilenamesArgs, hook_filenames, parse_hook_args, run_blocking_file_checks,
 };
-use rustc_hash::FxHashSet;
 
 /// Runs the `check-executables-have-shebangs` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
@@ -90,8 +89,7 @@ async fn git_check_shebangs(
     filenames: &[&Path],
 ) -> Result<HookOutput, anyhow::Error> {
     let stdout = git_index_stage_output(file_base).await?;
-    let filenames: FxHashSet<_> = filenames.iter().copied().collect();
-    let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, &filenames, true)
+    let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, filenames, true)
         .collect::<Vec<_>>();
     check_shebangs(file_base, &entries).await
 }
