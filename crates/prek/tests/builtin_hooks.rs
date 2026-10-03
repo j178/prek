@@ -1283,8 +1283,8 @@ fn check_added_large_files_hook() {
                   - id: check-added-large-files
                     args: ['--maxkb', '1']
         "})
-        .with_file("small_file.txt", "Hello World\n")
-        .with_file("large_file.txt", [0_u8; 2048]);
+        .with_file("small_file.txt", [0_u8; 1024])
+        .with_file("large_file.txt", [0_u8; 1025]);
 
     context.git().add(".");
 
@@ -1365,6 +1365,36 @@ fn check_added_large_files_hook() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+fn check_added_large_files_zero_limit() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb=0']
+                files: '\.bin$'
+    "})
+        .with_file("empty.bin", "")
+        .with_file("nonempty.bin", [0_u8; 1])
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - description: Prevents giant files from being committed
+    - exit code: 1
+
+      nonempty.bin (1 KB) exceeds 0 KB
+
+    ----- stderr -----
+    "#);
 }
 
 #[test]
