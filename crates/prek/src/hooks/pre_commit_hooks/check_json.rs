@@ -23,10 +23,6 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
 fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
     let content = fs_err::read(file_path)?;
-    if content.is_empty() {
-        return Ok(HookOutput::unchanged(0, Vec::new()));
-    }
-
     let content = match simdutf8::compat::from_utf8(&content) {
         Ok(content) => content,
         Err(error) => {
@@ -248,8 +244,8 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.json", content).await?;
         let result = check_file(&file_path, &file_path)?;
-        assert_eq!(result.exit_status, 0);
-        assert_eq!(result.output, b"");
+        assert_eq!(result.exit_status, 1);
+        assert_ne!(result.output, b"");
 
         Ok(())
     }
