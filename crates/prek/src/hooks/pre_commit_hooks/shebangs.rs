@@ -33,12 +33,17 @@ pub(super) async fn git_index_stage_output(file_base: &Path) -> Result<Vec<u8>, 
 pub(super) fn matching_git_index_paths_by_executable_bit<'a>(
     stdout: &'a [u8],
     file_base: &'a Path,
-    filenames: &'a FxHashSet<&Path>,
+    filenames: &[&'a Path],
     executable: bool,
 ) -> impl Iterator<Item = &'a Path> + 'a {
+    // Git reports index paths without a leading `./`.
+    let filenames = filenames
+        .iter()
+        .map(|path| path.strip_prefix(".").unwrap_or(path))
+        .collect::<FxHashSet<_>>();
     stdout
         .split(|&b| b == b'\0')
-        .filter_map(move |entry| parse_stage_entry(entry, file_base, filenames, executable))
+        .filter_map(move |entry| parse_stage_entry(entry, file_base, &filenames, executable))
 }
 
 fn parse_stage_entry<'a>(
