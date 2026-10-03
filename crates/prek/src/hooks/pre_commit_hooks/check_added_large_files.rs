@@ -62,7 +62,10 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<Hook
 
     run_concurrent_file_checks(filenames, *INTERNAL_CONCURRENCY, |filename| async move {
         let file_path = hook.project().relative_path().join(filename);
-        let size = fs_err::tokio::metadata(file_path).await?.len() / 1024;
+        let size = fs_err::tokio::metadata(file_path)
+            .await?
+            .len()
+            .div_ceil(1024);
         if size > args.max_kb {
             anyhow::Ok(HookOutput::unchanged(
                 1,

@@ -120,7 +120,7 @@ Prevents giant files from being committed.
 **Supported arguments** (compatible with `pre-commit-hooks`):
 
 - `--maxkb=<N>` (default: `500`)
-    - Maximum allowed file size, in kibibytes.
+    - Maximum allowed file size, in kibibytes. File sizes are rounded up, so `--maxkb=0` accepts only empty files.
 - `--enforce-all`
     - Check all matched files, not just those staged for addition.
 
