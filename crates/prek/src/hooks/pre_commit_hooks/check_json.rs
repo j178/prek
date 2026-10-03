@@ -36,11 +36,10 @@ fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
 
     let mut deserializer = serde_json::Deserializer::from_str(content);
     deserializer.disable_recursion_limit();
-    let deserializer = serde_stacker::Deserializer::new(&mut deserializer);
+    let stacker = serde_stacker::Deserializer::new(&mut deserializer);
 
-    // Try to parse with duplicate key detection
-    match JsonDuplicateKeyChecker::deserialize(deserializer) {
-        Ok(JsonDuplicateKeyChecker) => Ok(HookOutput::unchanged(0, Vec::new())),
+    match JsonDuplicateKeyChecker::deserialize(stacker).and_then(|_| deserializer.end()) {
+        Ok(()) => Ok(HookOutput::unchanged(0, Vec::new())),
         Err(e) => {
             let error_message =
                 format!("{}: Failed to json decode ({e})\n", display_path.display());
@@ -211,6 +210,22 @@ mod tests {
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_trailing_data() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("trailing.json");
+        for (content, status) in [
+            ("{} trailing\n", 1),
+            ("{\"a\": 1}\n{\"b\": 2}\n", 1),
+            ("truefalse\n", 1),
+            ("{} \t\r\n", 0),
+        ] {
+            fs_err::write(&path, content)?;
+            assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
+        }
         Ok(())
     }
 
