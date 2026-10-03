@@ -1,5 +1,5 @@
 use clap::Parser;
-use fancy_regex::Regex;
+use fancy_regex::{Regex, RegexInput};
 
 use crate::git::git_cmd;
 use crate::hook::Hook;
@@ -34,9 +34,13 @@ impl Args {
         for pattern in &self.patterns {
             let regex = Regex::new(pattern)
                 .with_context(|| format!("Failed to compile regex pattern `{pattern}`"))?;
-            if regex.is_match(branch).with_context(|| {
-                format!("Failed to match branch against regex pattern `{pattern}`")
-            })? {
+            if regex
+                .find_input(RegexInput::new(branch).anchored(true))
+                .with_context(|| {
+                    format!("Failed to match branch against regex pattern `{pattern}`")
+                })?
+                .is_some()
+            {
                 return Ok(true);
             }
         }
