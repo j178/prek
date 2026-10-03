@@ -263,7 +263,7 @@ Prevents the addition of new Git submodules.
 
 ### `check-json`
 
-Attempts to load all JSON files to verify syntax.
+Attempts to load all JSON files to verify syntax. Empty files are rejected.
 
 **Supported arguments**
 

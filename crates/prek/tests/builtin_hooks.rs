@@ -1095,7 +1095,7 @@ fn check_json_hook() {
         .init_git();
 
     // First run: hooks should fail
-    cmd_snapshot!(context, context.run(), @r"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1105,14 +1105,16 @@ fn check_json_hook() {
     - exit code: 1
 
       duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
+      empty.json: Failed to json decode (EOF while parsing a value at line 1 column 0)
       invalid.json: Failed to json decode (trailing comma at line 1 column 9)
 
     ----- stderr -----
-    ");
+    "#);
 
     // Fix the files
     context.write_file("invalid.json", r#"{"a": 1}"#);
     context.write_file("duplicate.json", r#"{"a": 1, "b": 2}"#);
+    context.write_file("empty.json", "null");
 
     context.git().add(".");
 
@@ -1556,6 +1558,7 @@ fn builtin_hooks_workspace_mode() {
       - exit code: 1
 
         duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
+        empty.json: Failed to json decode (EOF while parsing a value at line 1 column 0)
         invalid.json: Failed to json decode (trailing comma at line 1 column 9)
       mixed line ending......................................................Failed
       - hook id: mixed-line-ending
@@ -1605,6 +1608,7 @@ fn builtin_hooks_workspace_mode() {
     context.write_file("app/duplicate.yaml", "a: 1\nb: 2\n");
     context.write_file("app/invalid.json", concat!(r#"{"a": 1}"#, "\n"));
     context.write_file("app/duplicate.json", concat!(r#"{"a": 1, "b": 2}"#, "\n"));
+    context.write_file("app/empty.json", "null\n");
     context.write_file("app/large.bin", [0u8; 100]);
     context.git().add(".");
 
