@@ -21,15 +21,21 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    let stdout = git::git_cmd()?
+    let mut cmd = git::git_cmd()?;
+    let output = cmd
         .arg("config")
         .arg("core.fileMode")
-        .check(true)
+        .check(false)
         .output()
-        .await?
-        .stdout;
+        .await?;
 
-    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
+    let tracks_executable_bit = if output.status.code() == Some(1) {
+        // Git returns 1 when the setting is absent; core.fileMode defaults to true.
+        true
+    } else {
+        let output = cmd.check_output(output)?;
+        std::str::from_utf8(&output.stdout)?.trim() != "false"
+    };
     let file_base = hook.project().relative_path();
 
     if tracks_executable_bit {
