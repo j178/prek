@@ -245,9 +245,9 @@ With Git, uv, and hyperfine installed, run:
 ```console
 git clone https://github.com/prek-ci/benchmarks.git
 cd benchmarks
-git checkout b0fc0f941aa61ad7773fc8df4a92f08f3682649b
+git checkout fc65ca88d0b15db6e4649441ef51c1a0df968b38
 ./scripts/setup-tools.sh
-PATH="$PWD/.tools/pre-commit/bin:$PATH" ./benchmark.sh
+./benchmark.sh
 ```
 
 Results are written to `results/local-<timestamp>/summary.md`.
