@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 270" role="img" aria-labelledby="title desc">
   <title id="title">Runtime improvement from priority scheduling</title>
-  <desc id="desc">Horizontal bars compare prek using the fast path at 115 milliseconds with prek also running independent hooks at the same priority concurrently at 96 milliseconds. Lower is better.</desc>
+  <desc id="desc">Horizontal bars compare prek using the fast path at 105 milliseconds with prek also running independent hooks at the same priority concurrently at 94 milliseconds. Lower is better.</desc>
   <style>
     text {
       fill: #0f172a;
@@ -38,12 +38,12 @@
   <line class="axis" x1="250" y1="200" x2="810" y2="200" />
 
   <text class="label" x="20" y="105">Fast path</text>
-  <rect class="previous" x="250" y="82" width="429" height="32" rx="4" />
-  <text class="value" x="691" y="104">115 ms</text>
+  <rect class="previous" x="250" y="82" width="392" height="32" rx="4" />
+  <text class="value" x="654" y="104">105 ms</text>
 
   <text class="label" x="20" y="165">Fast path + priority</text>
-  <rect class="current" x="250" y="142" width="357" height="32" rx="4" />
-  <text class="value" x="619" y="164">96 ms · 17% lower</text>
+  <rect class="current" x="250" y="142" width="350" height="32" rx="4" />
+  <text class="value" x="612" y="164">94 ms · 11% lower</text>
 
   <text class="tick" x="250" y="221" text-anchor="middle">0</text>
   <text class="tick" x="362" y="221" text-anchor="middle">30</text>
@@ -51,5 +51,5 @@
   <text class="tick" x="586" y="221" text-anchor="middle">90</text>
   <text class="tick" x="698" y="221" text-anchor="middle">120</text>
   <text class="tick" x="810" y="221" text-anchor="middle">150 ms</text>
-  <text class="note" x="20" y="253">17% lower than the previous stage · 16.43x faster than the no-fast-path baseline</text>
+  <text class="note" x="20" y="253">11% lower than the previous stage · 16.37x faster than the no-fast-path baseline</text>
 </svg>
