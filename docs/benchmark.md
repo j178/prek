@@ -239,11 +239,11 @@ global state.
 ## Reproduce the benchmark
 
 The complete fixture generator, pinned hook configurations, hyperfine commands,
-and [2026-10-05 samples](https://github.com/prek-ci/benchmarks/tree/18fee36504fca68458dcd0ef488e2dae45ce2f8a/results/2026-10-05)
+and [current results](https://github.com/prek-ci/benchmarks/blob/b0fc0f941aa61ad7773fc8df4a92f08f3682649b/results/2026-10-05/summary.md)
 are published in
 [`prek-ci/benchmarks`](https://github.com/prek-ci/benchmarks).
 The reproduction commands below pin that snapshot at commit
-[`18fee36`](https://github.com/prek-ci/benchmarks/tree/18fee36504fca68458dcd0ef488e2dae45ce2f8a).
+[`b0fc0f9`](https://github.com/prek-ci/benchmarks/tree/b0fc0f941aa61ad7773fc8df4a92f08f3682649b).
 The generator recreates all three fixture layouts and verifies their Git tree
 hashes, so a change to any workload file is detected before measurements begin.
 
@@ -252,7 +252,7 @@ With Git, uv, hyperfine, and Python 3 installed, run:
 ```console
 git clone https://github.com/prek-ci/benchmarks.git
 cd benchmarks
-git checkout 18fee36504fca68458dcd0ef488e2dae45ce2f8a
+git checkout b0fc0f941aa61ad7773fc8df4a92f08f3682649b
 PREK_VERSION=0.5.5 ./scripts/setup-tools.sh
 PATH="$PWD/.tools/pre-commit/bin:$PATH" ./benchmark.sh
 ```
@@ -263,14 +263,12 @@ Adding the pre-commit environment to `PATH` makes that Python version available
 to both runners when they prepare hook environments. `benchmark.sh` creates a
 fresh 960-file fixture, warms both runner caches, executes the framework and
 runtime-ladder benchmarks in both command orders, and measures a clean
-`git diff`. It writes the raw JSON plus a pooled-median summary to
-`results/local-<timestamp>/`.
+`git diff`. It writes a pooled-median summary to
+`results/local-<timestamp>/summary.md`.
 
-The [original 2026-07-31 samples](https://github.com/prek-ci/benchmarks/tree/main/results/2026-07-31)
-remain available for historical reference. The OS and prek version have changed
-since that run, so these results are not a controlled version-to-version
-comparison. Expect absolute times to vary across machines; compare the ordering
-and relative changes on your own hardware.
+These results are not a controlled version-to-version comparison. Expect
+absolute times to vary across machines; compare the ordering and relative
+changes on your own hardware.
 
 ## Methodology
 
