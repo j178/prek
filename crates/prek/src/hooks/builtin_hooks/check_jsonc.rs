@@ -54,6 +54,9 @@ async fn check_file(
         allow_single_quoted_strings: false,
         allow_hexadecimal_numbers: false,
         allow_unary_plus_numbers: false,
+        allow_bare_decimal_point_numbers: false,
+        allow_non_finite_numbers: false,
+        allow_extended_string_escapes: false,
     };
     match jsonc_parser::parse_to_serde_value::<JsonDuplicateKeyChecker>(&content, &options) {
         Ok(_) => Ok(HookOutput::unchanged(0, Vec::new())),
@@ -146,6 +149,7 @@ mod tests {
         for content in [
             r#"{key: "value"}"#,
             r#"{"key": 'value'}"#,
+            r#"{"key": "\x41"}"#,
             r#"{"key": 0x10}"#,
             r#"{"key": +1}"#,
             r#"{"key": .5}"#,
