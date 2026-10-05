@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 470" role="img" aria-labelledby="title desc">
   <title id="title">Median end-to-end runtime for each benchmark stage</title>
-  <desc id="desc">Horizontal bars compare pre-commit at 1532 milliseconds, prek without the fast path at 1165 milliseconds, prek with the fast path at 119 milliseconds, prek with priority scheduling at 100 milliseconds, and prek with two projects at 91 milliseconds. Lower is better.</desc>
+  <desc id="desc">Horizontal bars compare pre-commit at 1945 milliseconds, prek without the fast path at 1571 milliseconds, prek with the fast path at 115 milliseconds, prek with priority scheduling at 96 milliseconds, and prek with two projects at 82 milliseconds. Lower is better.</desc>
   <style>
     text {
       fill: #0f172a;
@@ -41,29 +41,29 @@
   <line class="axis" x1="250" y1="402" x2="810" y2="402" />
 
   <text class="label" x="20" y="106">pre-commit</text>
-  <rect class="reference" x="250" y="83" width="429" height="32" rx="4" />
-  <text class="value" x="691" y="105">1,532 ms · reference</text>
+  <rect class="reference" x="250" y="83" width="340" height="32" rx="4" />
+  <text class="value" x="602" y="105">1,945 ms · reference</text>
 
   <text class="label" x="20" y="171">prek: no fast path</text>
-  <rect class="baseline" x="250" y="148" width="326" height="32" rx="4" />
-  <text class="value" x="588" y="170">1,165 ms · baseline</text>
+  <rect class="baseline" x="250" y="148" width="275" height="32" rx="4" />
+  <text class="value" x="537" y="170">1,571 ms · baseline</text>
 
   <text class="label" x="20" y="236">prek: fast path</text>
-  <rect class="optimized" x="250" y="213" width="33" height="32" rx="4" />
-  <text class="value" x="295" y="235">119 ms · 90% lower than previous</text>
+  <rect class="optimized" x="250" y="213" width="20" height="32" rx="4" />
+  <text class="value" x="282" y="235">115 ms · 93% lower than previous</text>
 
   <text class="label" x="20" y="301">prek: + priority</text>
-  <rect class="optimized" x="250" y="278" width="28" height="32" rx="4" />
-  <text class="value" x="290" y="300">100 ms · 16% lower</text>
+  <rect class="optimized" x="250" y="278" width="17" height="32" rx="4" />
+  <text class="value" x="279" y="300">96 ms · 17% lower</text>
 
   <text class="label" x="20" y="366">prek: + 2 projects</text>
-  <rect class="final" x="250" y="343" width="25" height="32" rx="4" />
-  <text class="value" x="287" y="365">91 ms · 10% lower</text>
+  <rect class="final" x="250" y="343" width="14" height="32" rx="4" />
+  <text class="value" x="276" y="365">82 ms · 14% lower</text>
 
   <text class="tick" x="250" y="423" text-anchor="middle">0</text>
-  <text class="tick" x="390" y="423" text-anchor="middle">500</text>
-  <text class="tick" x="530" y="423" text-anchor="middle">1,000</text>
-  <text class="tick" x="670" y="423" text-anchor="middle">1,500</text>
-  <text class="tick" x="810" y="423" text-anchor="middle">2,000 ms</text>
+  <text class="tick" x="390" y="423" text-anchor="middle">800</text>
+  <text class="tick" x="530" y="423" text-anchor="middle">1,600</text>
+  <text class="tick" x="670" y="423" text-anchor="middle">2,400</text>
+  <text class="tick" x="810" y="423" text-anchor="middle">3,200 ms</text>
   <text class="note" x="20" y="454">Pooled median of 30 runs (forward and reverse command order)</text>
 </svg>

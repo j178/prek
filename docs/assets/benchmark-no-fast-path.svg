@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 270" role="img" aria-labelledby="title desc">
   <title id="title">Baseline runtime without the fast path</title>
-  <desc id="desc">Horizontal bars compare pre-commit at 1532 milliseconds with prek running the original hook implementations at 1165 milliseconds. prek takes 24 percent less time. Lower is better.</desc>
+  <desc id="desc">Horizontal bars compare pre-commit at 1945 milliseconds with prek running the original hook implementations at 1571 milliseconds. Lower is better.</desc>
   <style>
     text {
       fill: #0f172a;
@@ -37,17 +37,17 @@
   <line class="axis" x1="250" y1="200" x2="810" y2="200" />
 
   <text class="label" x="20" y="105">pre-commit</text>
-  <rect class="reference" x="250" y="82" width="429" height="32" rx="4" />
-  <text class="value" x="691" y="104">1,532 ms · reference</text>
+  <rect class="reference" x="250" y="82" width="340" height="32" rx="4" />
+  <text class="value" x="602" y="104">1,945 ms · reference</text>
 
   <text class="label" x="20" y="165">prek: no fast path</text>
-  <rect class="baseline" x="250" y="142" width="326" height="32" rx="4" />
-  <text class="value" x="588" y="164">1,165 ms · 24% lower</text>
+  <rect class="baseline" x="250" y="142" width="275" height="32" rx="4" />
+  <text class="value" x="537" y="164">1,571 ms · 19% lower</text>
 
   <text class="tick" x="250" y="221" text-anchor="middle">0</text>
-  <text class="tick" x="390" y="221" text-anchor="middle">500</text>
-  <text class="tick" x="530" y="221" text-anchor="middle">1,000</text>
-  <text class="tick" x="670" y="221" text-anchor="middle">1,500</text>
-  <text class="tick" x="810" y="221" text-anchor="middle">2,000 ms</text>
+  <text class="tick" x="390" y="221" text-anchor="middle">800</text>
+  <text class="tick" x="530" y="221" text-anchor="middle">1,600</text>
+  <text class="tick" x="670" y="221" text-anchor="middle">2,400</text>
+  <text class="tick" x="810" y="221" text-anchor="middle">3,200 ms</text>
   <text class="note" x="20" y="253">Same hooks and Python implementations; prek becomes the baseline for the next step</text>
 </svg>
