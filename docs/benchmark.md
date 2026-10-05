@@ -239,11 +239,11 @@ global state.
 ## Reproduce the benchmark
 
 The complete fixture generator, pinned hook configurations, hyperfine commands,
-and [2026-10-05 rerun samples](https://github.com/prek-ci/benchmarks/tree/c15c35551248f9fb88e52af0f0e2d516b4b8049f/results/2026-10-05-rerun)
+and [2026-10-05 samples](https://github.com/prek-ci/benchmarks/tree/18fee36504fca68458dcd0ef488e2dae45ce2f8a/results/2026-10-05)
 are published in
 [`prek-ci/benchmarks`](https://github.com/prek-ci/benchmarks).
 The reproduction commands below pin that snapshot at commit
-[`c15c355`](https://github.com/prek-ci/benchmarks/tree/c15c35551248f9fb88e52af0f0e2d516b4b8049f).
+[`18fee36`](https://github.com/prek-ci/benchmarks/tree/18fee36504fca68458dcd0ef488e2dae45ce2f8a).
 The generator recreates all three fixture layouts and verifies their Git tree
 hashes, so a change to any workload file is detected before measurements begin.
 
@@ -252,7 +252,7 @@ With Git, uv, hyperfine, and Python 3 installed, run:
 ```console
 git clone https://github.com/prek-ci/benchmarks.git
 cd benchmarks
-git checkout c15c35551248f9fb88e52af0f0e2d516b4b8049f
+git checkout 18fee36504fca68458dcd0ef488e2dae45ce2f8a
 PREK_VERSION=0.5.5 ./scripts/setup-tools.sh
 PATH="$PWD/.tools/pre-commit/bin:$PATH" ./benchmark.sh
 ```
@@ -274,7 +274,7 @@ and relative changes on your own hardware.
 
 ## Methodology
 
-- Date: 2026-10-05 (rerun)
+- Date: 2026-10-05
 - OS: macOS 27.0
 - CPU: Apple M3 Pro, 12 cores
 - RAM: 18 GiB
