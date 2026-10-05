@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 400" role="img" aria-labelledby="title desc">
+  <title id="title">Framework-dominated runtime with no-op hooks</title>
+  <desc id="desc">Horizontal bars compare one no-op hook at 224 milliseconds for pre-commit and 68 milliseconds for prek, and ten sequential no-op hooks at 458 milliseconds for pre-commit and 255 milliseconds for prek. Lower is better.</desc>
+  <style>
+    text {
+      fill: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .title { font-size: 20px; font-weight: 600; }
+    .subtitle, .tick, .note { fill: #475569; }
+    .subtitle { font-size: 13px; }
+    .label { font-size: 14px; font-weight: 600; }
+    .value { font-size: 13px; }
+    .tick, .note { font-size: 12px; }
+    .grid { stroke: #cbd5e1; stroke-width: 1; }
+    .axis, .divider { stroke: #94a3b8; stroke-width: 1; }
+    .divider { opacity: 0.55; }
+    .reference { fill: #94a3b8; }
+    .prek { fill: #6366f1; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e2e8f0; }
+      .subtitle, .tick, .note { fill: #a8b3cf; }
+      .grid { stroke: #334155; }
+      .axis, .divider { stroke: #64748b; }
+      .reference { fill: #94a3b8; }
+      .prek { fill: #818cf8; }
+    }
+  </style>
+
+  <text class="title" x="20" y="28">Framework overhead with no-op hooks</text>
+  <text class="subtitle" x="20" y="51">Median wall time in milliseconds; same repository with 960 workload files; lower is better</text>
+
+  <line class="grid" x1="250" y1="70" x2="250" y2="322" />
+  <line class="grid" x1="350" y1="70" x2="350" y2="322" />
+  <line class="grid" x1="450" y1="70" x2="450" y2="322" />
+  <line class="grid" x1="550" y1="70" x2="550" y2="322" />
+  <line class="grid" x1="650" y1="70" x2="650" y2="322" />
+  <line class="grid" x1="750" y1="70" x2="750" y2="322" />
+  <line class="divider" x1="20" y1="190" x2="880" y2="190" />
+  <line class="axis" x1="250" y1="322" x2="750" y2="322" />
+
+  <text class="label" x="20" y="104">1 hook · pre-commit</text>
+  <rect class="reference" x="250" y="82" width="224" height="30" rx="4" />
+  <text class="value" x="486" y="103">224 ms</text>
+
+  <text class="label" x="20" y="154">1 hook · prek</text>
+  <rect class="prek" x="250" y="132" width="68" height="30" rx="4" />
+  <text class="value" x="330" y="153">68 ms · 3.30x faster</text>
+
+  <text class="label" x="20" y="234">10 hooks · pre-commit</text>
+  <rect class="reference" x="250" y="212" width="458" height="30" rx="4" />
+  <text class="value" x="720" y="233">458 ms</text>
+
+  <text class="label" x="20" y="284">10 hooks · prek</text>
+  <rect class="prek" x="250" y="262" width="255" height="30" rx="4" />
+  <text class="value" x="517" y="283">255 ms · 1.80x faster</text>
+
+  <text class="tick" x="250" y="343" text-anchor="middle">0</text>
+  <text class="tick" x="350" y="343" text-anchor="middle">100</text>
+  <text class="tick" x="450" y="343" text-anchor="middle">200</text>
+  <text class="tick" x="550" y="343" text-anchor="middle">300</text>
+  <text class="tick" x="650" y="343" text-anchor="middle">400</text>
+  <text class="tick" x="750" y="343" text-anchor="middle">500 ms</text>
+  <text class="note" x="20" y="380">Pooled median of 30 runs (forward and reverse command order)</text>
+</svg>
