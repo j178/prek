@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.5.5
+
+Released on 2026-10-05.
+
+### Enhancements
+
+- Add Nushell completion generation ([#2785](https://github.com/j178/prek/pull/2785))
+- Add `ppc64le` wheel and binary builds ([#2809](https://github.com/j178/prek/pull/2809))
+
+### Performance
+
+- Avoid JSON imports when querying Python interpreters ([#2790](https://github.com/j178/prek/pull/2790))
+- Avoid duplicate diffs after hooks rewrite files ([#2815](https://github.com/j178/prek/pull/2815))
+- Batch file reads in shebang checks ([#2793](https://github.com/j178/prek/pull/2793))
+- Check cached hook environments concurrently ([#2797](https://github.com/j178/prek/pull/2797))
+- Overlap Git discovery with worktree status checks ([#2821](https://github.com/j178/prek/pull/2821))
+- Query staged additions only for case conflicts ([#2802](https://github.com/j178/prek/pull/2802))
+- Reduce worker overhead in XML and pygrep checks ([#2789](https://github.com/j178/prek/pull/2789))
+- Reuse Git worktree state during hook startup ([#2787](https://github.com/j178/prek/pull/2787))
+- Reuse intent-to-add paths when saving unstaged changes ([#2788](https://github.com/j178/prek/pull/2788))
+- Run Git queries concurrently for case-conflict checks ([#2792](https://github.com/j178/prek/pull/2792))
+- Share Bun and Deno version queries across environments ([#2795](https://github.com/j178/prek/pull/2795))
+- Share Lua runtime probes across hook environments ([#2796](https://github.com/j178/prek/pull/2796))
+- Share Ruby version queries across hook environments ([#2794](https://github.com/j178/prek/pull/2794))
+- Share mise version queries across hook environments ([#2798](https://github.com/j178/prek/pull/2798))
+- Skip site initialization in Python interpreter probes ([#2822](https://github.com/j178/prek/pull/2822))
+- Skip untracked files in destroyed symlink checks ([#2799](https://github.com/j178/prek/pull/2799))
+- Skip unused file input for always-run hooks ([#2813](https://github.com/j178/prek/pull/2813))
+
+### Bug fixes
+
+- Preserve staged and unstaged changes on conflicted stash restore ([#2803](https://github.com/j178/prek/pull/2803))
+- Default missing `core.fileMode` in shebang checks ([#2832](https://github.com/j178/prek/pull/2832))
+- Match protected branch patterns from the start ([#2829](https://github.com/j178/prek/pull/2829))
+- Normalize explicit paths in shebang index checks ([#2831](https://github.com/j178/prek/pull/2831))
+- Preserve empty `trailing-whitespace` character sets ([#2830](https://github.com/j178/prek/pull/2830))
+- Reject empty files in `check-json` ([#2826](https://github.com/j178/prek/pull/2826))
+- Reject trailing data in `check-json` ([#2828](https://github.com/j178/prek/pull/2828))
+- Round up file sizes in `check-added-large-files` ([#2827](https://github.com/j178/prek/pull/2827))
+
+### Documentation
+
+- Redesign the prek badge and refresh logo details ([#2818](https://github.com/j178/prek/pull/2818))
+
+### Contributors
+
+- @imphil
+- @j178
+
 ## 0.5.4
 
 Released on 2026-09-28.
