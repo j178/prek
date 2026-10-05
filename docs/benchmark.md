@@ -238,37 +238,19 @@ global state.
 
 ## Reproduce the benchmark
 
-The complete fixture generator, pinned hook configurations, hyperfine commands,
-and [current results](https://github.com/prek-ci/benchmarks/blob/b0fc0f941aa61ad7773fc8df4a92f08f3682649b/results/2026-10-05/summary.md)
-are published in
+The scripts and results are in
 [`prek-ci/benchmarks`](https://github.com/prek-ci/benchmarks).
-The reproduction commands below pin that snapshot at commit
-[`b0fc0f9`](https://github.com/prek-ci/benchmarks/tree/b0fc0f941aa61ad7773fc8df4a92f08f3682649b).
-The generator recreates all three fixture layouts and verifies their Git tree
-hashes, so a change to any workload file is detected before measurements begin.
-
-With Git, uv, hyperfine, and Python 3 installed, run:
+With Git, uv, and hyperfine installed, run:
 
 ```console
 git clone https://github.com/prek-ci/benchmarks.git
 cd benchmarks
 git checkout b0fc0f941aa61ad7773fc8df4a92f08f3682649b
-PREK_VERSION=0.5.5 ./scripts/setup-tools.sh
+./scripts/setup-tools.sh
 PATH="$PWD/.tools/pre-commit/bin:$PATH" ./benchmark.sh
 ```
 
-With `PREK_VERSION=0.5.5`, `setup-tools.sh` installs the prek 0.5.5 binary wheel
-and pre-commit 4.6.1 in isolated tool environments using Python 3.14.6.
-Adding the pre-commit environment to `PATH` makes that Python version available
-to both runners when they prepare hook environments. `benchmark.sh` creates a
-fresh 960-file fixture, warms both runner caches, executes the framework and
-runtime-ladder benchmarks in both command orders, and measures a clean
-`git diff`. It writes a pooled-median summary to
-`results/local-<timestamp>/summary.md`.
-
-These results are not a controlled version-to-version comparison. Expect
-absolute times to vary across machines; compare the ordering and relative
-changes on your own hardware.
+Results are written to `results/local-<timestamp>/summary.md`.
 
 ## Methodology
 
