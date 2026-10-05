@@ -126,9 +126,10 @@ trait LanguageBackend: Sync {
         self.prepare_execution_environment(hook, hook.work_dir(), &mut environment)
             .await?;
         let entry = self.prepare_hook_entry(store, hook, &environment)?;
+        let command = resolve_command(entry.to_vec(), environment.path(hook), hook.work_dir());
         let run = async |batch: &[&Path]| {
             let output = environment
-                .command(hook, hook.work_dir(), &entry)?
+                .command(hook, hook.work_dir(), &command)?
                 .args(&hook.args)
                 .file_args(batch)
                 .stdin(Stdio::null())
@@ -215,13 +216,13 @@ impl ExecutionEnvironment {
         self
     }
 
+    /// Build a command from resolved arguments and apply the hook's execution environment.
     pub(crate) fn command(
         &self,
         hook: &InstalledHook,
         cwd: &Path,
         command: &[OsString],
     ) -> Result<Cmd> {
-        let command = resolve_command(command.to_vec(), self.path(hook), cwd);
         let (program, args) = command.split_first().context("Command cannot be empty")?;
         let mut cmd = Cmd::new(program);
         cmd.current_dir(cwd)
@@ -630,8 +631,9 @@ impl Language {
         self.backend()
             .prepare_execution_environment(hook, cwd, &mut environment)
             .await?;
+        let command = resolve_command(command.to_vec(), environment.path(hook), cwd);
         environment
-            .command(hook, cwd, command)?
+            .command(hook, cwd, &command)?
             .status()
             .await
             .map_err(Into::into)
