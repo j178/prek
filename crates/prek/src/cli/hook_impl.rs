@@ -114,31 +114,46 @@ pub(crate) async fn hook_impl(
         );
     }
 
-    let Some(mut run_args) = to_run_args(hook_type, &args, &stdin).await? else {
-        return Ok(legacy_code.into());
-    };
-    run_args.includes = includes;
-    run_args.skips = skips;
+    let runs = hook_run_options(hook_type, &args, &stdin).await?;
+    let multiple_refs = runs.len() > 1;
+    for mut run_args in runs {
+        if multiple_refs
+            && let (Some(local), Some(remote)) =
+                (&run_args.extra.local_branch, &run_args.extra.remote_branch)
+        {
+            writeln!(
+                printer.stdout(),
+                "Running pre-push hooks for `{}` -> `{}`",
+                local.cyan(),
+                remote.cyan(),
+            )?;
+        }
+        run_args.includes.clone_from(&includes);
+        run_args.skips.clone_from(&skips);
 
-    let status = cli::run(
-        store,
-        config,
-        RunArgs {
-            options: run_args,
-            stage: Some(hook_type.into()),
-            ..RunArgs::default()
-        },
-        false,
-        false,
-        printer,
-    )
-    .await?;
+        // Each run may change to the workspace root. Keep relative paths anchored
+        // to the original directory for every ref.
+        std::env::set_current_dir(&*CWD)?;
+        let status = cli::run(
+            store,
+            config.clone(),
+            RunArgs {
+                options: run_args,
+                stage: Some(hook_type.into()),
+                ..RunArgs::default()
+            },
+            false,
+            false,
+            printer,
+        )
+        .await?;
 
-    Ok(if !matches!(status, ExitStatus::Success) {
-        status
-    } else {
-        legacy_code.into()
-    })
+        if !matches!(status, ExitStatus::Success) {
+            return Ok(status);
+        }
+    }
+
+    Ok(legacy_code.into())
 }
 
 fn hook_num_args(hook_type: HookType) -> RangeInclusive<usize> {
@@ -231,29 +246,21 @@ async fn run_legacy(
         .unwrap_or(1))
 }
 
-async fn to_run_args(
+async fn hook_run_options(
     hook_type: HookType,
     args: &[OsString],
     stdin: &[u8],
-) -> Result<Option<RunOptions>> {
+) -> Result<Vec<RunOptions>> {
     let mut run_args = RunOptions::default();
 
     match hook_type {
         HookType::PrePush => {
-            // https://git-scm.com/docs/githooks#_pre_push
-            run_args.extra.remote_name = Some(args[0].to_string_lossy().into_owned());
-            run_args.extra.remote_url = Some(args[1].to_string_lossy().into_owned());
-
-            if let Some(push_info) = parse_pre_push_info(&args[0].to_string_lossy(), stdin).await? {
-                run_args.file_selection.from_ref = push_info.from_ref;
-                run_args.file_selection.to_ref = push_info.to_ref;
-                run_args.file_selection.all_files = push_info.all_files;
-                run_args.extra.remote_branch = push_info.remote_branch;
-                run_args.extra.local_branch = push_info.local_branch;
-            } else {
-                // Nothing to push
-                return Ok(None);
-            }
+            return pre_push_run_options(
+                &args[0].to_string_lossy(),
+                &args[1].to_string_lossy(),
+                stdin,
+            )
+            .await;
         }
         HookType::CommitMsg => {
             run_args.extra.commit_msg_filename = Some(args[0].to_string_lossy().into_owned());
@@ -286,32 +293,25 @@ async fn to_run_args(
         HookType::PostCommit | HookType::PreMergeCommit | HookType::PreCommit => {}
     }
 
-    Ok(Some(run_args))
+    Ok(vec![run_args])
 }
 
-#[derive(Debug)]
-struct PushInfo {
-    from_ref: Option<String>,
-    to_ref: Option<String>,
-    all_files: bool,
-    remote_branch: Option<String>,
-    local_branch: Option<String>,
-}
-
-async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<PushInfo>> {
+async fn pre_push_run_options(
+    remote_name: &str,
+    remote_url: &str,
+    stdin: &[u8],
+) -> Result<Vec<RunOptions>> {
     let buffer = String::from_utf8_lossy(stdin);
+    let mut runs = Vec::new();
 
+    // https://git-scm.com/docs/githooks#_pre_push
     for line in buffer.lines() {
-        let parts: Vec<&str> = line.rsplitn(4, ' ').collect();
-        if parts.len() != 4 {
+        let Some((remote_sha, remote_branch, local_sha, local_branch)) =
+            line.rsplitn(4, ' ').collect_tuple()
+        else {
             // Ignore malformed lines from stdin; a later valid line may still describe a push.
             continue;
-        }
-
-        let local_branch = parts[3];
-        let local_sha = parts[2];
-        let remote_branch = parts[1];
-        let remote_sha = parts[0];
+        };
 
         // A zero local SHA means this push deletes the remote ref. There is no local
         // target commit to diff, so it contributes no files to check.
@@ -319,67 +319,41 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
             continue;
         }
 
-        if !remote_sha.bytes().all(|b| b == b'0') && git::rev_exists(remote_sha).await? {
-            if git::is_ancestor(remote_sha, local_sha).await? {
-                // Normal update to an existing remote ref: the previous remote tip is
-                // an ancestor of the new local tip, so diff exactly the newly pushed range.
-                return Ok(Some(PushInfo {
-                    from_ref: Some(remote_sha.to_string()),
-                    to_ref: Some(local_sha.to_string()),
-                    all_files: false,
-                    remote_branch: Some(remote_branch.to_string()),
-                    local_branch: Some(local_branch.to_string()),
-                }));
+        let from_ref = if !remote_sha.bytes().all(|b| b == b'0')
+            && git::rev_exists(remote_sha).await?
+            && git::is_ancestor(remote_sha, local_sha).await?
+        {
+            Some(remote_sha.to_string())
+        } else {
+            // New refs, missing remote objects, and rebased force-pushes use the
+            // parent of the first remote-unknown commit to exclude upstream changes.
+            let ancestors = git::ancestors_not_in_remote(local_sha, remote_name).await?;
+            let Some(first_ancestor) = ancestors.first() else {
+                continue;
+            };
+            let roots = git::root_commits(local_sha).await?;
+            if roots.contains(first_ancestor) {
+                // A root push has no diff base and checks the full tracked tree.
+                None
+            } else if let Some(parent) = git::parent_commit(first_ancestor).await? {
+                Some(parent)
+            } else {
+                continue;
             }
+        };
 
-            // The old remote tip exists locally but is not in the new local history,
-            // which is the usual rebase/force-push shape. Do not diff against it:
-            // fall through to the new-branch logic below to derive a PR-like base.
-        }
-
-        // New remote ref, missing old remote object, or rebased force-push: find the
-        // commits reachable from the local tip that this remote cannot already reach.
-        let ancestors = git::ancestors_not_in_remote(local_sha, remote_name).await?;
-        if ancestors.is_empty() {
-            // The local tip is already reachable from the remote, so this line does
-            // not introduce files that need pre-push checks.
-            continue;
-        }
-
-        let first_ancestor = &ancestors[0];
-        let roots = git::root_commits(local_sha).await?;
-
-        if roots.contains(first_ancestor) {
-            // The first commit being pushed is a root commit. There is no parent to
-            // use as from_ref, so run hooks over the full tracked tree.
-            return Ok(Some(PushInfo {
-                from_ref: None,
-                to_ref: Some(local_sha.to_string()),
-                all_files: true,
-                remote_branch: Some(remote_branch.to_string()),
-                local_branch: Some(local_branch.to_string()),
-            }));
-        }
-
-        // Use the parent of the first remote-unknown commit as the diff base. For
-        // rebased force-pushes, this usually resolves to the updated default branch
-        // base, matching the files a pull request would show.
-        if let Some(source) = git::parent_commit(first_ancestor).await? {
-            return Ok(Some(PushInfo {
-                from_ref: Some(source),
-                to_ref: Some(local_sha.to_string()),
-                all_files: false,
-                remote_branch: Some(remote_branch.to_string()),
-                local_branch: Some(local_branch.to_string()),
-            }));
-        }
-
-        // A non-root commit should have a parent. If Git cannot provide one, ignore
-        // this line and allow any later pushed ref line to determine the hook range.
+        let mut run_args = RunOptions::default();
+        run_args.file_selection.all_files = from_ref.is_none();
+        run_args.file_selection.from_ref = from_ref;
+        run_args.file_selection.to_ref = Some(local_sha.to_string());
+        run_args.extra.remote_branch = Some(remote_branch.to_string());
+        run_args.extra.local_branch = Some(local_branch.to_string());
+        run_args.extra.remote_name = Some(remote_name.to_string());
+        run_args.extra.remote_url = Some(remote_url.to_string());
+        runs.push(run_args);
     }
 
-    // Nothing to push
-    Ok(None)
+    Ok(runs)
 }
 
 fn format_expected_args(range: RangeInclusive<usize>) -> String {

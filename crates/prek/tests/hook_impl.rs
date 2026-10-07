@@ -198,6 +198,291 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hook_impl_pre_push_multiple_refs() -> anyhow::Result<()> {
+    let context = pre_push_context()?;
+
+    context.git().run(["checkout", "-b", "a"]);
+    context.write_file("a.txt", "a");
+    context.git().add(".").commit("Add a");
+    context.git().run(["push", "origin", "a:remote-a"]);
+    context.write_file("a.txt", "updated a");
+    context.git().add(".").commit("Update a");
+
+    context.git().run(["checkout", "-b", "b"]);
+    context.write_file("b.txt", "b");
+    context.git().add(".").commit("Add b");
+    context.git().branch("c");
+    context
+        .install()
+        .args(["--hook-type", "pre-push"])
+        .assert()
+        .success();
+
+    // A failure on the second ref must block the entire push and stop before c.
+    cmd_snapshot!(context, context.git().command()
+        .args(["push", "--quiet", "origin", "a:remote-a", "b", "c"])
+        .env("FAIL_REF", "refs/heads/b"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running pre-push hooks for `refs/heads/a` -> `refs/heads/remote-a`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/heads/a -> refs/heads/remote-a
+      FROM_REF: Add a
+      TO_REF: Update a
+      ORIGIN: Add a
+      SOURCE: Update a
+      files: a.txt
+    Running pre-push hooks for `refs/heads/b` -> `refs/heads/b`
+    push-info................................................................Failed
+    - hook id: push-info
+    - duration: [TIME]
+    - exit code: 1
+
+      refs/heads/b -> refs/heads/b
+      FROM_REF: Add a
+      TO_REF: Add b
+      ORIGIN: Add a
+      SOURCE: Add b
+      files: a.txt, b.txt
+
+    ----- stderr -----
+    error: failed to push some refs to '[HOME]/remote.git'
+    "#);
+
+    cmd_snapshot!(context, context.git_at(context.home_dir().join("remote.git")).command()
+        .args(["for-each-ref", "--format=%(refname) %(subject)"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    refs/heads/master Initial commit
+    refs/heads/remote-a Add a
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context, context.git().command()
+        .args(["push", "--quiet", "origin", "a:remote-a", "b", "c"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running pre-push hooks for `refs/heads/a` -> `refs/heads/remote-a`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/heads/a -> refs/heads/remote-a
+      FROM_REF: Add a
+      TO_REF: Update a
+      ORIGIN: Add a
+      SOURCE: Update a
+      files: a.txt
+    Running pre-push hooks for `refs/heads/b` -> `refs/heads/b`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/heads/b -> refs/heads/b
+      FROM_REF: Add a
+      TO_REF: Add b
+      ORIGIN: Add a
+      SOURCE: Add b
+      files: a.txt, b.txt
+    Running pre-push hooks for `refs/heads/c` -> `refs/heads/c`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/heads/c -> refs/heads/c
+      FROM_REF: Add a
+      TO_REF: Add b
+      ORIGIN: Add a
+      SOURCE: Add b
+      files: a.txt, b.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn hook_impl_pre_push_tags_after_branch() -> anyhow::Result<()> {
+    let context = pre_push_context()?;
+    context.write_file("a.txt", "a");
+    context.git().add(".").commit("Update master");
+
+    // Both kinds of tag introduce an unrelated root after a normal branch range.
+    context.git().run(["checkout", "--orphan", "orphan"]);
+    context.git().commit("Orphan root");
+    context.git().run(["tag", "lightweight"]);
+    context.git().tag("annotated");
+    context.git().checkout("master");
+    context
+        .install()
+        .args(["--hook-type", "pre-push"])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context, context.git().command()
+        .args(["push", "--quiet", "origin", "master", "--tags"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running pre-push hooks for `refs/heads/master` -> `refs/heads/master`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/heads/master -> refs/heads/master
+      FROM_REF: Initial commit
+      TO_REF: Update master
+      ORIGIN: Initial commit
+      SOURCE: Update master
+      files: a.txt
+    Running pre-push hooks for `refs/tags/annotated` -> `refs/tags/annotated`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/tags/annotated -> refs/tags/annotated
+      FROM_REF: <none>
+      TO_REF: Orphan root
+      ORIGIN: <none>
+      SOURCE: Orphan root
+      files: .pre-commit-config.yaml, a.txt, push_info.py
+    Running pre-push hooks for `refs/tags/lightweight` -> `refs/tags/lightweight`
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/tags/lightweight -> refs/tags/lightweight
+      FROM_REF: <none>
+      TO_REF: Orphan root
+      ORIGIN: <none>
+      SOURCE: Orphan root
+      files: .pre-commit-config.yaml, a.txt, push_info.py
+
+    ----- stderr -----
+    "#);
+
+    // A tag on a commit already reachable through origin/master adds no commits.
+    context.git().tag("already-pushed");
+    cmd_snapshot!(context, context.git().command()
+        .args(["push", "--quiet", "origin", "already-pushed"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context, context.git().command()
+        .args(["push", "--quiet", "origin", "--delete", "annotated", "lightweight"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn hook_impl_pre_push_relative_config() -> anyhow::Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc! {r"
+        repos:
+        - repo: local
+          hooks:
+          - id: check
+            name: check
+            language: system
+            entry: echo checked
+        "})
+        .init_git();
+    context.git().commit("Initial commit");
+    let from = context.git().rev_parse("HEAD")?;
+    context.write_file("a.txt", "a");
+    context.git().add(".").commit("Add a");
+    let to = context.git().rev_parse("HEAD")?;
+    fs_err::create_dir(context.work_dir().join("subdir"))?;
+
+    // Each run changes to the workspace root, but --config is relative to --cd.
+    let stdin =
+        format!("refs/heads/a {to} refs/heads/a {from}\nrefs/heads/b {to} refs/heads/b {from}\n");
+    cmd_snapshot!(context, context.command()
+        .args(["--cd", "subdir", "--config", "../.pre-commit-config.yaml",
+            "hook-impl", "--hook-type", "pre-push", "--", "origin", "unused"])
+        .pass_stdin(stdin), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Using config file: ../.pre-commit-config.yaml
+    Running pre-push hooks for `refs/heads/a` -> `refs/heads/a`
+    check....................................................................Passed
+    Running pre-push hooks for `refs/heads/b` -> `refs/heads/b`
+    check....................................................................Passed
+
+    ----- stderr -----
+    "#);
+    Ok(())
+}
+
+fn pre_push_context() -> anyhow::Result<TestEnv> {
+    let context = TestEnv::new()
+        .with_config(indoc! {r"
+        repos:
+        - repo: local
+          hooks:
+          - id: push-info
+            name: push-info
+            language: system
+            entry: python3 push_info.py
+            stages: [pre-push]
+            always_run: true
+            verbose: true
+        "})
+        .with_file("push_info.py", indoc! {r#"
+            import os
+            import subprocess
+            import sys
+
+            def subject(ref):
+                if ref is None:
+                    return "<none>"
+                return subprocess.check_output(
+                    ["git", "log", "-1", "--format=%s", ref], text=True,
+                ).strip()
+
+            print(os.environ["PRE_COMMIT_LOCAL_BRANCH"], "->", os.environ["PRE_COMMIT_REMOTE_BRANCH"])
+            for name in ("FROM_REF", "TO_REF", "ORIGIN", "SOURCE"):
+                print(name + ":", subject(os.environ.get("PRE_COMMIT_" + name)))
+            print("files:", ", ".join(sorted(sys.argv[1:])))
+            sys.exit(os.environ["PRE_COMMIT_REMOTE_BRANCH"] == os.environ.get("FAIL_REF"))
+        "#})
+        .init_git();
+    context.git().add(".").commit("Initial commit");
+
+    let remote = context.home_dir().join("remote.git");
+    fs_err::create_dir_all(&remote)?;
+    context.git_at(&remote).run(["init", "--bare"]);
+    context
+        .git()
+        .command()
+        .args(["remote", "add", "origin"])
+        .arg(remote)
+        .assert()
+        .success();
+    context.git().run(["push", "origin", "master"]);
+    Ok(context)
+}
+
+#[test]
 fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
     let context = TestEnv::new().init_git();
 
