@@ -198,6 +198,80 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hook_impl_pre_push_uses_first_ref_with_commits() -> anyhow::Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc! {r"
+        repos:
+        - repo: local
+          hooks:
+          - id: push-info
+            name: push-info
+            language: system
+            entry: python3 push_info.py
+            stages: [pre-push]
+            always_run: true
+            verbose: true
+        "})
+        .with_file("push_info.py", indoc! {r#"
+            import os
+            import subprocess
+            import sys
+
+            print(os.environ["PRE_COMMIT_LOCAL_BRANCH"], "->", os.environ["PRE_COMMIT_REMOTE_BRANCH"])
+            for name in ("FROM_REF", "TO_REF"):
+                subject = subprocess.check_output(
+                    ["git", "log", "-1", "--format=%s", os.environ["PRE_COMMIT_" + name]],
+                    text=True,
+                ).strip()
+                print(name + ":", subject)
+            print("files:", ", ".join(sorted(sys.argv[1:])))
+        "#})
+        .init_git();
+    context.git().commit("Initial commit");
+    let base = context.git().rev_parse("HEAD")?;
+    context
+        .git()
+        .run(["update-ref", "refs/remotes/origin/master", &base]);
+
+    context.write_file("a.txt", "a");
+    context.git().add(".").commit("Add a").branch("a");
+    let a = context.git().rev_parse("HEAD")?;
+    context.write_file("b.txt", "b");
+    context.git().add(".").commit("Add b").branch("b");
+    let b = context.git().rev_parse("HEAD")?;
+
+    // Deletions and refs with no new commits must not prevent a later ref from
+    // being checked. Of the two remaining refs, only `a` supplies hook input.
+    let zero = "0".repeat(base.len());
+    let stdin = format!(
+        "malformed\n\
+         (delete) {zero} refs/heads/deleted {base}\n\
+         refs/heads/known {base} refs/heads/known {zero}\n\
+         refs/heads/a {a} refs/heads/remote-a {zero}\n\
+         refs/heads/b {b} refs/heads/b {zero}\n"
+    );
+    cmd_snapshot!(context, context.command()
+        .args(["hook-impl", "--hook-type", "pre-push", "--", "origin", "unused"])
+        .pass_stdin(stdin), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    push-info................................................................Passed
+    - hook id: push-info
+    - duration: [TIME]
+
+      refs/heads/a -> refs/heads/remote-a
+      FROM_REF: Initial commit
+      TO_REF: Add a
+      files: a.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
     let context = TestEnv::new().init_git();
 
