@@ -160,7 +160,7 @@ variables when the selected Git stage supplies the corresponding value:
 | `PRE_COMMIT_COMMIT_MSG_SOURCE` | The commit-message source supplied by Git |
 | `PRE_COMMIT_COMMIT_OBJECT_NAME` | The commit object supplied to `prepare-commit-msg` |
 | `PRE_COMMIT_PRE_REBASE_UPSTREAM`, `PRE_COMMIT_PRE_REBASE_BRANCH` | `pre-rebase` arguments |
-| `PRE_COMMIT_LOCAL_BRANCH`, `PRE_COMMIT_REMOTE_BRANCH` | `pre-push` branch values |
+| `PRE_COMMIT_LOCAL_BRANCH`, `PRE_COMMIT_REMOTE_BRANCH` | `pre-push` local and remote refs, including branches and tags |
 | `PRE_COMMIT_REMOTE_NAME`, `PRE_COMMIT_REMOTE_URL` | `pre-push` remote values |
 | `PRE_COMMIT_CHECKOUT_TYPE` | The checkout flag supplied to `post-checkout` |
 | `PRE_COMMIT_SQUASH_MERGE` | Set to `1` for a squash merge |

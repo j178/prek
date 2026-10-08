@@ -759,6 +759,21 @@ Stages with no repository file input do not have candidate filenames for
 | `pre-rebase` | Before a rebase starts. | No repository file input. |
 | `prepare-commit-msg` | Before the commit message editor opens or before the commit message is finalized. | Git's commit message file, not repository file paths. |
 
+### Pre-push
+
+!!! warning "Only the first ref is checked, using the current working tree"
+
+    When a push updates multiple branches or tags, `prek` runs hooks only for the
+    first ref with commits to check. Later refs are not checked.
+
+    `prek` does not check out that ref or verify that it matches the current
+    checkout. Hooks that read files may therefore check the wrong contents or
+    miss files that are absent from the working tree, even for a single-ref push.
+
+    For file checks on a specific commit, use a clean checkout of that commit.
+    Hooks that inspect Git objects using the supplied refs, such as commit
+    signature checks, can run correctly regardless of the current checkout.
+
 ## Common hook options
 
 These keys can appear on hooks (remote/local/builtin/meta), subject to the restrictions above.
