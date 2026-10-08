@@ -8,6 +8,7 @@ mod execution;
 mod files;
 mod git;
 mod include_deleted;
+mod jujutsu;
 mod modifications;
 mod output;
 mod repositories;

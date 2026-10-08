@@ -18,8 +18,12 @@ use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
+// `try-repo` always targets an external repository (a local path or the shadow copy),
+// never the current workspace, so its Git queries must be isolated from any ambient
+// repository environment (such as a Jujutsu workspace's backing Git store).
+
 async fn get_head_rev(repo: &Path) -> Result<String> {
-    let head_rev = git::git_cmd()?
+    let head_rev = git::git_cmd_isolated()?
         .arg("rev-parse")
         .arg("HEAD")
         .current_dir(repo)
@@ -32,13 +36,13 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
 
 async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
     let shadow = tmp_dir.join("shadow-repo");
-    git::git_cmd()?
+    git::git_cmd_isolated()?
         .arg("clone")
         .arg(repo_path)
         .arg(&shadow)
         .output()
         .await?;
-    git::git_cmd()?
+    git::git_cmd_isolated()?
         .arg("checkout")
         .arg(head_rev)
         .arg("-b")
@@ -50,9 +54,9 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
     let index_path = shadow.join(".git/index");
     let objects_path = shadow.join(".git/objects");
 
-    let staged_files = git::staged_files(repo_path, false).await?;
+    let staged_files = git::staged_files_isolated(repo_path, false).await?;
     if !staged_files.is_empty() {
-        git::git_cmd()?
+        git::git_cmd_isolated()?
             .arg("add")
             .arg("--")
             .file_args(staged_files.iter().map(|file| &file.path))
@@ -63,7 +67,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
             .await?;
     }
 
-    let mut add_u_cmd = git::git_cmd()?;
+    let mut add_u_cmd = git::git_cmd_isolated()?;
     add_u_cmd
         .arg("add")
         .arg("--update") // Update tracked files
@@ -73,7 +77,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .output()
         .await?;
 
-    git::git_cmd()?
+    git::git_cmd_isolated()?
         .arg("commit")
         .arg("-m")
         .arg("Temporary commit by prek try-repo")
@@ -129,7 +133,7 @@ async fn prepare_repo<'a>(
         get_head_rev(repo_path).await?
     } else {
         // For remote repositories, use ls-remote
-        let head_rev = git::git_cmd()?
+        let head_rev = git::git_cmd_isolated()?
             .arg("ls-remote")
             .arg("--exit-code")
             .arg(runtime_source.as_ref())
