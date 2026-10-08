@@ -6,7 +6,7 @@ mod common;
 fn list_builtins_defaults_to_verbose_output() {
     let context = TestEnv::new();
 
-    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @"
+    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -46,9 +46,6 @@ fn list_builtins_defaults_to_verbose_output() {
 
     check-signed-commit
       Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
-      flags:
-            --allow-status <CODE>  Signature status code to accept (repeatable): G, B, U, X, Y, R, E, or N
-                                   [default: G U]
 
     check-symlinks
       Checks for symlinks which do not point to anything.
@@ -155,7 +152,7 @@ fn list_builtins_defaults_to_verbose_output() {
 
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]

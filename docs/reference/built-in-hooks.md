@@ -615,19 +615,7 @@ Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
 
 **Supported arguments**
 
-- `--allow-status <CODE>` (repeatable, default: `G`, `U`): accept commits whose signature
-  status is one of these codes. Codes are Git's own `%G?` values:
-
-    | Code | Meaning |
-    | -- | -- |
-    | `G` | good signature |
-    | `B` | bad signature |
-    | `U` | good signature, unknown validity (untrusted) |
-    | `X` | good signature, but expired |
-    | `Y` | good signature, made with an expired key |
-    | `R` | good signature, made with a revoked key |
-    | `E` | signature cannot be checked, e.g. missing public key |
-    | `N` | no signature |
+- None.
 
 **Behavior / caveats**
 
@@ -636,7 +624,9 @@ Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
 - Checks the commits being pushed. Root/orphan pushes check the entire branch history.
 - Manual runs check only `HEAD`.
 - Merge commits are skipped.
-- Signature verification uses your local Git GPG/SSH configuration.
+- Commits must pass `git verify-commit` using your local Git GPG/SSH configuration.
+  Unsigned commits and verification failures, including missing tools or public keys,
+  fail the hook.
 
 ---
 

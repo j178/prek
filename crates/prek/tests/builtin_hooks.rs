@@ -1,10 +1,10 @@
+use prek_consts::env_vars::EnvVars;
 #[cfg(unix)]
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use prek_consts::env_vars::EnvVarsRead;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
-#[cfg(unix)]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
@@ -4027,7 +4027,7 @@ fn check_signed_commit_hook_fails_on_unsigned_root_commit() {
 
     context.git().commit("Initial commit");
 
-    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @"
+    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4036,22 +4036,10 @@ fn check_signed_commit_hook_fails_on_unsigned_root_commit() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] [N] no signature: Initial commit
-
-      Commit signature status codes:
-        G  good signature
-        B  bad signature
-        U  good signature, unknown validity (untrusted)
-        X  good signature, but expired
-        Y  good signature, made with an expired key
-        R  good signature, made with a revoked key
-        E  signature cannot be checked, e.g. missing public key
-        N  no signature
-
-      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
+      [COMMIT_SHA] Initial commit: signature verification failed
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]
@@ -4069,7 +4057,7 @@ fn check_signed_commit_hook_fails_on_unsigned_head_with_parent() {
     context.write_file("file.txt", "content\n");
     context.git().add(".").commit("Second commit");
 
-    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @"
+    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4078,46 +4066,221 @@ fn check_signed_commit_hook_fails_on_unsigned_head_with_parent() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] [N] no signature: Second commit
-
-      Commit signature status codes:
-        G  good signature
-        B  bad signature
-        U  good signature, unknown validity (untrusted)
-        X  good signature, but expired
-        Y  good signature, made with an expired key
-        R  good signature, made with a revoked key
-        E  signature cannot be checked, e.g. missing public key
-        N  no signature
-
-      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
+      [COMMIT_SHA] Second commit: signature verification failed
 
     ----- stderr -----
-    ");
+    "#);
+}
+
+fn commit_with_signature(context: &TestEnv, format: &str, subject: &str) -> Result<String> {
+    let tree = context.git().rev_parse("HEAD^{tree}")?;
+    let parent = context.git().rev_parse("HEAD")?;
+    // These failures happen before the verifier reads the signature, so no
+    // signing tools or keys are needed to reproduce them.
+    let commit = format!(
+        indoc::indoc! {"
+        tree {tree}
+        parent {parent}
+        author Prek Test <test@prek.dev> 1234567890 +0000
+        committer Prek Test <test@prek.dev> 1234567890 +0000
+        gpgsig -----BEGIN {format} SIGNATURE-----
+         test
+         -----END {format} SIGNATURE-----
+
+        {subject}
+    "},
+        tree = tree,
+        parent = parent,
+        format = format,
+        subject = subject
+    );
+    set_head_commit(context, &commit)
+}
+
+fn set_head_commit(context: &TestEnv, commit: &str) -> Result<String> {
+    let commit_path = context.home_dir().join("commit.txt");
+    fs_err::write(&commit_path, commit)?;
+    let output = context
+        .git()
+        .command()
+        .args(["hash-object", "-t", "commit", "-w"])
+        .arg(commit_path)
+        .output()?
+        .assert()
+        .success();
+    let commit = std::str::from_utf8(&output.get_output().stdout)?.trim();
+    context.git().run(["update-ref", "HEAD", commit]);
+    Ok(commit.to_string())
 }
 
 #[test]
-fn check_signed_commit_hook_passes_when_allow_status_widened_to_unsigned() {
+fn check_signed_commit_hook_reports_verification_errors_per_commit() -> Result<()> {
+    let context = check_signed_commit_context()
+        // Git uses `cannot spawn` on Windows.
+        .with_filter(
+            "cannot spawn prek-missing-gpg",
+            "cannot run prek-missing-gpg",
+        )
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-signed-commit
+        "})
+        .init_git();
+    context.git().commit("Unsigned commit");
+    commit_with_signature(&context, "PGP", "GPG signed commit")?;
+    let head = commit_with_signature(&context, "SSH", "SSH signed commit")?;
+    context
+        .git()
+        .run(["config", "gpg.program", "prek-missing-gpg"]);
+
+    cmd_snapshot!(context, context.run()
+        .args(["--hook-stage", "manual"])
+        .env("GIT_CONFIG_GLOBAL", context.home_dir().join("empty.gitconfig"))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(EnvVars::PRE_COMMIT_TO_REF, &head)
+        .env_remove(EnvVars::PRE_COMMIT_FROM_REF), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for commit signatures..............................................Failed
+    - hook id: check-signed-commit
+    - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
+    - exit code: 1
+
+      [COMMIT_SHA] SSH signed commit: signature verification failed
+        error: gpg.ssh.allowedSignersFile needs to be configured and exist for ssh signature verification
+      [COMMIT_SHA] GPG signed commit: signature verification failed
+        error: cannot run prek-missing-gpg: No such file or directory
+      [COMMIT_SHA] Unsigned commit: signature verification failed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn check_signed_commit_hook_handles_silent_verifier_failure() -> Result<()> {
     let context = check_signed_commit_context()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-signed-commit
-                args: [--allow-status, N]
+        "})
+        .with_executable_file("silent-gpg", "#!/bin/sh\nexit 1\n")
+        .init_git();
+    context.git().commit("Initial commit");
+    commit_with_signature(&context, "PGP", "Signed commit")?;
+    context
+        .git()
+        .command()
+        .args(["config", "gpg.program"])
+        .arg(context.work_dir().join("silent-gpg"))
+        .assert()
+        .success();
+
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "manual"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for commit signatures..............................................Failed
+    - hook id: check-signed-commit
+    - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
+    - exit code: 1
+
+      [COMMIT_SHA] Signed commit: signature verification failed
+
+    ----- stderr -----
+    "#);
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn check_signed_commit_hook_verifies_ssh_signatures() -> Result<()> {
+    let context = check_signed_commit_context()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-signed-commit
         "})
         .init_git();
+    context.git().commit("Unsigned parent");
 
-    context.git().commit("Initial commit");
+    let key = context.home_dir().join("signing-key");
+    std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(&key)
+        .assert()
+        .success();
+    let allowed_signers = context.home_dir().join("allowed-signers");
+    fs_err::write(
+        &allowed_signers,
+        format!(
+            "test@prek.dev {}",
+            fs_err::read_to_string(key.with_extension("pub"))?
+        ),
+    )?;
+    context.git().run(["config", "gpg.format", "ssh"]);
+    context.git().run(["config", "gpg.minTrustLevel", "fully"]);
+    for (name, value) in [
+        ("user.signingkey", &key),
+        ("gpg.ssh.allowedSignersFile", &allowed_signers),
+    ] {
+        context
+            .git()
+            .command()
+            .args(["config", name])
+            .arg(value)
+            .assert()
+            .success();
+    }
+    context
+        .git()
+        .run(["commit", "--allow-empty", "-S", "-m", "Signed commit"]);
 
-    cmd_snapshot!(context, context.run().arg("--hook-stage").arg("manual"), @"
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "manual"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     check for commit signatures..............................................Passed
 
     ----- stderr -----
-    ");
+    "#);
+
+    // Keep the original signature while changing the signed commit message.
+    let output = context
+        .git()
+        .command()
+        .args(["cat-file", "commit", "HEAD"])
+        .output()?
+        .assert()
+        .success();
+    let commit = std::str::from_utf8(&output.get_output().stdout)?
+        .replace("Signed commit", "Tampered commit");
+    set_head_commit(&context, &commit)?;
+
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "manual"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for commit signatures..............................................Failed
+    - hook id: check-signed-commit
+    - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
+    - exit code: 1
+
+      [COMMIT_SHA] Tampered commit: signature verification failed
+        Could not verify signature.
+        Signature verification failed: incorrect signature
+
+    ----- stderr -----
+    "#);
+    Ok(())
 }
 
 /// Regression test for a root/orphan-push scenario: `prek` only ever sets
@@ -4148,9 +4311,9 @@ fn check_signed_commit_hook_checks_full_history_when_only_to_ref_is_set() {
             .run()
             .arg("--hook-stage")
             .arg("manual")
-            .env("PRE_COMMIT_TO_REF", &head)
-            .env_remove("PRE_COMMIT_FROM_REF"),
-        @"
+            .env(EnvVars::PRE_COMMIT_TO_REF, &head)
+            .env_remove(EnvVars::PRE_COMMIT_FROM_REF),
+        @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4159,22 +4322,10 @@ fn check_signed_commit_hook_checks_full_history_when_only_to_ref_is_set() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] [N] no signature: Second commit
-      [COMMIT_SHA] [N] no signature: Initial commit
-
-      Commit signature status codes:
-        G  good signature
-        B  bad signature
-        U  good signature, unknown validity (untrusted)
-        X  good signature, but expired
-        Y  good signature, made with an expired key
-        R  good signature, made with a revoked key
-        E  signature cannot be checked, e.g. missing public key
-        N  no signature
-
-      Pass `--allow-status <CODE>` (repeatable) to replace the allowed status codes (default: G, U).
+      [COMMIT_SHA] Second commit: signature verification failed
+      [COMMIT_SHA] Initial commit: signature verification failed
 
     ----- stderr -----
-    "
+    "#
     );
 }

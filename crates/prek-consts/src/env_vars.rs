@@ -81,6 +81,10 @@ impl EnvVars {
 
     pub const SKIP: &'static str = "SKIP";
 
+    // Revision range passed to hooks
+    pub const PRE_COMMIT_FROM_REF: &'static str = "PRE_COMMIT_FROM_REF";
+    pub const PRE_COMMIT_TO_REF: &'static str = "PRE_COMMIT_TO_REF";
+
     // PREK specific environment variables, public for users
     pub const PREK_HOME: &'static str = "PREK_HOME";
     pub const PREK_COLOR: &'static str = "PREK_COLOR";
