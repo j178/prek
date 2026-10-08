@@ -17,6 +17,7 @@
 These differences intentionally change upstream behavior instead of adding a compatible superset.
 
 - File identification gives recognized extensions precedence over loose filename-prefix matches. For example, `makefile.png` is treated as a PNG image, while upstream `identify` also gives it `makefile` and `text` tags. Exact filename matches such as `Cargo.toml` still keep their name-specific tags.
+- When a push updates multiple branches or tags, `prek` runs pre-push hooks for each ref with commits to check, stopping at the first failure. `pre-commit` checks only the first such ref. See the [pre-push working tree warning](reference/configuration.md#pre-push).
 
 ## Workspace mode
 

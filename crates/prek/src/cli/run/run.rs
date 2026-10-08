@@ -374,11 +374,15 @@ fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArg
         if let Some(object) = &args.commit_object_name {
             std::env::set_var("PRE_COMMIT_COMMIT_OBJECT_NAME", object);
         }
-        if let Some(from_ref) = from_ref {
-            std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
-            std::env::set_var("PRE_COMMIT_FROM_REF", from_ref);
-        }
         if let Some(to_ref) = to_ref {
+            // Replace both endpoints when starting a new commit range.
+            if let Some(from_ref) = from_ref {
+                std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
+                std::env::set_var("PRE_COMMIT_FROM_REF", from_ref);
+            } else {
+                std::env::remove_var("PRE_COMMIT_ORIGIN");
+                std::env::remove_var("PRE_COMMIT_FROM_REF");
+            }
             std::env::set_var("PRE_COMMIT_SOURCE", to_ref);
             std::env::set_var("PRE_COMMIT_TO_REF", to_ref);
         }
