@@ -376,11 +376,11 @@ fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArg
         }
         if let Some(from_ref) = from_ref {
             std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
-            std::env::set_var("PRE_COMMIT_FROM_REF", from_ref);
+            std::env::set_var(EnvVars::PRE_COMMIT_FROM_REF, from_ref);
         }
         if let Some(to_ref) = to_ref {
             std::env::set_var("PRE_COMMIT_SOURCE", to_ref);
-            std::env::set_var("PRE_COMMIT_TO_REF", to_ref);
+            std::env::set_var(EnvVars::PRE_COMMIT_TO_REF, to_ref);
         }
         if let Some(upstream) = &args.pre_rebase_upstream {
             std::env::set_var("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream);

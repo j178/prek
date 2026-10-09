@@ -44,6 +44,9 @@ fn list_builtins_defaults_to_verbose_output() {
     check-shebang-scripts-are-executable
       Ensures that (non-binary) files with a shebang are executable.
 
+    check-signed-commit
+      Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
+
     check-symlinks
       Checks for symlinks which do not point to anything.
 
@@ -205,6 +208,11 @@ fn list_builtins_json() {
         "id": "check-shebang-scripts-are-executable",
         "name": "check that scripts with shebangs are executable",
         "description": "Ensures that (non-binary) files with a shebang are executable."
+      },
+      {
+        "id": "check-signed-commit",
+        "name": "check for commit signatures",
+        "description": "Ensures commits are signed with a valid GPG/SSH signature before they're pushed."
       },
       {
         "id": "check-symlinks",

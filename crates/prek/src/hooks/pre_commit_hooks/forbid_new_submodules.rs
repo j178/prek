@@ -13,8 +13,8 @@ use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_a
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let diff_arg = if let (Ok(from_ref), Ok(to_ref)) = (
-        EnvVars.var("PRE_COMMIT_FROM_REF"),
-        EnvVars.var("PRE_COMMIT_TO_REF"),
+        EnvVars.var(EnvVars::PRE_COMMIT_FROM_REF),
+        EnvVars.var(EnvVars::PRE_COMMIT_TO_REF),
     ) {
         Cow::Owned(format!("{from_ref}...{to_ref}"))
     } else {

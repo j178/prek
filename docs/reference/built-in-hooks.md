@@ -35,6 +35,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-merge-conflict`](#check-merge-conflict) (Checks for files that contain merge conflict strings.)
 - [`detect-private-key`](#detect-private-key) (Detects the presence of private keys.)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Protects specific branches from direct commits.)
+- [`check-signed-commit`](#check-signed-commit) (Ensures commits are signed with a valid GPG/SSH signature before they're pushed.)
 - [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable.)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang.)
 
@@ -605,6 +606,27 @@ Protects specific branches from direct commits.
 - This hook is configured as `always_run: true` by default, and does not take filenames.
   As a result, `files`, `exclude`, `types`, etc. are ignored unless you explicitly set `always_run: false`.
 - If HEAD is detached (no current branch), the hook does nothing.
+
+---
+
+### `check-signed-commit`
+
+Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
+
+**Supported arguments**
+
+- None.
+
+**Behavior / caveats**
+
+- Defaults to the `pre-push` and `manual` stages. This hook is configured as
+  `always_run: true` and does not take filenames.
+- Checks the commits being pushed. Root/orphan pushes check the entire branch history.
+- Manual runs check only `HEAD`.
+- Merge commits are skipped.
+- Commits must pass `git verify-commit` using your local Git GPG/SSH configuration.
+  Unsigned commits and verification failures, including missing tools or public keys,
+  fail the hook.
 
 ---
 
