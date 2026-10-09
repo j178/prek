@@ -34,6 +34,17 @@
     'pep621',
   ],
   customManagers: [
+    // Update komac and its release archive checksum together.
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/publish-winget\\.yml$/'],
+      matchStrings: [
+        'KOMAC_VERSION:\\s*"(?<currentValue>v[^"]+)"\\s+KOMAC_SHA256:\\s*"(?<currentDigest>[a-f0-9]{64})"',
+      ],
+      datasourceTemplate: 'github-release-attachments',
+      depNameTemplate: 'komac',
+      packageNameTemplate: 'russellbanks/Komac',
+    },
     // Update `uv` version in `crates/prek/src/languages/python/uv.rs` and CI workflows.
     {
       customType: 'regex',
