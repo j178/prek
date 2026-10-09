@@ -11,8 +11,8 @@ pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> anyhow::Result<
     let mut rendered = match quote {
         "'" => serde_saphyr::to_string(&SingleQuoted(value))?,
         "\"" => serde_saphyr::to_string(&DoubleQuoted(value))?,
-        // YAML 1.1's float regex accepts multiple dots, so serde-saphyr quotes
-        // numeric versions that pre-commit's PyYAML reads as strings.
+        // serde-saphyr adds unnecessary quotes to versions like `0.12.24` because
+        // YAML 1.1's float regex accepts multiple dots. PyYAML reads them as strings.
         _ if is_dotted_version(value) => value.to_owned(),
         _ => serde_saphyr::to_string(&value)?,
     };
