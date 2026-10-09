@@ -46,11 +46,37 @@ jobs:
           fi
         shell: bash
 
+      - name: Install komac
+        env:
+          KOMAC_VERSION: "v2.16.0"
+          KOMAC_SHA256: "7d2707fa6210f2789a3702de49fbd150b736dbf426ee0b9bc8e098736f9fd82d"
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/komac.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/russellbanks/Komac/releases/download/${KOMAC_VERSION}/komac-${KOMAC_VERSION#v}-x86_64-unknown-linux-gnu.tar.gz" \
+            --output "$archive"
+          echo "$KOMAC_SHA256  $archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/komac"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/komac" komac
+          echo "$RUNNER_TEMP/komac" >> "$GITHUB_PATH"
+
       - name: Publish to winget
-        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
-        with:
-          identifier: j178.Prek
-          release-tag: ${{ steps.tag.outputs.value }}
-          installers-regex: 'prek-.*windows.*\.zip$'
-          token: ${{ secrets.WINGET_TOKEN }}
-          fork-user: prek-bot
+        env:
+          # gh prefers GH_TOKEN; komac reads GITHUB_TOKEN to write to the WinGet fork.
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          KOMAC_FORK_OWNER: prek-bot
+          RELEASE_TAG: ${{ steps.tag.outputs.value }}
+        shell: bash
+        run: |
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")
+          version=$(jq -er '.tag_name | ltrimstr("v")' <<< "$release")
+          mapfile -t urls < <(jq -r '.assets[] | select(.name | test("^prek-.*windows.*\\.zip$")) | .browser_download_url' <<< "$release")
+          if [ "${#urls[@]}" -eq 0 ]; then
+            echo "::error::No Windows installer archives found for $RELEASE_TAG"
+            exit 1
+          fi
+          komac sync
+          komac update j178.Prek --version "$version" --submit --urls "${urls[@]}"
+          komac cleanup --only-merged
