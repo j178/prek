@@ -11,6 +11,9 @@ pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> anyhow::Result<
     let mut rendered = match quote {
         "'" => serde_saphyr::to_string(&SingleQuoted(value))?,
         "\"" => serde_saphyr::to_string(&DoubleQuoted(value))?,
+        // YAML 1.1's float regex accepts multiple dots, so serde-saphyr quotes
+        // numeric versions that pre-commit's PyYAML reads as strings.
+        _ if is_dotted_version(value) => value.to_owned(),
         _ => serde_saphyr::to_string(&value)?,
     };
 
@@ -18,6 +21,13 @@ pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> anyhow::Result<
         rendered.pop();
     }
     Ok(rendered)
+}
+
+fn is_dotted_version(value: &str) -> bool {
+    value.split('.').count() >= 3
+        && value
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
 }
 
 #[cfg(test)]
@@ -32,14 +42,28 @@ mod tests {
         assert_eq!(rendered, "'v1.2.3'");
         let rendered = serialize_yaml_scalar("v1.2.3", "\"").unwrap();
         assert_eq!(rendered, "\"v1.2.3\"");
-        let rendered = serialize_yaml_scalar("123", "").unwrap();
-        assert_eq!(rendered, "\"123\"");
-        let rendered = serialize_yaml_scalar("2", "").unwrap();
-        assert_eq!(rendered, "\"2\"");
-        let rendered = serialize_yaml_scalar("0.49", "").unwrap();
-        assert_eq!(rendered, "\"0.49\"");
-        let rendered = serialize_yaml_scalar("yes", "").unwrap();
-        assert_eq!(rendered, "\"yes\"");
+        for value in [
+            "123",
+            "2",
+            "0.49",
+            "2026.4",
+            "1e3",
+            "0x1F",
+            "0111111111111111111111111111111111111111",
+            "yes",
+            "true",
+            "null",
+            "2026-10-09",
+        ] {
+            let rendered = serialize_yaml_scalar(value, "").unwrap();
+            assert_eq!(rendered, format!("\"{value}\""), "{value}");
+        }
+        for value in ["0.12.24", "2026.04.09", "1.2.3.4"] {
+            for quote in ["", "'", "\""] {
+                let rendered = serialize_yaml_scalar(value, quote).unwrap();
+                assert_eq!(rendered, format!("{quote}{value}{quote}"), "{value}");
+            }
+        }
         let rendered = serialize_yaml_scalar("123", "'").unwrap();
         assert_eq!(rendered, "'123'");
         let rendered = serialize_yaml_scalar("123", "\"").unwrap();
