@@ -28,6 +28,73 @@ The standalone installer automatically downloads and installs the correct binary
 
     The installation script may be inspected before use. Alternatively, binaries can be downloaded directly from [GitHub Releases](#github-releases).
 
+??? note "Installer options"
+
+    ### Changing the installation path
+
+    By default, the standalone installer tries `$XDG_BIN_HOME`, then `$XDG_DATA_HOME/../bin`,
+    and finally `~/.local/bin`. Set `PREK_INSTALL_DIR` to override these locations:
+
+    === "macOS and Linux"
+
+        ```bash
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
+        ```
+
+    === "Windows"
+
+        ```powershell
+        powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+        ```
+
+    !!! note
+
+        `PREK_INSTALL_DIR` controls where the prek binary is installed. To change where
+        caches, toolchains, and hook environments are stored, use
+        [`PREK_HOME`](reference/environment-variables.md#prek_home).
+
+    ### Disabling PATH modifications
+
+    The installer adds the installation directory to your `PATH` by updating shell
+    profiles on macOS and Linux, or the user environment on Windows. Set
+    `PREK_NO_MODIFY_PATH=1` to skip this step:
+
+    === "macOS and Linux"
+
+        ```bash
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
+        ```
+
+    === "Windows"
+
+        ```powershell
+        powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+        ```
+
+    You can combine this with `PREK_INSTALL_DIR`. Add the directory to `PATH` yourself
+    or invoke prek by its full path.
+
+    ### Unmanaged installations
+
+    For temporary environments such as CI, set `PREK_UNMANAGED_INSTALL` to the desired
+    installation directory. This also skips PATH modifications and disables
+    `prek self update`:
+
+    === "macOS and Linux"
+
+        ```bash
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
+        ```
+
+    === "Windows"
+
+        ```powershell
+        powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+        ```
+
+    Add the directory to `PATH` yourself or invoke prek by its full path. To update an
+    unmanaged installation, rerun the installer for the desired version.
+
 ## Package Managers
 
 ### PyPI
