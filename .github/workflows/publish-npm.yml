@@ -9,7 +9,7 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  UV_VERSION: "0.12.19"
+  UV_VERSION: "0.13.0"
 
 jobs:
   publish:

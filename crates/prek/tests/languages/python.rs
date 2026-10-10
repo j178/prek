@@ -584,7 +584,7 @@ fn local_relative_additional_dependency_is_not_resolved_from_worktree() {
             (r"Command `[^`]*uv(?:\.exe)? pip", "Command `[UV] pip"),
             (r"python-[[:alnum:]]{20}", "python-[HASH]"),
             (
-                r"error: .*\.tmp[[:alnum:]]+ does not appear",
+                r"error: `?.*\.tmp[[:alnum:]]+`? does not appear",
                 "error: [INSTALL_CWD] does not appear",
             ),
             (
