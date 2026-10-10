@@ -494,15 +494,7 @@ impl InstallSource {
         debug!(?extracted_uv, target = %target_path.display(), "Moving uv to target");
         replace_uv_binary(&extracted_uv, &target_path).await?;
 
-        // Set executable permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let metadata = fs_err::tokio::metadata(&target_path).await?;
-            let mut perms = metadata.permissions();
-            perms.set_mode(0o755);
-            fs_err::tokio::set_permissions(&target_path, perms).await?;
-        }
+        crate::fs::make_executable(&target_path)?;
 
         Ok(())
     }
