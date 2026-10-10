@@ -9,7 +9,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{TestEnv, cmd_snapshot, make_executable};
+use crate::common::{TestEnv, cmd_snapshot, jj_cmd, make_executable};
 
 mod common;
 
@@ -2945,6 +2945,35 @@ fn no_commit_to_branch_hook() {
     ");
 }
 
+/// `no-commit-to-branch` is skipped in a jj workspace: jj has no "current branch"
+/// mapping to Git's HEAD, and the backing store's unborn HEAD would otherwise make
+/// the hook block every run. Regression test for that false positive.
+#[test]
+fn no_commit_to_branch_skipped_in_jj_workspace() {
+    let context = TestEnv::new();
+    let Some(mut init) = jj_cmd(context.work_dir()) else {
+        return;
+    };
+    init.args(["git", "init", "--colocate"]).assert().success();
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: no-commit-to-branch
+    "});
+    context.write_file("test.txt", "hello");
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
 #[test]
 fn no_commit_to_branch_hook_with_custom_branches() {
     let context = TestEnv::new()
@@ -3535,6 +3564,183 @@ fn check_case_conflict_directory() -> Result<()> {
     "#);
 
     Ok(())
+}
+
+#[test]
+fn check_case_conflict_in_non_colocated_jujutsu_workspace() -> Result<()> {
+    let context = TestEnv::new();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        // Skipping test on case-insensitive filesystem
+        return Ok(());
+    }
+
+    let Some(mut init) = jj_cmd(context.work_dir()) else {
+        return Ok(());
+    };
+    init.args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
+    context.write_file("src/foo.txt", "existing file");
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-case-conflict
+    "});
+
+    context.write_file("src/FOO.txt", "conflicting case");
+
+    cmd_snapshot!(context, context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - description: Checks for files that would conflict in case-insensitive filesystems
+    - exit code: 1
+
+      Case-insensitivity conflict found: src/FOO.txt
+      Case-insensitivity conflict found: src/foo.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+/// In a jj workspace, `check-added-large-files` must only flag newly added files,
+/// not pre-existing ones that were merely modified (jj has no staging area, so
+/// "added" is derived from the working-copy changeset).
+#[test]
+fn check_added_large_files_ignores_modified_in_jj_workspace() {
+    let context = TestEnv::new();
+    let Some(mut init) = jj_cmd(context.work_dir()) else {
+        return;
+    };
+    init.args(["git", "init", "--colocate"]).assert().success();
+
+    // Commit a large file as a pre-existing baseline.
+    context.write_file("large_file.txt", [0; 2048]); // 2 KB
+    jj_cmd(context.work_dir())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "});
+
+    // Modify the pre-existing large file (still over the limit) and add a small file.
+    context.write_file("large_file.txt", [1; 2048]);
+    context.write_file("small.txt", "hello\n");
+
+    // large_file.txt is modified, not added, so it must not be flagged.
+    cmd_snapshot!(context, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// jj reports a copied file whose source also changed as a copy, and it must still count
+/// as newly added for `check-added-large-files`.
+#[test]
+fn check_added_large_files_flags_copied_file_in_jj_workspace() {
+    let context = TestEnv::new();
+    let Some(mut init) = jj_cmd(context.work_dir()) else {
+        return;
+    };
+    init.args(["git", "init", "--colocate"]).assert().success();
+
+    // A large text file as a baseline: jj detects the copy below from its text content.
+    let content = "a line of audit text\n".repeat(150);
+    context.write_file("audit.txt", &content);
+    jj_cmd(context.work_dir())
+        .unwrap()
+        .args(["commit", "-m", "baseline"])
+        .assert()
+        .success();
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "});
+
+    // Copying while the source changes is what makes jj report a `C` entry.
+    fs_err::copy(
+        context.child("audit.txt").path(),
+        context.child("copy.txt").path(),
+    )
+    .unwrap();
+    context.write_file("audit.txt", format!("{content}extra line\n"));
+
+    cmd_snapshot!(context, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - description: Prevents giant files from being committed
+    - exit code: 1
+
+      copy.txt (4 KB) exceeds 1 KB
+
+    ----- stderr -----
+    ");
+}
+
+/// In a nested jj project (config in a subdirectory), added files must be reported
+/// relative to the project directory so `check-added-large-files` matches them. jj
+/// reports workspace-root-relative paths, so `added_files` rebases them onto the
+/// project; this guards against that regressing.
+#[test]
+fn check_added_large_files_in_nested_jj_workspace() {
+    let context = TestEnv::new();
+    let Some(mut init) = jj_cmd(context.work_dir()) else {
+        return;
+    };
+    init.args(["git", "init", "--colocate"]).assert().success();
+
+    let context = context.with_project_config(
+        "project",
+        indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "},
+    );
+    // A newly added >1 KB file inside the nested project.
+    context.write_file("project/big.txt", [0; 2048]);
+
+    cmd_snapshot!(context, context.run().current_dir(context.child("project").path()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - description: Prevents giant files from being committed
+    - exit code: 1
+
+      big.txt (2 KB) exceeds 1 KB
+
+    ----- stderr -----
+    ");
 }
 
 #[test]

@@ -613,10 +613,7 @@ impl From<FileSelectionArgs> for run::FileSelection {
         } = args;
 
         if last_commit {
-            return Self::Diff {
-                from_ref: "HEAD~1".to_string(),
-                to_ref: "HEAD".to_string(),
-            };
+            return Self::LastCommit;
         }
 
         let (from_ref, to_ref) = match (from_ref, to_ref) {

@@ -33,12 +33,21 @@ env:
   DENO_VERSION: "2"
   DART_VERSION: "3.10.4"
   R_VERSION: "4.6.0"
+  JJ_VERSION: "0.46.0"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+
+  # jj-vcs/jj publishes no build attestations, so the release archives are pinned by
+  # SHA-256. Release assets are mutable, so bumping JJ_VERSION requires re-verifying
+  # every digest here.
+  JJ_SHA256_LINUX_X86_64: "fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08"
+  JJ_SHA256_MACOS_AARCH64: "43daa37ce0f9716cdf6fb65a29cbcae74a3160aef048cf3cb3d166d41cb4ab58"
+  JJ_SHA256_MACOS_X86_64: "10d941de276c7c5074ef5d395312813b4575f4ce92cb9c0b05738efb90bd3b60"
+  JJ_SHA256_WINDOWS_X86_64: "c42316b10df04611bc65029a18bcb2d92636edddb6871d511f7bb4233e999b83"
 
 jobs:
   plan:
@@ -420,6 +429,49 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: "Install jj (Jujutsu)"
+        shell: bash
+        run: |
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)
+              target="x86_64-unknown-linux-musl"
+              sha256="$JJ_SHA256_LINUX_X86_64"
+              ;;
+            macOS-ARM64)
+              target="aarch64-apple-darwin"
+              sha256="$JJ_SHA256_MACOS_AARCH64"
+              ;;
+            macOS-X64)
+              target="x86_64-apple-darwin"
+              sha256="$JJ_SHA256_MACOS_X86_64"
+              ;;
+            *)
+              echo "Unsupported runner for jj install: $RUNNER_OS-$RUNNER_ARCH" >&2
+              exit 1
+              ;;
+          esac
+          asset="jj-v${JJ_VERSION}-${target}.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            --retry 5 --retry-connrefused --retry-delay 3 \
+            -o "/tmp/${asset}" \
+            "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/${asset}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "${sha256}  /tmp/${asset}" | sha256sum -c -
+          else
+            echo "${sha256}  /tmp/${asset}" | shasum -a 256 -c -
+          fi
+          extracted="$(mktemp -d)"
+          tar -xzf "/tmp/${asset}" -C "${extracted}"
+          mkdir -p "$HOME/.local/bin"
+          mv "${extracted}/jj" "$HOME/.local/bin/jj"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          jj config set --user user.name "prek ci"
+          jj config set --user user.email "prek-ci@example.com"
+          jj --version
+          # Fail the jj tests instead of silently skipping if jj ever goes missing.
+          echo "PREK_TEST_REQUIRE_JJ=1" >> "$GITHUB_ENV"
+
       - name: "Cargo test"
         env:
           CI_CORE_FILTER: ${{ needs.plan.outputs.ci-core-filter }}
@@ -486,6 +538,28 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Install jj (Jujutsu)"
+        shell: pwsh
+        run: |
+          $asset = "jj-v$env:JJ_VERSION-x86_64-pc-windows-msvc.zip"
+          $zip = Join-Path $env:RUNNER_TEMP $asset
+          Invoke-WebRequest -Uri "https://github.com/jj-vcs/jj/releases/download/v$env:JJ_VERSION/$asset" -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          if ($hash -ne $env:JJ_SHA256_WINDOWS_X86_64) {
+            Write-Error "jj checksum mismatch: expected $env:JJ_SHA256_WINDOWS_X86_64, got $hash"
+            exit 1
+          }
+          $dest = Join-Path $env:USERPROFILE ".local\bin"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $dest
+          $jj = Join-Path $dest "jj.exe"
+          & $jj config set --user user.name "prek ci"
+          & $jj config set --user user.email "prek-ci@example.com"
+          & $jj --version
+          # Fail the jj tests instead of silently skipping if jj ever goes missing.
+          Add-Content -Path $env:GITHUB_ENV -Value "PREK_TEST_REQUIRE_JJ=1"
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}

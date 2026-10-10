@@ -32,6 +32,27 @@ pub fn make_executable(_path: impl AsRef<Path>) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Build a `jj` command in `dir`, or `None` when `jj` is not installed so tests can
+/// skip gracefully on machines without Jujutsu.
+///
+/// Set `PREK_TEST_REQUIRE_JJ` (CI does this after installing jj) to turn a missing
+/// `jj` into a hard failure, so the jj tests can never silently no-op.
+pub fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
+    let Ok(jj) = which::which("jj") else {
+        assert!(
+            !EnvVars.is_set("PREK_TEST_REQUIRE_JJ"),
+            "PREK_TEST_REQUIRE_JJ is set but `jj` was not found on PATH"
+        );
+        return None;
+    };
+    let mut cmd = Command::new(jj);
+    cmd.current_dir(dir);
+    // Give jj a deterministic identity so `jj commit` does not depend on host config.
+    cmd.env("JJ_USER", "prek test");
+    cmd.env("JJ_EMAIL", "prek-test@example.com");
+    Some(cmd)
+}
+
 fn write_test_file(root: &ChildPath, file: &Path, content: &[u8]) {
     root.child(file)
         .write_binary(content)

@@ -32,6 +32,7 @@ use crate::config::{HideStatus, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
+use crate::repo;
 use crate::run::HOOK_CONCURRENCY;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
@@ -118,7 +119,10 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    let requires_clean_worktree = selection.requires_clean_worktree();
+    // Jujutsu has no index, so its default run mode operates on the working-copy
+    // changeset directly; the Git-only clean-worktree dance does not apply.
+    let requires_clean_worktree =
+        selection.requires_clean_worktree() && repo::should_stash_by_default_run();
     let worktree = if requires_clean_worktree {
         // Status paths are repository-relative, so the worktree query can start
         // before repository discovery finishes. Preserve discovery errors first.
@@ -243,8 +247,18 @@ pub(crate) async fn run(
         None
     };
 
-    let (from_ref, to_ref) = selection.refs();
-    set_env_vars(from_ref, to_ref, &extra_args);
+    let (from_ref, to_ref) = hook_refs(&selection).await?;
+    set_env_vars(from_ref.as_deref(), to_ref.as_deref(), &extra_args);
+    // A jj workspace can decline a pair it was asked for (a first commit has no parent to name,
+    // a revset may cover several commits, a pre-push of a root commit has no base). A pair
+    // inherited from a parent process must not stand in for the one that was omitted.
+    let (requested_from, requested_to) = selection.refs();
+    if (requested_from.is_some() || requested_to.is_some())
+        && from_ref.is_none()
+        && to_ref.is_none()
+    {
+        unset_git_ref_env();
+    }
 
     // These hooks run even without matching files and never receive filenames,
     // so discovery and tagging cannot affect execution. Keep explicit paths and
@@ -361,6 +375,74 @@ fn infer_stage_and_input_mode(
 
 fn uses_only_message_file_input(hook: &Hook) -> bool {
     !hook.stages.is_empty() && hook.stages.iter().all(stage_uses_message_file_input)
+}
+
+/// The ref pair hooks see as `PRE_COMMIT_FROM_REF`/`PRE_COMMIT_TO_REF`.
+///
+/// Hooks run Git on this pair, and a Jujutsu workspace has no Git spelling for it: `HEAD` is
+/// the working-copy commit, `--last-commit` names `@-` and its parent (jj leaves `@` empty), and
+/// a user-supplied ref is usually a revset. So the revisions jj resolves are handed over as the
+/// backing store's commit IDs. A ref jj cannot resolve keeps its spelling, because `pre-push`
+/// passes Git refs, which Git resolves itself. No pair at all is exported when one side has no
+/// commit ID to give: a lone ref would have a hook diff against a revision prek never meant to
+/// offer.
+async fn hook_refs(selection: &FileSelection) -> Result<(Option<String>, Option<String>)> {
+    if !repo::is_jujutsu() {
+        let (from_ref, to_ref) = selection.refs();
+        return Ok((from_ref.map(str::to_owned), to_ref.map(str::to_owned)));
+    }
+
+    let (from_ref, to_ref) = match selection {
+        // Git's `HEAD~1`/`HEAD` would name the empty commit `jj commit` leaves behind.
+        FileSelection::LastCommit => (Some("first_parent(@-)"), Some("@-")),
+        _ => selection.refs(),
+    };
+
+    let (from, to) = (
+        repo::hook_commit_id(from_ref).await?,
+        repo::hook_commit_id(to_ref).await?,
+    );
+    if from.is_none() || to.is_none() {
+        return Ok((None, None));
+    }
+    Ok((from, to))
+}
+
+/// Drop the ref environment a parent process may have left behind, aliases included.
+fn unset_git_ref_env() {
+    unsafe {
+        for name in [
+            "PRE_COMMIT_ORIGIN",
+            "PRE_COMMIT_FROM_REF",
+            "PRE_COMMIT_SOURCE",
+            "PRE_COMMIT_TO_REF",
+        ] {
+            std::env::remove_var(name);
+        }
+    }
+}
+
+/// The repositories whose working-copy patches a failed run prints.
+///
+/// A Git checkout's diff covers everything in it, but a Jujutsu workspace's changeset does not
+/// cover a Git repository nested inside the workspace, so those projects are printed from their
+/// own repository.
+async fn diff_roots(workspace: &Workspace) -> Result<Vec<PathBuf>> {
+    let root =
+        dunce::canonicalize(workspace.root()).unwrap_or_else(|_| workspace.root().to_path_buf());
+    let mut roots = vec![root.clone()];
+    if repo::plain_git_root(&root).await?.is_some() {
+        return Ok(roots);
+    }
+
+    for project in workspace.projects() {
+        if let Some(git_root) = repo::plain_git_root(project.path()).await?
+            && !roots.contains(&git_root)
+        {
+            roots.push(git_root);
+        }
+    }
+    Ok(roots)
 }
 
 // `pre-commit` sets these environment variables for other git hooks.
@@ -1207,18 +1289,18 @@ impl<'a> HookRunSession<'a> {
             } else {
                 "--color=never"
             };
-            git::git_cmd()?
-                .current_dir(workspace.root())
-                .arg("--no-pager")
-                .arg("diff")
-                .hidden_args(["--no-ext-diff"])
-                .arg(color)
-                .arg("--")
-                .arg(workspace.root())
-                .check(true)
-                .spawn()?
-                .wait()
-                .await?;
+            // Through the repository backend, so the patch matches the changes that were
+            // detected: a Jujutsu workspace snapshots rewritten files into Git's index, which
+            // leaves a Git diff of the same tree empty, and a Git repository nested inside one
+            // is printed from its own repository.
+            for root in diff_roots(workspace).await? {
+                repo::worktree_diff_cmd(&root, color)
+                    .await?
+                    .check(true)
+                    .spawn()?
+                    .wait()
+                    .await?;
+            }
         }
 
         if self.failed {
