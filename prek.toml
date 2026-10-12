@@ -11,6 +11,9 @@ exclude = { glob = "**/snapshots/**" }
 cooldown_days = 7
 freeze = true
 
+[update.repos."https://github.com/crate-ci/typos"]
+include_tags = "v[0-9]*"
+
 [[repos]]
 repo = "builtin"
 hooks = [
@@ -23,7 +26,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = "13d4ad9e5ad5db0958564fe6fb02b9b0f5ddb1aa"  # frozen: typos-dict-v0.14.2
+rev = "00f422f3b19c57bc6338715ebfe3316d38768461"  # frozen: v1.50.3
 hooks = [{ id = "typos" }]
 
 [[repos]]
