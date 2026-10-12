@@ -13,9 +13,11 @@ WORKDIR $HOME
 RUN echo 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries
 
 # Install dependencies from an Ubuntu snapshot for reproducibility.
-RUN --mount=type=cache,target=/var/lib/apt/lists \
-  apt install -y --update ca-certificates \
-  && apt install -y --update --snapshot ${UBUNTU_SNAPSHOT} --no-install-recommends \
+# All build dependencies are in main, so skip the other component indexes.
+RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+  sed -i 's/^Components:.*/Components: main/' /etc/apt/sources.list.d/ubuntu.sources \
+  && apt install -y --update --no-install-recommends ca-certificates \
+  && apt install -y --update --snapshot "${UBUNTU_SNAPSHOT}" --no-install-recommends \
   build-essential \
   curl
 
