@@ -91,6 +91,11 @@
       // Pin GitHub Actions to immutable SHAs
       pinDigests: true
     },
+    {
+      groupName: 'Docker images',
+      matchManagers: ['dockerfile'],
+      separateMajorMinor: false,
+    },
     // Disable updates for GitHub runners: we'd only pin them to a specific version
     // if there was a deliberate reason to do so
     {
