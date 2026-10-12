@@ -16,7 +16,7 @@ fn identify_text_with_missing_paths() {
             .arg(".")
             .arg("hello.py")
             .arg("missing.py"),
-        @"
+        @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -24,8 +24,8 @@ fn identify_text_with_missing_paths() {
     hello.py: file, non-executable, python, text
 
     ----- stderr -----
-    error: missing.py: failed to query metadata of symlink `missing.py`: No such file or directory (os error 2)
-    "
+    error: missing.py: failed to query raw metadata `missing.py`: No such file or directory (os error 2)
+    "#
     );
 }
 
@@ -67,6 +67,6 @@ fn identify_json_with_missing_paths() {
     ]
 
     ----- stderr -----
-    error: missing.py: failed to query metadata of symlink `missing.py`: No such file or directory (os error 2)
+    error: missing.py: failed to query raw metadata `missing.py`: No such file or directory (os error 2)
     "#);
 }
