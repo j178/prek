@@ -11,6 +11,9 @@ exclude = { glob = "**/snapshots/**" }
 cooldown_days = 7
 freeze = true
 
+[update.repos."https://github.com/crate-ci/typos"]
+include_tags = "v[0-9]*"
+
 [[repos]]
 repo = "builtin"
 hooks = [
@@ -59,7 +62,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/tombi-toml/tombi-pre-commit"
-rev = "281839f5187de960b66d8c85359768c910673ac9"  # frozen: v1.5.6
+rev = "3e7d0dfbb244888710ccd530be67a5983bf21c1e"  # frozen: v1.7.2
 hooks = [
   { id = "tombi-format", args = ["--offline"], files = '\.toml$' },
 ]
