@@ -1,6 +1,6 @@
 FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:0.11.28@sha256:0f36cb9361a3346885ca3677e3767016687b5a170c1a6b88465ec14aefec90aa AS uv
 
-FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 AS build
+FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS build
 
 # Keep the snapshot at least as recent as the Ubuntu base image.
 ARG UBUNTU_SNAPSHOT=20260928T000000Z
