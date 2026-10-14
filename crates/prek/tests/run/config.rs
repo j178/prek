@@ -89,7 +89,7 @@ fn run_tracks_relative_config_as_absolute_path() -> Result<()> {
 fn invalid_config() {
     let context = TestEnv::new().with_config("invalid: config").init_git();
 
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -101,7 +101,8 @@ fn invalid_config() {
       |
     1 | invalid: config
       | ^ missing field `repos`
-    ");
+      caused by: missing field `repos` at line 1, column 1
+    "#);
 
     context.write_config(indoc::indoc! {r"
         files: 12
@@ -109,7 +110,7 @@ fn invalid_config() {
     "});
     context.git().add(".");
 
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -123,7 +124,8 @@ fn invalid_config() {
       | ^ invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings
     2 | repos: []
       |
-    ");
+      caused by: invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings at line 1, column 1
+    "#);
 
     context.write_config(indoc::indoc! {r#"
         files:
@@ -132,7 +134,7 @@ fn invalid_config() {
     "#});
     context.git().add(".");
 
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -143,11 +145,12 @@ fn invalid_config() {
      --> <input>:2:3
       |
     1 | files:
-    2 |   glog: \"*.rs\"
+    2 |   glog: "*.rs"
       |   ^ unknown field `glog`, expected one of glob
     3 | repos: []
       |
-    ");
+      caused by: unknown field `glog`, expected one of glob at line 2, column 3
+    "#);
 
     context.write_config(indoc::indoc! {r#"
         repos:
@@ -318,7 +321,7 @@ fn minimum_prek_version() {
     "})
         .init_git();
 
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -333,7 +336,8 @@ fn minimum_prek_version() {
     2 | repos:
     3 |   - repo: local
       |
-    ");
+      caused by: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again. at line 1, column 23
+    "#);
 }
 
 /// Supports reading `pre-commit-config.yml` as well.

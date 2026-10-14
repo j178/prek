@@ -4,7 +4,6 @@ use std::iter;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use crate::cli::ExitStatus;
@@ -23,13 +22,7 @@ pub(crate) fn validate_configs(configs: Vec<PathBuf>, printer: Printer) -> Resul
     for config in configs {
         if let Err(err) = read_config(&config) {
             writeln!(printer.stderr(), "{}: {}", "error".red().bold(), err)?;
-            // YAML diagnostics already include their sources.
-            // TODO: Remove after https://github.com/bourumir-wyngs/serde-saphyr/issues/227.
-            for source in
-                iter::successors(err.source(), |&err| err.source()).take_while_inclusive(|err| {
-                    !err.is::<serde_saphyr::Error>() && !err.is::<Box<serde_saphyr::Error>>()
-                })
-            {
+            for source in iter::successors(err.source(), |&err| err.source()) {
                 writeln!(
                     printer.stderr(),
                     "  {}: {}",
@@ -63,13 +56,7 @@ pub(crate) fn validate_manifest(manifests: Vec<PathBuf>, printer: Printer) -> Re
     for manifest in manifests {
         if let Err(err) = read_manifest(&manifest) {
             writeln!(printer.stderr(), "{}: {}", "error".red().bold(), err)?;
-            // YAML diagnostics already include their sources.
-            // TODO: Remove after https://github.com/bourumir-wyngs/serde-saphyr/issues/227.
-            for source in
-                iter::successors(err.source(), |&err| err.source()).take_while_inclusive(|err| {
-                    !err.is::<serde_saphyr::Error>() && !err.is::<Box<serde_saphyr::Error>>()
-                })
-            {
+            for source in iter::successors(err.source(), |&err| err.source()) {
                 writeln!(
                     printer.stderr(),
                     "  {}: {}",
