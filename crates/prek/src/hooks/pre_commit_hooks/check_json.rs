@@ -34,6 +34,8 @@ fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
         }
     };
 
+    // Python's binary-mode JSON loader accepts a leading UTF-8 BOM.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut deserializer = serde_json::Deserializer::from_str(content);
     deserializer.disable_recursion_limit();
     let stacker = serde_stacker::Deserializer::new(&mut deserializer);
@@ -210,6 +212,15 @@ mod tests {
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_utf8_bom() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("bom.json");
+        fs_err::write(&path, "\u{feff}{\"key\": 1}")?;
+        assert_eq!(check_file(&path, &path)?.exit_status, 0);
         Ok(())
     }
 
