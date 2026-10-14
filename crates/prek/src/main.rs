@@ -9,6 +9,7 @@ use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 use tracing::level_filters::LevelFilter;
@@ -521,7 +522,11 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => code.into(),
         Err(err) => {
-            let mut causes = err.chain();
+            // YAML diagnostics already include their sources.
+            // TODO: Remove after https://github.com/bourumir-wyngs/serde-saphyr/issues/227.
+            let mut causes = err.chain().take_while_inclusive(|err| {
+                !err.is::<serde_saphyr::Error>() && !err.is::<Box<serde_saphyr::Error>>()
+            });
             eprintln!("{}: {}", "error".red().bold(), causes.next().unwrap());
             for err in causes {
                 eprintln!("  {}: {}", "caused by".red().bold(), err);
