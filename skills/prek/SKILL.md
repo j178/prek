@@ -205,6 +205,7 @@ Builtin hooks called out by the docs include:
 - `detect-private-key`
 - `no-commit-to-branch`
 - `check-signed-commit`
+- `check-dco-signoff`
 - `check-shebang-scripts-are-executable`
 - `check-executables-have-shebangs`
 
