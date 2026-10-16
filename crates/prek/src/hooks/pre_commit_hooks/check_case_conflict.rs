@@ -4,10 +4,10 @@ use std::path::Path;
 use anyhow::Result;
 use rustc_hash::FxHashSet;
 
-use crate::git;
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
+use crate::repo;
 
 /// Runs the `check-case-conflict` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
@@ -15,7 +15,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     let work_dir = hook.work_dir();
 
-    let repo_files = git::ls_files(work_dir, [Path::new(".")]).await?;
+    let repo_files = repo::ls_files(work_dir, [Path::new(".")]).await?;
     let mut all_files = FxHashSet::default();
     for path in &repo_files {
         insert_path_and_parents(&mut all_files, path);
@@ -39,7 +39,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
     // Newly staged files are already in the index. Query them only when a
     // conflict exists, to distinguish relevant conflicts from existing ones.
-    let added = git::staged_added_files(work_dir).await?;
+    let added = repo::added_files(work_dir).await?;
     let mut relevant_files = FxHashSet::default();
     for filename in &filenames {
         insert_path_and_parents(&mut relevant_files, filename);

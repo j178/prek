@@ -1,11 +1,12 @@
 mod common;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use indoc::indoc;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestEnv, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot, jj_cmd};
 
 #[test]
 fn basic_discovery() {
@@ -1047,6 +1048,63 @@ fn gitignore_respected() {
         .init_git();
 
     // Run from the root - should not discover projects in node_modules or target
+    cmd_snapshot!(context, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ src
+      Show CWD...............................................................Passed
+      - hook id: show-cwd
+      - duration: [TIME]
+
+        [TEMP_DIR]/src
+        ['.pre-commit-config.yaml']
+    ✓ <workspace>
+      Show CWD...............................................................Passed
+      - hook id: show-cwd
+      - duration: [TIME]
+
+        [TEMP_DIR]/
+        ['.gitignore', '.pre-commit-config.yaml', 'src/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    "#);
+}
+
+/// The same ignore handling in a jj workspace with no `.git` of its own, where the walker
+/// has no Git repository to find: `.gitignore` still has to keep project discovery out of
+/// ignored trees such as `node_modules` and `target`.
+#[test]
+fn gitignore_respected_in_non_colocated_jj_workspace() {
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sorted(sys.argv[1:]))'
+          verbose: true
+    "};
+
+    let context = TestEnv::new()
+        .with_workspace(
+            [
+                "src",
+                "node_modules/ignored", // Should be ignored by .gitignore
+                "target/ignored",       // Should be ignored by .gitignore
+            ],
+            config,
+        )
+        .with_file(".gitignore", "node_modules/\ntarget/\n");
+
+    let Some(mut init) = jj_cmd(context.work_dir()) else {
+        return;
+    };
+    init.args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
     cmd_snapshot!(context, context.run(), @r#"
     success: true
     exit_code: 0

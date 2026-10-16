@@ -20,7 +20,7 @@ use crate::fs::{PathClean, Simplified};
 use crate::hook::HookSpec;
 use crate::hook::{self, Hook, Repo};
 use crate::store::{CacheBucket, Store};
-use crate::{git, store, warn_user};
+use crate::{git, repo, store, warn_user};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -752,6 +752,10 @@ impl Workspace {
 
         ignore::WalkBuilder::new(root)
             .follow_links(false)
+            // A Jujutsu workspace without a `.git` of its own is not a Git repository to the
+            // walker, and `.gitignore` has to hold there all the same, or project discovery
+            // descends into `node_modules`, `target`, and the like.
+            .require_git(false)
             .add_custom_ignore_filename(".prekignore")
             .build_parallel()
             .run(|| {
@@ -899,8 +903,15 @@ impl Workspace {
         Ok(hooks)
     }
 
-    /// Check if all configuration files are staged in git.
+    /// Check that all configuration files are staged.
+    ///
+    /// This only applies to backends with a staging area (Git). Jujutsu has no index,
+    /// so the check is skipped there.
     pub(crate) fn check_configs_staged(&self, unstaged: &[PathBuf]) -> Result<()> {
+        if !repo::requires_staged_configs() {
+            return Ok(());
+        }
+
         let config_files = self
             .config_files()
             .map(Path::clean)

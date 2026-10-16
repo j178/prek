@@ -16,6 +16,7 @@ use crate::config::{FilePattern, GlobPatterns, Stage};
 use crate::fs::PathClean;
 use crate::git::FileEntry;
 use crate::hook::Hook;
+use crate::repo;
 use crate::workspace::Project;
 use crate::{fs, git, warn_user};
 
@@ -456,6 +457,10 @@ pub(crate) enum FileSelection {
         from_ref: String,
         to_ref: String,
     },
+    /// The commit that was just completed (`--last-commit`). Git spells it `HEAD~1`/`HEAD`;
+    /// a Jujutsu workspace names the pair `first_parent(@-)`/`@-` instead (see
+    /// `run::hook_refs`).
+    LastCommit,
     Explicit {
         files: Vec<String>,
         globs: Vec<Glob>,
@@ -465,13 +470,16 @@ pub(crate) enum FileSelection {
 
 impl FileSelection {
     pub(crate) const fn requires_clean_worktree(&self) -> bool {
-        matches!(self, Self::Default | Self::Diff { .. })
+        matches!(self, Self::Default | Self::Diff { .. } | Self::LastCommit)
     }
 
     pub(crate) fn refs(&self) -> (Option<&str>, Option<&str>) {
         match self {
             Self::Diff { from_ref, to_ref } => (Some(from_ref), Some(to_ref)),
             Self::All { from_ref, to_ref } => (from_ref.as_deref(), to_ref.as_deref()),
+            // Hooks written against Git expect these, and they describe the same commit in
+            // a Git repository.
+            Self::LastCommit => (Some("HEAD~1"), Some("HEAD")),
             Self::Default | Self::Explicit { .. } => (None, None),
         }
     }
@@ -682,7 +690,7 @@ async fn collect_explicit_files(
     }
 
     if !pathspecs.is_empty() {
-        for file in git::ls_files(git_root, pathspecs).await? {
+        for file in repo::ls_files(git_root, pathspecs).await? {
             let file = fs::normalize_path(file);
             let matches_directory = directories
                 .iter()
@@ -712,9 +720,15 @@ async fn collect_files_for_selection(
     include_deleted: bool,
 ) -> Result<Vec<FileEntry>> {
     match selection {
+        FileSelection::LastCommit => {
+            let files = repo::last_commit_files(workspace_root, include_deleted).await?;
+            debug!("Files changed in the last commit: {}", files.len());
+            Ok(files)
+        }
         FileSelection::Diff { from_ref, to_ref } => {
             let files =
-                git::changed_files(&from_ref, &to_ref, workspace_root, include_deleted).await?;
+                repo::changed_files_between(&from_ref, &to_ref, workspace_root, include_deleted)
+                    .await?;
             debug!(
                 "Files changed between {} and {}: {}",
                 from_ref,
@@ -733,21 +747,39 @@ async fn collect_files_for_selection(
             .map(FileEntry::from)
             .collect()),
         FileSelection::All { .. } => {
-            let files = git::ls_files(git_root, [workspace_root]).await?;
+            let files = repo::ls_files(git_root, [workspace_root]).await?;
             debug!("All files in the workspace: {}", files.len());
             Ok(files.into_iter().map(FileEntry::from).collect())
         }
         FileSelection::Default => {
-            if git::is_in_merge_conflict()? {
-                // TODO: Support include_deleted during merge conflict resolution,
-                // including files whose previous mode only exists in the other parent.
-                let files = git::conflicted_files(workspace_root).await?;
+            // TODO: Support include_deleted during merge conflict resolution,
+            // including files whose previous mode only exists in the other parent.
+            if let Some(files) = repo::conflicted_files(workspace_root).await? {
                 debug!("Conflicted files: {}", files.len());
-                return Ok(files.into_iter().map(FileEntry::from).collect());
+                // Git records a merge in the index, so the conflicted files are the whole
+                // selection. Jujutsu keeps conflicts in the working-copy commit alongside
+                // ordinary edits, so there they add to the changeset instead.
+                if !repo::is_jujutsu() {
+                    return Ok(files.into_iter().map(FileEntry::from).collect());
+                }
+                let mut selected = files
+                    .into_iter()
+                    .map(|path| (path, None))
+                    .collect::<FxHashMap<_, _>>();
+                for file in repo::default_files(workspace_root, include_deleted).await? {
+                    selected.insert(file.path, file.deleted_mode);
+                }
+                let mut files = selected
+                    .into_iter()
+                    .map(|(path, deleted_mode)| FileEntry { path, deleted_mode })
+                    .collect::<Vec<_>>();
+                debug!("Conflicted and changed files: {}", files.len());
+                files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+                return Ok(files);
             }
 
-            let files = git::staged_files(workspace_root, include_deleted).await?;
-            debug!("Staged files: {}", files.len());
+            let files = repo::default_files(workspace_root, include_deleted).await?;
+            debug!("Default files from repository backend: {}", files.len());
             Ok(files)
         }
     }

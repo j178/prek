@@ -1,10 +1,11 @@
 use clap::Parser;
 use fancy_regex::{Regex, RegexInput};
 
-use crate::git::git_cmd;
+use crate::git::git_cmd_for_dir;
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
 use crate::hooks::pre_commit_hooks::parse_hook_args;
+use crate::repo;
 use anyhow::{Context, Result};
 
 #[derive(Parser)]
@@ -53,7 +54,15 @@ impl Args {
 pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
     let args = parse_hook_args::<Args>(hook)?;
 
-    let output = git_cmd()?
+    // Which repository the hook's directory belongs to decides whether there is a branch to
+    // check; a Jujutsu workspace has none, since `HEAD` is detached there or names an unborn
+    // `main` in its backing store.
+    let Some(root) = repo::plain_git_root(hook.work_dir()).await? else {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    };
+
+    let output = git_cmd_for_dir()?
+        .current_dir(&root)
         .arg("symbolic-ref")
         .arg("HEAD")
         .check(false)

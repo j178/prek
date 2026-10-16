@@ -73,6 +73,60 @@ Running `prek install` installs the first type: it writes the Git shim so that G
 
 Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time Git invokes prek through the shim, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
 
+## Does prek work with Jujutsu (jj)?
+
+prek works with Git-backed [Jujutsu](https://jj-vcs.github.io/jj/) repositories and
+detects them automatically, including secondary workspaces created with
+`jj workspace add`. No extra configuration is needed. A repository on jj's native
+backend has no Git store for prek to drive, so prek reports that instead of
+guessing at a repository.
+
+Inside a jj workspace, prek:
+
+- Resolves the backing Git directory from `.jj/repo/store/git_target`, so its Git
+  commands work even when the workspace has no `.git` of its own.
+- Runs the default `prek run` on the files changed in the current working-copy
+  changeset, because jj has no staging area separate from the changeset.
+- Skips the Git index stash and the staged-config check, which do not apply to jj.
+- Points a hook's own Git commands at that backing store, so they run against your
+  workspace instead of failing to find a repository.
+
+`--all-files`, `--files`, and `--from-ref`/`--to-ref` behave as they do in a Git
+repository. In a colocated workspace, prek still detects jj, so even an installed
+Git hook checks the jj working-copy changeset rather than Git's staged files.
+
+!!! note
+
+    A few checks read Git's index or merge state directly rather than a file list,
+    so they have limited support in jj workspaces:
+
+    - `no-commit-to-branch` is skipped, since jj has no current branch that maps
+      to Git's `HEAD`.
+
+    - `forbid-new-submodules` does not detect newly added submodules, because it
+      reads `git diff --cached`.
+
+    - `PRE_COMMIT_FROM_REF`/`PRE_COMMIT_TO_REF` name the selected commits by their
+      backing-store commit IDs, since Git cannot resolve `HEAD`/`HEAD~1` or a revset
+      here. prek exports no pair when a selection names jj's root commit, whose
+      all-zero ID Git rejects in a diff range, such as `--last-commit` on a first
+      commit.
+
+    - `check-merge-conflict` does not fire on a jj conflict unless it runs with
+      `--assume-in-merge`, because it looks for Git merge-state files.
+
+    - `destroyed-symlinks` compares the index with the working copy through
+      `git status`, and `check-executables-have-shebangs` reads the index when
+      `core.fileMode` is off, so both can miss working-copy files.
+
+    - a working-copy path that is not valid UTF-8 does not reach file selection, so hooks
+      never receive it; a path holding a newline does.
+
+    - prek resolves its backend once, from the directory it runs in. A Git repository
+      nested inside a jj workspace is not resolved on its own, so file queries that
+      reach into one (for example `--files nested/big.txt`) use the outer backend. Run
+      prek from inside the nested repository to use its own.
+
 ## How does `prek install` interact with `core.hooksPath` and worktrees?
 
 If `core.hooksPath` is set in repo-local (`git config --local`) or worktree-local (`git config --worktree`) config, `prek install` and `prek uninstall` will honor it and operate on Git's effective hooks directory.

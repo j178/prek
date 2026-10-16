@@ -9,12 +9,14 @@ commands, see [Monorepos](../monorepos.md).
 Without `--config`, prek searches upward from the current working directory for
 `prek.toml`, `.pre-commit-config.yaml`, or `.pre-commit-config.yml`. It stops at
 the first directory with a config, which becomes the workspace root. The search
-never goes above the Git repository root.
+never goes above the repository root, which is the Git root or the Jujutsu (jj)
+workspace root.
 
 From the workspace root, prek recursively discovers projects in subdirectories.
-The workspace root can be inside the Git repository; it need not be the Git
-root. `-C` / `--cd` changes the working directory before discovery, so it can
-change which projects are found.
+The workspace root can be inside the repository; it need not be the repository
+root. This holds for Git repositories and for Jujutsu (jj) workspaces alike.
+`-C` / `--cd` changes the working directory before discovery, so it can change
+which projects are found.
 
 When several supported config files exist in one directory, prek uses the
 [configuration filename precedence](../configuration.md#choose-a-config-file) to choose one.

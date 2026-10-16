@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::git;
+use crate::repo;
 
 /// Tracks project worktree changes across hook priority groups.
 pub(crate) struct DiffTracker<'a> {
@@ -35,7 +35,7 @@ impl<'a> DiffTracker<'a> {
     /// Captures an unknown baseline before a group that requires diff tracking.
     pub(crate) async fn prepare_for_group(&mut self, track_changes: bool) -> Result<()> {
         if track_changes && let DiffBaseline::Unknown = self.baseline {
-            self.baseline = DiffBaseline::Snapshot(git::diff_worktree(self.path).await?);
+            self.baseline = DiffBaseline::Snapshot(repo::worktree_diff(self.path).await?);
         }
         Ok(())
     }
@@ -49,8 +49,8 @@ impl<'a> DiffTracker<'a> {
         match &mut self.baseline {
             DiffBaseline::Snapshot(prev_diff) => {
                 // One patch both detects changes and becomes the next baseline. A
-                // separate quiet check would repeat Git work whenever files are rewritten.
-                let curr_diff = git::diff_worktree(self.path).await?;
+                // separate quiet check would repeat the diff work whenever files are rewritten.
+                let curr_diff = repo::worktree_diff(self.path).await?;
                 let modified = curr_diff != *prev_diff;
                 *prev_diff = curr_diff;
                 Ok(modified)

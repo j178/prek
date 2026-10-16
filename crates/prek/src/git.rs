@@ -12,7 +12,8 @@ use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
 
-use crate::fs::PathClean;
+use crate::fs::{CWD, PathClean};
+use crate::jj;
 use crate::process;
 use crate::process::{Cmd, StatusError};
 
@@ -31,6 +32,14 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Jujutsu(#[from] jj::Error),
+
+    #[error(
+        "Detected a Jujutsu workspace at `{0}`, but prek could not find the Git repository backing it"
+    )]
+    JujutsuWithoutGitStore(PathBuf),
 
     #[error(transparent)]
     UTF8(#[from] Utf8Error),
@@ -96,6 +105,11 @@ struct Repo {
     git_dir: PathBuf,
     common_dir: PathBuf,
     hooks_dir: PathBuf,
+    /// Whether the boundary came from a Jujutsu workspace.
+    jujutsu: bool,
+    /// Backing Git store to point Git at, set only when Git cannot find the repository
+    /// on its own (a Jujutsu workspace with no `.git` entry at or below its root).
+    backing_store: Option<jj::GitStore>,
 }
 
 static REPO: LazyLock<Result<Repo, Error>> =
@@ -104,6 +118,11 @@ static REPO: LazyLock<Result<Repo, Error>> =
 /// Return the absolute path of the current repository's working tree.
 pub(crate) fn root() -> Result<&'static Path, &'static Error> {
     REPO.as_ref()?.root.as_deref()
+}
+
+/// Whether the repository boundary came from a Jujutsu workspace.
+pub(crate) fn is_jujutsu() -> bool {
+    REPO.as_ref().is_ok_and(|repo| repo.jujutsu)
 }
 
 /// Return the absolute Git directory of the current worktree, even after changing directory.
@@ -120,6 +139,16 @@ pub(crate) fn common_dir() -> Result<&'static Path, &'static Error> {
 ///
 /// `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_*`, and `GIT_CONFIG_VALUE_*`
 /// are deliberately excluded so nested Git commands retain caller-supplied command-scoped settings.
+/// The repository variables that name a path: a command changing directory has to anchor them
+/// to the one prek was started in first.
+static GIT_REPO_PATH_ENVS: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+];
+
 static GIT_REPO_LOCAL_ENVS: &[&str] = &[
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_CONFIG",
@@ -152,6 +181,31 @@ pub(crate) trait GitCommandExt {
     fn sanitize_git_repo_env(&mut self) -> &mut Self;
 }
 
+/// The Jujutsu backing store to expose to a command running in `dir`, if the active
+/// repository needs one and `dir` lies in the workspace above any nested repository.
+///
+/// Only a workspace with no `.git` entry of its own needs this: Git commands started
+/// elsewhere (hook environments, dependency repositories, nested Git repositories) must
+/// not inherit it.
+fn backing_store_for(dir: &Path) -> Option<&'static jj::GitStore> {
+    let store = REPO.as_ref().ok()?.backing_store.as_ref()?;
+    let dir = dunce::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    if !dir.starts_with(&store.workspace_root) {
+        return None;
+    }
+
+    // A `.git` between `dir` and the workspace root marks a nested repository, whose
+    // own Git commands should find it rather than the workspace's backing store.
+    let mut ancestor = dir.as_path();
+    while ancestor != store.workspace_root {
+        if ancestor.join(".git").exists() {
+            return None;
+        }
+        ancestor = ancestor.parent()?;
+    }
+    Some(store)
+}
+
 pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
     if let Some(work_tree) = git_work_tree() {
         cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
@@ -161,6 +215,14 @@ pub(crate) fn apply_git_work_tree(cmd: &mut Command) -> &mut Command {
 
 impl GitCommandExt for Cmd {
     fn preserve_current_worktree(&mut self, hook_cwd: &Path) -> &mut Self {
+        // A hook's own Git commands have to find the repository, which a Jujutsu
+        // workspace with no `.git` of its own cannot do on its own.
+        if let Some(store) = backing_store_for(hook_cwd) {
+            self.env(EnvVars::GIT_DIR, &store.git_dir);
+            self.env(EnvVars::GIT_WORK_TREE, &store.workspace_root);
+            return self;
+        }
+
         let Some(work_tree) = git_work_tree() else {
             return self;
         };
@@ -180,13 +242,90 @@ impl GitCommandExt for Cmd {
     }
 }
 
-pub(crate) fn git_cmd() -> Result<Cmd, Error> {
+/// Build a Git command with prek's baseline flags, but without pointing it at a
+/// Jujutsu workspace's backing store.
+///
+/// Discovery is what resolves that store in the first place, so it must never consult
+/// it, and neither must anything it calls.
+fn raw_git_cmd() -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?);
     cmd.hidden_args(["-c", "core.useBuiltinFSMonitor=false"]);
     if let Some(work_tree) = git_work_tree() {
         cmd.env(EnvVars::GIT_WORK_TREE, work_tree);
     }
+    Ok(cmd)
+}
 
+pub(crate) fn git_cmd() -> Result<Cmd, Error> {
+    let mut cmd = raw_git_cmd()?;
+    // A Jujutsu workspace with no `.git` of its own has to be driven through the
+    // backing store resolved from its `.jj` metadata. Colocated workspaces need no
+    // injection: Git finds the repository from the workspace itself, and pointing it
+    // elsewhere would lose a secondary workspace's own Git worktree.
+    //
+    // Commands that query a *different* repository (as `try-repo` does) must drop this
+    // again; see `git_cmd_isolated`.
+    if let Ok(repo) = REPO.as_ref()
+        && let Some(store) = &repo.backing_store
+    {
+        cmd.env(EnvVars::GIT_DIR, &store.git_dir);
+        cmd.env(EnvVars::GIT_WORK_TREE, &store.workspace_root);
+    }
+
+    Ok(cmd)
+}
+
+/// A Git command detached from prek's own repository environment.
+///
+/// The repository-local environment includes the backing store injected for a
+/// Jujutsu workspace, so commands that intentionally target another repository must
+/// clear it.
+pub(crate) fn git_cmd_isolated() -> Result<Cmd, Error> {
+    let mut cmd = git_cmd()?;
+    cmd.sanitize_git_repo_env();
+    Ok(cmd)
+}
+
+/// The Git root `dir` belongs to, asked through the repository selection prek inherited and
+/// without any Jujutsu backing store.
+pub(crate) async fn root_at(dir: &Path) -> Result<Option<PathBuf>, Error> {
+    let output = git_cmd_for_dir()?
+        .current_dir(dir)
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .check(false)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+    // Only Git's own trailing newline: a directory name may end in whitespace, and a path may
+    // hold bytes that are not UTF-8.
+    let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+    Ok(Some(path_from_git_bytes(stdout)?))
+}
+
+/// A Git command addressed to the repository a *directory* belongs to, rather than to the one
+/// prek resolved.
+///
+/// `git_cmd` points Git at a Jujutsu workspace's backing store, which would answer for the
+/// workspace instead of for a Git repository nested inside it, and `git_cmd_isolated` also drops
+/// a repository the caller selected with `GIT_DIR` and friends. Putting those back leaves the
+/// command with the environment prek inherited and nothing else.
+pub(crate) fn git_cmd_for_dir() -> Result<Cmd, Error> {
+    // The unflagged builder keeps the environment prek inherited, including the work tree
+    // `init_git_work_tree` saved for a `GIT_DIR` that came without one, and adds no backing store.
+    let mut cmd = raw_git_cmd()?;
+    // A relative repository path belongs to the directory prek was started in, while these
+    // commands change into a project directory before asking Git about it.
+    for key in GIT_REPO_PATH_ENVS {
+        if let Some(value) = EnvVars.var_os(key)
+            && Path::new(&value).is_relative()
+        {
+            cmd.env(key, CWD.join(value));
+        }
+    }
     Ok(cmd)
 }
 
@@ -201,7 +340,7 @@ fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
 /// Decode a Git path without resolving it against a directory.
 #[cfg(unix)]
 #[expect(clippy::unnecessary_wraps)]
-fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
+pub(crate) fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt as _;
 
@@ -210,7 +349,7 @@ fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
 
 /// Decode a Git path without resolving it against a directory.
 #[cfg(not(unix))]
-fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
+pub(crate) fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
     str::from_utf8(bytes).map(PathBuf::from)
 }
 
@@ -309,14 +448,21 @@ impl From<PathBuf> for FileEntry {
 
 fn diff_files_cmd(include_deleted: bool) -> Result<Cmd, Error> {
     let mut cmd = git_cmd()?;
-    // Each raw record must have one path. Renames become additions and deletions,
-    // so old paths can trigger hooks independently of Git's similarity heuristics.
+    configure_diff_files(&mut cmd, include_deleted);
+    Ok(cmd)
+}
+
+/// Configure a command to emit one raw diff record per changed path.
+///
+/// Each raw record must have one path. Renames become additions and deletions,
+/// so old paths can trigger hooks independently of Git's similarity heuristics.
+fn configure_diff_files(cmd: &mut Cmd, include_deleted: bool) -> &mut Cmd {
     cmd.args(["diff", "--raw", "--no-renames", "--no-relative", "-z"])
         .hidden_args(["--no-ext-diff"]);
     if !include_deleted {
         cmd.arg("--diff-filter=d");
     }
-    Ok(cmd)
+    cmd
 }
 
 /// Parse raw diff records without changing the paths' spelling or base directory.
@@ -398,7 +544,23 @@ pub(crate) async fn staged_files(
     root: &Path,
     include_deleted: bool,
 ) -> Result<Vec<FileEntry>, Error> {
-    let output = diff_files_cmd(include_deleted)?
+    staged_files_with(diff_files_cmd(include_deleted)?, root).await
+}
+
+/// Staged paths of another repository, isolated from prek's own repository environment.
+///
+/// `try-repo` queries repositories that are not the one prek was started in.
+pub(crate) async fn staged_files_isolated(
+    root: &Path,
+    include_deleted: bool,
+) -> Result<Vec<FileEntry>, Error> {
+    let mut cmd = git_cmd_isolated()?;
+    configure_diff_files(&mut cmd, include_deleted);
+    staged_files_with(cmd, root).await
+}
+
+async fn staged_files_with(mut cmd: Cmd, root: &Path) -> Result<Vec<FileEntry>, Error> {
+    let output = cmd
         .current_dir(root)
         .arg("--cached")
         .check(true)
@@ -459,9 +621,11 @@ fn parse_worktree_status(output: &[u8]) -> Result<WorktreeStatus, Error> {
 
 /// Check for changes against `rev` anywhere in the repository containing `path`.
 ///
-/// `path` selects the repository without limiting the check to that directory.
+/// `path` selects the repository without limiting the check to that directory. That
+/// repository is not necessarily prek's own, so the check ignores prek's repository
+/// environment (`try-repo` relies on this).
 pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
-    let status = git_cmd()?
+    let status = git_cmd_isolated()?
         .current_dir(path)
         .arg("diff")
         .hidden_args(["--no-ext-diff"])
@@ -536,7 +700,7 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>> {
 /// `diff.relative=true`. Git's patch prefixes are retained.
 #[instrument(level = "trace")]
 pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
-    let output = git_cmd()?
+    let output = git_cmd_for_dir()?
         .current_dir(path)
         .arg("diff")
         .hidden_args([
@@ -566,6 +730,20 @@ pub(crate) async fn diff_worktree(path: &Path) -> Result<Vec<u8>, Error> {
     Ok(output.stdout)
 }
 
+/// Command that prints a patch for unstaged changes under `root`, for
+/// `--show-diff-on-failure`, in the requested color mode.
+pub(crate) fn diff_worktree_cmd(root: &Path, color: &str) -> Result<Cmd, Error> {
+    let mut cmd = git_cmd_for_dir()?;
+    cmd.current_dir(root)
+        .arg("--no-pager")
+        .arg("diff")
+        .hidden_args(["--no-ext-diff"])
+        .arg(color)
+        .arg("--")
+        .arg(root);
+    Ok(cmd)
+}
+
 /// Create a tree object from the current index.
 ///
 /// The name of the new tree object is printed to standard output.
@@ -577,10 +755,106 @@ pub(crate) fn write_tree() -> Result<String, Error> {
 
 impl Repo {
     /// Discover repository directories from an absolute `cwd`, storing absolute paths.
+    ///
+    /// A Jujutsu workspace marks the repository backend as Jujutsu, and, when it has no
+    /// `.git` entry at or below its root (a secondary workspace created with
+    /// `jj workspace add`), points Git at the store resolved from its `.jj` metadata.
+    /// The nearest boundary wins, so a Git repository nested inside a Jujutsu workspace
+    /// is still treated as Git.
     #[instrument(level = "trace")]
     fn discover(cwd: &Path) -> Result<Self, Error> {
+        let Some(jujutsu_root) = jj::find_workspace_root(cwd) else {
+            return Self::discover_git(cwd, None);
+        };
+        let jujutsu_root = dunce::canonicalize(&jujutsu_root).unwrap_or(jujutsu_root);
+
+        let plain = Self::discover_git(cwd, None);
+
+        // A Git repository strictly inside the workspace is the nearer boundary, and it
+        // does not depend on the Jujutsu metadata at all, so it is decided before the
+        // store is read: broken metadata in an enclosing workspace must not hide a checkout
+        // the user actually selected.
+        if let Ok(repo) = &plain
+            && repo
+                .root
+                .as_ref()
+                .is_ok_and(|root| root.starts_with(&jujutsu_root) && root != &jujutsu_root)
+        {
+            return Self::discover_git(cwd, None);
+        }
+
+        let Some(store) = jj::resolve_git_store(cwd)? else {
+            // The `.jj` metadata is unusable (a non-Git backend, or broken state). A Git
+            // repository at or below the workspace still wins, but falling back to an
+            // enclosing one would quietly hook a repository the user never selected.
+            return match plain {
+                Ok(repo)
+                    if repo
+                        .root
+                        .as_ref()
+                        .is_ok_and(|root| root.starts_with(&jujutsu_root)) =>
+                {
+                    Ok(repo)
+                }
+                Ok(_) | Err(Error::NotRepository) => {
+                    Err(Error::JujutsuWithoutGitStore(jujutsu_root))
+                }
+                Err(err) => Err(err),
+            };
+        };
+
+        match plain {
+            Ok(mut repo) => {
+                // A `.git` at the workspace boundary: a colocated workspace, or a secondary
+                // one for which jj created a Git worktree. Git already resolves the right
+                // directories, so only mark the backend.
+                if repo
+                    .root
+                    .as_ref()
+                    .is_ok_and(|root| root == &store.workspace_root)
+                {
+                    repo.jujutsu = true;
+                    return Ok(repo);
+                }
+                // Git resolved a repository the caller named with `GIT_DIR`, and it is not this
+                // workspace. Keep it rather than pointing Git at the workspace's backing store,
+                // which would run the hooks against the wrong repository. A repository Git merely
+                // walked up to (an enclosing checkout) does not get this treatment: the workspace
+                // is the nearer boundary.
+                if EnvVars.is_set(EnvVars::GIT_DIR) {
+                    return Ok(repo);
+                }
+            }
+            // Fall back to the backing store only when Git simply found no repository.
+            // A repository that is broken, or one named by an inherited `GIT_DIR` that
+            // does not resolve (`git` itself would have failed), is reported instead of
+            // being masked by the store.
+            Err(err)
+                if EnvVars.is_set(EnvVars::GIT_DIR) || !matches!(err, Error::NotRepository) =>
+            {
+                return Err(err);
+            }
+            Err(_) => {}
+        }
+
+        let mut repo = Self::discover_git(cwd, Some(&store))?;
+        repo.jujutsu = true;
+        repo.backing_store = Some(store);
+        Ok(repo)
+    }
+
+    /// Discover the Git directories by asking Git, optionally pointed at a Jujutsu
+    /// workspace's backing store.
+    #[instrument(level = "trace")]
+    fn discover_git(cwd: &Path, jujutsu: Option<&jj::GitStore>) -> Result<Self, Error> {
         let rev_parse = |args: &[&str]| -> Result<_, Error> {
-            let mut cmd = git_cmd()?;
+            // Use the unflagged builder: this call *is* what resolves a Jujutsu
+            // workspace's backing store for the rest of the process.
+            let mut cmd = raw_git_cmd()?;
+            if let Some(store) = jujutsu {
+                cmd.env(EnvVars::GIT_DIR, &store.git_dir);
+                cmd.env(EnvVars::GIT_WORK_TREE, &store.workspace_root);
+            }
             cmd.current_dir(cwd)
                 .arg("rev-parse")
                 .args(args)
@@ -648,6 +922,8 @@ impl Repo {
             git_dir,
             common_dir: cwd.join(common_dir),
             hooks_dir: cwd.join(hooks_dir),
+            jujutsu: false,
+            backing_store: None,
         };
         debug!(?state, "Git repository state");
         Ok(state)
