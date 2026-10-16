@@ -690,3 +690,142 @@ fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// A dependency that needs a newer Python than the environment was built with is retried once:
+/// the venv is removed, recreated for the inferred interpreter, and the install runs again. (The
+/// bound is one no interpreter meets, because a bound the environment's interpreter already
+/// satisfies is deliberately not retried.)
+///
+/// uv is stubbed, because a real retry needs a machine whose installed interpreters are too old
+/// for the dependency, which no test can assume. The stub records the commands it is given, and
+/// the hook prints that log, so the whole lifecycle is visible in the snapshot.
+#[cfg(unix)]
+#[test]
+fn retries_dependency_install_with_the_inferred_python() -> anyhow::Result<()> {
+    use prek_consts::env_vars::EnvVarsRead as _;
+
+    let context = TestEnv::new();
+    let log = context
+        .work_dir()
+        .child("uv.log")
+        .path()
+        .display()
+        .to_string();
+
+    let context = context
+        .with_executable_file(
+            "stub/uv",
+            indoc::formatdoc! {r#"
+                #!/bin/sh
+                # A stub uv: the first `pip install` fails the way uv reports a dependency that
+                # needs a newer Python, and the venv it creates holds the real interpreter, so
+                # the hook can run afterwards.
+                log="{log}"
+                bound="$UV_STUB_BOUND"
+                [ -z "$bound" ] && bound="4.0"
+                py="default"
+                prev=""
+                last=""
+                for arg in "$@"; do
+                  if [ "$prev" = "--python" ]; then py="$arg"; fi
+                  prev="$arg"
+                  last="$arg"
+                done
+                case "$1" in
+                  --version) echo "uv 0.9.9" ;;
+                  venv)
+                    mkdir -p "$2/bin"
+                    ln -sf "$(command -v python3)" "$2/bin/python"
+                    ln -sf "$(command -v python3)" "$2/bin/python3"
+                    echo "venv --python $py" >> "$log"
+                    ;;
+                  pip)
+                    echo "pip install $last" >> "$log"
+                    if [ "$(grep -c '^pip install' "$log")" = 1 ]; then
+                      # The default bound is one no released interpreter meets, so the retry runs
+                      # on any machine; `UV_STUB_BOUND` names one the interpreter does meet.
+                      echo "cause: Because the current Python version does not satisfy Python>=$bound and a dependency requires Python>=$bound, we can conclude that the requirements are unsatisfiable." >&2
+                      exit 1
+                    fi
+                    ;;
+                esac
+                exit 0
+            "#},
+        )
+        .with_config(indoc::formatdoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: retry
+                    name: retry
+                    language: python
+                    entry: python -c "print(open('{log}').read(), end='')"
+                    additional_dependencies: ["foo==1.0"]
+                    verbose: true
+                    always_run: true
+                    pass_filenames: false
+        "#})
+        .init_git();
+
+    // The stub has to win over any real uv, so its directory goes first.
+    let path = std::env::join_paths(
+        std::iter::once(context.work_dir().child("stub").to_path_buf()).chain(
+            std::env::split_paths(&EnvVars.var_os(EnvVars::PATH).expect("PATH must be set")),
+        ),
+    )?;
+
+    cmd_snapshot!(context, context.run().env(EnvVars::PATH, &path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    retry....................................................................Passed
+    - hook id: retry
+    - duration: [TIME]
+
+      venv --python default
+      pip install foo==1.0
+      venv --python >=4.0.0, <4.1.0
+      pip install foo==1.0
+
+    ----- stderr -----
+    ");
+
+    // The same failure with a bound the installed interpreter already meets: a venv rebuilt for
+    // that range would pick the same interpreter and fail the same way, so prek surfaces the
+    // resolution error and leaves the working environment alone (one venv, one install below).
+    context.write_file("uv.log", "");
+    context.write_config(indoc::formatdoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: retry
+                name: retry
+                language: python
+                entry: python -c "print(open('{log}').read(), end='')"
+                additional_dependencies: ["bar==2.0"]
+                verbose: true
+                always_run: true
+                pass_filenames: false
+    "#});
+    context.git().add(".pre-commit-config.yaml");
+
+    cmd_snapshot!(context, context.run()
+        .env(EnvVars::PATH, &path)
+        .env("UV_STUB_BOUND", "3.0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `retry`
+      caused by: Command `[TEMP_DIR]/stub/uv pip install --project / bar==2.0` exited with an error:
+
+    [status]
+    exit status: 1
+
+    [stderr]
+    cause: Because the current Python version does not satisfy Python>=3.0 and a dependency requires Python>=3.0, we can conclude that the requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
