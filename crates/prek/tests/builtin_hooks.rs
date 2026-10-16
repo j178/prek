@@ -4036,7 +4036,7 @@ fn check_signed_commit_hook_fails_on_unsigned_root_commit() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Initial commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4066,7 +4066,7 @@ fn check_signed_commit_hook_fails_on_unsigned_head_with_parent() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Second commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4149,11 +4149,11 @@ fn check_signed_commit_hook_reports_verification_errors_per_commit() -> Result<(
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] SSH signed commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
         error: gpg.ssh.allowedSignersFile needs to be configured and exist for ssh signature verification
-      [COMMIT_SHA] GPG signed commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
         error: cannot run prek-missing-gpg: No such file or directory
-      [COMMIT_SHA] Unsigned commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4192,7 +4192,7 @@ fn check_signed_commit_hook_handles_silent_verifier_failure() -> Result<()> {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Signed commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4274,7 +4274,7 @@ fn check_signed_commit_hook_verifies_ssh_signatures() -> Result<()> {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Tampered commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
         Could not verify signature.
         Signature verification failed: incorrect signature
 
@@ -4322,8 +4322,8 @@ fn check_signed_commit_hook_checks_full_history_when_only_to_ref_is_set() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Second commit: signature verification failed
-      [COMMIT_SHA] Initial commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#
@@ -4361,7 +4361,7 @@ fn check_commit_trailers_hook_checks_git_signoff() {
     - description: Checks required and denied commit trailers
     - exit code: 1
 
-      .git/COMMIT_EDITMSG: no non-empty trailer matches required rule `Signed-off-by`
+      .git/COMMIT_EDITMSG: missing required trailer `Signed-off-by`
     "#);
     cmd_snapshot!(context, context.git().command().args(["commit", "-s", "-m", "Add feature"]), @r#"
     success: true
@@ -4396,7 +4396,7 @@ fn check_commit_trailers_hook_ignores_subject_body_and_comment_matches() {
             - description: Checks required and denied commit trailers
             - exit code: 1
 
-              MSG: no non-empty trailer matches required rule `Signed-off-by`
+              MSG: missing required trailer `Signed-off-by`
 
             ----- stderr -----
             "#);
@@ -4525,10 +4525,10 @@ fn check_commit_trailers_hook_matches_values_and_denies_any_occurrence() {
     - description: Checks required and denied commit trailers
     - exit code: 1
 
-      MSG: no non-empty trailer matches required rule `Signed-off-by`
-      MSG: no non-empty trailer matches required rule `Co-authored-by=^Alice/b`
-      MSG: trailer `Co-authored-by: Claude <claude@example.com>` matches denied rule `Co-authored-by=(?i)^claude/b`
-      MSG: trailer `AI-generated-by: ` matches denied rule `AI-generated-by`
+      MSG: trailer `Signed-off-by` needs a value
+      MSG: trailer `Co-authored-by` needs a value matching `^Alice/b`
+      MSG: value `Claude <claude@example.com>` is not allowed for trailer `Co-authored-by`
+      MSG: trailer `AI-generated-by` is not allowed
 
     ----- stderr -----
     "#);
@@ -4567,7 +4567,7 @@ fn check_commit_trailers_hook_does_not_hide_denied_values_in_malformed_blocks() 
     - description: Checks required and denied commit trailers
     - exit code: 1
 
-      MSG: trailer block contains non-trailer lines
+      MSG: trailer block contains extra text; move it above the trailers
 
     ----- stderr -----
     "#);
@@ -4642,7 +4642,7 @@ fn check_commit_trailers_hook_checks_push_ranges_even_without_file_changes() -> 
     - description: Checks required and denied commit trailers
     - exit code: 1
 
-      abc1234 Denied middle commit: trailer `Co-authored-by: Claude <claude@example.com>` matches denied rule `Co-authored-by=(?i)^claude/b`
+      abc1234: value `Claude <claude@example.com>` is not allowed for trailer `Co-authored-by`
 
     ----- stderr -----
     error: failed to push some refs to '[HOME]/remote.git'
@@ -4684,7 +4684,7 @@ fn check_commit_trailers_hook_checks_push_ranges_even_without_file_changes() -> 
     - description: Checks required and denied commit trailers
     - exit code: 1
 
-      abc1234 Existing history without trailers: no non-empty trailer matches required rule `Signed-off-by`
+      abc1234: missing required trailer `Signed-off-by`
 
     ----- stderr -----
     error: failed to push some refs to '[HOME]/empty.git'

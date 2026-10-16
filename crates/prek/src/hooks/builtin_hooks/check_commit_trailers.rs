@@ -92,21 +92,25 @@ fn parse_rule(value: &str) -> Result<Rule, String> {
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     for denied in &args.deny {
-        anyhow::ensure!(
-            denied.pattern.is_some()
-                || !args
-                    .require
-                    .iter()
-                    .any(|rule| rule.key.eq_ignore_ascii_case(&denied.key)),
-            "Trailer `{}` cannot be both required and denied",
-            denied.key
-        );
+        if denied.pattern.is_none()
+            && args
+                .require
+                .iter()
+                .any(|rule| rule.key.eq_ignore_ascii_case(&denied.key))
+        {
+            anyhow::bail!(
+                "Trailer `{}` cannot be both required and denied",
+                denied.key
+            );
+        }
     }
 
     let mut output = Vec::new();
     match EnvVars.var(EnvVars::PREK_HOOK_STAGE).as_deref() {
         Ok("commit-msg") => {
-            anyhow::ensure!(!filenames.is_empty(), "Expected a commit message filename");
+            if filenames.is_empty() {
+                anyhow::bail!("Expected a commit message filename");
+            }
             let prefix = comment_prefix(hook.work_dir()).await?;
             let scissors = format!("{prefix} ------------------------ >8 ------------------------");
             for filename in filenames {
@@ -137,7 +141,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
                 .args([
                     "log",
                     "--no-show-signature",
-                    "--format=%h %s%n%B",
+                    "--format=%h%n%B",
                     "-z",
                     "--end-of-options",
                 ])
@@ -180,10 +184,9 @@ async fn comment_prefix(work_dir: &Path) -> Result<String> {
         .map(|(_, value)| value)
         .next_back()
         .unwrap_or("#");
-    anyhow::ensure!(
-        prefix != "auto" && !prefix.is_empty(),
-        "check-commit-trailers requires an explicit Git comment character or string"
-    );
+    if prefix == "auto" || prefix.is_empty() {
+        anyhow::bail!("check-commit-trailers requires an explicit Git comment character or string");
+    }
     Ok(prefix.to_string())
 }
 
@@ -247,7 +250,10 @@ fn check_message(source: &str, message: &str, args: &Args, output: &mut Vec<u8>)
         })
     {
         // Treating a malformed candidate as absent would let deny rules pass silently.
-        writeln!(output, "{source}: trailer block contains non-trailer lines")?;
+        writeln!(
+            output,
+            "{source}: trailer block contains extra text; move it above the trailers"
+        )?;
         return Ok(());
     }
     for rule in &args.require {
@@ -259,20 +265,35 @@ fn check_message(source: &str, message: &str, args: &Args, output: &mut Vec<u8>)
             }
         }
         if !found {
-            writeln!(
-                output,
-                "{source}: no non-empty trailer matches required rule `{rule}`"
-            )?;
+            if !block
+                .trailers
+                .iter()
+                .any(|trailer| rule.key.eq_ignore_ascii_case(trailer.key))
+            {
+                writeln!(output, "{source}: missing required trailer `{}`", rule.key)?;
+            } else if let Some(pattern) = &rule.pattern {
+                writeln!(
+                    output,
+                    "{source}: trailer `{}` needs a value matching `{pattern}`",
+                    rule.key
+                )?;
+            } else {
+                writeln!(output, "{source}: trailer `{}` needs a value", rule.key)?;
+            }
         }
     }
     for rule in &args.deny {
         for trailer in &block.trailers {
             if rule.matches(trailer)? {
-                writeln!(
-                    output,
-                    "{source}: trailer `{}: {}` matches denied rule `{rule}`",
-                    trailer.key, trailer.value
-                )?;
+                if rule.pattern.is_some() {
+                    writeln!(
+                        output,
+                        "{source}: value `{}` is not allowed for trailer `{}`",
+                        trailer.value, trailer.key
+                    )?;
+                } else {
+                    writeln!(output, "{source}: trailer `{}` is not allowed", trailer.key)?;
+                }
                 break;
             }
         }
