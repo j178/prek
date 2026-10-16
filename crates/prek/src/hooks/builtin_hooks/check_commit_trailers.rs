@@ -111,14 +111,19 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
             if filenames.is_empty() {
                 anyhow::bail!("Expected a commit message filename");
             }
-            let prefix = comment_prefix(hook.work_dir()).await?;
-            let scissors = format!("{prefix} ------------------------ >8 ------------------------");
+            // Skip commit-msg checks triggered by `git merge`.
+            if git::git_dir()?.join("MERGE_HEAD").try_exists()? {
+                return Ok(HookOutput::unchanged(0, output));
+            }
             for filename in filenames {
                 let message = fs_err::tokio::read_to_string(hook.work_dir().join(filename)).await?;
                 let message = message
                     .lines()
-                    .take_while(|line| *line != scissors)
-                    .filter(|line| !line.starts_with(&prefix))
+                    // Ignore content below Git's scissors marker, including verbose diffs.
+                    .take_while(|line| {
+                        *line != "# ------------------------ >8 ------------------------"
+                    })
+                    .filter(|line| !line.starts_with('#'))
                     .join("\n");
                 check_message(
                     &filename.display().to_string(),
@@ -140,6 +145,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
                 .current_dir(hook.work_dir())
                 .args([
                     "log",
+                    "--no-merges",
                     "--no-show-signature",
                     "--format=%h%n%B",
                     "-z",
@@ -160,34 +166,6 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         _ => anyhow::bail!("check-commit-trailers requires the commit-msg or pre-push stage"),
     }
     Ok(HookOutput::unchanged(i32::from(!output.is_empty()), output))
-}
-
-async fn comment_prefix(work_dir: &Path) -> Result<String> {
-    let mut command = git::git_cmd()?;
-    command
-        .current_dir(work_dir)
-        .args([
-            "config",
-            "--null",
-            "--get-regexp",
-            r"^core\.comment(char|string)$",
-        ])
-        .check(false);
-    let output = command.output().await?;
-    if output.status.code() != Some(1) {
-        command.check_status(output.status)?;
-    }
-    let config = String::from_utf8(output.stdout)?;
-    let prefix = config
-        .split('\0')
-        .filter_map(|entry| entry.split_once('\n'))
-        .map(|(_, value)| value)
-        .next_back()
-        .unwrap_or("#");
-    if prefix == "auto" || prefix.is_empty() {
-        anyhow::bail!("check-commit-trailers requires an explicit Git comment character or string");
-    }
-    Ok(prefix.to_string())
 }
 
 struct Trailer<'a> {

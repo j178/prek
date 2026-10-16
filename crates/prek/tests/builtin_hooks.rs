@@ -4377,6 +4377,49 @@ fn check_commit_trailers_hook_checks_git_signoff() {
 }
 
 #[test]
+fn check_commit_trailers_hook_skips_merges_in_linked_worktree() {
+    let context =
+        check_commit_trailers_context("[--require, Signed-off-by, --deny, Co-authored-by]");
+    context.git().commit("Initial commit");
+    context.git().run(["checkout", "-b", "feature"]);
+    context
+        .git()
+        .run(["commit", "--allow-empty", "-m", "Feature change"]);
+    context.git().run(["checkout", "master"]);
+    context.git().run(["worktree", "add", "worktree", "HEAD"]);
+    context.install().assert().success();
+
+    let git = context.git_at(context.child("worktree"));
+    cmd_snapshot!(context, git.command().args([
+        "merge", "--quiet", "--no-ff", "feature", "-m",
+        "Integrate feature\n\nCo-authored-by: Claude",
+    ]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    check commit trailers....................................................Passed
+    "#);
+
+    cmd_snapshot!(context, git.command().args([
+        "commit", "--quiet", "--allow-empty", "-m", "Merge user data",
+    ]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      ../.git/worktrees/worktree/COMMIT_EDITMSG: missing required trailer `Signed-off-by`
+    "#);
+}
+
+#[test]
 fn check_commit_trailers_hook_ignores_subject_body_and_comment_matches() {
     let context = check_commit_trailers_context("[--require, Signed-off-by]");
 
@@ -4409,8 +4452,6 @@ fn check_commit_trailers_hook_accepts_folded_trailers_and_editor_comments() {
     let context = check_commit_trailers_context(
         r"[--require, 'Co-authored-by=^Helper <helper@example\.com>$', --deny, 'Co-authored-by=Claude']",
     );
-    context.git().run(["config", "core.commentChar", ";"]);
-    context.git().run(["config", "core.commentString", "//"]);
     context.write_file(
         "MSG",
         indoc::indoc! {"
@@ -4419,8 +4460,8 @@ fn check_commit_trailers_hook_accepts_folded_trailers_and_editor_comments() {
         co-AUTHORED-by:
           Helper <helper@example.com>
 
-        // Comment after the trailers.
-        // ------------------------ >8 ------------------------
+        # Comment after the trailers.
+        # ------------------------ >8 ------------------------
 
         Co-authored-by: Claude
     "}
@@ -4633,6 +4674,15 @@ fn check_commit_trailers_hook_checks_push_ranges_even_without_file_changes() -> 
         "-m",
         "Allowed tip\n\nSigned-off-by: Alice <alice@example.com>",
     ]);
+    context.git().branch("denied-feature");
+    context.git().run(["reset", "--hard", &base]);
+    context.git().run([
+        "merge",
+        "--no-ff",
+        "denied-feature",
+        "-m",
+        "Integrate feature\n\nCo-authored-by: Claude",
+    ]);
     cmd_snapshot!(context, context.git().command().args(["push", "origin", "HEAD"]), @r#"
     success: false
     exit_code: 1
@@ -4654,6 +4704,15 @@ fn check_commit_trailers_hook_checks_push_ranges_even_without_file_changes() -> 
         "--allow-empty",
         "-m",
         "Allowed tip\n\nSigned-off-by: Alice <alice@example.com>",
+    ]);
+    context.git().branch("allowed-feature");
+    context.git().run(["reset", "--hard", &base]);
+    context.git().run([
+        "merge",
+        "--no-ff",
+        "allowed-feature",
+        "-m",
+        "Integrate feature\n\nCo-authored-by: Claude",
     ]);
     cmd_snapshot!(context, context.git().command().args(["push", "origin", "HEAD"]), @r#"
     success: true

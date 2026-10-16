@@ -682,9 +682,10 @@ such as `--deny=AI-generated-by`.
   the subject or body by a blank line. Repeated keys and indented continuation
   lines are supported. Matching text in the subject or an earlier paragraph does
   not count as a trailer.
-- `pre-push` checks commits being pushed, including empty and merge commits. When
+- Merge commits are skipped. Squash commits are checked. When amending an existing
+  merge commit, its message is still checked at `commit-msg`.
+- `pre-push` checks commits being pushed, including empty commits. When
   pushing multiple refs, only the first ref with pending commits is checked.
-- `core.commentChar=auto` is not supported.
 
 ---
 
