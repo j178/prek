@@ -966,7 +966,7 @@ fn skips() {
     context.git().add(".");
 
     // Should error out because of the invalid config
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -978,7 +978,8 @@ fn skips() {
       |
     1 | invalid_yaml: [
       |               ^ unclosed bracket '['
-    ");
+      caused by: unclosed bracket '[' at line 1, column 15
+    "#);
 
     // Should skip the invalid config
     cmd_snapshot!(context, context.run().arg("--skip").arg("project3/"), @r#"

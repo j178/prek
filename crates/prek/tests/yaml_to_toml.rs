@@ -199,6 +199,7 @@ fn yaml_to_toml_rejects_invalid_config() {
       |
     1 | repos: 123
       |        ^ expected sequence start
+      caused by: expected sequence start at line 1, column 8
     "#
     );
 }
