@@ -22,7 +22,7 @@ pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
             "--no-merges",
             "--no-show-signature",
             "-z",
-            "--pretty=format:%H %h %s",
+            "--pretty=format:%H %h",
         ])
         .arg(range)
         .output()
@@ -32,7 +32,7 @@ pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
     let mut checks =
         futures_util::stream::iter(commits.split('\0').filter(|record| !record.is_empty()))
             .map(|record| async move {
-                let (oid, summary) = record
+                let (oid, short_oid) = record
                     .split_once(' ')
                     .context("Invalid commit information from Git")?;
                 // Verify separately so each diagnostic belongs to a specific commit.
@@ -43,20 +43,20 @@ pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {
                     .output()
                     .await
                     .with_context(|| format!("Failed to verify commit {oid}"))?;
-                anyhow::Ok((summary, output))
+                anyhow::Ok((short_oid, output))
             })
             .buffered(*INTERNAL_CONCURRENCY);
 
     let mut failed = false;
     let mut message = output.stderr;
     while let Some(result) = checks.next().await {
-        let (summary, output) = result?;
+        let (short_oid, output) = result?;
         if output.status.success() {
             continue;
         }
 
         failed = true;
-        writeln!(message, "{summary}: signature verification failed")?;
+        writeln!(message, "{short_oid}: signature verification failed")?;
         for line in String::from_utf8_lossy(&output.stderr).trim_end().lines() {
             writeln!(message, "  {line}")?;
         }

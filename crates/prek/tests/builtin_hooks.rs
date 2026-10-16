@@ -4,7 +4,7 @@ use prek_consts::env_vars::EnvVarsRead;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
@@ -4036,7 +4036,7 @@ fn check_signed_commit_hook_fails_on_unsigned_root_commit() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Initial commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4066,7 +4066,7 @@ fn check_signed_commit_hook_fails_on_unsigned_head_with_parent() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Second commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4149,11 +4149,11 @@ fn check_signed_commit_hook_reports_verification_errors_per_commit() -> Result<(
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] SSH signed commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
         error: gpg.ssh.allowedSignersFile needs to be configured and exist for ssh signature verification
-      [COMMIT_SHA] GPG signed commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
         error: cannot run prek-missing-gpg: No such file or directory
-      [COMMIT_SHA] Unsigned commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4192,7 +4192,7 @@ fn check_signed_commit_hook_handles_silent_verifier_failure() -> Result<()> {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Signed commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#);
@@ -4274,7 +4274,7 @@ fn check_signed_commit_hook_verifies_ssh_signatures() -> Result<()> {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Tampered commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
         Could not verify signature.
         Signature verification failed: incorrect signature
 
@@ -4322,10 +4322,431 @@ fn check_signed_commit_hook_checks_full_history_when_only_to_ref_is_set() {
     - description: Ensures commits are signed with a valid GPG/SSH signature before they're pushed
     - exit code: 1
 
-      [COMMIT_SHA] Second commit: signature verification failed
-      [COMMIT_SHA] Initial commit: signature verification failed
+      [COMMIT_SHA]: signature verification failed
+      [COMMIT_SHA]: signature verification failed
 
     ----- stderr -----
     "#
     );
+}
+
+fn check_commit_trailers_context(args: &str) -> TestEnv {
+    TestEnv::new()
+        .with_filter("[a-f0-9]{7}", "abc1234")
+        .with_config(indoc::formatdoc! {r"
+        default_install_hook_types:
+          - commit-msg
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-commit-trailers
+                args: {args}
+        "})
+        .init_git()
+}
+
+#[test]
+fn check_commit_trailers_hook_checks_git_signoff() {
+    let context = check_commit_trailers_context("[--require, Signed-off-by]");
+    context.install().assert().success();
+
+    cmd_snapshot!(context, context.git().command().args(["commit", "-m", "Add feature"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      .git/COMMIT_EDITMSG: missing required trailer `Signed-off-by`
+    "#);
+    cmd_snapshot!(context, context.git().command().args(["commit", "-s", "-m", "Add feature"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Add feature
+     1 file changed, 7 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+
+    ----- stderr -----
+    check commit trailers....................................................Passed
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_skips_merges_in_linked_worktree() {
+    let context =
+        check_commit_trailers_context("[--require, Signed-off-by, --deny, Co-authored-by]");
+    context.git().commit("Initial commit");
+    context.git().run(["checkout", "-b", "feature"]);
+    context
+        .git()
+        .run(["commit", "--allow-empty", "-m", "Feature change"]);
+    context.git().run(["checkout", "master"]);
+    context.git().run(["worktree", "add", "worktree", "HEAD"]);
+    context.install().assert().success();
+
+    let git = context.git_at(context.child("worktree"));
+    cmd_snapshot!(context, git.command().args([
+        "merge", "--quiet", "--no-ff", "feature", "-m",
+        "Integrate feature\n\nCo-authored-by: Claude",
+    ]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    check commit trailers....................................................Passed
+    "#);
+
+    cmd_snapshot!(context, git.command().args([
+        "commit", "--quiet", "--allow-empty", "-m", "Merge user data",
+    ]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      ../.git/worktrees/worktree/COMMIT_EDITMSG: missing required trailer `Signed-off-by`
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_ignores_subject_body_and_comment_matches() {
+    let context = check_commit_trailers_context("[--require, Signed-off-by]");
+
+    insta::allow_duplicates! {
+        for message in [
+            "Signed-off-by: Prek Test <test@prek.dev>\n",
+            "Subject\n\nSigned-off-by: Prek Test <test@prek.dev>\n\nMore body text.\n",
+            "Subject\n\n# Signed-off-by: Prek Test <test@prek.dev>\n",
+        ] {
+            context.write_file("MSG", message);
+            cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+            check commit trailers....................................................Failed
+            - hook id: check-commit-trailers
+            - description: Checks required and denied commit trailers
+            - exit code: 1
+
+              MSG: missing required trailer `Signed-off-by`
+
+            ----- stderr -----
+            "#);
+        }
+    }
+}
+
+#[test]
+fn check_commit_trailers_hook_accepts_folded_trailers_and_editor_comments() {
+    let context = check_commit_trailers_context(
+        r"[--require, 'Co-authored-by=^Helper <helper@example\.com>$', --deny, 'Co-authored-by=Claude']",
+    );
+    context.write_file(
+        "MSG",
+        indoc::indoc! {"
+        Subject
+
+        co-AUTHORED-by:
+          Helper <helper@example.com>
+
+        # Comment after the trailers.
+        # ------------------------ >8 ------------------------
+
+        Co-authored-by: Claude
+    "}
+        .replace('\n', "\r\n"),
+    );
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check commit trailers....................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_rejects_invalid_configuration() {
+    let context = check_commit_trailers_context("[]");
+    context.write_file("MSG", "Subject\n");
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-commit-trailers`
+      caused by: error: the following required arguments were not provided:
+      <--require <KEY[=REGEX]>|--deny <KEY[=REGEX]>>
+
+    Usage: check-commit-trailers <--require <KEY[=REGEX]>|--deny <KEY[=REGEX]>>
+    "#);
+
+    let context = check_commit_trailers_context("[--require, 'Co-authored-by:']");
+    context.write_file("MSG", "Subject\n");
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-commit-trailers`
+      caused by: error: invalid value 'Co-authored-by:' for '--require <KEY[=REGEX]>': trailer keys must contain only ASCII letters, digits, and hyphens
+
+      caused by: trailer keys must contain only ASCII letters, digits, and hyphens
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_reads_workspace_message() {
+    let context = TestEnv::new().init_git();
+    context.write_workspace(
+        ["nested"],
+        indoc::indoc! {"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-commit-trailers
+                args: [--require, Co-authored-by]
+    "},
+    );
+    context.write_file(
+        "MSG",
+        "Subject\n\nCo-authored-by: Helper <helper@example.com>\n",
+    );
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ nested
+      check commit trailers..................................................Passed
+    ✓ <workspace>
+      check commit trailers..................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_matches_values_and_denies_any_occurrence() {
+    let context = check_commit_trailers_context(
+        r"[--require, Signed-off-by, --require, 'Co-authored-by=^Alice\b', --require, 'Refs=^issue=123$', --deny, 'Co-authored-by=(?i)^claude\b', --deny, AI-generated-by]",
+    );
+    context.write_file(
+        "MSG",
+        indoc::indoc! {"
+        Add feature
+
+        Signed-off-by:
+        Co-authored-by: Bob <bob@example.com>
+        Co-authored-by:
+          Claude <claude@example.com>
+        Refs: issue=123
+        AI-generated-by:
+    "},
+    );
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      MSG: trailer `Signed-off-by` needs a value
+      MSG: trailer `Co-authored-by` needs a value matching `^Alice/b`
+      MSG: value `Claude <claude@example.com>` is not allowed for trailer `Co-authored-by`
+      MSG: trailer `AI-generated-by` is not allowed
+
+    ----- stderr -----
+    "#);
+
+    context.write_file(
+        "MSG",
+        indoc::indoc! {"
+        Add feature
+
+        Signed-off-by: Alice <alice@example.com>
+        Co-authored-by: Alice <alice@example.com>
+        Co-authored-by: Bob <bob@example.com>
+        Refs: issue=123
+    "},
+    );
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check commit trailers....................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_does_not_hide_denied_values_in_malformed_blocks() {
+    let context = check_commit_trailers_context("[--deny, Co-authored-by]");
+    context.write_file("MSG", "Subject\n\nCo-authored-by: Claude\nExtra prose\n");
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      MSG: trailer block contains extra text; move it above the trailers
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_rejects_invalid_patterns_and_conflicting_rules() {
+    let context = check_commit_trailers_context("[--deny, 'Co-authored-by=[']");
+    context.write_file("MSG", "Subject\n");
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-commit-trailers`
+      caused by: error: invalid value 'Co-authored-by=[' for '--deny <KEY[=REGEX]>': Parsing error at position 1: Invalid character class
+
+      caused by: Parsing error at position 1: Invalid character class
+    "#);
+
+    let context =
+        check_commit_trailers_context("[--require, Signed-off-by, --deny, signed-OFF-by]");
+    context.write_file("MSG", "Subject\n");
+    cmd_snapshot!(context, context.run().args(["--hook-stage", "commit-msg", "--commit-msg-filename", "MSG"]), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `check-commit-trailers`
+      caused by: Trailer `signed-OFF-by` cannot be both required and denied
+    "#);
+}
+
+#[test]
+fn check_commit_trailers_hook_checks_push_ranges_even_without_file_changes() -> Result<()> {
+    let context = check_commit_trailers_context(
+        r"[--require, Signed-off-by, --deny, 'Co-authored-by=(?i)^claude\b']",
+    );
+    context.git().commit("Existing history without trailers");
+    let base = context.git().rev_parse("HEAD")?;
+    let remote = context.home_dir().join("remote.git");
+    fs_err::create_dir_all(&remote)?;
+    context.git_at(&remote).run(["init", "--bare"]);
+    context.git().run([
+        "remote",
+        "add",
+        "origin",
+        remote.to_str().context("UTF-8 test path")?,
+    ]);
+    context.git().run(["push", "origin", "HEAD"]);
+    context
+        .install()
+        .args(["--hook-type", "pre-push"])
+        .assert()
+        .success();
+
+    context.git().run(["commit", "--allow-empty", "-m", "Denied middle commit\n\nSigned-off-by: Alice <alice@example.com>\nCo-authored-by: Alice <alice@example.com>\nCo-authored-by: Claude <claude@example.com>"]);
+    context.git().run([
+        "commit",
+        "--allow-empty",
+        "-m",
+        "Allowed tip\n\nSigned-off-by: Alice <alice@example.com>",
+    ]);
+    context.git().branch("denied-feature");
+    context.git().run(["reset", "--hard", &base]);
+    context.git().run([
+        "merge",
+        "--no-ff",
+        "denied-feature",
+        "-m",
+        "Integrate feature\n\nCo-authored-by: Claude",
+    ]);
+    cmd_snapshot!(context, context.git().command().args(["push", "origin", "HEAD"]), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      abc1234: value `Claude <claude@example.com>` is not allowed for trailer `Co-authored-by`
+
+    ----- stderr -----
+    error: failed to push some refs to '[HOME]/remote.git'
+    "#);
+
+    context.git().run(["reset", "--hard", &base]);
+    context.git().run([
+        "commit",
+        "--allow-empty",
+        "-m",
+        "Allowed tip\n\nSigned-off-by: Alice <alice@example.com>",
+    ]);
+    context.git().branch("allowed-feature");
+    context.git().run(["reset", "--hard", &base]);
+    context.git().run([
+        "merge",
+        "--no-ff",
+        "allowed-feature",
+        "-m",
+        "Integrate feature\n\nCo-authored-by: Claude",
+    ]);
+    cmd_snapshot!(context, context.git().command().args(["push", "origin", "HEAD"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check commit trailers....................................................Passed
+
+    ----- stderr -----
+    To [HOME]/remote.git
+       abc1234..abc1234  HEAD -> master
+    "#);
+
+    let remote = context.home_dir().join("empty.git");
+    fs_err::create_dir_all(&remote)?;
+    context.git_at(&remote).run(["init", "--bare"]);
+    context.git().run([
+        "remote",
+        "add",
+        "empty",
+        remote.to_str().context("UTF-8 test path")?,
+    ]);
+    cmd_snapshot!(context, context.git().command().args(["push", "empty", "HEAD"]).env(EnvVars::PRE_COMMIT_FROM_REF, "HEAD"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check commit trailers....................................................Failed
+    - hook id: check-commit-trailers
+    - description: Checks required and denied commit trailers
+    - exit code: 1
+
+      abc1234: missing required trailer `Signed-off-by`
+
+    ----- stderr -----
+    error: failed to push some refs to '[HOME]/empty.git'
+    "#);
+    Ok(())
 }

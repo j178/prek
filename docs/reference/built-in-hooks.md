@@ -36,6 +36,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`detect-private-key`](#detect-private-key) (Detects the presence of private keys.)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Protects specific branches from direct commits.)
 - [`check-signed-commit`](#check-signed-commit) (Ensures commits are signed with a valid GPG/SSH signature before they're pushed.)
+- [`check-commit-trailers`](#check-commit-trailers) (Checks required and denied commit trailers.)
 - [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable.)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang.)
 
@@ -627,6 +628,64 @@ Ensures commits are signed with a valid GPG/SSH signature before they're pushed.
 - Commits must pass `git verify-commit` using your local Git GPG/SSH configuration.
   Unsigned commits and verification failures, including missing tools or public keys,
   fail the hook.
+
+---
+
+### `check-commit-trailers`
+
+Checks required and denied trailers in commit messages, such as `Signed-off-by`,
+`Co-authored-by`, or `Reviewed-by`. At `commit-msg`, it checks the message before
+the commit is created. At `pre-push`, it checks the messages of commits being pushed.
+
+**Supported arguments**
+
+- `--require KEY[=REGEX]`: Require a trailer with a non-empty value. If a regular
+  expression is supplied, at least one value for that key must match it. Other
+  values for the same key are still allowed.
+- `--deny KEY[=REGEX]`: Reject commits containing this key. Add a regular expression
+  to reject only matching values. A single matching value is enough to fail the
+  check, even if other values for the same key are allowed.
+
+Configure at least one rule. You can repeat either argument and combine required
+and denied rules. For example, `--require Signed-off-by --require Co-authored-by`
+requires both trailers. A commit passes only when all required rules are satisfied
+and none of the denied rules match.
+
+Trailer keys are case-insensitive, so `Signed-off-by` and `signed-off-by` are
+equivalent. Value patterns are case-sensitive by default; prefix a pattern with
+`(?i)` to ignore case. Patterns can match part of a value; use `^` and `$` to match
+the whole value.
+
+For example, require a sign-off and reject co-authors named Claude:
+
+```yaml
+default_install_hook_types: [commit-msg, pre-push]
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-commit-trailers
+        args:
+          - --require=Signed-off-by
+          - '--deny=Co-authored-by=(?i)^claude\b'
+```
+
+This configuration allows commits without a co-author. If co-authors are listed,
+none may match the denied pattern: a commit listing both Alice and Claude still
+fails. Add `--require=Co-authored-by` to also require at least one co-author.
+
+To forbid a trailer entirely, regardless of its value, use a rule without a pattern,
+such as `--deny=AI-generated-by`.
+
+**Caveats**
+
+- Trailers must form a `Key: value` block at the end of the message, separated from
+  the subject or body by a blank line. Repeated keys and indented continuation
+  lines are supported. Matching text in the subject or an earlier paragraph does
+  not count as a trailer.
+- Merge commits are skipped. Squash commits are checked. When amending an existing
+  merge commit, its message is still checked at `commit-msg`.
+- `pre-push` checks commits being pushed, including empty commits. When
+  pushing multiple refs, only the first ref with pending commits is checked.
 
 ---
 

@@ -244,7 +244,7 @@ pub(crate) async fn run(
     };
 
     let (from_ref, to_ref) = selection.refs();
-    set_env_vars(from_ref, to_ref, &extra_args);
+    set_env_vars(stage_filter, from_ref, to_ref, &extra_args);
 
     // These hooks run even without matching files and never receive filenames,
     // so discovery and tagging cannot affect execution. Keep explicit paths and
@@ -364,9 +364,19 @@ fn uses_only_message_file_input(hook: &Hook) -> bool {
 }
 
 // `pre-commit` sets these environment variables for other git hooks.
-fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArgs) {
+fn set_env_vars(
+    stage: Option<Stage>,
+    from_ref: Option<&str>,
+    to_ref: Option<&str>,
+    args: &RunExtraArgs,
+) {
     unsafe {
         std::env::set_var("PRE_COMMIT", "1");
+        if let Some(stage) = stage {
+            std::env::set_var(EnvVars::PREK_HOOK_STAGE, stage.as_ref());
+        } else {
+            std::env::remove_var(EnvVars::PREK_HOOK_STAGE);
+        }
 
         if let Some(source) = &args.prepare_commit_message_source {
             std::env::set_var("PRE_COMMIT_COMMIT_MSG_SOURCE", source);
@@ -377,6 +387,10 @@ fn set_env_vars(from_ref: Option<&str>, to_ref: Option<&str>, args: &RunExtraArg
         if let Some(from_ref) = from_ref {
             std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
             std::env::set_var(EnvVars::PRE_COMMIT_FROM_REF, from_ref);
+        } else if to_ref.is_some() {
+            // Root pushes have no base, even if the parent process supplied one.
+            std::env::remove_var("PRE_COMMIT_ORIGIN");
+            std::env::remove_var(EnvVars::PRE_COMMIT_FROM_REF);
         }
         if let Some(to_ref) = to_ref {
             std::env::set_var("PRE_COMMIT_SOURCE", to_ref);

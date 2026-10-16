@@ -19,6 +19,14 @@ fn list_builtins_defaults_to_verbose_output() {
     check-case-conflict
       Checks for files that would conflict in case-insensitive filesystems.
 
+    check-commit-trailers
+      Checks required and denied commit trailers.
+      flags:
+            --require <KEY[=REGEX]>  Require a non-empty trailer value, optionally matching a regex.
+                                     Repeat for multiple rules
+            --deny <KEY[=REGEX]>     Deny a trailer, or any of its values matching a regex. Repeat for
+                                     multiple rules
+
     check-executables-have-shebangs
       Ensures that (non-binary) executables have a shebang.
 
@@ -173,6 +181,11 @@ fn list_builtins_json() {
         "id": "check-case-conflict",
         "name": "check for case conflicts",
         "description": "Checks for files that would conflict in case-insensitive filesystems."
+      },
+      {
+        "id": "check-commit-trailers",
+        "name": "check commit trailers",
+        "description": "Checks required and denied commit trailers."
       },
       {
         "id": "check-executables-have-shebangs",
