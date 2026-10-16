@@ -17,7 +17,6 @@
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
-    managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   // Pin GitHub Actions references in documentation to immutable SHAs.
   'github-actions': {
@@ -32,6 +31,7 @@
     'custom.regex',
     'dockerfile',
     'pep621',
+    'rust-toolchain',
   ],
   customManagers: [
     // Update komac and its release archive checksum together.
@@ -67,17 +67,6 @@
         'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
       depNameTemplate: "msrv",
-      packageNameTemplate: "rust-lang/rust",
-      datasourceTemplate: "github-releases",
-    },
-    // Rust toolchain version
-    {
-      customType: "regex",
-      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml$/"],
-      matchStrings: [
-        'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
-      ],
-      depNameTemplate: "rust",
       packageNameTemplate: "rust-lang/rust",
       datasourceTemplate: "github-releases",
     }
@@ -116,12 +105,7 @@
       enabled: false
     },
     {
-      matchManagers: ["custom.regex"],
-      matchDepNames: ["rust"],
-      commitMessageTopic: "Rust",
-    },
-    {
-      matchManagers: [ 'cargo', 'github-actions', 'pep621', 'custom.regex', 'dockerfile' ],
+      matchManagers: [ 'cargo', 'github-actions', 'pep621', 'custom.regex', 'dockerfile', 'rust-toolchain' ],
       minimumReleaseAge: '7 days'
     },
     {
