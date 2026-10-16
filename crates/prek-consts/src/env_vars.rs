@@ -86,6 +86,7 @@ impl EnvVars {
     pub const PRE_COMMIT_TO_REF: &'static str = "PRE_COMMIT_TO_REF";
 
     // PREK specific environment variables, public for users
+    pub const PREK_HOOK_STAGE: &'static str = "PREK_HOOK_STAGE";
     pub const PREK_HOME: &'static str = "PREK_HOME";
     pub const PREK_COLOR: &'static str = "PREK_COLOR";
     pub const PREK_SKIP: &'static str = "PREK_SKIP";

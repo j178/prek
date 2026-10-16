@@ -217,6 +217,7 @@ fn hook_impl_pre_push_uses_first_ref_with_commits() -> anyhow::Result<()> {
             import subprocess
             import sys
 
+            print("stage:", os.environ["PREK_HOOK_STAGE"])
             print(os.environ["PRE_COMMIT_LOCAL_BRANCH"], "->", os.environ["PRE_COMMIT_REMOTE_BRANCH"])
             for name in ("FROM_REF", "TO_REF"):
                 subject = subprocess.check_output(
@@ -260,6 +261,7 @@ fn hook_impl_pre_push_uses_first_ref_with_commits() -> anyhow::Result<()> {
     - hook id: push-info
     - duration: [TIME]
 
+      stage: pre-push
       refs/heads/a -> refs/heads/remote-a
       FROM_REF: Initial commit
       TO_REF: Add a
@@ -1233,5 +1235,78 @@ fn workspace_hook_impl_with_selectors() {
       - duration: [TIME]
 
         cwd: [TEMP_DIR]/project2
+    "#);
+}
+
+#[test]
+fn hook_stage_is_exposed_to_external_hooks() {
+    let context = TestEnv::new()
+        .with_config(indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: stage
+                name: stage
+                language: system
+                entry: python3 stage.py
+                stages: [commit-msg, pre-commit]
+                groups: [ci]
+                always_run: true
+                verbose: true
+        "})
+        .with_file(
+            "stage.py",
+            indoc! {r#"
+            import os
+            import pathlib
+            import sys
+
+            stage = os.environ.get("PREK_HOOK_STAGE", "unset")
+            print("stage:", stage)
+            if stage == "commit-msg":
+                print("message:", pathlib.Path(sys.argv[1]).read_text().strip())
+        "#},
+        )
+        .init_git();
+    context.write_file("MSG", "Proposed commit\n");
+    cmd_snapshot!(context, context.command()
+        .args(["hook-impl", "--hook-type", "commit-msg", "--", "MSG"])
+        .env(EnvVars::PREK_HOOK_STAGE, "pre-push"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage....................................................................Passed
+    - hook id: stage
+    - duration: [TIME]
+
+      stage: commit-msg
+      message: Proposed commit
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage....................................................................Passed
+    - hook id: stage
+    - duration: [TIME]
+
+      stage: pre-commit
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context, context.run().args(["--group", "ci"])
+        .env(EnvVars::PREK_HOOK_STAGE, "commit-msg"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    stage....................................................................Passed
+    - hook id: stage
+    - duration: [TIME]
+
+      stage: unset
+
+    ----- stderr -----
     "#);
 }
