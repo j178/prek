@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anstream::eprintln;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
@@ -120,6 +120,15 @@ pub(crate) async fn hook_impl(
     run_args.includes = includes;
     run_args.skips = skips;
 
+    if hook_type == HookType::PrePush {
+        let status = run_pre_push_in_worktree(store, config, run_args).await?;
+        return Ok(if !matches!(status, ExitStatus::Success) {
+            status
+        } else {
+            legacy_code.into()
+        });
+    }
+
     let status = cli::run(
         store,
         config,
@@ -139,6 +148,110 @@ pub(crate) async fn hook_impl(
     } else {
         legacy_code.into()
     })
+}
+
+async fn run_pre_push_in_worktree(
+    store: &Store,
+    config: Option<PathBuf>,
+    run_args: RunOptions,
+) -> Result<ExitStatus> {
+    let RunOptions {
+        includes,
+        skips,
+        file_selection,
+        extra,
+        ..
+    } = run_args;
+    let local_sha = file_selection
+        .to_ref
+        .as_deref()
+        .context("pre-push hook did not provide a local target ref")?;
+    let from_ref = file_selection.from_ref;
+
+    let temp_dir = tempfile::TempDir::with_prefix_in("pre-push-", store.scratch_path())?;
+    let worktree = temp_dir.path().join("worktree");
+
+    let mut add_worktree = git::git_cmd()?;
+    let add_status = add_worktree
+        .check(false)
+        .args(["worktree", "add", "--detach", "--quiet"])
+        .arg(&worktree)
+        .arg(local_sha)
+        .status()
+        .await?;
+    if !add_status.success() {
+        anyhow::bail!("Failed to create a temporary worktree for pre-push");
+    }
+
+    let result = async {
+        let executable = std::env::current_exe()?;
+        let mut command = crate::process::Cmd::new(executable);
+        command
+            .current_dir(&worktree)
+            .arg("--stage")
+            .arg("pre-push");
+
+        if let Some(config) = config {
+            command.arg("--config").arg(config);
+        }
+        if let Some(from_ref) = from_ref.as_deref() {
+            command
+                .arg("--from-ref")
+                .arg(from_ref)
+                .arg("--to-ref")
+                .arg(local_sha);
+        } else {
+            command.arg("--all-files");
+        }
+        for include in includes {
+            command.arg(include);
+        }
+        for skip in skips {
+            command.arg("--skip").arg(skip);
+        }
+
+        if let Some(branch) = extra.remote_branch {
+            command.env("PRE_COMMIT_REMOTE_BRANCH", branch);
+        }
+        if let Some(branch) = extra.local_branch {
+            command.env("PRE_COMMIT_LOCAL_BRANCH", branch);
+        }
+        if let Some(name) = extra.remote_name {
+            command.env("PRE_COMMIT_REMOTE_NAME", name);
+        }
+        if let Some(url) = extra.remote_url {
+            command.env("PRE_COMMIT_REMOTE_URL", url);
+        }
+        command
+            .env("PRE_COMMIT_SOURCE", local_sha)
+            .env("PRE_COMMIT_TO_REF", local_sha);
+        if let Some(from_ref) = from_ref.as_deref() {
+            command
+                .env("PRE_COMMIT_ORIGIN", from_ref)
+                .env("PRE_COMMIT_FROM_REF", from_ref);
+        }
+
+        let status = command.check(false).status().await?;
+        let code = status
+            .code()
+            .and_then(|code| u8::try_from(code).ok())
+            .unwrap_or(1);
+        Ok(ExitStatus::from(code))
+    }
+    .await;
+
+    let mut remove_worktree = git::git_cmd()?;
+    let remove_status = remove_worktree
+        .check(false)
+        .args(["worktree", "remove", "--force"])
+        .arg(&worktree)
+        .status()
+        .await?;
+    if !remove_status.success() {
+        anyhow::bail!("Failed to remove the temporary pre-push worktree");
+    }
+
+    result
 }
 
 fn hook_num_args(hook_type: HookType) -> RangeInclusive<usize> {
