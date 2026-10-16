@@ -83,6 +83,12 @@
     }
   ],
   packageRules: [
+    // Bump Python dependencies without raising the minimum supported Python version.
+    {
+      matchManagers: ['pep621'],
+      matchDepTypes: ['!requires-python'],
+      rangeStrategy: 'bump',
+    },
     // Group all GitHub Actions updates together
     {
       groupName: 'GitHub Actions',
