@@ -1,3 +1,8 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+
 """Build and train a native release binary, or run lightweight checks with --verify."""
 
 from __future__ import annotations
@@ -47,14 +52,9 @@ def train(binary: Path, root: Path, profile_dir: Path) -> None:
     old = small.git("rev-parse", "HEAD~1").decode().strip()
     new = small.git("rev-parse", "HEAD").decode().strip()
     # Drive the installed shim with the ref records Git supplies on stdin.
-    subprocess.run(
+    small.command(
         ["sh", ".git/hooks/pre-push", "origin", str(small.root)],
         input=f"refs/heads/main {new} refs/heads/main {old}\n".encode(),
-        cwd=small.root,
-        env=env,
-        check=True,
-        capture_output=True,
-        timeout=120,
     )
 
     for original, fixed in [
@@ -111,12 +111,9 @@ def verify(binary: Path, root: Path) -> None:
 
 def build_profile(target: str | None) -> None:
     source = Path(__file__).resolve().parents[2]
-    version = subprocess.check_output(["rustc", "-vV"], cwd=source, text=True)
-    host = next(
-        line.removeprefix("host: ")
-        for line in version.splitlines()
-        if line.startswith("host: ")
-    )
+    host = subprocess.check_output(
+        ["rustc", "--print", "host-tuple"], cwd=source, text=True
+    ).strip()
     target = target or host
     if target != host:
         raise ValueError(
@@ -126,13 +123,11 @@ def build_profile(target: str | None) -> None:
         raise ValueError(
             "Use RUSTFLAGS instead of CARGO_ENCODED_RUSTFLAGS for PGO builds"
         )
-    sysroot = subprocess.check_output(
-        ["rustc", "--print", "sysroot"], cwd=source, text=True
+    libdir = subprocess.check_output(
+        ["rustc", "--print", "target-libdir"], cwd=source, text=True
     ).strip()
     suffix = ".exe" if os.name == "nt" else ""
-    profiler = (
-        Path(sysroot) / "lib" / "rustlib" / host / "bin" / f"llvm-profdata{suffix}"
-    )
+    profiler = Path(libdir).parent / "bin" / f"llvm-profdata{suffix}"
     if not profiler.is_file():
         subprocess.run(
             ["rustup", "component", "add", "llvm-tools-preview"],
@@ -153,9 +148,11 @@ def build_profile(target: str | None) -> None:
     env = os.environ.copy()
     env["CARGO_INCREMENTAL"] = "0"
     env["CARGO_TARGET_DIR"] = str(instrumented)
+    # Thin LTO speeds up instrumentation; the final release build keeps fat LTO.
     env["RUSTFLAGS"] = (
-        f"{env.get('RUSTFLAGS', '')} -Cprofile-generate={profile_dir}".strip()
-    )
+        f"{env.get('RUSTFLAGS', '')} -Cprofile-generate={profile_dir} "
+        "-Clto=thin -Cembed-bitcode=yes"
+    ).strip()
     print(f"Building instrumented prek for {target}", flush=True)
     subprocess.run(
         [

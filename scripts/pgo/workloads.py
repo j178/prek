@@ -1,4 +1,4 @@
-"""Deterministic, offline repositories for PGO training and evaluation."""
+"""Deterministic, offline repositories for PGO training and smoke tests."""
 
 from __future__ import annotations
 
@@ -43,9 +43,12 @@ class Repository:
         self.git("config", "core.autocrlf", "false")
         self.git("config", "commit.gpgsign", "false")
 
-    def command(self, args: list[str | Path], expected: int = 0) -> bytes:
+    def command(
+        self, args: list[str | Path], expected: int = 0, *, input: bytes | None = None
+    ) -> bytes:
         result = subprocess.run(
             args,
+            input=input,
             cwd=self.root,
             env=self.env,
             capture_output=True,
