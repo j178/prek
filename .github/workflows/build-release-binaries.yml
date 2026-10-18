@@ -125,11 +125,11 @@ jobs:
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
-            if [ "$TARGET" = aarch64-unknown-linux-gnu ]; then
-              # GNU ld can fail on large instrumented binaries; use lld for both builds.
-              lld_dir="$(rustc --print sysroot)/lib/rustlib/$TARGET/bin/gcc-ld"
-              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld"
-            fi
+            # Use the same LLD and ICF settings for training and the final build.
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
+
             if [ "$PGO_ENABLED" = true ]; then
               uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
               export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
@@ -194,6 +194,11 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            # LLD runs on the host, even when linking for a different architecture.
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -236,6 +241,10 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -279,6 +288,10 @@ jobs:
           manylinux: musllinux_1_1
           # Also support glibc systems older than the aarch64 GNU build's baseline.
           args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
+          before-script-linux: |
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
