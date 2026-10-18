@@ -35,9 +35,10 @@ def environment(root: Path) -> dict[str, str]:
 
 class Repository:
     def __init__(self, root: Path, env: dict[str, str]) -> None:
-        self.root = root
-        self.env = env
         root.mkdir()
+        # Windows TEMP can use short names, while Git returns canonical paths.
+        self.root = root.resolve()
+        self.env = env
         self.git("init", "--quiet", "--template=", "--initial-branch=main")
         self.git("config", "core.autocrlf", "false")
         self.git("config", "commit.gpgsign", "false")

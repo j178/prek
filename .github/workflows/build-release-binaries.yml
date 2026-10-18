@@ -93,13 +93,25 @@ jobs:
         run: |
           winget install NASM.NASM --accept-source-agreements --accept-package-agreements
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Use LLD on Windows ARM64
+        # link.exe can corrupt ARM64 PGO profiles; use the same linker for baseline builds.
+        # https://github.com/rust-lang/rust/issues/156675
+        if: matrix.platform.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: |
+          linker="$(cygpath -m "$(rustc --print sysroot)")/lib/rustlib/$TARGET/bin/rust-lld.exe"
+          echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Clinker=$linker -Clinker-flavor=lld-link" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: ${{ env.PGO_ENABLED == 'true' && runner.os != 'Linux' }}
+        with:
+          enable-cache: false
       - name: Train PGO on macOS and Windows
-        # Linux uses the same script inside maturin's manylinux container below.
+        # Linux trains inside manylinux so both builds use the same toolchain and libraries.
         if: ${{ env.PGO_ENABLED == 'true' && runner.os != 'Linux' }}
         shell: bash
         run: |
-          source scripts/pgo/prepare.sh python
-          echo "RUSTFLAGS=$RUSTFLAGS" >> "$GITHUB_ENV"
+          uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
+          echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$GITHUB_WORKSPACE/target/pgo/$TARGET/prek.profdata" >> "$GITHUB_ENV"
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -108,7 +120,16 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           args: --release --locked --out dist --features self-update --compatibility pypi
-          before-script-linux: source scripts/pgo/prepare.sh python3.12
+          before-script-linux: |
+            if [ "$TARGET" = aarch64-unknown-linux-gnu ]; then
+              # GNU ld can fail on large instrumented binaries; use lld for both builds.
+              lld_dir="$(rustc --print sysroot)/lib/rustlib/$TARGET/bin/gcc-ld"
+              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld"
+            fi
+            if [ "$PGO_ENABLED" = true ]; then
+              uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
+              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
+            fi
           docker-options: -e PGO_ENABLED -e TARGET
       - name: Smoke-test release binary
         shell: bash
