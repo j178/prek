@@ -101,12 +101,16 @@ jobs:
         run: |
           linker="$(cygpath -m "$(rustc --print sysroot)")/lib/rustlib/$TARGET/bin/rust-lld.exe"
           echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Clinker=$linker -Clinker-flavor=lld-link" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: ${{ env.PGO_ENABLED == 'true' && runner.os != 'Linux' }}
+        with:
+          enable-cache: false
       - name: Train PGO on macOS and Windows
         # Linux trains inside manylinux so both builds use the same toolchain and libraries.
         if: ${{ env.PGO_ENABLED == 'true' && runner.os != 'Linux' }}
         shell: bash
         run: |
-          python scripts/pgo/train.py --target "$TARGET"
+          uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
           echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$GITHUB_WORKSPACE/target/pgo/$TARGET/prek.profdata" >> "$GITHUB_ENV"
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
@@ -123,7 +127,7 @@ jobs:
               export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld"
             fi
             if [ "$PGO_ENABLED" = true ]; then
-              python3.12 scripts/pgo/train.py --target "$TARGET"
+              uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
               export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
             fi
           docker-options: -e PGO_ENABLED -e TARGET
