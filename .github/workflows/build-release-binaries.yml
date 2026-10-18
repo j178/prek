@@ -14,10 +14,6 @@ on:
       plan:
         required: true
         type: string
-      variant:
-        description: "Build only native evaluation artifacts: baseline or pgo"
-        type: string
-        default: ""
 
 permissions: {}
 
@@ -32,12 +28,13 @@ env:
 
 jobs:
   sdist:
-    if: ${{ inputs.variant == '' }}
+    name: Source distribution
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: Build sdist
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -45,6 +42,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           command: sdist
           args: --out dist
+
       - name: "Upload sdist"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -52,6 +50,7 @@ jobs:
           path: dist
 
   native:
+    name: ${{ matrix.platform.target }}
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 60
     strategy:
@@ -72,46 +71,49 @@ jobs:
             runner: windows-latest
           - target: aarch64-pc-windows-msvc
             runner: windows-11-arm
+
     env:
       TARGET: ${{ matrix.platform.target }}
-      # Enable each target only after its independent PGO evaluation passes.
-      PGO_ENABLED: ${{ inputs.variant == 'pgo' || (inputs.variant == '' && contains(fromJSON(vars.PREK_RELEASE_PGO_TARGETS || '[]'), matrix.platform.target)) }}
       # Match the deployment target in the training and final macOS builds.
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.platform.target == 'aarch64-apple-darwin' && '11.0' || matrix.platform.target == 'x86_64-apple-darwin' && '10.12' || '' }}
       AWS_LC_SYS_PREBUILT_NASM: "0"
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: Make Git Bash available to Python
         if: runner.os == 'Windows'
         shell: bash
         run: echo "$(cygpath -w /usr/bin)" >> "$GITHUB_PATH"
+
       - name: Install NASM
         if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
         shell: pwsh
         run: |
           winget install NASM.NASM --accept-source-agreements --accept-package-agreements
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - name: Use LLD on Windows ARM64
-        # link.exe can corrupt ARM64 PGO profiles; use the same linker for baseline builds.
-        # https://github.com/rust-lang/rust/issues/156675
-        if: matrix.platform.target == 'aarch64-pc-windows-msvc'
-        shell: bash
-        run: |
-          linker="$(cygpath -m "$(rustc --print sysroot)")/lib/rustlib/$TARGET/bin/rust-lld.exe"
-          echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Clinker=$linker -Clinker-flavor=lld-link" >> "$GITHUB_ENV"
+
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        if: ${{ env.PGO_ENABLED == 'true' && runner.os != 'Linux' }}
         with:
           enable-cache: false
+
       - name: Train PGO on macOS and Windows
         # Linux trains inside manylinux so both builds use the same toolchain and libraries.
-        if: ${{ env.PGO_ENABLED == 'true' && runner.os != 'Linux' }}
+        if: runner.os != 'Linux'
         shell: bash
         run: |
-          uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
+          if [ "$TARGET" = aarch64-pc-windows-msvc ]; then
+            # link.exe can corrupt ARM64 PGO profiles.
+            # https://github.com/rust-lang/rust/issues/156675
+            linker="$(cygpath -m "$(rustc --print sysroot)")/lib/rustlib/$TARGET/bin/rust-lld.exe"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clinker=$linker -Clinker-flavor=lld-link"
+          fi
+
+          uv run scripts/pgo/train.py --target "$TARGET"
           echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$GITHUB_WORKSPACE/target/pgo/$TARGET/prek.profdata" >> "$GITHUB_ENV"
+
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -126,14 +128,15 @@ jobs:
               lld_dir="$(rustc --print sysroot)/lib/rustlib/$TARGET/bin/gcc-ld"
               export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld"
             fi
-            if [ "$PGO_ENABLED" = true ]; then
-              uv run --no-project --python '>=3.9' scripts/pgo/train.py --target "$TARGET"
-              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
-            fi
-          docker-options: -e PGO_ENABLED -e TARGET
+
+            uv run scripts/pgo/train.py --target "$TARGET"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
+          docker-options: -e TARGET
+
       - name: Smoke-test release binary
         shell: bash
-        run: python scripts/pgo/train.py --verify "target/$TARGET/release/prek${{ runner.os == 'Windows' && '.exe' || '' }}"
+        run: uv run scripts/pgo/train.py --verify "target/$TARGET/release/prek${{ runner.os == 'Windows' && '.exe' || '' }}"
+
       - name: Archive binary
         shell: python
         run: |
@@ -145,6 +148,7 @@ jobs:
 
           target = os.environ["TARGET"]
           binary = Path("target", target, "release", "prek.exe" if os.name == "nt" else "prek")
+
           if os.name == "nt":
               archive = Path(f"prek-{target}.zip")
               with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
@@ -153,19 +157,21 @@ jobs:
               archive = Path(f"prek-{target}.tar.gz")
               with tarfile.open(archive, "w:gz") as output:
                   output.add(binary, arcname=f"prek-{target}/prek")
+
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
           Path(f"{archive}.sha256").write_text(f"{digest}  {archive.name}\n")
+
       - name: Upload wheel
-        if: ${{ inputs.variant == '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ runner.os == 'macOS' && 'macos' || runner.os == 'Windows' && 'windows' || 'linux' }}-${{ env.TARGET }}
           path: dist
           if-no-files-found: error
+
       - name: Upload archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.variant && format('{0}-', inputs.variant) || '' }}artifacts-${{ env.TARGET }}
+          name: artifacts-${{ env.TARGET }}
           path: |
             *.tar.gz
             *.zip
@@ -173,7 +179,7 @@ jobs:
           if-no-files-found: error
 
   linux-ppc64le:
-    if: ${{ inputs.variant == '' }}
+    name: powerpc64le-unknown-linux-gnu
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -182,6 +188,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -190,11 +197,13 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
+
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-linux-${{ env.TARGET }}
           path: dist
+
       - name: "Archive binary"
         shell: bash
         run: |
@@ -207,6 +216,7 @@ jobs:
           cp "target/$TARGET/release/prek" "$ARCHIVE_NAME/prek"
           tar czvf "$ARCHIVE_FILE" "$ARCHIVE_NAME"
           shasum -a 256 "$ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
+
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -216,7 +226,7 @@ jobs:
             *.sha256
 
   musllinux:
-    if: ${{ inputs.variant == '' }}
+    name: x86_64-unknown-linux-musl
     runs-on: ubuntu-latest
     env:
       TARGET: x86_64-unknown-linux-musl
@@ -224,6 +234,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -232,11 +243,13 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update --compatibility pypi
+
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-linux-${{ env.TARGET }}
           path: dist
+
       - name: "Archive binary"
         shell: bash
         run: |
@@ -249,6 +262,7 @@ jobs:
           cp "target/$TARGET/release/prek" "$ARCHIVE_NAME/prek"
           tar czvf "$ARCHIVE_FILE" "$ARCHIVE_NAME"
           shasum -a 256 "$ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
+
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -258,7 +272,7 @@ jobs:
             *.sha256
 
   musllinux-cross:
-    if: ${{ inputs.variant == '' }}
+    name: aarch64-unknown-linux-musl
     runs-on: ubuntu-latest
     env:
       TARGET: aarch64-unknown-linux-musl
@@ -266,6 +280,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -275,11 +290,13 @@ jobs:
           manylinux: musllinux_1_1
           # Also support glibc systems older than the aarch64 GNU build's baseline.
           args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
+
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-linux-${{ env.TARGET }}
           path: dist
+
       - name: "Archive binary"
         shell: bash
         run: |
@@ -292,6 +309,7 @@ jobs:
           cp "target/$TARGET/release/prek" "$ARCHIVE_NAME/prek"
           tar czvf "$ARCHIVE_FILE" "$ARCHIVE_NAME"
           shasum -a 256 "$ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
+
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
