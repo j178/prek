@@ -2,6 +2,7 @@ mod installer;
 #[allow(clippy::module_inception)]
 mod rust;
 mod rustup;
+mod toolchain;
 mod version;
 
 pub(crate) use rust::Rust;

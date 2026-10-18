@@ -5,14 +5,14 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
-use semver::Version;
 use target_lexicon::HOST;
 use tracing::{debug, trace, warn};
 
 use crate::checksum::{Sha256Digest, fetch_checksum};
 use crate::fs::{LockedFile, make_executable};
 use crate::http::download_artifact;
-use crate::languages::rust::version::RustVersion;
+use crate::languages::rust::toolchain::RustToolchain;
+use crate::languages::rust::version::query_version;
 use crate::process::Cmd;
 use crate::store::Store;
 use crate::warn_user;
@@ -21,12 +21,6 @@ use crate::warn_user;
 pub(crate) struct Rustup {
     bin: PathBuf,
     rustup_home: PathBuf,
-}
-
-pub(crate) struct ToolchainInfo {
-    pub(crate) name: String,
-    pub(crate) path: PathBuf,
-    pub(crate) version: RustVersion,
 }
 
 static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
@@ -62,33 +56,24 @@ fn rustup_profile(env_vars: &impl EnvVarsRead) -> RustupProfile {
 }
 
 impl Rustup {
-    pub(crate) fn rustup_home(&self) -> &Path {
-        &self.rustup_home
+    pub(crate) fn find(rustup_home: &Path) -> Option<Self> {
+        let bin = which::which(&*RUSTUP_BINARY_NAME).ok().or_else(|| {
+            let bin = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
+            if bin.is_file() { Some(bin) } else { None }
+        })?;
+        Some(Self {
+            bin,
+            rustup_home: rustup_home.to_path_buf(),
+        })
     }
 
     /// Install rustup if not already installed.
     pub(crate) async fn install(store: &Store, rustup_home: &Path) -> Result<Self> {
-        // 1) Check system installed `rustup`
-        if let Ok(rustup_path) = which::which(&*RUSTUP_BINARY_NAME) {
-            trace!("Using system installed rustup at {}", rustup_path.display());
-            return Ok(Self {
-                bin: rustup_path,
-                rustup_home: rustup_home.to_path_buf(),
-            });
+        if let Some(rustup) = Self::find(rustup_home) {
+            return Ok(rustup);
         }
-
-        // 2) Check if already installed in store
         let rustup_path = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
 
-        if rustup_path.is_file() {
-            trace!("Using managed rustup at {}", rustup_path.display());
-            return Ok(Self {
-                bin: rustup_path,
-                rustup_home: rustup_home.to_path_buf(),
-            });
-        }
-
-        // 3) Install rustup
         fs_err::tokio::create_dir_all(&rustup_home).await?;
         let _lock = LockedFile::acquire(rustup_home.join(".lock"), "rustup").await?;
 
@@ -140,7 +125,7 @@ impl Rustup {
         })
     }
 
-    pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<PathBuf> {
+    pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<RustToolchain> {
         let output = Cmd::new(&self.bin)
             .env(EnvVars::RUSTUP_HOME, &self.rustup_home)
             .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
@@ -175,45 +160,27 @@ impl Rustup {
                 )
             })?;
 
-        Ok(self.rustup_home.join("toolchains").join(installed_name))
+        toolchain_info(self.rustup_home.join("toolchains").join(installed_name)).await
     }
 
     /// List installed toolchains managed by prek.
-    pub(crate) async fn list_installed_toolchains(&self) -> Result<Vec<ToolchainInfo>> {
-        let output = Cmd::new(&self.bin)
-            .arg("toolchain")
-            .arg("list")
-            .arg("-v")
-            .env(EnvVars::RUSTUP_HOME, &self.rustup_home)
-            .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
-            .check(true)
-            .output()
-            .await
-            .context("Failed to list installed toolchains")?;
-
-        let entries: Vec<(String, PathBuf)> = str::from_utf8(&output.stdout)?
-            .lines()
-            .filter_map(parse_toolchain_line)
-            .collect();
-
-        let infos: Vec<ToolchainInfo> = futures_util::stream::iter(entries)
-            .map(async move |(name, path)| toolchain_info(name, path).await)
-            .buffer_unordered(8)
-            .filter_map(async move |result| match result {
-                Ok(info) => Some(info),
-                Err(e) => {
-                    warn!("Skipping invalid toolchain: {e:#}");
-                    None
-                }
-            })
-            .collect()
-            .await;
-
-        Ok(infos)
+    pub(crate) async fn list_installed_toolchains(
+        rustup_home: &Path,
+    ) -> Result<Vec<RustToolchain>> {
+        let mut dirs = match fs_err::tokio::read_dir(rustup_home.join("toolchains")).await {
+            Ok(dirs) => dirs,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(err) => return Err(err.into()),
+        };
+        let mut entries = Vec::new();
+        while let Some(entry) = dirs.next_entry().await? {
+            entries.push(entry.path());
+        }
+        Ok(inspect_toolchains(entries).await)
     }
 
     /// List system-installed Rust toolchains.
-    pub(crate) async fn list_system_toolchains(&self) -> Result<Vec<ToolchainInfo>> {
+    pub(crate) async fn list_system_toolchains(&self) -> Result<Vec<RustToolchain>> {
         let output = Cmd::new(&self.bin)
             .arg("toolchain")
             .arg("list")
@@ -224,25 +191,10 @@ impl Rustup {
             .await
             .context("Failed to list system toolchains")?;
 
-        let entries: Vec<(String, PathBuf)> = str::from_utf8(&output.stdout)?
+        let entries = str::from_utf8(&output.stdout)?
             .lines()
-            .filter_map(parse_toolchain_line)
-            .collect();
-
-        let infos: Vec<ToolchainInfo> = futures_util::stream::iter(entries)
-            .map(async move |(name, path)| toolchain_info(name, path).await)
-            .buffer_unordered(8)
-            .filter_map(async move |result| match result {
-                Ok(info) => Some(info),
-                Err(e) => {
-                    warn!("Skipping invalid toolchain: {e:#}");
-                    None
-                }
-            })
-            .collect()
-            .await;
-
-        Ok(infos)
+            .filter_map(parse_toolchain_line);
+        Ok(inspect_toolchains(entries).await)
     }
 }
 
@@ -253,46 +205,40 @@ fn digest_from_rustup_checksum(contents: &str) -> Result<Option<Sha256Digest>> {
     digest.parse().map(Some)
 }
 
-fn parse_toolchain_line(line: &str) -> Option<(String, PathBuf)> {
+fn parse_toolchain_line(line: &str) -> Option<PathBuf> {
     // Typical formats:
     // "stable-aarch64-apple-darwin (default) /Users/me/.rustup/toolchains/stable-aarch64-apple-darwin"
     // "nightly-x86_64-unknown-linux-gnu /home/me/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu"
-    let parts: Vec<_> = line.split_whitespace().collect();
-    let name = (*parts.first()?).to_string();
-    let path = parts.last()?;
-    let path = PathBuf::from(path);
-    if path.exists() {
-        Some((name, path))
-    } else {
-        None
-    }
+    line.split_whitespace()
+        .next_back()
+        .map(PathBuf::from)
+        .filter(|path| path.exists())
 }
 
-async fn toolchain_info(name: String, toolchain_dir: PathBuf) -> Result<ToolchainInfo> {
+async fn toolchain_info(toolchain_dir: PathBuf) -> Result<RustToolchain> {
     let rustc = toolchain_dir
         .join("bin")
         .join("rustc")
         .with_extension(EXE_EXTENSION);
 
-    let output = Cmd::new(&rustc)
-        .arg("--version")
-        .check(true)
-        .output()
+    let version = query_version(&rustc).await?;
+
+    Ok(RustToolchain::from_dir(&toolchain_dir, version))
+}
+
+async fn inspect_toolchains(paths: impl IntoIterator<Item = PathBuf>) -> Vec<RustToolchain> {
+    futures_util::stream::iter(paths)
+        .map(toolchain_info)
+        .buffer_unordered(8)
+        .filter_map(async move |result| match result {
+            Ok(info) => Some(info),
+            Err(e) => {
+                warn!("Skipping invalid toolchain: {e:#}");
+                None
+            }
+        })
+        .collect()
         .await
-        .with_context(|| format!("Failed to read version from {}", rustc.display()))?;
-
-    let version_str = str::from_utf8(&output.stdout)?
-        .split_whitespace()
-        .nth(1)
-        .context("Failed to parse rustc --version output")?;
-    let version = Version::parse(version_str)?;
-    let version = RustVersion::from_path(&version, &toolchain_dir);
-
-    Ok(ToolchainInfo {
-        name,
-        path: toolchain_dir,
-        version,
-    })
 }
 
 #[cfg(test)]
