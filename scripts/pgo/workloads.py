@@ -14,6 +14,7 @@ def environment(root: Path) -> dict[str, str]:
         if not key.startswith(("PREK_", "PRE_COMMIT_", "GIT_", "XDG_"))
         and key not in {"SKIP", "CLICOLOR_FORCE", "FORCE_COLOR"}
     }
+
     env.update(
         PREK_HOME=str(root / "cache"),
         PREK_INTERNAL__USER_CONFIG_PATH=str(root / "user-config.toml"),
@@ -36,9 +37,11 @@ def environment(root: Path) -> dict[str, str]:
 class Repository:
     def __init__(self, root: Path, env: dict[str, str]) -> None:
         root.mkdir()
+
         # Windows TEMP can use short names, while Git returns canonical paths.
         self.root = root.resolve()
         self.env = env
+
         self.git("init", "--quiet", "--template=", "--initial-branch=main")
         self.git("config", "core.autocrlf", "false")
         self.git("config", "commit.gpgsign", "false")
@@ -55,11 +58,13 @@ class Repository:
             timeout=120,
             check=False,
         )
+
         if result.returncode != expected:
             raise RuntimeError(
                 f"{args} exited {result.returncode}, expected {expected}:\n"
                 + (result.stdout + result.stderr).decode(errors="replace")
             )
+
         return result.stdout + result.stderr
 
     def git(self, *args: str) -> bytes:
@@ -107,6 +112,7 @@ def config(*, toml: bool = False, system: bool = False) -> tuple[str, str]:
         "check-shebang-scripts-are-executable",
         "check-symlinks",
     ]
+
     if toml:
         content = '[[repos]]\nrepo = "builtin"\nhooks = [\n'
         content += "".join(
@@ -114,6 +120,7 @@ def config(*, toml: bool = False, system: bool = False) -> tuple[str, str]:
             for i, hook in enumerate(hooks)
         )
         return "prek.toml", content + "]\n"
+
     content = "repos:\n  - repo: builtin\n    hooks:\n"
     content += "".join(f"      - id: {hook}\n" for hook in hooks)
     if system:
@@ -148,11 +155,14 @@ def populate(repo: Repository, count: int, *, prefix: str = "src") -> None:
         if not suffix:
             (repo.root / name).chmod(0o755)
             executables.append(name)
+
     # Windows does not track executable bits in the filesystem.
     if executables:
         repo.git("add", "--chmod=+x", "--", *executables)
+
     repo.write("change.txt", "original\n")
     repo.write("invalid.json", "{}\n")
+
     # Symlink creation on Windows requires privileges or Developer Mode.
     if os.name != "nt":
         (repo.root / prefix / "linked.txt").symlink_to("../change.txt")
@@ -164,12 +174,15 @@ def fixture(
     repo = Repository(root, env)
     repo.write(*config(system=not workspace))
     populate(repo, count)
+
     if workspace:
         name, content = config(toml=True)
         repo.write(f"src/{name}", content)
         repo.write("other/.pre-commit-config.yaml", config()[1])
         populate(repo, count // 3, prefix="other")
+
     repo.commit()
+
     repo.write("change.txt", "committed change\n")
     repo.commit()
     return repo
