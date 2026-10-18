@@ -1,0 +1,84 @@
+name: Evaluate PGO
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, pgo]
+    uses: $/.github/workflows/build-linux-release.yml
+    with:
+      pgo: ${{ matrix.variant == 'pgo' }}
+      variant: ${{ matrix.variant }}
+
+  benchmark:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: baseline-artifacts-x86_64-unknown-linux-gnu
+          path: baseline
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pgo-artifacts-x86_64-unknown-linux-gnu
+          path: pgo
+      - name: Unpack binaries
+        run: |
+          tar xf baseline/prek-x86_64-unknown-linux-gnu.tar.gz -C baseline
+          tar xf pgo/prek-x86_64-unknown-linux-gnu.tar.gz -C pgo
+      - name: Install hyperfine
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
+        with:
+          tool: hyperfine@2.0.0
+      - name: Compare release binaries
+        run: |
+          python3 scripts/pgo/benchmark.py \
+            --baseline baseline/prek-x86_64-unknown-linux-gnu/prek \
+            --pgo pgo/prek-x86_64-unknown-linux-gnu/prek \
+            --output results.json
+      - name: Summarize measurements
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          results = json.loads(Path("results.json").read_text())
+          lines = ["| Workload | Baseline (ms) | PGO (ms) | Change |", "| --- | ---: | ---: | ---: |"]
+          for name, case in results["cases"].items():
+              baseline, pgo = case["median_seconds"]
+              change = (case["pgo_over_baseline"] - 1) * 100
+              lines.append(f"| {name} | {baseline * 1000:.2f} | {pgo * 1000:.2f} | {change:+.2f}% |")
+          lines.append(f"\nGeometric mean ratio: {results['geometric_mean_ratio']:.4f}")
+          baseline_size, pgo_size = [binary["bytes"] for binary in results["binaries"]]
+          size_change = results["binary_size_change"]
+          lines.extend([
+              "",
+              "| Baseline size (bytes) | PGO size (bytes) | Difference (bytes) | Change |",
+              "| ---: | ---: | ---: | ---: |",
+              f"| {baseline_size:,} | {pgo_size:,} | {size_change['bytes']:+,} | {size_change['percent']:+.2f}% |",
+              "",
+              "Size changes are PGO minus baseline; negative values mean a smaller binary.",
+          ])
+          lines.append("\nReview all three runs, raw samples, binary sizes, and build costs before enabling release PGO.")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n".join(lines) + "\n")
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pgo-results-${{ matrix.repetition }}
+          path: results.json
+          if-no-files-found: error

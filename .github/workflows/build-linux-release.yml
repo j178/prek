@@ -1,0 +1,77 @@
+name: Build Linux release
+
+on:
+  workflow_call:
+    inputs:
+      pgo:
+        type: boolean
+        default: false
+      variant:
+        description: Artifact prefix for independent evaluation builds
+        type: string
+        default: ""
+
+permissions: {}
+
+env:
+  ACTIONS_CACHE_MODE: none
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+  TARGET: x86_64-unknown-linux-gnu
+  # renovate: datasource=github-releases depName=PyO3/maturin versioning=semver
+  MATURIN_VERSION: "v1.15.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          sccache: false
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ env.TARGET }}
+          manylinux: 2_17
+          rustup-components: ${{ inputs.pgo && 'llvm-tools-preview' || '' }}
+          args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            if [ "$PGO_ENABLED" = true ]; then
+              python3.12 scripts/pgo/train.py --target "$TARGET"
+              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/prek.profdata"
+            fi
+          docker-options: -e PGO_ENABLED -e TARGET
+        env:
+          PGO_ENABLED: ${{ inputs.pgo }}
+          # cc forwards Rust PGO flags to clang, whose profile ABI may differ from rustc's.
+          # https://github.com/rust-lang/cc-rs/issues/1986
+          CFLAGS: -fno-profile-generate -fno-profile-use
+          CXXFLAGS: -fno-profile-generate -fno-profile-use
+      - name: Archive binary
+        run: |
+          mkdir "prek-$TARGET"
+          cp "target/$TARGET/release/prek" "prek-$TARGET/prek"
+          tar czf "prek-$TARGET.tar.gz" "prek-$TARGET"
+          sha256sum "prek-$TARGET.tar.gz" > "prek-$TARGET.tar.gz.sha256"
+      - name: Smoke-test release binary
+        run: python3 scripts/pgo/train.py --binary "target/$TARGET/release/prek"
+      - name: Upload wheel
+        if: ${{ inputs.variant == '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-linux-${{ env.TARGET }}
+          path: dist
+          if-no-files-found: error
+      - name: Upload archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.variant && format('{0}-', inputs.variant) || '' }}artifacts-${{ env.TARGET }}
+          path: |
+            *.tar.gz
+            *.sha256
+          if-no-files-found: error
