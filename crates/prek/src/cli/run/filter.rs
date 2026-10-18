@@ -612,7 +612,8 @@ fn strip_prefix_in_place(path: &mut PathBuf, prefix: &Path) -> bool {
 }
 
 fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
-    let absolute = std::path::absolute(path)?.clean();
+    // Match the canonical Git root even when Windows gives the cwd an 8.3 name.
+    let absolute = std::path::absolute(fs::CWD.join(path))?.clean();
     fs::relative_to(absolute, new_cwd)
 }
 
