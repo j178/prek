@@ -75,8 +75,8 @@ check_variance() {
   fi
 
   local ref_mean current_mean ratio pct
-  ref_mean=$(jq '.results[0].mean' "$OUT_JSON")
-  current_mean=$(jq '.results[1].mean' "$OUT_JSON")
+  ref_mean=$(jq '.results[0].summary.time_wall_clock.mean' "$OUT_JSON")
+  current_mean=$(jq '.results[1].summary.time_wall_clock.mean' "$OUT_JSON")
   ratio=$(echo "scale=4; $current_mean / $ref_mean" | bc)
   pct=$(echo "scale=2; ($ratio - 1) * 100" | bc)
 
@@ -99,7 +99,7 @@ benchmark() {
   local prepare="${5:-}"
   local label_suffix="${6:-}"
   local label="prek $cmd"
-  local -a hyperfine_args=(-i -N -w "$warmup" -r "$runs" --export-markdown "$OUT_MD" --export-json "$OUT_JSON")
+  local -a hyperfine_args=(-i -N -w "$warmup" -r "$runs" --metrics=time_wall_clock --export-markdown "$OUT_MD" --export-json "$OUT_JSON")
 
   if [ -n "$label_suffix" ]; then
     label="$label $label_suffix"
@@ -115,7 +115,7 @@ benchmark() {
 
   write_blank_line
   write_line "### \`$label\`"
-  if ! hyperfine "${hyperfine_args[@]}" --reference "$BASE_BINARY $cmd" "$HEAD_BINARY $cmd"; then
+  if ! hyperfine "${hyperfine_args[@]}" "$BASE_BINARY $cmd" "$HEAD_BINARY $cmd"; then
     write_line "⚠️ Benchmark failed for: $cmd"
     return 1
   fi

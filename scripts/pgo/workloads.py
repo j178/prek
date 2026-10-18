@@ -125,6 +125,7 @@ def config(*, toml: bool = False, system: bool = False) -> tuple[str, str]:
 
 
 def populate(repo: Repository, count: int, *, prefix: str = "src") -> None:
+    executables = []
     for i in range(count):
         directory = f"{prefix}/package-{i % 11}/nested"
         suffix, content = (
@@ -142,9 +143,15 @@ def populate(repo: Repository, count: int, *, prefix: str = "src") -> None:
         repo.write(name, content)
         if not suffix:
             (repo.root / name).chmod(0o755)
+            executables.append(name)
+    # Windows does not track executable bits in the filesystem.
+    if executables:
+        repo.git("add", "--chmod=+x", "--", *executables)
     repo.write("change.txt", "original\n")
     repo.write("invalid.json", "{}\n")
-    (repo.root / prefix / "linked.txt").symlink_to("../change.txt")
+    # Symlink creation on Windows requires privileges or Developer Mode.
+    if os.name != "nt":
+        (repo.root / prefix / "linked.txt").symlink_to("../change.txt")
 
 
 def fixture(

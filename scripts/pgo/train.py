@@ -1,4 +1,4 @@
-"""Build and train a native release binary, or smoke-test one with --binary."""
+"""Build and train a native release binary, or run lightweight checks with --verify."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def train(binary: Path, root: Path, profile_dir: Path) -> None:
         before = small.state()
         small.run(binary)
         small.run(binary, "run")
-        small.command([small.root / ".git/hooks/pre-commit"])
+        small.command(["sh", ".git/hooks/pre-commit"])
         if small.state() != before:
             raise RuntimeError("The staged run did not preserve the index and worktree")
         small.reset()
@@ -48,7 +48,7 @@ def train(binary: Path, root: Path, profile_dir: Path) -> None:
     new = small.git("rev-parse", "HEAD").decode().strip()
     # Drive the installed shim with the ref records Git supplies on stdin.
     subprocess.run(
-        [small.root / ".git/hooks/pre-push", "origin", str(small.root)],
+        ["sh", ".git/hooks/pre-push", "origin", str(small.root)],
         input=f"refs/heads/main {new} refs/heads/main {old}\n".encode(),
         cwd=small.root,
         env=env,
@@ -129,12 +129,19 @@ def build_profile(target: str | None) -> None:
     sysroot = subprocess.check_output(
         ["rustc", "--print", "sysroot"], cwd=source, text=True
     ).strip()
-    profiler = Path(sysroot) / "lib" / "rustlib" / host / "bin" / "llvm-profdata"
+    suffix = ".exe" if os.name == "nt" else ""
+    profiler = (
+        Path(sysroot) / "lib" / "rustlib" / host / "bin" / f"llvm-profdata{suffix}"
+    )
     if not profiler.is_file():
-        raise RuntimeError("Install llvm-tools-preview for the active Rust toolchain")
+        subprocess.run(
+            ["rustup", "component", "add", "llvm-tools-preview"],
+            cwd=source,
+            check=True,
+        )
 
     target_dir = (source / os.environ.get("CARGO_TARGET_DIR", "target")).resolve()
-    pgo_dir = target_dir / "pgo"
+    pgo_dir = target_dir / "pgo" / target
     profile_dir = pgo_dir / "profiles"
     instrumented = pgo_dir / "instrumented"
     merged = pgo_dir / "prek.profdata"
@@ -149,11 +156,6 @@ def build_profile(target: str | None) -> None:
     env["RUSTFLAGS"] = (
         f"{env.get('RUSTFLAGS', '')} -Cprofile-generate={profile_dir}".strip()
     )
-    # Keep native dependencies out of Rust's profiling runtime.
-    for variable in ("CFLAGS", "CXXFLAGS"):
-        env[variable] = (
-            f"{env.get(variable, '')} -fno-profile-generate -fno-profile-use".strip()
-        )
     print(f"Building instrumented prek for {target}", flush=True)
     subprocess.run(
         [
@@ -174,7 +176,7 @@ def build_profile(target: str | None) -> None:
         env=env,
         check=True,
     )
-    binary = instrumented / target / "release" / "prek"
+    binary = instrumented / target / "release" / f"prek{suffix}"
     print(f"Training {binary}", flush=True)
     with tempfile.TemporaryDirectory(prefix="prek-pgo-") as directory:
         train(binary, Path(directory), profile_dir)
@@ -189,17 +191,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
-        "--binary", type=Path, help="Smoke-test an existing release binary"
+        "--verify",
+        type=Path,
+        metavar="BINARY",
+        help="Run lightweight checks on an existing release binary",
     )
     mode.add_argument(
         "--target", help="Native Rust target (defaults to the rustc host)"
     )
     args = parser.parse_args()
-    if args.binary is None:
+    if args.verify is None:
         build_profile(args.target)
     else:
         with tempfile.TemporaryDirectory(prefix="prek-pgo-") as directory:
-            verify(args.binary.resolve(), Path(directory))
+            verify(args.verify.resolve(), Path(directory))
         print("Release binary smoke test passed", flush=True)
 
 
