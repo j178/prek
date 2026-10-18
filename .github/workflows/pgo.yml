@@ -11,27 +11,9 @@ jobs:
       fail-fast: false
       matrix:
         variant: [baseline, pgo]
-        platform: &platforms
-          - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-latest
-            manylinux: "2_17"
-          - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
-            manylinux: "2_28"
-          - target: x86_64-apple-darwin
-            runner: macos-15-intel
-          - target: aarch64-apple-darwin
-            runner: macos-15
-          - target: x86_64-pc-windows-msvc
-            runner: windows-latest
-          - target: aarch64-pc-windows-msvc
-            runner: windows-11-arm
-    uses: $/.github/workflows/build-native-release.yml
+    uses: $/.github/workflows/build-release-binaries.yml
     with:
-      target: ${{ matrix.platform.target }}
-      runner: ${{ matrix.platform.runner }}
-      manylinux: ${{ matrix.platform.manylinux || 'auto' }}
-      pgo: ${{ matrix.variant == 'pgo' }}
+      plan: ""
       variant: ${{ matrix.variant }}
 
   benchmark:
@@ -43,7 +25,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: *platforms
+        platform:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
         repetition: [1, 2, 3]
     env:
       TARGET: ${{ matrix.platform.target }}
@@ -64,9 +58,9 @@ jobs:
           name: pgo-artifacts-${{ env.TARGET }}
           path: pgo
       - name: Install hyperfine
-        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
-          tool: hyperfine@2.0.0
+          tool: hyperfine
       - name: Compare release binaries
         shell: python
         run: |

@@ -134,7 +134,11 @@ def build_profile(target: str | None) -> None:
         Path(sysroot) / "lib" / "rustlib" / host / "bin" / f"llvm-profdata{suffix}"
     )
     if not profiler.is_file():
-        raise RuntimeError("Install llvm-tools-preview for the active Rust toolchain")
+        subprocess.run(
+            ["rustup", "component", "add", "llvm-tools-preview"],
+            cwd=source,
+            check=True,
+        )
 
     target_dir = (source / os.environ.get("CARGO_TARGET_DIR", "target")).resolve()
     pgo_dir = target_dir / "pgo" / target
@@ -152,12 +156,6 @@ def build_profile(target: str | None) -> None:
     env["RUSTFLAGS"] = (
         f"{env.get('RUSTFLAGS', '')} -Cprofile-generate={profile_dir}".strip()
     )
-    # Keep native dependencies out of Rust's profiling runtime.
-    if os.name != "nt":
-        for variable in ("CFLAGS", "CXXFLAGS"):
-            env[variable] = (
-                f"{env.get(variable, '')} -fno-profile-generate -fno-profile-use".strip()
-            )
     print(f"Building instrumented prek for {target}", flush=True)
     subprocess.run(
         [
