@@ -99,9 +99,10 @@ jobs:
         with:
           enable-cache: false
 
-      - name: Train PGO on macOS and Windows
+      - name: Train PGO on macOS ARM64 and Windows
         # Linux trains inside manylinux so both builds use the same toolchain and libraries.
-        if: runner.os != 'Linux'
+        # The extra instrumented build is too slow on Intel macOS runners.
+        if: runner.os != 'Linux' && matrix.platform.target != 'x86_64-apple-darwin'
         shell: bash
         run: |
           if [ "$TARGET" = aarch64-pc-windows-msvc ]; then
