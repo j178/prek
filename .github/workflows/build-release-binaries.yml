@@ -46,146 +46,32 @@ jobs:
           name: wheels-sdist
           path: dist
 
-  windows:
-    runs-on: windows-latest
+  native:
     strategy:
+      fail-fast: false
       matrix:
         platform:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            manylinux: "2_17"
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            manylinux: "2_28"
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+          - target: aarch64-apple-darwin
+            runner: macos-15
           - target: x86_64-pc-windows-msvc
-            arch: x64
+            runner: windows-latest
           - target: aarch64-pc-windows-msvc
-            arch: x64 # not relevant here
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: "Install NASM"
-        # NASM is required for the x86-64 Windows target by aws-lc-sys.
-        # On aarch64-pc-windows-msvc, it uses clang-cl instead.
-        # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
-        if: contains(matrix.platform.target, 'x86')
-        run: |
-          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
-          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - name: "Build wheels"
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          sccache: false
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --features self-update --compatibility pypi
-        env:
-          # Disable prebuilt NASM objects so we always compile assembly from source.
-          AWS_LC_SYS_PREBUILT_NASM: "0"
-      - name: "Upload wheels"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wheels-windows-${{ matrix.platform.target }}
-          path: dist
-      - name: "Archive binary"
-        shell: bash
-        run: |
-          ARCHIVE_FILE=prek-${{ matrix.platform.target }}.zip
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/prek.exe
-          sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
-      - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: artifacts-${{ matrix.platform.target }}
-          path: |
-            *.zip
-            *.sha256
-
-  macos:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        platform:
-          - runner: macos-15
-            target: x86_64-apple-darwin
-          - runner: macos-15
-            target: aarch64-apple-darwin
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: "Build wheels"
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          sccache: false
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --features self-update --compatibility pypi
-      - name: "Upload wheels"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wheels-macos-${{ matrix.platform.target }}
-          path: dist
-      - name: "Archive binary"
-        run: |
-          TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=prek-$TARGET
-          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
-
-          mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
-          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
-          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
-      - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: artifacts-${{ matrix.platform.target }}
-          path: |
-            *.tar.gz
-            *.sha256
-
-  linux:
-    uses: $/.github/workflows/build-linux-release.yml
+            runner: windows-11-arm
+    uses: $/.github/workflows/build-native-release.yml
     with:
-      # Enable only after the independent PGO evaluation meets the rollout criteria.
-      pgo: ${{ vars.PREK_RELEASE_PGO == 'true' }}
-
-  linux-arm:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      TARGET: aarch64-unknown-linux-gnu
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: "Build wheels"
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          sccache: false
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          target: ${{ env.TARGET }}
-          manylinux: 2_28
-          args: --release --locked --out dist --features self-update --compatibility pypi
-      - name: "Upload wheels"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wheels-linux-${{ env.TARGET }}
-          path: dist
-      - name: "Archive binary"
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ARCHIVE_NAME="prek-$TARGET"
-          ARCHIVE_FILE="$ARCHIVE_NAME.tar.gz"
-
-          mkdir -p "$ARCHIVE_NAME"
-          cp "target/$TARGET/release/prek" "$ARCHIVE_NAME/prek"
-          tar czvf "$ARCHIVE_FILE" "$ARCHIVE_NAME"
-          shasum -a 256 "$ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
-      - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: artifacts-${{ env.TARGET }}
-          path: |
-            *.tar.gz
-            *.sha256
+      target: ${{ matrix.platform.target }}
+      runner: ${{ matrix.platform.runner }}
+      manylinux: ${{ matrix.platform.manylinux || 'auto' }}
+      # Enable each target only after its independent PGO evaluation passes.
+      pgo: ${{ contains(fromJSON(vars.PREK_RELEASE_PGO_TARGETS || '[]'), matrix.platform.target) }}
 
   linux-ppc64le:
     runs-on: ubuntu-latest

@@ -1,0 +1,128 @@
+name: Build native release
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        required: true
+      runner:
+        type: string
+        required: true
+      manylinux:
+        type: string
+        default: auto
+      pgo:
+        type: boolean
+        default: false
+      variant:
+        description: Artifact prefix for independent evaluation builds
+        type: string
+        default: ""
+
+permissions: {}
+
+env:
+  ACTIONS_CACHE_MODE: none
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+  TARGET: ${{ inputs.target }}
+  # Match the deployment target in the training and final macOS builds.
+  MACOSX_DEPLOYMENT_TARGET: ${{ inputs.target == 'aarch64-apple-darwin' && '11.0' || inputs.target == 'x86_64-apple-darwin' && '10.12' || '' }}
+  # cc forwards Rust PGO flags to clang, whose profile ABI may differ from rustc's.
+  # https://github.com/rust-lang/cc-rs/issues/1986
+  CFLAGS: ${{ !contains(inputs.target, 'windows') && '-fno-profile-generate -fno-profile-use' || '' }}
+  CXXFLAGS: ${{ !contains(inputs.target, 'windows') && '-fno-profile-generate -fno-profile-use' || '' }}
+  AWS_LC_SYS_PREBUILT_NASM: "0"
+  # renovate: datasource=github-releases depName=PyO3/maturin versioning=semver
+  MATURIN_VERSION: "v1.15.0"
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Make Git Bash available to Python
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "$(cygpath -w /usr/bin)" >> "$GITHUB_PATH"
+      - name: Install NASM
+        if: ${{ inputs.target == 'x86_64-pc-windows-msvc' }}
+        shell: pwsh
+        run: |
+          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Train PGO on macOS and Windows
+        if: ${{ inputs.pgo && runner.os != 'Linux' }}
+        shell: bash
+        run: |
+          rustup component add llvm-tools-preview
+          python scripts/pgo/train.py --target "$TARGET"
+          echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$GITHUB_WORKSPACE/target/pgo/$TARGET/prek.profdata" >> "$GITHUB_ENV"
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          sccache: false
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ env.TARGET }}
+          manylinux: ${{ inputs.manylinux }}
+          rustup-components: ${{ inputs.pgo && 'llvm-tools-preview' || '' }}
+          args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            if [ "$TARGET" = aarch64-unknown-linux-gnu ]; then
+              # Use the same linker for both builds; GNU ld can fail on large instrumented binaries.
+              lld_dir="$(rustc --print sysroot)/lib/rustlib/$TARGET/bin/gcc-ld"
+              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld"
+            fi
+            if [ "$PGO_ENABLED" = true ]; then
+              python3.12 scripts/pgo/train.py --target "$TARGET"
+              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
+            fi
+          docker-options: -e PGO_ENABLED -e TARGET
+        env:
+          PGO_ENABLED: ${{ inputs.pgo }}
+      - name: Smoke-test release binary
+        shell: bash
+        run: python scripts/pgo/train.py --verify "target/$TARGET/release/prek${{ runner.os == 'Windows' && '.exe' || '' }}"
+      - name: Archive binary
+        shell: python
+        run: |
+          import hashlib
+          import os
+          import tarfile
+          import zipfile
+          from pathlib import Path
+
+          target = os.environ["TARGET"]
+          binary = Path("target", target, "release", "prek.exe" if os.name == "nt" else "prek")
+          if os.name == "nt":
+              archive = Path(f"prek-{target}.zip")
+              with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+                  output.write(binary, "prek.exe")
+          else:
+              archive = Path(f"prek-{target}.tar.gz")
+              with tarfile.open(archive, "w:gz") as output:
+                  output.add(binary, arcname=f"prek-{target}/prek")
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          Path(f"{archive}.sha256").write_text(f"{digest}  {archive.name}\n")
+      - name: Upload wheel
+        if: ${{ inputs.variant == '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-${{ runner.os == 'macOS' && 'macos' || runner.os == 'Windows' && 'windows' || 'linux' }}-${{ env.TARGET }}
+          path: dist
+          if-no-files-found: error
+      - name: Upload archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.variant && format('{0}-', inputs.variant) || '' }}artifacts-${{ env.TARGET }}
+          path: |
+            *.tar.gz
+            *.zip
+            *.sha256
+          if-no-files-found: error

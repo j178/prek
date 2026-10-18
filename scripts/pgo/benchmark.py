@@ -62,15 +62,17 @@ def benchmark(
     ]
     results = {}
     for name, repo, args, state in cases:
-        prepare = prepare_command(state)
+        # A relative script works with both Unix shells and Windows cmd.exe.
+        repo.write(".git/pgo-prepare.sh", prepare_command(state) + "\n")
+        prepare_args = ["sh", ".git/pgo-prepare.sh"]
         expected = 1 if state == "fix" else 0
         observations = []
         for binary in binaries:
-            repo.command(["sh", "-c", prepare])
+            repo.command(prepare_args)
             output = repo.run(binary, *args, expected=expected)
             # Stash logs include a timestamp and PID for the same preserved diff.
             output = re.sub(
-                rb"/patches/\d+-\d+\.patch", b"/patches/[patch].patch", output
+                rb"[/\\]patches[/\\]\d+-\d+\.patch", b"/patches/[patch].patch", output
             )
             observations.append((output, repo.state()))
         if observations[0] != observations[1]:
@@ -83,7 +85,7 @@ def benchmark(
             "--metrics=time_wall_clock",
             f"--warmup={warmup}",
             f"--runs={runs}",
-            f"--prepare={prepare}",
+            f"--prepare={shlex.join(prepare_args)}",
             f"--export-json={output_file}",
         ]
         if expected == 1:
