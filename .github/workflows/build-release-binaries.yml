@@ -76,6 +76,10 @@ jobs:
       TARGET: ${{ matrix.platform.target }}
       # Match the deployment target in the training and final macOS builds.
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.platform.target == 'aarch64-apple-darwin' && '11.0' || matrix.platform.target == 'x86_64-apple-darwin' && '10.12' || '' }}
+
+      # Use Rust's bundled Mach-O LLD for identical code folding.
+      RUSTFLAGS: ${{ contains(matrix.platform.target, 'apple-darwin') && '-Clinker=rust-lld -Clinker-flavor=ld64.lld -Clink-arg=--icf=safe' || '' }}
+
       AWS_LC_SYS_PREBUILT_NASM: "0"
 
     steps:
@@ -124,11 +128,10 @@ jobs:
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
-            if [ "$TARGET" = aarch64-unknown-linux-gnu ]; then
-              # GNU ld can fail on large instrumented binaries; use lld for both builds.
-              lld_dir="$(rustc --print sysroot)/lib/rustlib/$TARGET/bin/gcc-ld"
-              export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld"
-            fi
+            # Use the same LLD and ICF settings for training and the final build.
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
 
             uv run scripts/pgo/train.py --target "$TARGET"
             export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
@@ -198,6 +201,12 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            # GCC 4.8 cannot use -fuse-ld=lld, so expose LLD as ld through -B.
+            lld_dir="$(mktemp -d)"
+            ln -s "$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/rust-lld" "$lld_dir/ld"
+            test -x "$lld_dir/ld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-Wl,--icf=all"
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -244,6 +253,10 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -291,6 +304,10 @@ jobs:
           manylinux: musllinux_1_1
           # Also support glibc systems older than the aarch64 GNU build's baseline.
           args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
+          before-script-linux: |
+            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+            test -x "$lld_dir/ld.lld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
