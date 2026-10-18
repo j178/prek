@@ -3,8 +3,22 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from pathlib import Path
+
+
+def run_command(
+    args: list[str | Path], *, cwd: Path, check: bool, **kwargs
+) -> subprocess.CompletedProcess:
+    command = [str(arg) for arg in args]
+    if os.name == "nt":
+        displayed = subprocess.list2cmdline(command)
+    else:
+        displayed = shlex.join(command)
+
+    print(f"[{cwd}] > {displayed}", flush=True)
+    return subprocess.run(args, cwd=cwd, check=check, **kwargs)
 
 
 def environment(root: Path) -> dict[str, str]:
@@ -49,7 +63,7 @@ class Repository:
     def command(
         self, args: list[str | Path], expected: int = 0, *, input: bytes | None = None
     ) -> bytes:
-        result = subprocess.run(
+        result = run_command(
             args,
             input=input,
             cwd=self.root,

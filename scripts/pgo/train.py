@@ -13,12 +13,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from workloads import environment, fixture
+from workloads import environment, fixture, run_command
 
 
 def train(binary: Path, root: Path, profile_dir: Path) -> None:
     env = environment(root)
     env["LLVM_PROFILE_FILE"] = str(profile_dir / "prek-%m.profraw")
+    print(f"LLVM_PROFILE_FILE={env['LLVM_PROFILE_FILE']}", flush=True)
 
     small = fixture(root / "small", env, 84)
     medium = fixture(root / "workspace", env, 840, workspace=True)
@@ -123,9 +124,13 @@ def verify(binary: Path, root: Path) -> None:
 
 def build_profile(target: str | None) -> None:
     source = Path(__file__).resolve().parents[2]
-    host = subprocess.check_output(
-        ["rustc", "--print", "host-tuple"], cwd=source, text=True
-    ).strip()
+    host = run_command(
+        ["rustc", "--print", "host-tuple"],
+        cwd=source,
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    ).stdout.strip()
     target = target or host
     if target != host:
         raise ValueError(
@@ -137,13 +142,17 @@ def build_profile(target: str | None) -> None:
             "Use RUSTFLAGS instead of CARGO_ENCODED_RUSTFLAGS for PGO builds"
         )
 
-    libdir = subprocess.check_output(
-        ["rustc", "--print", "target-libdir"], cwd=source, text=True
-    ).strip()
+    libdir = run_command(
+        ["rustc", "--print", "target-libdir"],
+        cwd=source,
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    ).stdout.strip()
     suffix = ".exe" if os.name == "nt" else ""
     profiler = Path(libdir).parent / "bin" / f"llvm-profdata{suffix}"
     if not profiler.is_file():
-        subprocess.run(
+        run_command(
             ["rustup", "component", "add", "llvm-tools-preview"],
             cwd=source,
             check=True,
@@ -171,7 +180,9 @@ def build_profile(target: str | None) -> None:
     ).strip()
 
     print(f"Building instrumented prek for {target}", flush=True)
-    subprocess.run(
+    print(f"CARGO_TARGET_DIR={instrumented}", flush=True)
+    print(f"RUSTFLAGS={env['RUSTFLAGS']}", flush=True)
+    run_command(
         [
             "cargo",
             "build",
@@ -200,7 +211,7 @@ def build_profile(target: str | None) -> None:
     if not profiles or any(profile.stat().st_size == 0 for profile in profiles):
         raise RuntimeError("Training did not produce complete profiles")
 
-    subprocess.run([profiler, "merge", "-o", merged, *profiles], check=True)
+    run_command([profiler, "merge", "-o", merged, *profiles], cwd=source, check=True)
     print(f"Merged {len(profiles)} profiles into {merged}", flush=True)
 
 

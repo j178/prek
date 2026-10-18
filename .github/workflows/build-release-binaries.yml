@@ -28,6 +28,7 @@ env:
 
 jobs:
   sdist:
+    name: Source distribution
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,6 +50,7 @@ jobs:
           path: dist
 
   native:
+    name: ${{ matrix.platform.target }}
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 60
     strategy:
@@ -177,6 +179,7 @@ jobs:
           if-no-files-found: error
 
   linux-ppc64le:
+    name: powerpc64le-unknown-linux-gnu
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -223,6 +226,7 @@ jobs:
             *.sha256
 
   musllinux:
+    name: x86_64-unknown-linux-musl
     runs-on: ubuntu-latest
     env:
       TARGET: x86_64-unknown-linux-musl
@@ -268,6 +272,7 @@ jobs:
             *.sha256
 
   musllinux-cross:
+    name: aarch64-unknown-linux-musl
     runs-on: ubuntu-latest
     env:
       TARGET: aarch64-unknown-linux-musl
