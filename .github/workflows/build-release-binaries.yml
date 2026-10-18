@@ -195,10 +195,11 @@ jobs:
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
-            # LLD runs on the host, even when linking for a different architecture.
-            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
-            test -x "$lld_dir/ld.lld"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
+            # GCC 4.8 cannot use -fuse-ld=lld, so expose LLD as ld through -B.
+            lld_dir="$(mktemp -d)"
+            ln -s "$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/rust-lld" "$lld_dir/ld"
+            test -x "$lld_dir/ld"
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-Wl,--icf=all"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
