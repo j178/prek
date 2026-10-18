@@ -78,6 +78,10 @@ jobs:
       PGO_ENABLED: ${{ inputs.variant == 'pgo' || (inputs.variant == '' && contains(fromJSON(vars.PREK_RELEASE_PGO_TARGETS || '[]'), matrix.platform.target)) }}
       # Match the deployment target in the training and final macOS builds.
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.platform.target == 'aarch64-apple-darwin' && '11.0' || matrix.platform.target == 'x86_64-apple-darwin' && '10.12' || '' }}
+
+      # Use Rust's bundled Mach-O LLD for identical code folding.
+      RUSTFLAGS: ${{ contains(matrix.platform.target, 'apple-darwin') && '-Clinker=rust-lld -Clinker-flavor=ld64.lld -Clink-arg=--icf=safe' || '' }}
+
       AWS_LC_SYS_PREBUILT_NASM: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
