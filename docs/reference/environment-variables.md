@@ -155,6 +155,7 @@ variables when the selected Git stage supplies the corresponding value:
 
 | Variable | When it is available |
 | -- | -- |
+| `PREK_HOOK_STAGE` | The current stage, such as `commit-msg` or `pre-push`. Unset for group runs without `--hook-stage` |
 | `PRE_COMMIT_FROM_REF`, `PRE_COMMIT_ORIGIN` | The starting ref for revision-range and push-style runs |
 | `PRE_COMMIT_TO_REF`, `PRE_COMMIT_SOURCE` | The destination ref for revision-range and push-style runs |
 | `PRE_COMMIT_COMMIT_MSG_SOURCE` | The commit-message source supplied by Git |
@@ -169,6 +170,11 @@ variables when the selected Git stage supplies the corresponding value:
 These values describe the current hook invocation. Hooks should tolerate a
 variable being absent when they also support stages where Git does not provide
 that value.
+
+Hooks supporting both `commit-msg` and `pre-push` can use `PREK_HOOK_STAGE` to choose
+between the message filename argument and the push revision range. Keep
+`pass_filenames: true` to receive the message file, and set `always_run: true` to
+check commits with no changed files.
 
 ## Related external variables
 
