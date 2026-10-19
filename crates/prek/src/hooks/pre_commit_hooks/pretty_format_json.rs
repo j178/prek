@@ -10,8 +10,7 @@ use serde_json::ser::{Formatter, PrettyFormatter};
 use similar::TextDiff;
 
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser, Debug)]
 #[command(disable_help_subcommand = true)]

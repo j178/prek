@@ -5,9 +5,7 @@ use rustc_hash::FxHashSet;
 
 use crate::git::{lfs_files, staged_added_files};
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
-use crate::hooks::run_concurrent_file_checks;
+use crate::hooks::{HookOutput, hook_filenames, parse_hook_args, run_concurrent_file_checks};
 use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]

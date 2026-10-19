@@ -2,13 +2,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::debug;
 
 use crate::hook::Hook;
+use crate::hooks::HookFuture;
 use crate::hooks::HookOutput;
-
-use super::HookFuture;
 
 pub(crate) mod check_added_large_files;
 pub(crate) mod check_case_conflict;
@@ -56,12 +54,6 @@ pub(crate) struct FixArgs {
     pub(crate) filenames: Vec<PathBuf>,
 }
 
-pub(crate) fn parse_hook_args<T: Parser>(hook: &Hook) -> Result<T> {
-    Ok(T::try_parse_from(
-        hook.entry.expect_argv_entry().split_with_args(&hook.args)?,
-    )?)
-}
-
 pub(crate) fn contents_equal<'a>(
     mut original: &[u8],
     chunks: impl IntoIterator<Item = &'a [u8]>,
@@ -73,53 +65,6 @@ pub(crate) fn contents_equal<'a>(
         original = rest;
     }
     original.is_empty()
-}
-
-pub(crate) fn hook_filenames<'a>(
-    configured: &'a [PathBuf],
-    selected: &'a [&Path],
-) -> impl Iterator<Item = &'a Path> + 'a {
-    configured
-        .iter()
-        .map(PathBuf::as_path)
-        .chain(selected.iter().copied())
-}
-
-/// Runs blocking file checks, preserving filename order in the combined output.
-/// Explicit filenames finish serially before selected filenames run in parallel.
-/// Each check receives the path joined to `file_base` for I/O and the original path for diagnostics.
-pub(crate) async fn run_blocking_file_checks<F>(
-    file_base: &Path,
-    explicit: &[PathBuf],
-    selected: &[&Path],
-    check: F,
-) -> Result<HookOutput>
-where
-    F: Fn(&Path, &Path) -> Result<HookOutput> + Send + Sync + 'static,
-{
-    let file_base = file_base.to_path_buf();
-    let explicit_len = explicit.len();
-    let filenames: Vec<_> = hook_filenames(explicit, selected)
-        .map(Path::to_path_buf)
-        .collect();
-    // Enter the blocking pool once for the batch, rather than once per file or I/O operation.
-    tokio::task::spawn_blocking(move || {
-        let (explicit, selected) = filenames.split_at(explicit_len);
-        let mut result = HookOutput::unchanged(0, Vec::new());
-        for filename in explicit {
-            result.merge_known(check(&file_base.join(filename), filename)?);
-        }
-        // Collect results in input order so diagnostics and the first I/O error are deterministic.
-        let outputs: Vec<_> = selected
-            .par_iter()
-            .map(|filename| check(&file_base.join(filename), filename))
-            .collect();
-        for output in outputs {
-            result.merge_known(output?);
-        }
-        Ok(result)
-    })
-    .await?
 }
 
 /// Hooks from `https://github.com/pre-commit/pre-commit-hooks`.
@@ -199,30 +144,4 @@ impl PreCommitHooks {
 // TODO: compare rev
 pub(crate) fn is_pre_commit_hooks(url: &str) -> bool {
     url == "https://github.com/pre-commit/pre-commit-hooks"
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn blocking_checks_finish_explicit_duplicates_before_selected_files() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        fs_err::write(dir.path().join("shared"), b"0")?;
-        fs_err::write(dir.path().join("other"), b"9")?;
-        let explicit = [PathBuf::from("shared"), PathBuf::from("shared")];
-        let selected = [Path::new("shared"), Path::new("other")];
-        let result = run_blocking_file_checks(dir.path(), &explicit, &selected, |path, _| {
-            let contents = fs_err::read(path)?;
-            fs_err::write(path, [contents[0] + 1])?;
-            Ok(HookOutput::known(1, contents, true))
-        })
-        .await?;
-
-        assert_eq!(result.output, b"0129");
-        assert_eq!(result.exit_status, 1);
-        assert_eq!(result.file_changes, crate::hooks::FileChanges::Modified);
-        assert_eq!(fs_err::read(dir.path().join("shared"))?, b"3");
-        Ok(())
-    }
 }

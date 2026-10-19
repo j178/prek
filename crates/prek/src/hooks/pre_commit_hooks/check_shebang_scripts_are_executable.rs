@@ -4,13 +4,11 @@ use std::path::Path;
 use owo_colors::OwoColorize;
 
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
+use crate::hooks::pre_commit_hooks::FilenamesArgs;
 use crate::hooks::pre_commit_hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
-use crate::hooks::pre_commit_hooks::{
-    FilenamesArgs, hook_filenames, parse_hook_args, run_blocking_file_checks,
-};
+use crate::hooks::{HookOutput, hook_filenames, parse_hook_args, run_blocking_file_checks};
 
 /// Runs the `check-shebang-scripts-are-executable` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {

@@ -8,8 +8,7 @@ use fancy_regex::{BytesMode, RegexInput, RegexOptionsBuilder, RegexSet};
 use memchr::memchr_iter;
 
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
