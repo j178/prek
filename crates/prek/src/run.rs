@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::LazyLock;
@@ -49,9 +48,21 @@ pub(crate) static BATCH_CONCURRENCY: LazyLock<usize> =
 struct Partitions<'a> {
     filenames: &'a [&'a Path],
     current_index: usize,
-    max_per_batch: usize,
+    batching: Batching,
     remaining_arg_length: usize,
 }
+
+enum Batching {
+    /// The hook's explicit limit on filenames per invocation.
+    Limited(usize),
+    /// A planned batch count that may be exceeded to fit the command-line length limit.
+    Balanced { remaining_batches: usize },
+}
+
+// Spread process startup costs over more files while still allowing larger inputs
+// to run in parallel. This is a heuristic for automatic batching: small inputs or
+// the command-line length limit can still produce batches with fewer files.
+const MIN_FILES_PER_BATCH: usize = 16;
 
 /// We make a conservative guess for the size of a single pointer (64-bit) here
 /// in order to support scenarios where a 32-bit binary is launching a 64-bit
@@ -150,9 +161,13 @@ impl<'a> Partitions<'a> {
         filenames: &'a [&'a Path],
         concurrency: usize,
     ) -> anyhow::Result<Self> {
-        let max_per_batch = match hook.pass_filenames {
-            PassFilenames::Limited(n) => n.get(),
-            _ => max(4, filenames.len().div_ceil(concurrency)),
+        let batching = match hook.pass_filenames {
+            PassFilenames::Limited(n) => Batching::Limited(n.get()),
+            _ => Batching::Balanced {
+                // Round down so a small remainder does not add another process:
+                // 31 files still plan one batch. Concurrency only caps the batch count.
+                remaining_batches: (filenames.len() / MIN_FILES_PER_BATCH).clamp(1, concurrency),
+            },
         };
         let mut arg_max = platform_max_cli_length();
 
@@ -188,7 +203,7 @@ impl<'a> Partitions<'a> {
         Ok(Self {
             filenames,
             current_index: 0,
-            max_per_batch,
+            batching,
             remaining_arg_length: arg_max,
         })
     }
@@ -210,12 +225,27 @@ impl<'a> Iterator for Partitions<'a> {
 
         let start_index = self.current_index;
         let mut remaining_length = self.remaining_arg_length;
+        let max_per_batch = match &mut self.batching {
+            Batching::Limited(n) => *n,
+            Batching::Balanced { remaining_batches } => {
+                // Recalculate from the remaining files to avoid a small final batch.
+                // For example, 49 files across three batches become 17, 16, 16.
+                //
+                // The byte limit may cut batches short, leaving files after the planned
+                // count reaches zero. Using a divisor of one lets the byte limit alone
+                // split those remaining files.
+                let max_per_batch =
+                    (self.filenames.len() - start_index).div_ceil((*remaining_batches).max(1));
+                *remaining_batches = remaining_batches.saturating_sub(1);
+                max_per_batch
+            }
+        };
 
         while self.current_index < self.filenames.len() {
             let filename = self.filenames[self.current_index];
             let length = arg_size(filename);
 
-            if length > remaining_length || self.current_index - start_index >= self.max_per_batch {
+            if length > remaining_length || self.current_index - start_index >= max_per_batch {
                 break;
             }
 
@@ -328,13 +358,13 @@ mod tests {
     fn create_test_partitions<'a>(
         filenames: &'a [&'a Path],
         remaining_arg_length: usize,
-        max_per_batch: usize,
+        batching: Batching,
     ) -> Partitions<'a> {
         Partitions {
             filenames,
             current_index: 0,
             remaining_arg_length,
-            max_per_batch,
+            batching,
         }
     }
 
@@ -342,7 +372,7 @@ mod tests {
     fn test_partitions_empty_filenames() {
         let filenames: Vec<&Path> = vec![];
 
-        let mut partitions = create_test_partitions(&filenames, 4096, 10);
+        let mut partitions = create_test_partitions(&filenames, 4096, Batching::Limited(10));
 
         // Should return empty slice once, then None
         let batch = partitions.next();
@@ -362,7 +392,7 @@ mod tests {
         let file3 = PathBuf::from("file3.txt");
         let filenames: Vec<&Path> = vec![&file1, &long_file, &file3];
 
-        let mut partitions = create_test_partitions(&filenames, 1000, 10);
+        let mut partitions = create_test_partitions(&filenames, 1000, Batching::Limited(10));
 
         // First batch should succeed with file1
         let batch1 = partitions.next();
@@ -381,7 +411,7 @@ mod tests {
             .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
-        let partitions = create_test_partitions(&file_refs, 100_000, 25);
+        let partitions = create_test_partitions(&file_refs, 100_000, Batching::Limited(25));
 
         let all_batches: Vec<_> = partitions.map(<[&Path]>::len).collect();
 
@@ -467,16 +497,17 @@ mod tests {
             .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
-        // Set a small max_cli_length to force multiple batches
-        let partitions = create_test_partitions(&file_refs, 100, 100);
+        // Each filename needs 18 bytes, so the byte limit requires five batches
+        // even though only two were planned.
+        let partitions = create_test_partitions(
+            &file_refs,
+            40,
+            Batching::Balanced {
+                remaining_batches: 2,
+            },
+        );
 
-        let all_batches: Vec<_> = partitions.map(<[&Path]>::len).collect();
-
-        // Should have multiple batches due to CLI length limit
-        assert!(all_batches.len() > 1);
-
-        // All files should have been processed
-        let total_files: usize = all_batches.iter().sum();
-        assert_eq!(total_files, 10);
+        let all_batches: Vec<_> = partitions.collect();
+        assert_eq!(all_batches, file_refs.chunks(2).collect::<Vec<_>>());
     }
 }
