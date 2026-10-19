@@ -38,13 +38,13 @@ The standalone installer automatically downloads and installs the correct binary
     === "macOS and Linux"
 
         ```bash
-        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
         ```
 
     === "Windows"
 
         ```powershell
-        powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+        powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
         ```
 
     !!! note
@@ -62,13 +62,13 @@ The standalone installer automatically downloads and installs the correct binary
     === "macOS and Linux"
 
         ```bash
-        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
         ```
 
     === "Windows"
 
         ```powershell
-        powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+        powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
         ```
 
     You can combine this with `PREK_INSTALL_DIR`. Add the directory to `PATH` yourself
@@ -83,13 +83,13 @@ The standalone installer automatically downloads and installs the correct binary
     === "macOS and Linux"
 
         ```bash
-        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
+        curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
         ```
 
     === "Windows"
 
         ```powershell
-        powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+        powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
         ```
 
     Add the directory to `PATH` yourself or invoke prek by its full path. To update an
