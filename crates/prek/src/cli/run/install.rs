@@ -8,9 +8,9 @@ use futures_util::stream::{FuturesUnordered, StreamExt};
 use tracing::{debug, warn};
 
 use crate::cli::reporter::HookInstallReporter;
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::config::Language;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
-use crate::run::INTERNAL_CONCURRENCY;
 use crate::store::Store;
 
 /// Resolve already-installed hook environments and install the missing ones.

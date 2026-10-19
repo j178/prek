@@ -12,6 +12,7 @@ use tracing::{instrument, trace};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::concurrency::run_by_batch;
 use crate::config::Language;
 use crate::fs::PathClean;
 use crate::git::GitCommandExt;
@@ -19,7 +20,6 @@ use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
 use crate::hooks::{self, HookOutput};
 use crate::process::{Cmd, with_command_env};
-use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 mod bun;

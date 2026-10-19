@@ -28,11 +28,11 @@ use crate::cli::run::{
     ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
 };
 use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
+use crate::concurrency::HOOK_CONCURRENCY;
 use crate::config::{HideStatus, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
-use crate::run::HOOK_CONCURRENCY;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
 use crate::terminal::{USE_COLOR, sanitize_output};

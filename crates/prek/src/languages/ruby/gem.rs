@@ -6,9 +6,9 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
 use tracing::debug;
 
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::languages::ruby::installer::RubyResult;
 use crate::process::Cmd;
-use crate::run::INTERNAL_CONCURRENCY;
 
 /// Build a `PATH` value with the resolved Ruby's bin directory prepended.
 ///

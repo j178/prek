@@ -9,11 +9,11 @@ use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::languages::python::{Uv, python_exec, query_python_info_cached};
 use crate::process::Cmd;
-use crate::run::INTERNAL_CONCURRENCY;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 #[derive(Debug, Default)]

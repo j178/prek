@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use rustc_hash::FxHashSet;
 
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::git::{lfs_files, staged_added_files};
 use crate::hook::Hook;
 use crate::hooks::{HookOutput, hook_filenames, parse_hook_args, run_concurrent_file_checks};
-use crate::run::INTERNAL_CONCURRENCY;
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
