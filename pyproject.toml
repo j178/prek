@@ -34,7 +34,7 @@ docs = [
   "mike",
   "zensical>=0.0.24",
 ]
-docker = ["cargo-zigbuild>=0.19.8"]
+docker = ["cargo-zigbuild>=0.23.4"]
 
 [tool.uv.sources]
 rooster = { git = "https://github.com/j178/rooster", rev = "c1901e113611dbe4c2c30917a4d4d392e6d0c679" }

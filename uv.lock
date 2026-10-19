@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.8"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -625,11 +625,15 @@ docs = [
     { name = "zensical", marker = "python_full_version >= '3.12'" },
 ]
 
+[package.group-requires-python]
+dev = ">=3.12"
+docs = ">=3.12"
+
 [package.metadata]
 
 [package.metadata.requires-dev]
 dev = [{ name = "rooster", marker = "python_full_version >= '3.12'", git = "https://github.com/j178/rooster?rev=c1901e113611dbe4c2c30917a4d4d392e6d0c679" }]
-docker = [{ name = "cargo-zigbuild", specifier = ">=0.19.8" }]
+docker = [{ name = "cargo-zigbuild", specifier = ">=0.23.4" }]
 docs = [
     { name = "llmstxt-standalone", marker = "python_full_version >= '3.12'", specifier = ">=0.2.0" },
     { name = "mike", marker = "python_full_version >= '3.12'", git = "https://github.com/squidfunk/mike.git?rev=2d4ad799442f4592db8ad53b179bfb33db8c69ac" },
