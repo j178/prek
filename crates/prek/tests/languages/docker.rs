@@ -53,7 +53,7 @@ fn workspace_docker() {
 
     context.git().add(".");
 
-    cmd_snapshot!(context, context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -74,9 +74,8 @@ fn workspace_docker() {
       - hook id: hello-world
       - duration: [TIME]
 
-        .pre-commit-config.yaml project1/.pre-commit-config.yaml project2/.pre-commit-config.yaml project1/project1.txt
-        project2/project2.txt
+        .pre-commit-config.yaml project1/.pre-commit-config.yaml project2/.pre-commit-config.yaml project1/project1.txt project2/project2.txt
 
     ----- stderr -----
-    "#);
+    ");
 }
