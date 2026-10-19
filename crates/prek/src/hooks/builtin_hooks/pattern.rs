@@ -1,7 +1,6 @@
 use std::io::{BufRead, BufReader, Write};
 use std::ops::Range;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -10,9 +9,7 @@ use memchr::memchr_iter;
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::parse_hook_args;
-use crate::hooks::run_concurrent_file_checks;
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -54,7 +51,7 @@ enum ScanMode {
 }
 
 struct Matcher {
-    regex: Arc<RegexSet>,
+    regex: RegexSet,
     scan_mode: ScanMode,
 }
 
@@ -67,11 +64,7 @@ impl Matcher {
         };
 
         Ok(Self {
-            regex: Arc::new(compile_patterns(
-                &args.patterns,
-                args.ignore_case,
-                args.multiline,
-            )?),
+            regex: compile_patterns(&args.patterns, args.ignore_case, args.multiline)?,
             scan_mode,
         })
     }
@@ -162,49 +155,33 @@ async fn run_content_patterns(
 ) -> Result<HookOutput> {
     let args = parse_hook_args::<Args>(hook)?;
     let matcher = Matcher::new(&args)?;
-    let file_base = hook.project().relative_path();
-
-    run_concurrent_file_checks(
-        filenames.iter().copied(),
-        *INTERNAL_CONCURRENCY,
-        |filename| check_file(file_base, filename, &matcher, policy),
+    run_blocking_file_checks(
+        hook.project().relative_path(),
+        &[],
+        filenames,
+        move |file_path, display_path| check_file(file_path, display_path, &matcher, policy),
     )
     .await
 }
 
-async fn check_file(
-    file_base: &Path,
-    filename: &Path,
+fn check_file(
+    file_path: &Path,
+    display_path: &Path,
     matcher: &Matcher,
     policy: MatchPolicy,
 ) -> Result<HookOutput> {
     let (exit_status, output) = match matcher.scan_mode {
-        ScanMode::Lines => check_file_lines(file_base, filename, &matcher.regex, policy).await,
+        ScanMode::Lines => check_file_lines(file_path, display_path, &matcher.regex, policy),
         ScanMode::Multiline => {
-            check_file_multiline(file_base, filename, &matcher.regex, policy).await
+            check_file_multiline(file_path, display_path, &matcher.regex, policy)
         }
     }?;
     Ok(HookOutput::unchanged(exit_status, output))
 }
 
-async fn check_file_lines(
-    file_base: &Path,
-    filename: &Path,
-    patterns: &Arc<RegexSet>,
-    policy: MatchPolicy,
-) -> Result<(i32, Vec<u8>)> {
-    let file_path = file_base.join(filename);
-    let filename = filename.to_path_buf();
-    let patterns = Arc::clone(patterns);
-    tokio::task::spawn_blocking(move || {
-        check_file_lines_blocking(&file_path, &filename, &patterns, policy)
-    })
-    .await?
-}
-
-fn check_file_lines_blocking(
+fn check_file_lines(
     file_path: &Path,
-    filename: &Path,
+    display_path: &Path,
     patterns: &RegexSet,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
@@ -222,7 +199,7 @@ fn check_file_lines_blocking(
             .with_context(|| {
                 format!(
                     "Failed to match patterns in `{}:{line_number}`",
-                    filename.display()
+                    display_path.display()
                 )
             })?
             .is_some()
@@ -232,7 +209,7 @@ fn check_file_lines_blocking(
             }
 
             matched = true;
-            write!(output, "{}:{line_number}:", filename.display())?;
+            write!(output, "{}:{line_number}:", display_path.display())?;
             output.write_all(contents)?;
             writeln!(output)?;
         }
@@ -241,19 +218,19 @@ fn check_file_lines_blocking(
 
     match policy {
         MatchPolicy::Deny => Ok((i32::from(matched), output)),
-        MatchPolicy::Require => Ok(missing_match(filename)),
+        MatchPolicy::Require => Ok(missing_match(display_path)),
     }
 }
 
-async fn check_file_multiline(
-    file_base: &Path,
-    filename: &Path,
+fn check_file_multiline(
+    file_path: &Path,
+    display_path: &Path,
     patterns: &RegexSet,
     policy: MatchPolicy,
 ) -> Result<(i32, Vec<u8>)> {
-    let contents = fs_err::tokio::read(file_base.join(filename)).await?;
+    let contents = fs_err::read(file_path)?;
     let matched = find_first_match(patterns, &contents)
-        .with_context(|| format!("Failed to match patterns in `{}`", filename.display()))?;
+        .with_context(|| format!("Failed to match patterns in `{}`", display_path.display()))?;
     match policy {
         MatchPolicy::Deny => {
             let Some(matched) = matched else {
@@ -262,7 +239,7 @@ async fn check_file_multiline(
             let line_number = memchr_iter(b'\n', &contents[..matched.start]).count() + 1;
             let matched = &contents[matched];
             let mut output = Vec::new();
-            write!(output, "{}:{line_number}:", filename.display())?;
+            write!(output, "{}:{line_number}:", display_path.display())?;
             output.write_all(matched)?;
             if !matched.ends_with(b"\n") {
                 writeln!(output)?;
@@ -270,7 +247,7 @@ async fn check_file_multiline(
             Ok((1, output))
         }
         MatchPolicy::Require if matched.is_some() => Ok((0, Vec::new())),
-        MatchPolicy::Require => Ok(missing_match(filename)),
+        MatchPolicy::Require => Ok(missing_match(display_path)),
     }
 }
 

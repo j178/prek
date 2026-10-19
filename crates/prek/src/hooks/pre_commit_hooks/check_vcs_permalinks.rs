@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
@@ -10,9 +9,7 @@ use regex::bytes::{Match, Regex};
 
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{hook_filenames, parse_hook_args};
-use crate::hooks::run_concurrent_file_checks;
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -86,38 +83,23 @@ fn is_probable_commit_hash(reference: &[u8]) -> bool {
 /// Runs the `check-vcs-permalinks` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
-    let matcher = Arc::new(GithubNonPermalinkMatcher::new(
-        args.additional_github_domains,
-    ));
+    let matcher = GithubNonPermalinkMatcher::new(args.additional_github_domains);
 
-    let file_base = hook.project().relative_path();
-    run_concurrent_file_checks(
-        hook_filenames(&args.filenames, filenames),
-        *INTERNAL_CONCURRENCY,
-        |filename| check_file(file_base, filename, &matcher),
+    run_blocking_file_checks(
+        hook.project().relative_path(),
+        &args.filenames,
+        filenames,
+        move |file_path, display_path| check_file(file_path, display_path, &matcher),
     )
     .await
 }
 
-async fn check_file(
-    file_base: &Path,
-    filename: &Path,
-    matcher: &Arc<GithubNonPermalinkMatcher>,
-) -> Result<HookOutput> {
-    let path = file_base.join(filename);
-    let filename = filename.to_path_buf();
-    let matcher = Arc::clone(matcher);
-    let (exit_status, output) =
-        tokio::task::spawn_blocking(move || check_file_sync(&path, &filename, &matcher)).await??;
-    Ok(HookOutput::unchanged(exit_status, output))
-}
-
-fn check_file_sync(
-    path: &Path,
-    filename: &Path,
+fn check_file(
+    file_path: &Path,
+    display_path: &Path,
     matcher: &GithubNonPermalinkMatcher,
-) -> Result<(i32, Vec<u8>)> {
-    let file = fs_err::File::open(path)?;
+) -> Result<HookOutput> {
+    let file = fs_err::File::open(file_path)?;
     let mut reader = BufReader::new(file);
 
     let mut retval = 0;
@@ -130,14 +112,14 @@ fn check_file_sync(
         for m in matcher.find_non_permalink(&line) {
             retval = 1;
             write!(output, "Non-permanent github link detected: ")?;
-            write!(output, "{}:{}:", filename.display(), line_number)?;
+            write!(output, "{}:{}:", display_path.display(), line_number)?;
             output.write_all(m.as_bytes())?;
             writeln!(output)?;
         }
         line.clear();
     }
 
-    Ok((retval, output))
+    Ok(HookOutput::unchanged(retval, output))
 }
 
 #[cfg(test)]
@@ -233,19 +215,18 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_check_file_with_additional_domain() -> Result<()> {
+    #[test]
+    fn test_check_file_with_additional_domain() -> Result<()> {
         let dir = tempdir()?;
         let file_path = dir.path().join("links.md");
-        fs_err::tokio::write(
+        fs_err::write(
             &file_path,
             b"https://github.example.com/owner/repo/blob/main/file.py#L10 and https://github.com/owner/repo/blob/master/src/lib.rs#L5\n",
-        )
-        .await?;
+        )?;
 
-        let matcher = Arc::new(matcher(&["github.example.com"]));
+        let matcher = matcher(&["github.example.com"]);
         let relative = PathBuf::from("links.md");
-        let result = check_file(dir.path(), &relative, &matcher).await?;
+        let result = check_file(&file_path, &relative, &matcher)?;
 
         assert_eq!(result.exit_status, 1);
         assert_eq!(
