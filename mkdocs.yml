@@ -54,7 +54,6 @@ plugins:
   - search
   - minify:
       minify_html: true
-  - include-markdown
   - llmstxt:
       markdown_description: |
         prek is a drop-in replacement for pre-commit, fully compatible with existing
