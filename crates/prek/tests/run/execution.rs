@@ -452,6 +452,57 @@ fn run_with_stdin_closed() {
     "#);
 }
 
+#[test]
+fn filename_batches_are_balanced() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: batches
+                name: batches
+                entry: python3 -c 'import sys; print(len(sys.argv) - 1)'
+                language: system
+                files: '\.txt$'
+                verbose: true
+        "})
+        .with_files((0..49).map(|i| (format!("f{i:02}.txt"), "")))
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--all-files")
+        .env("PREK_CONCURRENT_BATCHES", "12")
+        .env_remove("PREK_NO_CONCURRENCY"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    batches..................................................................Passed
+    - hook id: batches
+    - duration: [TIME]
+
+      17
+      16
+      16
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().arg("--files")
+        .args((0..31).map(|i| format!("f{i:02}.txt")))
+        .env("PREK_CONCURRENT_BATCHES", "12")
+        .env_remove("PREK_NO_CONCURRENCY"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    batches..................................................................Passed
+    - hook id: batches
+    - duration: [TIME]
+
+      31
+
+    ----- stderr -----
+    ");
+}
+
 /// `pass_filenames: n` limits each invocation to at most n files.
 /// With n=1, each matched file gets its own invocation.
 #[test]
