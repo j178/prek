@@ -1,114 +1,27 @@
 use std::fmt::Display;
-use std::ops::Deref;
-use std::path::Path;
 use std::str::FromStr;
+
+use semver::Version;
 
 use crate::hook::InstallInfo;
 use crate::languages::version::{Error, try_into_u64_slice};
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub(crate) enum Channel {
     Stable,
     Beta,
     Nightly,
 }
 
-impl FromStr for Channel {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "stable" => Ok(Channel::Stable),
-            "beta" => Ok(Channel::Beta),
-            "nightly" => Ok(Channel::Nightly),
-            _ => Err(()),
+impl Channel {
+    pub(crate) fn from_version(version: &Version) -> Option<Self> {
+        match version.pre.as_str().split('.').next()? {
+            "" => Some(Self::Stable),
+            "beta" => Some(Self::Beta),
+            "nightly" => Some(Self::Nightly),
+            _ => None,
         }
-    }
-}
-
-impl Display for Channel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let channel_str = match self {
-            Channel::Stable => "stable",
-            Channel::Beta => "beta",
-            Channel::Nightly => "nightly",
-        };
-        write!(f, "{channel_str}")
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RustVersion {
-    version: semver::Version,
-    channel: Option<Channel>,
-}
-
-impl Default for RustVersion {
-    fn default() -> Self {
-        Self {
-            version: semver::Version::new(0, 0, 0),
-            channel: None,
-        }
-    }
-}
-
-impl Deref for RustVersion {
-    type Target = semver::Version;
-
-    fn deref(&self) -> &Self::Target {
-        &self.version
-    }
-}
-
-impl RustVersion {
-    pub(crate) fn from_version(version: &semver::Version) -> Self {
-        Self {
-            version: version.clone(),
-            channel: None,
-        }
-    }
-
-    pub(crate) fn from_channel(channel: Channel) -> Self {
-        Self {
-            version: semver::Version::new(0, 0, 0),
-            channel: Some(channel),
-        }
-    }
-
-    pub(crate) fn from_path(version: &semver::Version, path: &Path) -> Self {
-        let toolchain_str = path
-            .file_name()
-            .and_then(|os_str| os_str.to_str())
-            .unwrap_or_default();
-        let path = toolchain_str.to_lowercase();
-        let channel = if path.starts_with("nightly") {
-            Some(Channel::Nightly)
-        } else if path.starts_with("beta") {
-            Some(Channel::Beta)
-        } else if path.starts_with("stable") {
-            Some(Channel::Stable)
-        } else {
-            None
-        };
-        Self {
-            version: version.clone(),
-            channel,
-        }
-    }
-
-    pub(crate) fn to_toolchain_name(&self) -> String {
-        if let Some(channel) = &self.channel {
-            channel.to_string()
-        } else {
-            format!(
-                "{}.{}.{}",
-                self.version.major, self.version.minor, self.version.patch
-            )
-        }
-    }
-
-    pub(crate) fn channel(&self) -> Option<Channel> {
-        self.channel
     }
 }
 
@@ -165,8 +78,6 @@ impl Display for RustRequest {
     }
 }
 
-pub(crate) const EXTRA_KEY_CHANNEL: &str = "channel";
-
 impl RustRequest {
     pub(crate) fn is_any(&self) -> bool {
         matches!(self, RustRequest::Any)
@@ -188,44 +99,23 @@ impl RustRequest {
     }
 
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        match self {
-            RustRequest::Any => {
-                // Any request accepts any valid installation, or specifically "stable"
-                install_info
-                    .get_extra(EXTRA_KEY_CHANNEL)
-                    .is_some_and(|ch| ch == "stable")
-                    || install_info.language_version.major > 0
-            }
-            RustRequest::Channel(requested_channel) => {
-                let channel = install_info
-                    .get_extra(EXTRA_KEY_CHANNEL)
-                    .and_then(|ch| Channel::from_str(ch).ok());
-                channel.as_ref().is_some_and(|ch| ch == requested_channel)
-            }
-            _ => {
-                let version = &install_info.language_version;
-                self.matches(&RustVersion::from_version(version))
-            }
-        }
+        self.matches(&install_info.language_version)
     }
 
-    pub(crate) fn matches(&self, version: &RustVersion) -> bool {
+    pub(crate) fn matches(&self, version: &Version) -> bool {
         match self {
-            RustRequest::Any => true,
-            RustRequest::Channel(requested_channel) => version
-                .channel
-                .as_ref()
-                .is_some_and(|ch| ch == requested_channel),
-            RustRequest::Major(major) => version.version.major == *major,
+            RustRequest::Any => version.major > 0,
+            RustRequest::Channel(requested_channel) => {
+                Channel::from_version(version).as_ref() == Some(requested_channel)
+            }
+            RustRequest::Major(major) => version.major == *major,
             RustRequest::MajorMinor(major, minor) => {
-                version.version.major == *major && version.version.minor == *minor
+                version.major == *major && version.minor == *minor
             }
             RustRequest::MajorMinorPatch(major, minor, patch) => {
-                version.version.major == *major
-                    && version.version.minor == *minor
-                    && version.version.patch == *patch
+                version.major == *major && version.minor == *minor && version.patch == *patch
             }
-            RustRequest::Range(req, _) => req.matches(&version.version),
+            RustRequest::Range(req, _) => req.matches(version),
         }
     }
 }
@@ -235,7 +125,6 @@ mod tests {
     use super::*;
     use crate::config::Language;
     use crate::hook::InstallInfo;
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     #[test]
@@ -282,15 +171,12 @@ mod tests {
 
     #[test]
     fn test_request_matches() -> anyhow::Result<()> {
-        let version = RustVersion::from_path(
-            &semver::Version::new(1, 71, 0),
-            Path::new("/home/user/.rustup/toolchains/stable-x86_64-unknown-linux-gnu"),
-        );
-        let other_version = RustVersion::from_version(&semver::Version::new(1, 72, 1));
+        let version = Version::new(1, 71, 0);
+        let other_version = Version::new(1, 72, 1);
 
         assert!(RustRequest::Any.matches(&version));
         assert!(RustRequest::Channel(Channel::Stable).matches(&version));
-        assert!(!RustRequest::Channel(Channel::Stable).matches(&other_version));
+        assert!(RustRequest::Channel(Channel::Stable).matches(&other_version));
         assert!(RustRequest::Major(1).matches(&version));
         assert!(!RustRequest::Major(2).matches(&version));
         assert!(RustRequest::MajorMinor(1, 71).matches(&version));
@@ -306,81 +192,29 @@ mod tests {
     }
 
     #[test]
-    fn test_request_satisfied_by_install_info() -> anyhow::Result<()> {
+    fn channels_match_compiler_releases_and_cached_versions() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let toolchain_path = temp_dir.path().join("rust-toolchain");
-        fs_err::write(&toolchain_path, b"")?;
-
-        let mut install_info =
-            InstallInfo::create(Language::Rust, None, Vec::new(), temp_dir.path())?;
-        install_info
-            .with_language_version(semver::Version::new(1, 71, 0))
-            .with_toolchain(toolchain_path);
-
-        assert!(RustRequest::Any.satisfied_by(&install_info));
-        assert!(RustRequest::Major(1).satisfied_by(&install_info));
-        assert!(RustRequest::MajorMinor(1, 71).satisfied_by(&install_info));
-        assert!(RustRequest::MajorMinorPatch(1, 71, 0).satisfied_by(&install_info));
-        assert!(!RustRequest::MajorMinorPatch(1, 71, 1).satisfied_by(&install_info));
-
-        let req = RustRequest::Range(
-            semver::VersionReq::parse(">=1.70, <1.72")?,
-            ">=1.70, <1.72".into(),
-        );
-        assert!(req.satisfied_by(&install_info));
-
-        let req = RustRequest::Range(semver::VersionReq::parse(">=1.72")?, ">=1.72".into());
-        assert!(!req.satisfied_by(&install_info));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_satisfied_by_channel() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::create(Language::Rust, None, Vec::new(), temp_dir.path())?;
-        install_info
-            .with_language_version(semver::Version::new(1, 75, 0))
-            .with_toolchain(PathBuf::from("/some/path"))
-            .with_extra(EXTRA_KEY_CHANNEL, "stable");
-
-        // Channel request should match when extra is set
-        assert!(RustRequest::Channel(Channel::Stable).satisfied_by(&install_info));
-        assert!(!RustRequest::Channel(Channel::Nightly).satisfied_by(&install_info));
-        assert!(!RustRequest::Channel(Channel::Beta).satisfied_by(&install_info));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_satisfied_by_any_with_stable_channel() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::create(Language::Rust, None, Vec::new(), temp_dir.path())?;
-        install_info
-            .with_language_version(semver::Version::new(1, 75, 0))
-            .with_toolchain(PathBuf::from("/some/path"))
-            .with_extra("rust_channel", "stable");
-
-        // Any request should match stable channel
-        assert!(RustRequest::Any.satisfied_by(&install_info));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_satisfied_by_any_without_channel() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::create(Language::Rust, None, Vec::new(), temp_dir.path())?;
-        install_info
-            .with_language_version(semver::Version::new(1, 75, 0))
-            .with_toolchain(PathBuf::from("/some/path"));
-        // No channel set - should still match Any if version > 0
-
-        assert!(RustRequest::Any.satisfied_by(&install_info));
-
+        for (release, expected) in [
+            ("1.95.0", Some(Channel::Stable)),
+            ("1.96.0-beta.2", Some(Channel::Beta)),
+            ("1.97.0-nightly", Some(Channel::Nightly)),
+            ("1.97.0-dev", None),
+        ] {
+            let version = Version::parse(release)?;
+            let mut info = InstallInfo::create(Language::Rust, None, Vec::new(), temp_dir.path())?;
+            // Legacy channel metadata must not override the compiler's release.
+            info.with_language_version(version.clone())
+                .with_extra("channel", "nightly");
+            for channel in [Channel::Stable, Channel::Beta, Channel::Nightly] {
+                let request = RustRequest::Channel(channel);
+                assert_eq!(
+                    request.matches(&version),
+                    Some(channel) == expected,
+                    "{release}: {channel}"
+                );
+                assert_eq!(request.satisfied_by(&info), request.matches(&version));
+            }
+        }
         Ok(())
     }
 }
