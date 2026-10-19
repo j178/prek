@@ -71,6 +71,7 @@ jobs:
           HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
           HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           [[ "$GH_REF" == "refs/heads/master" ]] && on_master_branch=1
           [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
@@ -79,6 +80,8 @@ jobs:
           [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
           [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
 
+          # The merge commit can include base-branch changes newer than BASE_SHA.
+          # Compare against the PR head to avoid counting those as PR changes.
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
@@ -100,7 +103,7 @@ jobs:
             [[ "$file" =~ ^scripts/hyperfine-.*\.sh$ ]] && bench_scripts_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ ]] && continue
             any_code_changed=1
-          done <<< "$(git diff --name-only "${BASE_SHA:-origin/master}...HEAD")"
+          done <<< "$(git diff --name-only "${BASE_SHA:-origin/master}...${HEAD_SHA}")"
 
           [[ $rust_code_changed || $rust_deps_changed || $rust_config_changed ]] && any_rust_changed=1
           [[ $rust_deps_changed || $rust_config_changed || $workflow_changed ]] && cache_relevant_changed=1
