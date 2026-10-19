@@ -24,7 +24,7 @@ anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async-trait = { version = "0.1.89" }
-async_zip = { version = "0.0.21", package = "astral_async_zip", features = ["deflate", "tokio"] }
+async_zip = { version = "0.0.22", package = "astral_async_zip", features = ["deflate", "tokio"] }
 asyncband = { version = "0.7.1", features = ["once-cell", "once-map", "semaphore"] }
 aws-lc-rs = { version = "1.17.0", default-features = false, features = ["aws-lc-sys"] }
 axoupdater = { version = "0.10.0", default-features = false, features = ["github_releases"] }
