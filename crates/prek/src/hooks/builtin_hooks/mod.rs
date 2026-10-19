@@ -16,9 +16,8 @@ use crate::hooks::pre_commit_hooks::{
     fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace, forbid_new_submodules,
     mixed_line_ending, no_commit_to_branch, pretty_format_json, requirements_txt_fixer,
 };
+use crate::hooks::{HookFuture, HookOutput};
 use crate::store::Store;
-
-use super::{HookFuture, HookOutput};
 
 mod check_commit_trailers;
 mod check_json5;

@@ -3,8 +3,7 @@ use fancy_regex::{Regex, RegexInput};
 
 use crate::git::git_cmd;
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::parse_hook_args;
+use crate::hooks::{HookOutput, parse_hook_args};
 use anyhow::{Context, Result};
 
 #[derive(Parser)]

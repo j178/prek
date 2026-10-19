@@ -7,11 +7,11 @@ use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::concurrency::run_by_batch;
 use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::process::Cmd;
-use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]

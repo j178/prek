@@ -12,10 +12,10 @@ use tracing::{trace, warn};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::cli::run::HookRunReporter;
+use crate::concurrency::run_by_batch;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageBackend;
 use crate::process::Cmd;
-use crate::run::run_by_batch;
 use crate::store::Store;
 use crate::terminal::USE_COLOR;
 use crate::warn_user;

@@ -7,10 +7,8 @@ use anyhow::Result;
 use bstr::ByteSlice;
 
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{
-    FixArgs, contents_equal, parse_hook_args, run_blocking_file_checks,
-};
+use crate::hooks::pre_commit_hooks::{FixArgs, contents_equal};
+use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
 
 const BROKEN_PKG_RESOURCES: [&[u8]; 2] = [b"pkg-resources==0.0.0\n", b"pkg_resources==0.0.0\n"];
 

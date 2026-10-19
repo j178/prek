@@ -11,8 +11,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::git;
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::parse_hook_args;
+use crate::hooks::{HookOutput, parse_hook_args};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]

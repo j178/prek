@@ -11,10 +11,10 @@ use seahash::SeaHasher;
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::config::{RemoteRepo, RemoteRepoKey};
 use crate::fs::{LockedFile, expand_tilde};
 use crate::git::{self, TerminalPrompt};
-use crate::run::INTERNAL_CONCURRENCY;
 use crate::warn_user;
 use crate::workspace::HookInitReporter;
 

@@ -7,8 +7,7 @@ use memchr::{memchr_iter, memmem};
 
 use crate::git::git_dir;
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
 
 const START_PATTERN: &[u8] = b"<<<<<<< ";
 const ANCESTOR_PATTERN: &[u8] = b"||||||| ";

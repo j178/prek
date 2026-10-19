@@ -1,10 +1,12 @@
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use clap::Parser;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::cli::run::HookRunReporter;
 use crate::hook::{Hook, Repo};
@@ -103,7 +105,7 @@ pub(crate) fn requires_diff_tracking(hook: &Hook) -> bool {
     }
 }
 
-pub async fn run_fast_path(
+pub(crate) async fn run_fast_path(
     _store: &Store,
     hook: &Hook,
     filenames: &[&Path],
@@ -111,14 +113,66 @@ pub async fn run_fast_path(
 ) -> anyhow::Result<HookOutput> {
     let progress = reporter.on_run_start(hook, filenames.len());
 
-    let Some(implemented) = fast_path_hook(hook) else {
-        unreachable!("run_fast_path requires a supported pre-commit hook");
-    };
+    let implemented =
+        fast_path_hook(hook).expect("run_fast_path requires a supported pre-commit hook");
     let result = implemented.run(hook, filenames).await;
 
     reporter.on_run_complete(progress);
 
     result
+}
+
+fn parse_hook_args<T: Parser>(hook: &Hook) -> anyhow::Result<T> {
+    Ok(T::try_parse_from(
+        hook.entry.expect_argv_entry().split_with_args(&hook.args)?,
+    )?)
+}
+
+fn hook_filenames<'a>(
+    configured: &'a [PathBuf],
+    selected: &'a [&Path],
+) -> impl Iterator<Item = &'a Path> + 'a {
+    configured
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(selected.iter().copied())
+}
+
+/// Runs blocking file checks, preserving filename order in the combined output.
+/// Explicit filenames finish serially before selected filenames run in parallel.
+/// Each check receives the path joined to `file_base` for I/O and the original path for diagnostics.
+async fn run_blocking_file_checks<F>(
+    file_base: &Path,
+    explicit: &[PathBuf],
+    selected: &[&Path],
+    check: F,
+) -> anyhow::Result<HookOutput>
+where
+    F: Fn(&Path, &Path) -> anyhow::Result<HookOutput> + Send + Sync + 'static,
+{
+    let file_base = file_base.to_path_buf();
+    let explicit_len = explicit.len();
+    let filenames: Vec<_> = hook_filenames(explicit, selected)
+        .map(Path::to_path_buf)
+        .collect();
+    // Enter the blocking pool once for the batch, rather than once per file or I/O operation.
+    tokio::task::spawn_blocking(move || {
+        let (explicit, selected) = filenames.split_at(explicit_len);
+        let mut result = HookOutput::unchanged(0, Vec::new());
+        for filename in explicit {
+            result.merge_known(check(&file_base.join(filename), filename)?);
+        }
+        // Collect results in input order so diagnostics and the first I/O error are deterministic.
+        let outputs: Vec<_> = selected
+            .par_iter()
+            .map(|filename| check(&file_base.join(filename), filename))
+            .collect();
+        for output in outputs {
+            result.merge_known(output?);
+        }
+        Ok(result)
+    })
+    .await?
 }
 
 /// Runs per-file checks concurrently and merges their results in input order.
@@ -144,4 +198,32 @@ where
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn blocking_checks_finish_explicit_duplicates_before_selected_files() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        fs_err::write(dir.path().join("shared"), b"0")?;
+        fs_err::write(dir.path().join("other"), b"9")?;
+        let explicit = [PathBuf::from("shared"), PathBuf::from("shared")];
+        let selected = [Path::new("shared"), Path::new("other")];
+        let result = run_blocking_file_checks(dir.path(), &explicit, &selected, |path, _| {
+            let contents = fs_err::read(path)?;
+            fs_err::write(path, [contents[0] + 1])?;
+            Ok(HookOutput::known(1, contents, true))
+        })
+        .await?;
+
+        assert_eq!(result.output, b"0129");
+        assert_eq!(result.exit_status, 1);
+        assert_eq!(result.file_changes, crate::hooks::FileChanges::Modified);
+        assert_eq!(fs_err::read(dir.path().join("shared"))?, b"3");
+        Ok(())
+    }
 }

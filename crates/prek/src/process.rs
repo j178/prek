@@ -41,7 +41,7 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tracing::{enabled, trace};
 
-use crate::run::HookRunOutput;
+use crate::concurrency::HookRunOutput;
 #[cfg(not(windows))]
 use crate::terminal::USE_COLOR;
 

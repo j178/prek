@@ -4,10 +4,10 @@ use anyhow::{Context, Result};
 use futures_util::StreamExt;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::git;
 use crate::hook::Hook;
 use crate::hooks::HookOutput;
-use crate::run::INTERNAL_CONCURRENCY;
 
 /// Runs the `check-signed-commit` hook.
 pub(crate) async fn run(hook: &Hook) -> Result<HookOutput> {

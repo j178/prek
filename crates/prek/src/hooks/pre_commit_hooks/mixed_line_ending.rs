@@ -6,8 +6,7 @@ use clap::{Parser, ValueEnum};
 use memchr::memchr2;
 
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
 
 const CRLF: &[u8] = b"\r\n";
 const LF: &[u8] = b"\n";

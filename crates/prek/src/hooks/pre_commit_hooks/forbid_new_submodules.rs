@@ -6,8 +6,8 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::git;
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
+use crate::hooks::pre_commit_hooks::FilenamesArgs;
+use crate::hooks::{HookOutput, hook_filenames, parse_hook_args};
 
 /// Runs the `forbid-new-submodules` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {

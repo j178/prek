@@ -4,8 +4,8 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FixArgs, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::pre_commit_hooks::FixArgs;
+use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 

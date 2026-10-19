@@ -2,11 +2,10 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::hook::Hook;
-use crate::hooks::HookOutput;
-use crate::hooks::pre_commit_hooks::{FilenamesArgs, hook_filenames, parse_hook_args};
-use crate::hooks::run_concurrent_file_checks;
-use crate::run::INTERNAL_CONCURRENCY;
+use crate::hooks::pre_commit_hooks::FilenamesArgs;
+use crate::hooks::{HookOutput, hook_filenames, parse_hook_args, run_concurrent_file_checks};
 
 /// Runs the `check-symlinks` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {

@@ -34,6 +34,7 @@ mod archive;
 mod checksum;
 mod cleanup;
 mod cli;
+mod concurrency;
 mod config;
 mod fs;
 mod git;
@@ -49,7 +50,6 @@ mod process;
 mod profiler;
 #[cfg(unix)]
 mod resource_limit;
-mod run;
 #[cfg(feature = "schemars")]
 mod schema;
 mod settings;
