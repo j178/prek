@@ -563,6 +563,8 @@ Supported formats:
 - `1`, `1.70`, `1.70.0`
 - Semver ranges like `>=1.70, <1.72`
 
+prek supports Rust installed through system package managers as well as rustup. For system installations, `rustc` and `cargo` must be in the same directory.
+
 #### Toolchain profile
 
 When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_rust_profile>) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
