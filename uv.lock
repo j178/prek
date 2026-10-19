@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.8"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -618,7 +618,7 @@ wheels = [
 
 [[package]]
 name = "prek"
-version = "0.5.5"
+version = "0.5.6"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -633,10 +633,6 @@ docs = [
     { name = "mike", marker = "python_full_version >= '3.12'" },
     { name = "zensical", marker = "python_full_version >= '3.12'" },
 ]
-
-[package.group-requires-python]
-dev = ">=3.12"
-docs = ">=3.12"
 
 [package.metadata]
 
