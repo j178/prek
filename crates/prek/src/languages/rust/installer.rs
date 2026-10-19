@@ -1,3 +1,4 @@
+use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -11,7 +12,7 @@ use crate::languages::rust::RustRequest;
 use crate::languages::rust::rustup::Rustup;
 use crate::languages::rust::toolchain::RustToolchain;
 use crate::languages::rust::version::Channel;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::languages::version::{ToolchainPolicy, ToolchainSource};
 use crate::store::{Store, ToolBucket};
 
 /// Selects or installs a toolchain according to the requested version and source policy.
@@ -62,7 +63,7 @@ impl<'a> RustInstaller<'a> {
 
     async fn find_system(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
         let managed_root = dunce::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
-        let rustc_paths = find_system_executables("rustc", &self.root).unwrap_or_default();
+        let rustc_paths = which::which_all("rustc").into_iter().flatten();
 
         for rustc in rustc_paths {
             let result = self
@@ -91,8 +92,13 @@ impl<'a> RustInstaller<'a> {
         request: &RustRequest,
         managed_root: &Path,
     ) -> Result<Option<RustToolchain>> {
-        let rustc = Rustup::resolve_proxy(rustc, "rustc", self.cwd).await?;
+        let rustc = Rustup::resolve_rustc(rustc, self.cwd).await?;
         if dunce::canonicalize(&rustc)?.starts_with(managed_root) {
+            return Ok(None);
+        }
+
+        let cargo = rustc.with_file_name("cargo").with_extension(EXE_EXTENSION);
+        if !cargo.is_file() {
             return Ok(None);
         }
 
@@ -101,7 +107,7 @@ impl<'a> RustInstaller<'a> {
             return Ok(None);
         }
 
-        Ok(RustToolchain::find_cargo(&rustc, &version, self.cwd, Some(managed_root)).await)
+        Ok(Some(RustToolchain { rustc, version }))
     }
 
     async fn select_toolchain(
@@ -137,11 +143,6 @@ impl<'a> RustInstaller<'a> {
                 continue;
             }
 
-            if let Err(err) = toolchain.check_cargo().await {
-                debug!("Skipping unusable Rust toolchain: {err:#}");
-                continue;
-            }
-
             return Some(toolchain);
         }
 
@@ -163,10 +164,8 @@ impl<'a> RustInstaller<'a> {
         debug!(%toolchain, "Installing Rust toolchain");
 
         let path = rustup.install_toolchain(&self.root, &toolchain).await?;
-        let toolchain = RustToolchain::inspect_dir(&path).await?;
-        toolchain.check_cargo().await?;
 
-        Ok(toolchain)
+        RustToolchain::inspect_dir(&path).await
     }
 
     async fn resolve_version(req: &RustRequest) -> Result<String> {
@@ -238,7 +237,6 @@ mod tests {
         .map(|release| {
             Ok(RustToolchain {
                 rustc: PathBuf::from("rustc"),
-                cargo: PathBuf::from("cargo"),
                 version: Version::parse(release)?,
             })
         })

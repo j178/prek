@@ -633,6 +633,7 @@ Supported formats:
 - Semver ranges like `>=1.70, <1.72`
 
 prek supports Rust installed through system package managers as well as rustup.
+For system installations, `rustc` and `cargo` must be in the same directory.
 
 #### Toolchain profile
 

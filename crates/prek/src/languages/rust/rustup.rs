@@ -53,11 +53,14 @@ fn rustup_profile(env_vars: &impl EnvVarsRead) -> RustupProfile {
 }
 
 impl Rustup {
-    pub(crate) fn find(rustup_home: &Path) -> Option<Self> {
-        let bin = which::which(&*RUSTUP_BINARY_NAME).ok().or_else(|| {
-            let bin = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
-            if bin.is_file() { Some(bin) } else { None }
-        })?;
+    /// Find prek's cached rustup, falling back to PATH.
+    pub(crate) fn find(managed_root: &Path) -> Option<Self> {
+        let bin = managed_root.join("rustup").with_extension(EXE_EXTENSION);
+        if bin.is_file() {
+            return Some(Self { bin });
+        }
+
+        let bin = which::which(&*RUSTUP_BINARY_NAME).ok()?;
 
         Some(Self { bin })
     }
@@ -104,12 +107,6 @@ impl Rustup {
         .await?;
         make_executable(download.path())?;
 
-        // Move to final location
-        if target.exists() {
-            debug!(path = %target.display(), "Removing existing rustup");
-            fs_err::tokio::remove_file(&target).await?;
-        }
-
         debug!(path = %target.display(), "Installing rustup");
         crate::fs::rename_with_retry(download.path(), &target).await?;
 
@@ -141,14 +138,8 @@ impl Rustup {
         let installed_name = stdout
             .lines()
             .find_map(|line| {
-                let line = line.trim();
-                let (name, _) = line.split_once(" installed")?;
-                let name = name.trim();
-                if name.is_empty() {
-                    None
-                } else {
-                    Some(name.to_string())
-                }
+                let (name, _) = line.trim().split_once(" installed")?;
+                Some(name.trim())
             })
             .with_context(|| {
                 format!(
@@ -195,11 +186,7 @@ impl Rustup {
         Ok(entries)
     }
 
-    pub(crate) async fn resolve_proxy(
-        executable: &Path,
-        name: &str,
-        cwd: &Path,
-    ) -> Result<PathBuf> {
+    pub(crate) async fn resolve_rustc(executable: &Path, cwd: &Path) -> Result<PathBuf> {
         let resolved = dunce::canonicalize(executable)?;
         let rustup = resolved
             .with_file_name("rustup")
@@ -211,7 +198,7 @@ impl Rustup {
         }
 
         let output = Cmd::new(&rustup)
-            .args(["which", name])
+            .args(["which", "rustc"])
             .current_dir(cwd)
             .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
             .check(true)

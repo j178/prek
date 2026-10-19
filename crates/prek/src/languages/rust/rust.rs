@@ -136,12 +136,13 @@ enum CargoInstaller<'a> {
 
 impl CargoInstaller<'_> {
     fn command(&self, toolchain: &RustToolchain, install_root: &Path) -> Cmd {
-        let (executable, args): (&Path, &[&str]) = match self {
-            Self::Cargo => (&toolchain.cargo, &["install", "--bins"]),
-            Self::Binstall(cargo_binstall) => (cargo_binstall, &["--no-confirm"]),
+        let (mut cmd, args): (Cmd, &[&str]) = match self {
+            Self::Cargo => (toolchain.cargo_command(), &["install", "--bins"]),
+            Self::Binstall(cargo_binstall) => {
+                (toolchain.command(cargo_binstall), &["--no-confirm"])
+            }
         };
 
-        let mut cmd = toolchain.command(executable);
         cmd.args(args).arg("--root").arg(install_root);
 
         cmd
@@ -474,7 +475,7 @@ impl LanguageBackend for Rust {
             .install(version, hook.language_request.toolchain_policy())
             .await
             .context("Failed to install rust")?;
-        let new_path = prepend_paths(&rust.bin_dirs()?).context("Failed to join PATH")?;
+        let new_path = prepend_paths(&[rust.bin_dir()?]).context("Failed to join PATH")?;
 
         let mut info = InstallInfo::new(&hook, &store.hooks_dir())?;
         info.with_toolchain(rust.rustc.clone())
@@ -545,44 +546,25 @@ impl LanguageBackend for Rust {
     fn execution_environment(
         &self,
         store: &Store,
-        _hook: &InstalledHook,
-    ) -> anyhow::Result<ExecutionEnvironment> {
-        let mut environment = ExecutionEnvironment::new();
-        environment.env(EnvVars::CARGO_HOME, store.cache_path(CacheBucket::Cargo));
-
-        Ok(environment)
-    }
-
-    async fn prepare_execution_environment(
-        &self,
         hook: &InstalledHook,
-        cwd: &Path,
-        environment: &mut ExecutionEnvironment,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<ExecutionEnvironment> {
         let info = hook.install_info().context("Rust hook must be installed")?;
         let rust_bin = bin_dir(&info.env_path);
         let rustc = rustc_path(info);
-        let toolchain = RustToolchain::find_cargo(&rustc, &info.language_version, cwd, None).await;
+        let toolchain_bin = rustc
+            .parent()
+            .context("Rust compiler has no parent directory")?;
+        let new_path =
+            prepend_paths(&[rust_bin.as_path(), toolchain_bin]).context("Failed to join PATH")?;
 
-        let mut paths = vec![rust_bin.as_path()];
-        if let Some(toolchain) = &toolchain {
-            paths.extend(toolchain.bin_dirs()?);
-        } else {
-            // Compiled hooks can run without Cargo, even if it was removed since installation.
-            paths.push(
-                rustc
-                    .parent()
-                    .context("Rust compiler has no parent directory")?,
-            );
-        }
-
-        let new_path = prepend_paths(&paths).context("Failed to join PATH")?;
+        let mut environment = ExecutionEnvironment::new();
         environment
             .set_path(&new_path)
+            .env(EnvVars::CARGO_HOME, store.cache_path(CacheBucket::Cargo))
             .env(EnvVars::RUSTC, &rustc)
             .env(EnvVars::RUSTUP_AUTO_INSTALL, "0");
 
-        Ok(())
+        Ok(environment)
     }
 }
 
