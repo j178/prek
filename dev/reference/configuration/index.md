@@ -1,0 +1,1507 @@
+# Configuration Reference
+
+This page documents the configuration keys that `prek` understands.
+
+## Global config file
+
+`prek` reads an optional user-level global config from:
+
+- Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
+- Windows: `%APPDATA%\prek\prek.toml`
+
+This file stores user-level `prek` settings and does not define project hooks.
+
+### Global `hide_status`
+
+Default hook report filtering for `prek run`, installed Git hooks, and `prek try-repo`:
+
+```toml
+hide_status = ["passed", "skipped"]
+```
+
+The default is an empty list, which shows all reports. CLI options override project [`hide_status`](<#hide_status>), which overrides this user-level default. Each source replaces the entire list. Set `hide_status = []` in a project to show all reports, or use `--no-hide-status` for a single run.
+
+### Global `update`
+
+User-level defaults for [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>):
+
+| Key | Type | Default | CLI override |
+| --- | --- | --- | --- |
+| `update.cooldown_days` | integer days, `0` to `255` | `0` | [`--cooldown-days <DAYS>`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) |
+| `update.freeze` | boolean | `false` | [`--freeze`](<https://prek.j178.dev/dev/reference/cli/#prek-update--freeze>), which forces freezing on |
+| `update.include_tags` | glob string or list of glob strings | empty | [`--include-tag`](<https://prek.j178.dev/dev/reference/cli/#prek-update--include-tag>) |
+| `update.exclude_tags` | glob string or list of glob strings | empty | [`--exclude-tag`](<https://prek.j178.dev/dev/reference/cli/#prek-update--exclude-tag>) |
+
+```toml
+[update]
+cooldown_days = 7
+freeze = true
+include_tags = "v*"
+exclude_tags = ["*-{alpha,beta,rc}*"]
+```
+
+Each field is resolved independently with this precedence:
+
+1. the corresponding CLI option, when provided
+2. [project `update`](<#update>)
+3. user-level global config
+4. the default shown above
+
+The cooldown age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.
+
+> [!TIP]
+>
+> **Cooldowns never downgrade**
+>
+> If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) keeps the current `rev` instead of downgrading it.
+
+## Extension keys (`x-`)
+
+Any key starting with `x-` (a lowercase `x` followed by a hyphen) is silently ignored by `prek` at any level of the configuration. This supports custom metadata without triggering unexpected key warnings.
+
+## Top-level keys
+
+### `repos` (required)
+
+A list of hook repositories.
+
+Each entry is one of:
+
+- a remote repository (typically a git URL)
+- `repo: local` for hooks defined directly in your repository
+- `repo: meta` for built-in meta hooks
+- `repo: builtin` for `prek`'s built-in fast hooks
+
+See [Repo entries](<#repo-entries>).
+
+### `priorities`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> Priority aliases are a `prek` extension and do not exist in upstream `pre-commit`.
+
+An optional mapping that declares configuration-local aliases for non-negative integer priorities. A hook can use one of these aliases in its [`priority`](<#priority>) field instead of repeating the integer.
+
+- Type: mapping from string to non-negative integer
+- Default: empty mapping
+- Scope: the current project configuration only
+- Aliases: non-empty, case-sensitive strings without whitespace
+
+Different aliases may map to the same integer. Unused declarations are allowed. Referencing an alias that is not declared in the current configuration is an error.
+
+### `files`
+
+Global *include* regex applied before hook-level filtering.
+
+- Type: regex string (default, pre-commit compatible) **or** a prek-only glob pattern mapping
+- Default: no global include filter
+
+This is usually used to narrow down the universe of files in large repositories.
+
+> [!NOTE]
+>
+> **What path is matched? (workspace + nested projects)**
+>
+> `files` (and `exclude`) are matched against the file path **relative to the project root** — i.e. the directory containing the configuration file.
+>
+> - For the root project, this is the workspace root.
+> - For a nested project, this is the nested project directory.
+>
+> Example (workspace mode):
+>
+> - Root project config: `./.pre-commit-config.yaml`
+> - Nested project config: `./nested/.pre-commit-config.yaml`
+>
+> For a file at `nested/excluded_by_project`:
+>
+> - Root project sees the path as `nested/excluded_by_project`
+> - Nested project sees the path as `excluded_by_project`
+>
+> This matters most for anchored patterns like `^...$`.
+
+> [!TIP]
+>
+> **Regex matching**
+>
+> When `files` / `exclude` are regex strings, they are matched with *search* semantics (the pattern can match anywhere in the path). Use `^` to anchor at the beginning and `$` at the end.
+>
+> `prek` uses the Rust [`fancy-regex`](<https://github.com/fancy-regex/fancy-regex>) engine. Most typical patterns are portable to upstream `pre-commit`, but very advanced regex features may differ from Python’s `re`.
+
+> [!NOTE]
+>
+> **prek-only globs**
+>
+> In addition to regex strings, `prek` supports glob patterns via:
+>
+> - `files: { glob: "..." }` (single glob)
+> - `files: { glob: ["...", "..."] }` (glob list)
+>
+> This is a `prek` extension. Upstream `pre-commit` expects regex strings here.
+>
+> For more information on the glob syntax, refer to the [globset documentation](<https://docs.rs/globset/latest/globset/#syntax>).
+
+Examples:
+
+```toml
+# Regex (portable to pre-commit)
+files = "\\.rs$"
+
+# Glob (prek-only)
+files = { glob = "src/**/*.rs" }
+
+# Glob list (prek-only; matches if any glob matches)
+files = { glob = ["src/**/*.rs", "crates/**/src/**/*.rs"] }
+```
+
+```yaml
+# Regex (portable to pre-commit)
+files: "\\.rs$"
+
+# Glob (prek-only)
+files:
+  glob: "src/**/*.rs"
+
+# Glob list (prek-only; matches if any glob matches)
+files:
+  glob:
+    - "src/**/*.rs"
+    - "crates/**/src/**/*.rs"
+```
+
+### `exclude`
+
+Global *exclude* regex applied before hook-level filtering.
+
+- Type: regex string (default, pre-commit compatible) **or** a prek-only glob pattern mapping
+- Default: no global exclude filter
+
+`exclude` is useful for generated folders, vendored code, or build outputs.
+
+> [!NOTE]
+>
+> **What path is matched?**
+>
+> Same as [`files`](<#top-level-files>): the pattern is evaluated against the file path **relative to the project root** (the directory containing the config).
+
+> [!NOTE]
+>
+> **prek-only globs**
+>
+> Like [`files`](<#top-level-files>), `exclude` supports `glob` (single glob or glob list) as a `prek` extension. For glob syntax details, see the [globset documentation](<https://docs.rs/globset/latest/globset/#syntax>).
+
+Examples:
+
+```toml
+# Regex (portable to pre-commit)
+exclude = "^target/"
+
+# Glob (prek-only)
+exclude = { glob = "target/**" }
+
+# Glob list (prek-only)
+exclude = { glob = ["target/**", "dist/**"] }
+```
+
+```yaml
+# Regex (portable to pre-commit)
+exclude: "^target/"
+
+# Glob (prek-only)
+exclude:
+  glob: "target/**"
+
+# Glob list (prek-only)
+exclude:
+  glob:
+    - "target/**"
+    - "dist/**"
+```
+
+Verbose regex example (useful for long allow/deny lists):
+
+```toml
+# `(?x)` enables "verbose" regex mode (whitespace and newlines are ignored).
+exclude = """(?x)^(
+  docs/|
+  vendor/|
+  target/
+)"""
+```
+
+```yaml
+# `(?x)` enables "verbose" regex mode (whitespace and newlines are ignored).
+exclude: |
+  (?x)^(
+    docs/|
+    vendor/|
+    target/
+  )
+```
+
+### `fail_fast`
+
+Stop the run after the first failing hook.
+
+- Type: boolean
+- Default: `false`
+
+This is a global default; individual hooks can also set `fail_fast`.
+
+### `hide_status`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> Hook report filtering is a prek extension.
+
+Hide hook reports with the specified final statuses, including their output.
+
+- Type: list of `"passed"`, `"failed"`, or `"skipped"`
+- Default: the [user-level setting](<#global-hide_status>), or an empty list
+
+```toml
+hide_status = ["passed", "skipped"]
+```
+
+```yaml
+hide_status: [passed, skipped]
+```
+
+`--hide-status` replaces the configured list. Use `hide_status = []` or `--no-hide-status` to show all reports.
+
+In workspace mode, this setting applies only to the current project. Filtering does not change hook execution or exit codes.
+
+### `default_language_version`
+
+Map a language name to the default [`language_version`](<#language_version>) used by hooks of that language. Each value can be a request string or an options map.
+
+- Type: map
+- Default: none (hooks fall back to `language_version: default`)
+
+Example:
+
+```toml
+default_language_version.python = "3.12"
+default_language_version.node = { request = "20", preference = "only-managed" }
+```
+
+```yaml
+default_language_version:
+  python: "3.12"
+  node:
+    request: "20"
+    preference: only-managed
+```
+
+`prek` treats [`language_version`](<#language_version>) as a version request (often a semver-like selector) and may install toolchains automatically. See [Difference from pre-commit](<https://prek.j178.dev/dev/diff/index.md>).
+
+Defaults are applied field by field. For example, a hook can override only the `request` while retaining the default `preference` for its language.
+
+### `default_stages`
+
+Default [`stages`](<#stages>) used when a hook does not specify its own.
+
+- Type: list of stage names
+- Default: all stages
+
+Allowed values:
+
+- `manual`
+- `commit-msg`
+- `post-checkout`
+- `post-commit`
+- `post-merge`
+- `post-rewrite`
+- `pre-commit`
+- `pre-merge-commit`
+- `pre-push`
+- `pre-rebase`
+- `prepare-commit-msg`
+
+See [Supported Git Hook Stages](<#supported-git-hook-stages>) for what each value means.
+
+### `default_env`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `default_env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
+
+Environment variables to apply when `prek` creates hook environments and runs hooks in this config. If a hook sets the same variable in [`env`](<#prek-only-env>), the hook-level value wins.
+
+- Type: map of string to string
+- Default: none
+
+Example:
+
+```toml
+default_env = { UV_PYTHON = "", VIRTUAL_ENV = "" }
+```
+
+```yaml
+default_env:
+  UV_PYTHON: ""
+  VIRTUAL_ENV: ""
+```
+
+### `default_install_hook_types`
+
+Default Git shim name(s) installed by [`prek install`](<https://prek.j178.dev/dev/reference/cli/#prek-install>) when you don’t pass `--hook-type`.
+
+- Type: list of `--hook-type` values
+- Default: `[pre-commit]`
+
+This controls which Git shims are installed (for example `pre-commit` vs `pre-push`). It is separate from a hook’s [`stages`](<#stages>), which controls when a particular hook is eligible to run.
+
+Allowed values:
+
+- `pre-commit`
+- `pre-push`
+- `commit-msg`
+- `prepare-commit-msg`
+- `post-checkout`
+- `post-commit`
+- `post-merge`
+- `post-rewrite`
+- `pre-merge-commit`
+- `pre-rebase`
+
+### `update`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
+
+Project settings for [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>):
+
+| Key | Type | Default or behavior |
+| --- | --- | --- |
+| `update.cooldown_days` | integer days, `0` to `255` | Inherited from the global config, or `0`. |
+| `update.freeze` | boolean | Inherited from the global config, or `false`. |
+| `update.include_tags` | glob string or list of glob strings | Inherited from the global config, or empty. Only consider matching tags. |
+| `update.exclude_tags` | glob string or list of glob strings | Inherited from the global config, or empty. Ignore matching tags. |
+| `update.repos` | map from repo to tag-filter fields | Override tag filters for a repository whose configured `repo` value exactly matches the map key. |
+
+```toml
+[update]
+cooldown_days = 7
+freeze = false
+include_tags = "v*"
+exclude_tags = ["*-{alpha,beta,rc}*"]
+
+[update.repos."https://github.com/example/hooks"]
+include_tags = ["v1.*", "v2.*"]
+
+[update.repos."https://github.com/lycheeverse/lychee"]
+exclude_tags = ["nightly", "*-rc*", "*-dev*"]
+```
+
+```yaml
+update:
+  cooldown_days: 7
+  freeze: false
+  include_tags: "v*"
+  exclude_tags: ["*-{alpha,beta,rc}*"]
+  repos:
+    "https://github.com/example/hooks":
+      include_tags: ["v1.*", "v2.*"]
+    "https://github.com/lycheeverse/lychee":
+      exclude_tags: ["nightly", "*-rc*", "*-dev*"]
+```
+
+Each project-level field overrides the corresponding [global `update`](<#global-update>) field. Within `update.repos`, `include_tags` and `exclude_tags` are resolved independently: an omitted field inherits the project default, a present field replaces it, and `[]` explicitly clears it. This allows one repository to override only `include_tags` while still inheriting `exclude_tags`.
+
+CLI filters have the highest precedence. `--include-tag` and `--exclude-tag` replace the configured effective defaults; `--repo-include-tag` then replaces the include filters for its named repository, while `--repo-exclude-tag` adds excludes for its named repository.
+
+In workspace mode, `update` is scoped to the project config file that defines it and is not inherited by nested projects. Sub-projects use their own `update`, then the user-level global config, then built-in defaults. Repositories shared by multiple projects are fetched once but evaluated with each project's cooldown, freeze, and tag-filter settings.
+
+### `minimum_prek_version`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> This key is a `prek` extension. Upstream `pre-commit` uses `minimum_pre_commit_version`, which `prek` intentionally ignores.
+
+Require a minimum `prek` version for this config.
+
+- Type: string (version)
+- Default: unset
+
+If the installed `prek` is older than the configured minimum, `prek` exits with an error.
+
+Example:
+
+```toml
+minimum_prek_version = "0.2.0"
+```
+
+```yaml
+minimum_prek_version: "0.2.0"
+```
+
+### `orphan`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `orphan` is a `prek` workspace-mode feature and is not recognized by upstream `pre-commit`.
+
+Workspace-mode setting to isolate a nested project from parent configs.
+
+- Type: boolean
+- Default: `false`
+
+When `orphan: true`, files under this project directory are handled only by this project’s config and are not “seen” by parent projects.
+
+Example:
+
+```toml
+orphan = true
+
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.8.4"
+hooks = [{ id = "ruff" }]
+```
+
+```yaml
+orphan: true
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+```
+
+See [Orphan projects](<https://prek.j178.dev/dev/reference/workspace/#orphan-projects>) for details.
+
+## Repo entries
+
+Each item under `repos:` is a mapping that always contains a `repo:` key.
+
+### Remote repository
+
+Use this for hooks distributed in a separate repository.
+
+Required keys:
+
+- `repo`: repository location (commonly an https git URL)
+- `rev`: version to use (tag, branch, or commit SHA)
+- `hooks`: list of hook selections
+
+Remote hook definitions live inside the hook repository itself in the `.pre-commit-hooks.yaml` manifest (at the repo root). Your config only selects hooks by `id` and optionally overrides options. See [Authoring Hooks](<https://prek.j178.dev/dev/authoring-hooks/index.md>) if you maintain a hook repository.
+
+#### `repo`
+
+Where to fetch hooks from.
+
+In most configs this is a git URL. `prek` also recognizes special values documented separately: `local`, `meta`, and `builtin`.
+
+#### `rev`
+
+The revision to use for the remote repository.
+
+Use a full commit SHA when an immutable Git pin is required. Version tags are readable and conventional for releases, but a repository maintainer can move a tag. Branch names are moving targets, so runs may change over time.
+
+#### `hooks`
+
+The list of hooks to enable from that repository.
+
+Each item must at least specify `id`. You can also add hook-level options (filters, args, stages, etc.) to customize behavior.
+
+Example:
+
+```toml
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.8.4"
+hooks = [{ id = "ruff", args = ["--fix"] }]
+```
+
+```yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+```
+
+Notes:
+
+- For reproducibility, prefer a versioned release tag or an immutable commit SHA.
+- [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) can help update [`rev`](<#rev>) values.
+
+### `repo: local`
+
+Define hooks inline inside your repository.
+
+Keys:
+
+- `repo`: must be `local`
+- `hooks`: list of **local hook definitions** (see [Local hook definition](<#local-hook-definition>))
+
+Example:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "cargo-fmt",
+    name = "cargo fmt",
+    language = "system",
+    entry = "cargo fmt",
+    files = "\\.rs$",
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        language: system
+        entry: cargo fmt
+        files: "\\.rs$"
+```
+
+### `repo: meta`
+
+Use `pre-commit`-style meta hooks that validate and debug your configuration.
+
+`prek` supports the following meta hook ids:
+
+- `check-hooks-apply`
+- `check-useless-excludes`
+- `identity`
+
+Restrictions:
+
+- `id` is required.
+- `entry` is not allowed.
+- `language` (if set) must be `system`.
+
+You may still configure normal hook options such as [`files`](<#hook-files-exclude>), [`exclude`](<#hook-files-exclude>), [`stages`](<#stages>), etc.
+
+Example:
+
+```toml
+[[repos]]
+repo = "meta"
+hooks = [{ id = "check-useless-excludes" }]
+```
+
+```yaml
+repos:
+  - repo: meta
+    hooks:
+      - id: check-useless-excludes
+```
+
+### `repo: builtin`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `repo: builtin` is specific to `prek` and is not compatible with upstream `pre-commit`.
+
+Use `prek`’s built-in fast hooks (offline, zero setup).
+
+Restrictions:
+
+- `id` is required.
+- `entry` is not allowed.
+- `language` (if set) must be `system`.
+
+Example:
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "check-yaml" },
+]
+```
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: trailing-whitespace
+      - id: check-yaml
+```
+
+For available hooks and their arguments, see [Built-in Hooks](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md>). For setup examples and automatic fast-path behavior, see [Built-in Hooks](<https://prek.j178.dev/dev/built-in-hooks/index.md>).
+
+## Hook entries
+
+Hook items under `repos[*].hooks` have slightly different shapes depending on the repo type.
+
+### Remote hook selection
+
+For a remote repo, the hook entry must include:
+
+- `id` (required): selects the hook from the repository
+
+All other hook keys are optional overrides (for example [`args`](<#args>), [`files`](<#hook-files-exclude>), [`exclude`](<#hook-files-exclude>), [`stages`](<#stages>), …).
+
+> [!NOTE]
+>
+> **Advanced overrides**
+>
+> `prek` also supports overriding `name`, `entry`, and `language` for remote hooks. This can be useful for experimentation, but it may reduce portability to the original `pre-commit`.
+
+### Local hook definition
+
+For `repo: local`, the hook entry is a full definition and must include:
+
+- `id` (required): stable identifier used by [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) and selectors
+- `name` (required): label shown in output
+- `entry` (required): command to execute
+- `language` (required): how `prek` sets up and runs the hook
+
+### Builtin/meta hook selection
+
+For `repo: builtin` and `repo: meta`, the hook entry must include `id`. You can optionally provide `name` and normal hook options (filters, [`stages`](<#stages>), etc), but not `entry`.
+
+## Supported Git Hook Stages
+
+`prek` follows upstream [`pre-commit` behavior](<https://pre-commit.com/#supported-git-hooks>) for Git hook stages. The [`stages`](<#stages>) option controls which hooks are eligible to run; the selected stage controls what input the hook receives.
+
+Stages with no repository file input do not have candidate filenames for [`files`](<#hook-files-exclude>), [`exclude`](<#hook-files-exclude>), [`types`](<#hook-types>), [`types_or`](<#hook-types>), or [`exclude_types`](<#hook-types>). Hooks in those stages need [`always_run: true`](<#always_run>) to run automatically.
+
+| Stage | When it runs | Hook input |
+| --- | --- | --- |
+| `manual` | Only when selected explicitly, for example with `prek run --hook-stage manual`. | Repository file paths selected by the `prek run` file mode. |
+| `commit-msg` | During commit message validation. | Git's commit message file, not repository file paths. |
+| `post-checkout` | After a checkout has occurred. | No repository file input. |
+| `post-commit` | After a commit has already succeeded. | No repository file input. |
+| `post-merge` | After a successful merge. | No repository file input. |
+| `post-rewrite` | After a command rewrites history, such as amend or rebase. | No repository file input. |
+| `pre-commit` | Before a commit is finalized. | Repository file paths from the staged contents; unstaged changes are temporarily stashed while hooks run. |
+| `pre-merge-commit` | After a merge succeeds but before the merge commit is created. | Repository file paths from the staged merge result. |
+| `pre-push` | During `git push`. | Repository file paths changed in the push range. |
+| `pre-rebase` | Before a rebase starts. | No repository file input. |
+| `prepare-commit-msg` | Before the commit message editor opens or before the commit message is finalized. | Git's commit message file, not repository file paths. |
+
+### Pre-push
+
+> [!WARNING]
+>
+> **Only the first ref is checked, using the current working tree**
+>
+> When a push updates multiple branches or tags, `prek` runs hooks only for the first ref with commits to check. Later refs are not checked.
+>
+> `prek` does not check out that ref or verify that it matches the current checkout. Hooks that read files may therefore check the wrong contents or miss files that are absent from the working tree, even for a single-ref push.
+>
+> For file checks on a specific commit, use a clean checkout of that commit. Hooks that inspect Git objects using the supplied refs, such as commit signature checks, can run correctly regardless of the current checkout.
+
+## Common hook options
+
+These keys can appear on hooks (remote/local/builtin/meta), subject to the restrictions above.
+
+### `id`
+
+The stable identifier of the hook.
+
+- For remote hooks, this must match a hook id defined by the remote repository.
+- For local hooks, you choose it.
+
+`id` is also used for CLI selection (for example [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) and [`PREK_SKIP`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_skip>)).
+
+> [!NOTE]
+>
+> **Hook ids containing `:`**
+>
+> If your hook id contains `:` (for example `id: lint:ruff`), `prek run lint:ruff` will not select that hook. `prek` interprets `lint:ruff` as the selector `<project-path>:<hook-id>`, with project `lint` and hook `ruff`. To select the hook id `lint:ruff`, add a leading `:` and run `prek run :lint:ruff`.
+
+### `name`
+
+Human-friendly label shown in output.
+
+- Required for `repo: local` hooks.
+- Optional as an override for remote/meta/builtin hooks.
+
+### `entry`
+
+The command line to execute for the hook.
+
+- Required for `repo: local` hooks.
+- Optional override for remote hooks.
+- Not allowed for `repo: meta` and `repo: builtin`.
+
+The repository type, language, and optional `shell` setting determine how this value is interpreted. See [Hook entry resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>) for the command, path, and working-directory rules.
+
+If [`pass_filenames`](<#pass_filenames>) is `true`, `prek` appends matching filenames to this command when running.
+
+### `shell`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `shell` is a `prek` extension and may not be recognized by upstream `pre-commit`.
+
+Run `entry` through a predefined shell adapter.
+
+- Type: one of `sh`, `bash`, `pwsh`, `powershell`, `cmd`
+- Default: `null` (run `entry` directly without a shell)
+
+When `shell` is omitted, `prek` preserves the default no-shell behavior: it parses `entry` into argv, invokes the command directly, and appends [`args`](<#args>) and matching filenames as process arguments.
+
+When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook [`args`](<#args>) followed by matching filenames as script arguments.
+
+| `shell` | Adapter command | Script arguments |
+| --- | --- | --- |
+| `bash` | `bash --noprofile --norc -eo pipefail <script>` | `"$@"` |
+| `sh` | `sh -e <script>` | `"$@"` |
+| `pwsh` | `pwsh -NoProfile -NonInteractive -File <script>` | `$args` |
+| `powershell` | `powershell -NoProfile -NonInteractive -File <script>` | `$args` |
+| `cmd` | `cmd /D /E:ON /V:OFF /S /C CALL <script>` | `%*` |
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "test-all",
+    name = "test-all",
+    language = "system",
+    entry = """
+    uv run --python=3.10 --isolated pytest
+    uv run --python=3.11 --isolated pytest
+    """,
+    shell = "bash",
+    pass_filenames = false,
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: test-all
+        name: test-all
+        language: system
+        entry: |
+          uv run --python=3.10 --isolated pytest
+          uv run --python=3.11 --isolated pytest
+        shell: bash
+        pass_filenames: false
+```
+
+> [!NOTE]
+>
+> **Unsupported languages**
+>
+> `shell` is rejected for language backends that do not run `entry` through the shell-aware entry resolver, and for `repo: meta` and `repo: builtin` hooks.
+>
+> | Language | Why `shell` is unsupported |
+> | --- | --- |
+> | `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
+> | `dart` | Dart package config injection requires `entry` to resolve to a direct `dart` command. |
+> | `fail` | `entry` is the failure message body. |
+> | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
+> | `pygrep` | `entry` is the regex pattern. |
+> | `r` | `entry` must use the R backend's `Rscript -e <expr>` or `Rscript <file>` forms. |
+
+### `language`
+
+How `prek` should run the hook (and whether it should create a managed environment).
+
+- Required for `repo: local` hooks.
+- Optional override for remote hooks.
+- Not allowed (except as `system`) for `repo: meta` and `repo: builtin`.
+
+Common values include `system`, `python`, `node`, `php`, `rust`, `golang`, `ruby`, and `docker`.
+
+See [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>) for per-language behavior, supported values, and [`language_version`](<#language_version>) details.
+
+> [!NOTE]
+>
+> **Language name aliases**
+>
+> For compatibility with upstream `pre-commit`, the following legacy language names are also accepted:
+>
+> - `unsupported` is treated as `system`
+> - `unsupported_script` is treated as `script`
+
+### `alias`
+
+An alternate identifier for selecting the hook from the CLI.
+
+If set, you can run the hook via either [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) or [`prek run <alias>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>).
+
+### `args`
+
+Extra arguments appended to the hook’s `entry`.
+
+- Type: list of strings
+
+Example:
+
+```toml
+hooks = [{ id = "ruff", args = ["--fix"] }]
+```
+
+```yaml
+hooks:
+  - id: ruff
+    args: [--fix]
+```
+
+### `env`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
+
+Extra environment variables for hook environment creation and the hook process.
+
+- Type: map of string to string
+
+Values override the existing process environment (including variables such as `PATH`). They are applied to commands that create the hook environment and when the hook runs.
+
+> [!NOTE]
+>
+> **Creation time**
+>
+> When a matching hook environment already exists, `prek` reuses it without applying these variables to installation again. Changing `env` does not recreate or select a different environment. The new values affect installation the next time the environment is created for another reason. If multiple hooks share an environment, only the `env` of the hook that creates it affects installation.
+
+Language backends may override or remove variables they manage to preserve hook environment isolation. This applies to subprocesses started by a backend. `env` is not treated as configuration for download logic implemented directly inside `prek`.
+
+For remote hooks, `env` may also be set by the hook author in `.pre-commit-hooks.yaml`. Values from the project configuration are merged with manifest values and override duplicate keys. Values set directly on a hook override matching [`default_env`](<#default_env>) values.
+
+When running `docker` / `docker_image` hooks, these variables are passed into the container rather than being applied to the container runtime command.
+
+Example:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "cargo-doc",
+    name = "cargo doc",
+    language = "system",
+    entry = "cargo doc --all-features --workspace --no-deps",
+    env = { RUSTDOCFLAGS = "-Dwarnings" },
+    pass_filenames = false,
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-doc
+        name: cargo doc
+        language: system
+        entry: cargo doc --all-features --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        pass_filenames: false
+```
+
+### `files` / `exclude`
+
+Filters applied to candidate filenames.
+
+- `files` selects which files are eligible for the hook.
+- `exclude` removes files matched by `files`.
+
+If you use both global and hook-level filters, the effective behavior is “global filter first, then hook filter”.
+
+By default (and for compatibility with upstream `pre-commit`), these are regex strings. As a `prek` extension, you can also specify globs using `glob` or a glob list.
+
+See [Top-level `files`](<#top-level-files>) and [Top-level `exclude`](<#top-level-exclude>) for syntax notes and examples.
+
+### `types` / `types_or` / `exclude_types`
+
+File-type filters based on [`identify`](<https://pre-commit.com/#filtering-files-with-types>) tags.
+
+> [!TIP]
+>
+> Use [`prek util identify <path>`](<https://prek.j178.dev/dev/reference/cli/#prek-util-identify>) to see how prek tags a file when you’re troubleshooting `types` filters.
+
+Compared to regex-only filtering ([`files` / `exclude`](<#hook-files-exclude>)), tag-based filtering is often easier and more robust:
+
+- tags can match by **file extension** *and* by **shebang** (for extensionless scripts)
+- you can easily exclude things like **symlinks** or **binary files**
+
+Common tags include:
+
+- `file`, `text`, `binary`, `symlink`, `executable`
+- language-ish tags such as `python`, `rust`, `javascript`, `yaml`, `toml`, ...
+- `types`: all listed tags must match (logical AND)
+- `types_or`: at least one listed tag must match (logical OR)
+- `exclude_types`: tags that disqualify a file
+
+How these combine:
+
+- [`files` / `exclude`](<#hook-files-exclude>), `types`, and `types_or` are combined with **AND**.
+- Tags within `types` are combined with **AND**.
+- Tags within `types_or` are combined with **OR**.
+
+Defaults:
+
+- `types`: `[file]` (matches all files)
+- `types_or`: `[]`
+- `exclude_types`: `[]`
+
+These filters are applied in addition to regex filtering.
+
+Examples:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  # AND: must be under `src/` AND have the `python` tag
+  {
+    id = "lint-py",
+    name = "Lint (py)",
+    language = "system",
+    entry = "python -m ruff check",
+    files = "^src/",
+    types = ["python"],
+    exclude_types = ["symlink"]
+  },
+
+  # OR: match any of the listed tags under `web/`
+  {
+    id = "lint-web",
+    name = "Lint (web)",
+    language = "system",
+    entry = "npm run lint",
+    files = "^web/",
+    types_or = ["javascript", "jsx", "ts", "tsx"]
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: lint-py
+        name: Lint (py)
+        language: system
+        entry: python -m ruff check
+        files: ^src/
+        types: [python]
+        exclude_types: [symlink]
+
+      - id: lint-web
+        name: Lint (web)
+        language: system
+        entry: npm run lint
+        files: ^web/
+        types_or: [javascript, jsx, ts, tsx]
+```
+
+If you need to match a path pattern that doesn’t align with a hook’s default `types` (common when reusing an existing hook in a nonstandard way), override it back to “all files” and use [`files`](<#hook-files-exclude>):
+
+```toml
+[[repos]]
+repo = "meta"
+hooks = [
+  {
+    id = "check-hooks-apply",
+    types = ["file"],
+    files = "\\.(yaml|yml|myext)$"
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+        types: [file]
+        files: \.(yaml|yml|myext)$
+```
+
+### `include_deleted`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `include_deleted` is a `prek` extension.
+
+Include deleted paths when running hooks on staged changes or a commit range.
+
+- Type: boolean
+- Default: `false`
+
+Deleted paths pass through the same global and hook-level `files` / `exclude` filters as existing files.
+
+> [!NOTE]
+>
+> **Type tags for deleted files**
+>
+> Type tags are inferred from the filename and Git's recorded file mode. For example, a deleted regular `.rs` file still matches `types: [rust]`, and a deleted symbolic link matches `types: [symlink]`.
+>
+> Tags that require reading the deleted file, such as a language identified only by its shebang, are unavailable. Unavailable tags neither satisfy `types` / `types_or` nor match `exclude_types`.
+
+This is useful for project-wide checks that can fail after a file is deleted:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "cargo-clippy",
+    name = "cargo clippy",
+    language = "system",
+    entry = "cargo clippy --all-targets --all-features -- -D warnings",
+    types = ["rust"],
+    include_deleted = true,
+    pass_filenames = false,
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-clippy
+        name: cargo clippy
+        language: system
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        types: [rust]
+        include_deleted: true
+        pass_filenames: false
+```
+
+When [`pass_filenames`](<#pass_filenames>) is enabled, matching deleted paths are also passed to the hook. The hook must be able to handle paths that no longer exist. Renames include the old path as a deletion as well as the new path.
+
+`--all-files`, `--files`, `--directory`, and `--glob` retain their usual file selection and do not add deleted paths. Stages without file input, such as `post-merge`, still require [`always_run: true`](<#always_run>). Deleted-file matching during merge conflict resolution is not yet supported.
+
+### `always_run`
+
+Run the hook even when no files match.
+
+- Type: boolean
+- Default: `false`
+
+This is commonly used for hooks that check repository-wide state (for example, running a test suite) rather than operating on specific files.
+
+### `pass_filenames`
+
+Controls whether `prek` appends the matching filenames to the command line.
+
+- Type: boolean or positive integer
+- Default: `true` which passes all matching filenames
+
+Set `pass_filenames: false` for hooks that don’t accept file arguments (or that discover files themselves).
+
+Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple batches. A batch is one hook command invocation over a subset of the matched filenames. Batches may run concurrently up to `PREK_CONCURRENT_BATCHES` unless [`require_serial`](<#require_serial>) is `true`. This is useful for tools that can only process a limited number of files at once.
+
+Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `pass_filenames: n` with a positive integer is a `prek` extension. Upstream `pre-commit` only accepts a boolean value.
+
+### `stages`
+
+Declare which stages a hook is eligible to run in.
+
+- Type: list of stage names
+- Default: all stages
+
+Allowed values:
+
+- `manual`
+- `commit-msg`
+- `post-checkout`
+- `post-commit`
+- `post-merge`
+- `post-rewrite`
+- `pre-commit`
+- `pre-merge-commit`
+- `pre-push`
+- `pre-rebase`
+- `prepare-commit-msg`
+
+For behavior of each stage and whether it operates on repository files, see [Supported Git Hook Stages](<#supported-git-hook-stages>).
+
+When you run [`prek run --hook-stage <stage>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>), only hooks configured for that stage are considered.
+
+### `groups`
+
+Tag a hook with user-defined run groups.
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `groups` is a `prek` extension. Upstream `pre-commit` does not support selecting hooks by group.
+
+- Type: list of strings
+- Default: `[]`
+
+Groups are arbitrary labels used by [`prek run --group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--group>), [`prek run --require-group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--require-group>), and [`prek run --no-group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--no-group>). Group names cannot be empty, contain whitespace, or start with `@`. Names that start with `@` are reserved for special selectors:
+
+- `@ungrouped` matches hooks whose effective `groups` list is empty.
+
+This selector works with `--group`, `--require-group`, and `--no-group`. It is a virtual membership and cannot be added to a hook's `groups` list.
+
+`groups` is a project configuration field. If it appears in a remote `.pre-commit-hooks.yaml` manifest, `prek` ignores it.
+
+Examples:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "format",
+    name = "Format Python",
+    language = "system",
+    entry = "ruff format",
+    groups = ["format", "ci"],
+  },
+  {
+    id = "lint",
+    name = "Lint Python",
+    language = "system",
+    entry = "ruff check",
+    groups = ["lint", "ci"],
+  },
+]
+```
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: Format Python
+        language: system
+        entry: ruff format
+        groups: [format, ci]
+
+      - id: lint
+        name: Lint Python
+        language: system
+        entry: ruff check
+        groups: [lint, ci]
+```
+
+Run only the `ci` group:
+
+```bash
+prek run --all-files --group ci
+```
+
+Run the `ci` group together with ungrouped hooks:
+
+```bash
+prek run --all-files --group ci --group @ungrouped
+```
+
+Run only hooks belonging to both `lint` and `ci`:
+
+```bash
+prek run --all-files --require-group lint --require-group ci
+```
+
+Run everything except formatters:
+
+```bash
+prek run --all-files --no-group format
+```
+
+If a hook matches both `--group` and `--no-group`, `--no-group` wins.
+
+Repeated `--group` values use union semantics, while repeated `--require-group` values use intersection semantics. When combined, a hook must match at least one `--group`, every `--require-group`, and no `--no-group`.
+
+For example, consider these hook groups:
+
+| Hook | Groups |
+| --- | --- |
+| `ty` | `lint-only`, `fast`, `local` |
+| `ruff-format` | `format`, `fast`, `local` |
+| `mypy` | `lint-only`, `slow`, `ci` |
+| `black` | `format`, `slow`, `ci` |
+
+```bash
+prek run --all-files --require-group fast --group format --group lint-only
+```
+
+This represents `fast AND (format OR lint-only)`, so it selects exactly `ty` and `ruff-format`. Reordering the options does not change the selection.
+
+When any group selector is used without `--stage`, group filtering is not constrained by hook stage. `prek run` collects normal file input for the manual command and runs every matching hook that can use that input. Hooks configured only for `commit-msg` and/or `prepare-commit-msg` require Git's message file argument, so they are ignored unless run in the corresponding hook stage. If every matching hook is ignored this way, `prek run` warns and fails.
+
+### `require_serial`
+
+Force a hook to run without parallel batches (one in-flight process for that hook at a time).
+
+- Type: boolean
+- Default: `false`
+
+This is useful for tools that use global caches/locks or otherwise can’t handle concurrent execution.
+
+### `priority`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `priority` controls `prek`'s scheduler and does not exist in upstream `pre-commit`.
+
+Each hook can set an explicit `priority` that controls when it runs and with which hooks it may execute in parallel. The value may be either a non-negative integer or a [priority alias](<#priorities>) declared by the current configuration.
+
+Scope:
+
+- `priority` is evaluated **within a single configuration file** and is compared across **all hooks in that file**, even if they appear under different `repos:` entries.
+- `priority` does **not** coordinate across different config files. In workspace mode, each project’s config file is scheduled independently.
+- Numeric priorities and aliases can be mixed. Aliases resolve to their declared integer before scheduling.
+
+Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to `PREK_CONCURRENT_HOOKS`.
+
+When `priority` is omitted, `prek` assigns an implicit value based on hook order to preserve sequential behavior.
+
+Example:
+
+```toml
+[priorities]
+format = 0
+checks = 10
+tests = 20
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "format",
+    name = "Format",
+    language = "system",
+    entry = "python3 -m ruff format",
+    always_run = true,
+    priority = "format",
+  },
+  {
+    id = "lint",
+    name = "Lint",
+    language = "system",
+    entry = "python3 -m ruff check",
+    always_run = true,
+    priority = "checks",
+  },
+  {
+    id = "tests",
+    name = "Tests",
+    language = "system",
+    entry = "just test",
+    always_run = true,
+    priority = "tests",
+  },
+]
+```
+
+```yaml
+priorities:
+  format: 0
+  checks: 10
+  tests: 20
+
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: Format
+        language: system
+        entry: python3 -m ruff format
+        always_run: true
+        priority: format
+
+      - id: lint
+        name: Lint
+        language: system
+        entry: python3 -m ruff check
+        always_run: true
+        priority: checks
+
+      - id: tests
+        name: Tests
+        language: system
+        entry: just test
+        always_run: true
+        priority: tests
+```
+
+> [!CAUTION]
+>
+> **Parallel hooks modifying files**
+>
+> If two hooks run in the same priority group and both mutate the same files (or depend on shared state), results are undefined. Use separate priorities to avoid overlap.
+
+> [!NOTE]
+>
+> **Hooks modifying files without a non-zero exit code**
+>
+> If a hook modifies files without emitting a non-zero exit code (e.g. `ruff format`), the priority group as a whole will fail. It is not possible for prek to attribute the failure to a specific hook in the group which modified files. Use separate priorities for clearer failure attribution.
+
+> [!NOTE]
+>
+> **`require_serial` is different**
+>
+> [`require_serial`](<#require_serial>) set to `true` prevents concurrent batches of the *same hook*. It does not prevent other hooks from running alongside it; use a unique `priority` if you need exclusivity.
+
+> [!NOTE]
+>
+> **Priority aliases are not hook groups**
+>
+> Priority aliases control scheduling. [`groups`](<#groups>) select which hooks run and have no ordering or concurrency meaning.
+
+### `fail_fast`
+
+Hook-level fail-fast behavior.
+
+- Type: boolean
+- Default: `false`
+
+If `true`, a failure in this hook stops the run immediately.
+
+### `verbose`
+
+Print hook output even when the hook succeeds.
+
+- Type: boolean
+- Default: `false`
+
+### `log_file`
+
+Write hook output to a file when the hook fails (and also when `verbose: true`). Relative paths are resolved from the directory containing the configuration file.
+
+- Type: string path
+
+### `description`
+
+Free-form description shown in listings / metadata. Its first line is also included in failure and verbose run details.
+
+- Type: string
+
+### `language_version`
+
+Choose the language/toolchain version request and source preference for this hook.
+
+- Type: string or map
+- Default: `default`
+
+If not set, `prek` may use [`default_language_version`](<#default_language_version>) for the hook’s language.
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> `language_version` is treated as a **version request**, not a single pinned value. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`).
+>
+> Special values:
+>
+> - `default`: use the language’s default resolution logic.
+> - `system`: do not download a new toolchain. A compatible toolchain already managed by prek may still be reused, and project metadata can further constrain the required version.
+>
+> The map form accepts these fields:
+>
+> - `request`: the same version request accepted by the string form. It defaults to `default`.
+> - `preference`: controls which toolchain sources prek searches and in what order. It defaults to `managed`.
+>
+> `preference` accepts:
+>
+> - `only-managed`: use an existing prek-managed toolchain, or download one.
+> - `managed`: prefer an existing prek-managed toolchain, then search outside prek's managed store, then download one.
+> - `system`: prefer a toolchain outside prek's managed store, then try an existing prek-managed toolchain, then download one.
+> - `only-system`: only search outside prek's managed store and never download a toolchain.
+>
+> A “system” toolchain is any toolchain discovered outside prek's managed store, including one installed by an operating-system package manager or version manager.
+>
+> The preference affects toolchain selection when a hook environment must be created. It does not affect reuse of an existing compatible hook environment.
+>
+> Language-specific behavior:
+>
+> - Python: passed to the Python resolver (for example `python3` or `python3.12`). May trigger toolchain download.
+> - Node: passed to the Node resolver (for example `20`, `18.19.0`). May trigger toolchain download.
+> - Go: uses Go version strings such as `1.22.1` (downloaded if missing).
+> - Rust: supports rustup toolchains such as `stable`, `beta`, `nightly`, or versioned toolchains.
+> - Other languages: parsed as a semver request and matched against the installed toolchain version.
+>
+> Examples:
+>
+> ```toml
+> hooks = [
+>   { id = "ruff", language = "python", language_version = "3.12" },
+>   { id = "eslint", language = "node", language_version = { request = "20", preference = "only-managed" } },
+>   { id = "cargo-fmt", language = "rust", language_version = "stable" },
+>   { id = "my-tool", language = "system", language_version = "system" },
+> ]
+> ```
+>
+> ```yaml
+> hooks:
+>   - id: ruff
+>     language: python
+>     language_version: "3.12"
+>
+>   - id: eslint
+>     language: node
+>     language_version:
+>       request: "20"
+>       preference: only-managed
+>
+>   - id: cargo-fmt
+>     language: rust
+>     language_version: stable
+>
+>   - id: my-tool
+>     language: system
+>     language_version: system
+> ```
+
+### `additional_dependencies`
+
+Extra dependencies for hooks that run inside a managed environment (for example Python or Node hooks).
+
+- Type: list of strings
+
+If you set this for a language that doesn’t support dependency installation, `prek` fails with a configuration error.
+
+### `minimum_prek_version`
+
+> [!NOTE]
+>
+> **prek-only**
+>
+> This is a `prek`-specific requirement gate. Upstream `pre-commit` does not have a hook-level minimum version key.
+
+Require a minimum `prek` version for this specific hook.
+
+- Type: string (version)
+- Default: unset
+
+For process environment controls, see the [Environment Variable Reference](<https://prek.j178.dev/dev/reference/environment-variables/index.md>).

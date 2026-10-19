@@ -4,40 +4,70 @@
         <loc>https://prek.j178.dev/dev/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/installation/</loc>
+        <loc>https://prek.j178.dev/dev/authoring-hooks/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/quickstart/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/migration/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/running-hooks/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/configuration/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/local-hooks/</loc>
+        <loc>https://prek.j178.dev/dev/benchmark/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/built-in-hooks/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/monorepos/</loc>
+        <loc>https://prek.j178.dev/dev/changelog/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/ci/</loc>
       </url>
       <url>
+        <loc>https://prek.j178.dev/dev/compatibility/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/configuration/</loc>
+      </url>
+      <url>
         <loc>https://prek.j178.dev/dev/cookbook/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/debugging/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/diff/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/faq/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/installation/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/integrations/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/authoring-hooks/</loc>
+        <loc>https://prek.j178.dev/dev/internals/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/local-hooks/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/migration/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/monorepos/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/proposals/concurrency/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/proposals/hook-groups/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/proposals/hook-shell/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/quickstart/</loc>
+      </url>
+      <url>
+        <loc>https://prek.j178.dev/dev/reference/built-in-hooks/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/reference/cli/</loc>
@@ -46,7 +76,7 @@
         <loc>https://prek.j178.dev/dev/reference/configuration/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/reference/built-in-hooks/</loc>
+        <loc>https://prek.j178.dev/dev/reference/environment-variables/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/reference/language-support/</loc>
@@ -55,30 +85,9 @@
         <loc>https://prek.j178.dev/dev/reference/workspace/</loc>
       </url>
       <url>
-        <loc>https://prek.j178.dev/dev/reference/environment-variables/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/internals/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/debugging/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/faq/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/compatibility/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/diff/</loc>
+        <loc>https://prek.j178.dev/dev/running-hooks/</loc>
       </url>
       <url>
         <loc>https://prek.j178.dev/dev/security/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/benchmark/</loc>
-      </url>
-      <url>
-        <loc>https://prek.j178.dev/dev/changelog/</loc>
       </url>
 </urlset>

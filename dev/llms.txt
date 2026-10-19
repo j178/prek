@@ -1,0 +1,63 @@
+# prek
+
+> A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.
+
+prek is a drop-in replacement for pre-commit, fully compatible with existing
+`.pre-commit-config.yaml` files. It runs the same hooks faster, with better
+toolchain management.
+
+Key differences from pre-commit:
+- Single binary, no Python runtime required
+- Parallel hook execution by priority
+- Built-in workspace/monorepo support
+- Automatic toolchain installation (Python, Node, Go, Rust, Ruby)
+- Integration with uv for Python environments
+
+When fetching documentation, use explicit `index.md` paths for directories, e.g.,
+`https://prek.j178.dev/configuration/index.md`. This returns clean markdown
+instead of rendered HTML.
+
+## Getting Started
+
+- [Introduction](<https://prek.j178.dev/dev/index.md>)
+- [Installation](<https://prek.j178.dev/dev/installation/index.md>)
+- [Quickstart](<https://prek.j178.dev/dev/quickstart/index.md>)
+- [Migrating from Other Tools](<https://prek.j178.dev/dev/migration/index.md>)
+
+## Usage
+
+- [Running Hooks](<https://prek.j178.dev/dev/running-hooks/index.md>)
+- [Configuration](<https://prek.j178.dev/dev/configuration/index.md>)
+- [Local Hooks](<https://prek.j178.dev/dev/local-hooks/index.md>)
+- [Built-in Hooks](<https://prek.j178.dev/dev/built-in-hooks/index.md>)
+- [Monorepos](<https://prek.j178.dev/dev/monorepos/index.md>)
+- [Continuous Integration](<https://prek.j178.dev/dev/ci/index.md>)
+- [Cookbook](<https://prek.j178.dev/dev/cookbook/index.md>)
+- [Integrations](<https://prek.j178.dev/dev/integrations/index.md>)
+
+## Authoring
+
+- [Hook Repositories](<https://prek.j178.dev/dev/authoring-hooks/index.md>)
+
+## Reference
+
+- [CLI Reference](<https://prek.j178.dev/dev/reference/cli/index.md>)
+- [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md>)
+- [Built-in Hooks](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md>)
+- [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>)
+- [Workspace Reference](<https://prek.j178.dev/dev/reference/workspace/index.md>)
+- [Environment Variables](<https://prek.j178.dev/dev/reference/environment-variables/index.md>)
+- [Internals](<https://prek.j178.dev/dev/internals/index.md>)
+
+## Help
+
+- [Debugging](<https://prek.j178.dev/dev/debugging/index.md>)
+- [FAQ](<https://prek.j178.dev/dev/faq/index.md>)
+
+## About
+
+- [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md>)
+- [Differences](<https://prek.j178.dev/dev/diff/index.md>)
+- [Security](<https://prek.j178.dev/dev/security/index.md>)
+- [Benchmark](<https://prek.j178.dev/dev/benchmark/index.md>)
+- [Changelog](<https://prek.j178.dev/dev/changelog/index.md>)
