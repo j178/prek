@@ -1,18 +1,20 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use futures_util::StreamExt;
 use itertools::Itertools;
 use semver::Version;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::languages::rust::RustRequest;
 use crate::languages::rust::rustup::Rustup;
-use crate::languages::rust::toolchain::{RustToolchain, resolve_proxy};
-use crate::languages::rust::version::{Channel, query_version};
+use crate::languages::rust::toolchain::RustToolchain;
+use crate::languages::rust::version::Channel;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::store::{Store, ToolBucket};
 
+/// Selects or installs a toolchain according to the requested version and source policy.
 pub(crate) struct RustInstaller<'a> {
     store: &'a Store,
     root: PathBuf,
@@ -35,9 +37,10 @@ impl<'a> RustInstaller<'a> {
     ) -> Result<RustToolchain> {
         for &source in policy.search_order() {
             let result = match source {
-                ToolchainSource::Managed => self.find_installed(request).await?,
-                ToolchainSource::System => self.find_system_rust(request).await?,
+                ToolchainSource::Managed => self.find_managed(request).await?,
+                ToolchainSource::System => self.find_system(request).await?,
             };
+
             if let Some(result) = result {
                 trace!(?result, ?source, "Found rust");
                 return Ok(result);
@@ -51,33 +54,21 @@ impl<'a> RustInstaller<'a> {
         self.download(request).await
     }
 
-    async fn find_installed(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
-        let toolchains = Rustup::list_installed_toolchains(&self.root).await?;
-        Ok(Self::select_toolchain(toolchains, request).await)
+    async fn find_managed(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
+        let paths = Rustup::list_managed_toolchains(&self.root).await?;
+
+        Ok(Self::select_toolchain(paths, request, None).await)
     }
 
-    async fn select_toolchain(
-        mut toolchains: Vec<RustToolchain>,
-        request: &RustRequest,
-    ) -> Option<RustToolchain> {
-        sort_toolchains(&mut toolchains);
-        for toolchain in toolchains {
-            if !request.matches(&toolchain.version) {
-                continue;
-            }
-            if let Err(err) = toolchain.check_cargo().await {
-                debug!("Skipping unusable Rust toolchain: {err:#}");
-                continue;
-            }
-            return Some(toolchain);
-        }
-        None
-    }
-
-    async fn find_system_rust(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
+    async fn find_system(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
+        let managed_root = dunce::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
         let rustc_paths = find_system_executables("rustc", &self.root).unwrap_or_default();
+
         for rustc in rustc_paths {
-            let result = self.inspect_system_rust(&rustc, request).await;
+            let result = self
+                .inspect_system_rust(&rustc, request, &managed_root)
+                .await;
+
             match result {
                 Ok(Some(rust)) => return Ok(Some(rust)),
                 Ok(None) => {}
@@ -86,19 +77,11 @@ impl<'a> RustInstaller<'a> {
         }
 
         if let Some(rustup) = Rustup::find(&self.root) {
-            let toolchains = rustup.list_system_toolchains().await?;
-            let managed_root =
-                dunce::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
-            let toolchains = toolchains
-                .into_iter()
-                .filter(|info| {
-                    let path =
-                        dunce::canonicalize(&info.rustc).unwrap_or_else(|_| info.rustc.clone());
-                    !path.starts_with(&managed_root)
-                })
-                .collect();
-            return Ok(Self::select_toolchain(toolchains, request).await);
+            let paths = rustup.list_system_toolchains().await?;
+
+            return Ok(Self::select_toolchain(paths, request, Some(&managed_root)).await);
         }
+
         Ok(None)
     }
 
@@ -106,17 +89,84 @@ impl<'a> RustInstaller<'a> {
         &self,
         rustc: &Path,
         request: &RustRequest,
+        managed_root: &Path,
     ) -> Result<Option<RustToolchain>> {
-        let rustc = resolve_proxy(rustc, "rustc", self.cwd).await?;
-        let managed_root = dunce::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
-        if dunce::canonicalize(&rustc)?.starts_with(&managed_root) {
+        let rustc = Rustup::resolve_proxy(rustc, "rustc", self.cwd).await?;
+        if dunce::canonicalize(&rustc)?.starts_with(managed_root) {
             return Ok(None);
         }
-        let version = query_version(&rustc).await?;
+
+        let version = RustToolchain::query_version(&rustc).await?;
         if !request.matches(&version) {
             return Ok(None);
         }
-        Ok(RustToolchain::find_cargo(&rustc, &version, self.cwd, Some(&managed_root)).await)
+
+        Ok(RustToolchain::find_cargo(&rustc, &version, self.cwd, Some(managed_root)).await)
+    }
+
+    async fn select_toolchain(
+        paths: impl IntoIterator<Item = PathBuf>,
+        request: &RustRequest,
+        excluded_root: Option<&Path>,
+    ) -> Option<RustToolchain> {
+        let mut toolchains: Vec<_> = futures_util::stream::iter(paths)
+            .map(async move |path| RustToolchain::inspect_dir(&path).await)
+            .buffer_unordered(8)
+            .filter_map(async move |result| match result {
+                Ok(toolchain) => Some(toolchain),
+                Err(err) => {
+                    warn!("Skipping invalid toolchain: {err:#}");
+                    None
+                }
+            })
+            .collect()
+            .await;
+
+        sort_toolchains(&mut toolchains);
+
+        for toolchain in toolchains {
+            if let Some(root) = excluded_root {
+                let rustc = dunce::canonicalize(&toolchain.rustc)
+                    .unwrap_or_else(|_| toolchain.rustc.clone());
+                if rustc.starts_with(root) {
+                    continue;
+                }
+            }
+
+            if !request.matches(&toolchain.version) {
+                continue;
+            }
+
+            if let Err(err) = toolchain.check_cargo().await {
+                debug!("Skipping unusable Rust toolchain: {err:#}");
+                continue;
+            }
+
+            return Some(toolchain);
+        }
+
+        None
+    }
+
+    async fn download(&self, request: &RustRequest) -> Result<RustToolchain> {
+        let rustup = Rustup::install(self.store, &self.root).await?;
+
+        fs_err::tokio::create_dir_all(&self.root).await?;
+        let _lock = LockedFile::acquire(self.root.join(".lock"), "rustup").await?;
+
+        // Another process may have installed a matching toolchain while we waited.
+        if let Some(toolchain) = self.find_managed(request).await? {
+            return Ok(toolchain);
+        }
+
+        let toolchain = Self::resolve_version(request).await?;
+        debug!(%toolchain, "Installing Rust toolchain");
+
+        let path = rustup.install_toolchain(&self.root, &toolchain).await?;
+        let toolchain = RustToolchain::inspect_dir(&path).await?;
+        toolchain.check_cargo().await?;
+
+        Ok(toolchain)
     }
 
     async fn resolve_version(req: &RustRequest) -> Result<String> {
@@ -135,6 +185,7 @@ impl<'a> RustInstaller<'a> {
                     .output()
                     .await?
                     .stdout;
+
                 let version = str::from_utf8(&output)?
                     .lines()
                     .filter_map(|line| {
@@ -145,24 +196,10 @@ impl<'a> RustInstaller<'a> {
                     .sorted_unstable_by(|a, b| b.cmp(a))
                     .find(|version| req.matches(version))
                     .with_context(|| format!("Version `{req}` not found on remote"))?;
+
                 Ok(version.to_string())
             }
         }
-    }
-
-    async fn download(&self, request: &RustRequest) -> Result<RustToolchain> {
-        let rustup = Rustup::install(self.store, &self.root).await?;
-        fs_err::tokio::create_dir_all(&self.root).await?;
-        let _lock = LockedFile::acquire(self.root.join(".lock"), "rustup").await?;
-        // Another process may have installed a matching toolchain while we waited.
-        if let Some(toolchain) = self.find_installed(request).await? {
-            return Ok(toolchain);
-        }
-        let toolchain = Self::resolve_version(request).await?;
-        debug!(%toolchain, "Installing Rust toolchain");
-        let toolchain = rustup.install_toolchain(&toolchain).await?;
-        toolchain.check_cargo().await?;
-        Ok(toolchain)
     }
 }
 
@@ -199,10 +236,11 @@ mod tests {
         ]
         .into_iter()
         .map(|release| {
-            Ok(RustToolchain::from_dir(
-                Path::new("toolchain"),
-                Version::parse(release)?,
-            ))
+            Ok(RustToolchain {
+                rustc: PathBuf::from("rustc"),
+                cargo: PathBuf::from("cargo"),
+                version: Version::parse(release)?,
+            })
         })
         .collect::<Result<Vec<_>>>()?;
 

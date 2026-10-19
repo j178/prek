@@ -633,8 +633,6 @@ Supported formats:
 - Semver ranges like `>=1.70, <1.72`
 
 prek supports Rust installed through system package managers as well as rustup.
-Channel requests match the compiler's release channel, so `stable` also accepts
-stable releases installed without rustup or under a versioned rustup name.
 
 #### Toolchain profile
 

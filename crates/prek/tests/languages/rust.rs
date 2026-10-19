@@ -81,36 +81,6 @@ repos:
     }
 
     #[test]
-    fn channel_rechecked_after_system_upgrade() -> Result<()> {
-        let (context, path) = context("stable")?;
-        cmd_snapshot!(context, context.run().arg("-v").env("PATH", &path), @r#"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        rust.....................................................................Passed
-        - hook id: rust
-        - duration: [TIME]
-
-          compiler: rustc 1.95.0
-
-        ----- stderr -----
-        "#);
-        write_rustc(&context, "1.96.0-nightly");
-        cmd_snapshot!(context, context.run().arg("-v").env("PATH", &path), @r#"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: Failed to install hook `rust`
-          caused by: Failed to install rust
-          caused by: No suitable Rust version found for toolchain policy: only-system (downloads disabled)
-        "#);
-        assert!(!context.home_dir().child("tools/rustup").exists());
-        Ok(())
-    }
-
-    #[test]
     fn rustup_proxies_resolve_before_caching() -> Result<()> {
         let (context, _) = context("stable")?;
         context.write_executable_file(
@@ -281,7 +251,7 @@ repos:
         "#);
             }
         }
-        anyhow::ensure!(
+        assert!(
             !context.home_dir().child("tools/rustup").exists(),
             "unexpected rustup bootstrap"
         );

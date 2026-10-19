@@ -3,24 +3,20 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use futures_util::StreamExt;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use target_lexicon::HOST;
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 use crate::checksum::{Sha256Digest, fetch_checksum};
 use crate::fs::{LockedFile, make_executable};
 use crate::http::download_artifact;
-use crate::languages::rust::toolchain::RustToolchain;
-use crate::languages::rust::version::query_version;
 use crate::process::Cmd;
 use crate::store::Store;
 use crate::warn_user;
 
-#[derive(Clone)]
+/// A rustup executable that can operate on the system or a specified managed home.
 pub(crate) struct Rustup {
     bin: PathBuf,
-    rustup_home: PathBuf,
 }
 
 static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
@@ -51,6 +47,7 @@ fn rustup_profile(env_vars: &impl EnvVarsRead) -> RustupProfile {
             value,
             default.as_ref(),
         );
+
         default
     })
 }
@@ -61,10 +58,8 @@ impl Rustup {
             let bin = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
             if bin.is_file() { Some(bin) } else { None }
         })?;
-        Some(Self {
-            bin,
-            rustup_home: rustup_home.to_path_buf(),
-        })
+
+        Some(Self { bin })
     }
 
     /// Install rustup if not already installed.
@@ -72,17 +67,13 @@ impl Rustup {
         if let Some(rustup) = Self::find(rustup_home) {
             return Ok(rustup);
         }
-        let rustup_path = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
 
         fs_err::tokio::create_dir_all(&rustup_home).await?;
         let _lock = LockedFile::acquire(rustup_home.join(".lock"), "rustup").await?;
 
-        if rustup_path.is_file() {
-            trace!("Using managed rustup at {}", rustup_path.display());
-            return Ok(Self {
-                bin: rustup_path,
-                rustup_home: rustup_home.to_path_buf(),
-            });
+        if let Some(rustup) = Self::find(rustup_home) {
+            trace!("Using rustup at {}", rustup.bin.display());
+            return Ok(rustup);
         }
 
         Self::download(store, rustup_home)
@@ -98,6 +89,7 @@ impl Rustup {
             "rustup-init"
         };
         let url = format!("https://static.rust-lang.org/rustup/dist/{triple}/{filename}");
+
         // Save "rustup-init" as "rustup", this is what "rustup-init" does when setting up.
         let target = rustup_home.join("rustup").with_extension(EXE_EXTENSION);
         let checksum_url = format!("{url}.sha256");
@@ -106,6 +98,7 @@ impl Rustup {
             let Some(checksum) = fetch_checksum(&checksum_url).await? else {
                 return Ok(None);
             };
+
             digest_from_rustup_checksum(&checksum)
         })
         .await?;
@@ -116,18 +109,21 @@ impl Rustup {
             debug!(path = %target.display(), "Removing existing rustup");
             fs_err::tokio::remove_file(&target).await?;
         }
+
         debug!(path = %target.display(), "Installing rustup");
         crate::fs::rename_with_retry(download.path(), &target).await?;
 
-        Ok(Self {
-            bin: target,
-            rustup_home: rustup_home.to_path_buf(),
-        })
+        Ok(Self { bin: target })
     }
 
-    pub(crate) async fn install_toolchain(&self, toolchain: &str) -> Result<RustToolchain> {
+    /// Install a toolchain into the given rustup home and return its directory.
+    pub(crate) async fn install_toolchain(
+        &self,
+        rustup_home: &Path,
+        toolchain: &str,
+    ) -> Result<PathBuf> {
         let output = Cmd::new(&self.bin)
-            .env(EnvVars::RUSTUP_HOME, &self.rustup_home)
+            .env(EnvVars::RUSTUP_HOME, rustup_home)
             .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
             .arg("toolchain")
             .arg("install")
@@ -160,27 +156,27 @@ impl Rustup {
                 )
             })?;
 
-        toolchain_info(self.rustup_home.join("toolchains").join(installed_name)).await
+        Ok(rustup_home.join("toolchains").join(installed_name))
     }
 
-    /// List installed toolchains managed by prek.
-    pub(crate) async fn list_installed_toolchains(
-        rustup_home: &Path,
-    ) -> Result<Vec<RustToolchain>> {
+    /// List toolchain directories in the given managed rustup home.
+    pub(crate) async fn list_managed_toolchains(rustup_home: &Path) -> Result<Vec<PathBuf>> {
         let mut dirs = match fs_err::tokio::read_dir(rustup_home.join("toolchains")).await {
             Ok(dirs) => dirs,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(err) => return Err(err.into()),
         };
+
         let mut entries = Vec::new();
         while let Some(entry) = dirs.next_entry().await? {
             entries.push(entry.path());
         }
-        Ok(inspect_toolchains(entries).await)
+
+        Ok(entries)
     }
 
-    /// List system-installed Rust toolchains.
-    pub(crate) async fn list_system_toolchains(&self) -> Result<Vec<RustToolchain>> {
+    /// List toolchain directories in the user's rustup home.
+    pub(crate) async fn list_system_toolchains(&self) -> Result<Vec<PathBuf>> {
         let output = Cmd::new(&self.bin)
             .arg("toolchain")
             .arg("list")
@@ -193,8 +189,36 @@ impl Rustup {
 
         let entries = str::from_utf8(&output.stdout)?
             .lines()
-            .filter_map(parse_toolchain_line);
-        Ok(inspect_toolchains(entries).await)
+            .filter_map(parse_toolchain_line)
+            .collect();
+
+        Ok(entries)
+    }
+
+    pub(crate) async fn resolve_proxy(
+        executable: &Path,
+        name: &str,
+        cwd: &Path,
+    ) -> Result<PathBuf> {
+        let resolved = dunce::canonicalize(executable)?;
+        let rustup = resolved
+            .with_file_name("rustup")
+            .with_extension(EXE_EXTENSION);
+
+        // rustup proxies can be hard links, so canonicalizing alone does not identify them.
+        if !same_file::is_same_file(&resolved, &rustup).unwrap_or(false) {
+            return Ok(executable.to_path_buf());
+        }
+
+        let output = Cmd::new(&rustup)
+            .args(["which", name])
+            .current_dir(cwd)
+            .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
+            .check(true)
+            .output()
+            .await?;
+
+        Ok(PathBuf::from(str::from_utf8(&output.stdout)?.trim()))
     }
 }
 
@@ -202,6 +226,7 @@ fn digest_from_rustup_checksum(contents: &str) -> Result<Option<Sha256Digest>> {
     let Some(digest) = contents.split_whitespace().next() else {
         return Ok(None);
     };
+
     digest.parse().map(Some)
 }
 
@@ -213,32 +238,6 @@ fn parse_toolchain_line(line: &str) -> Option<PathBuf> {
         .next_back()
         .map(PathBuf::from)
         .filter(|path| path.exists())
-}
-
-async fn toolchain_info(toolchain_dir: PathBuf) -> Result<RustToolchain> {
-    let rustc = toolchain_dir
-        .join("bin")
-        .join("rustc")
-        .with_extension(EXE_EXTENSION);
-
-    let version = query_version(&rustc).await?;
-
-    Ok(RustToolchain::from_dir(&toolchain_dir, version))
-}
-
-async fn inspect_toolchains(paths: impl IntoIterator<Item = PathBuf>) -> Vec<RustToolchain> {
-    futures_util::stream::iter(paths)
-        .map(toolchain_info)
-        .buffer_unordered(8)
-        .filter_map(async move |result| match result {
-            Ok(info) => Some(info),
-            Err(e) => {
-                warn!("Skipping invalid toolchain: {e:#}");
-                None
-            }
-        })
-        .collect()
-        .await
 }
 
 #[cfg(test)]

@@ -1,44 +1,17 @@
 use std::fmt::Display;
-use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::Context;
-use prek_consts::env_vars::EnvVars;
 use semver::Version;
 
 use crate::hook::InstallInfo;
 use crate::languages::version::{Error, try_into_u64_slice};
-use crate::process::Cmd;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub(crate) enum Channel {
     Stable,
     Beta,
     Nightly,
-}
-
-impl FromStr for Channel {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "stable" => Ok(Channel::Stable),
-            "beta" => Ok(Channel::Beta),
-            "nightly" => Ok(Channel::Nightly),
-            _ => Err(()),
-        }
-    }
-}
-
-impl Display for Channel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let channel_str = match self {
-            Channel::Stable => "stable",
-            Channel::Beta => "beta",
-            Channel::Nightly => "nightly",
-        };
-        write!(f, "{channel_str}")
-    }
 }
 
 impl Channel {
@@ -50,22 +23,6 @@ impl Channel {
             _ => None,
         }
     }
-}
-
-pub(crate) async fn query_version(rustc: &Path) -> anyhow::Result<Version> {
-    let output = Cmd::new(rustc)
-        .arg("-vV")
-        .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
-        .check(true)
-        .output()
-        .await
-        .with_context(|| format!("Failed to query Rust version from {}", rustc.display()))?;
-    let output = str::from_utf8(&output.stdout)?;
-    let release = output
-        .lines()
-        .find_map(|line| line.strip_prefix("release: "))
-        .with_context(|| format!("Failed to parse Rust version from output: {output}"))?;
-    Version::parse(release).context("Invalid Rust release version")
 }
 
 /// A parsed Rust version request:
