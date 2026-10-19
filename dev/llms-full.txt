@@ -156,13 +156,13 @@ The standalone installer automatically downloads and installs the correct binary
 Use `curl` to download the script and execute it with `sh`:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | sh
 ```
 
 Use `irm` to download the script and execute it with `iex`:
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex"
 ```
 
 Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies>) allows running a script from the internet.
@@ -180,11 +180,11 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 > By default, the standalone installer tries `$XDG_BIN_HOME`, then `$XDG_DATA_HOME/../bin`, and finally `~/.local/bin`. Set `PREK_INSTALL_DIR` to override these locations:
 >
 > ```bash
-> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
+> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
 > ```
 >
 > ```powershell
-> powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+> powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
 > ```
 >
 > > **Note**
@@ -196,11 +196,11 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 > The installer adds the installation directory to your `PATH` by updating shell profiles on macOS and Linux, or the user environment on Windows. Set `PREK_NO_MODIFY_PATH=1` to skip this step:
 >
 > ```bash
-> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
+> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
 > ```
 >
 > ```powershell
-> powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+> powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
 > ```
 >
 > You can combine this with `PREK_INSTALL_DIR`. Add the directory to `PATH` yourself or invoke prek by its full path.
@@ -210,11 +210,11 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 > For temporary environments such as CI, set `PREK_UNMANAGED_INSTALL` to the desired installation directory. This also skips PATH modifications and disables `prek self update`:
 >
 > ```bash
-> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
+> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
 > ```
 >
 > ```powershell
-> powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.5/prek-installer.ps1 | iex}
+> powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
 > ```
 >
 > Add the directory to `PATH` yourself or invoke prek by its full path. To update an unmanaged installation, rerun the installer for the desired version.
@@ -1513,13 +1513,13 @@ A common pattern is to copy the binary into your own image:
 
 ```dockerfile
 FROM debian:bookworm-slim
-COPY --from=ghcr.io/j178/prek:0.5.5 /prek /usr/local/bin/prek
+COPY --from=ghcr.io/j178/prek:0.5.6 /prek /usr/local/bin/prek
 ```
 
 If you prefer, you can also run the distroless image directly:
 
 ```bash
-docker run --rm ghcr.io/j178/prek:0.5.5 --version
+docker run --rm ghcr.io/j178/prek:0.5.6 --version
 ```
 
 ### Alpine
@@ -1527,7 +1527,7 @@ docker run --rm ghcr.io/j178/prek:0.5.5 --version
 The Alpine variant includes `prek`, Git, CA certificates, a shell, and the Alpine package manager.
 
 ```bash
-docker run --rm ghcr.io/j178/prek:0.5.5-alpine --version
+docker run --rm ghcr.io/j178/prek:0.5.6-alpine --version
 ```
 
 Use `X.Y.Z-alpine3.24` to pin both the prek and Alpine versions, or `alpine3.24` to pin only the Alpine version while tracking the latest prek release. Tags without the numbered Alpine suffix, such as `X.Y.Z-alpine` and `alpine`, use the current supported Alpine release.
@@ -1549,7 +1549,7 @@ Loaded 1 attestation from GitHub API
 
 > [!TIP]
 >
-> Use a specific version tag (e.g., `ghcr.io/j178/prek:0.5.5`) or image digest rather than `latest` for verification.
+> Use a specific version tag (e.g., `ghcr.io/j178/prek:0.5.6`) or image digest rather than `latest` for verification.
 
 ## prek skill for agents
 
@@ -8045,6 +8045,42 @@ Results are written to `results/local-<timestamp>/summary.md`.
 Benchmark performance varies with hardware, operating system, repository shape, hook configuration, cache state, and background load. Compare representative end-to-end workloads on your own machine before making configuration decisions.
 
 # Changelog
+
+## 0.5.6
+
+Released on 2026-10-19.
+
+### Enhancements
+
+- Add builtin hook `check-commit-trailers` ([\#2885](<https://github.com/j178/prek/pull/2885>))
+- Add builtin hook `check-signed-commit` ([\#2725](<https://github.com/j178/prek/pull/2725>))
+
+### Performance
+
+- Enable PGO for native release builds ([\#2890](<https://github.com/j178/prek/pull/2890>))
+- Reduce hook process launches with balanced batches ([\#2907](<https://github.com/j178/prek/pull/2907>))
+- Resolve hook commands before batching ([\#2840](<https://github.com/j178/prek/pull/2840>))
+
+### Bug fixes
+
+- Accept UTF-8 BOM in `check-json` ([\#2879](<https://github.com/j178/prek/pull/2879>))
+- Preserve unquoted dotted revisions in `prek update` ([\#2853](<https://github.com/j178/prek/pull/2853>))
+
+### Documentation
+
+- Document standalone installer options ([\#2859](<https://github.com/j178/prek/pull/2859>))
+- Update benchmarks for prek 0.5.5 ([\#2786](<https://github.com/j178/prek/pull/2786>))
+
+### Other changes
+
+- Enable ICF for release builds ([\#2891](<https://github.com/j178/prek/pull/2891>))
+- Update uv to 0.13.0 ([\#2856](<https://github.com/j178/prek/pull/2856>))
+
+### Contributors
+
+- @ebuildy
+- @j178
+- @shaanmajid
 
 ## 0.5.5
 

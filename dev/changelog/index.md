@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.6
+
+Released on 2026-10-19.
+
+### Enhancements
+
+- Add builtin hook `check-commit-trailers` ([\#2885](<https://github.com/j178/prek/pull/2885>))
+- Add builtin hook `check-signed-commit` ([\#2725](<https://github.com/j178/prek/pull/2725>))
+
+### Performance
+
+- Enable PGO for native release builds ([\#2890](<https://github.com/j178/prek/pull/2890>))
+- Reduce hook process launches with balanced batches ([\#2907](<https://github.com/j178/prek/pull/2907>))
+- Resolve hook commands before batching ([\#2840](<https://github.com/j178/prek/pull/2840>))
+
+### Bug fixes
+
+- Accept UTF-8 BOM in `check-json` ([\#2879](<https://github.com/j178/prek/pull/2879>))
+- Preserve unquoted dotted revisions in `prek update` ([\#2853](<https://github.com/j178/prek/pull/2853>))
+
+### Documentation
+
+- Document standalone installer options ([\#2859](<https://github.com/j178/prek/pull/2859>))
+- Update benchmarks for prek 0.5.5 ([\#2786](<https://github.com/j178/prek/pull/2786>))
+
+### Other changes
+
+- Enable ICF for release builds ([\#2891](<https://github.com/j178/prek/pull/2891>))
+- Update uv to 0.13.0 ([\#2856](<https://github.com/j178/prek/pull/2856>))
+
+### Contributors
+
+- @ebuildy
+- @j178
+- @shaanmajid
+
 ## 0.5.5
 
 Released on 2026-10-05.
