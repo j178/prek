@@ -34,7 +34,7 @@ fn basic_discovery() {
     context.git().add(".");
 
     // Run from the root directory
-    cmd_snapshot!(context, context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -72,12 +72,10 @@ fn basic_discovery() {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-        [TEMP_DIR]/
-        ['project3/project5/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
-    "#);
+    ");
 
     // Run from a subdirectory
     cmd_snapshot!(context, context.run().current_dir(cwd.join("project2")), @r"
@@ -443,7 +441,7 @@ fn run_with_selectors() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context, context.run().arg("--skip").arg("project2/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project2/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -474,14 +472,12 @@ fn run_with_selectors() {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-        [TEMP_DIR]/
-        ['project3/project5/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context, context.run().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -498,14 +494,12 @@ fn run_with_selectors() {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-        [TEMP_DIR]/
-        ['project3/project5/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context, context.run().arg("show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg("show-cwd"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -543,12 +537,10 @@ fn run_with_selectors() {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-        [TEMP_DIR]/
-        ['project3/project5/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
-    "#);
+    ");
 
     cmd_snapshot!(context, context.run().arg("project2:show-cwd"), @r#"
     success: true
@@ -565,7 +557,7 @@ fn run_with_selectors() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context, context.run().arg(".:show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg(".:show-cwd"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -574,12 +566,10 @@ fn run_with_selectors() {
     - duration: [TIME]
 
       [TEMP_DIR]/
-      ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-      [TEMP_DIR]/
-      ['project3/project5/.pre-commit-config.yaml']
+      ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
-    "#);
+    ");
 
     cmd_snapshot!(context, context.run().arg("--skip").arg("show-cwd"), @r#"
     success: true
@@ -599,7 +589,7 @@ fn run_with_selectors() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context, context.run().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -632,15 +622,13 @@ fn run_with_selectors() {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-        [TEMP_DIR]/
-        ['project3/project5/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
     warning: selector `--skip=nested:show-cwd` did not match any hooks
-    "#);
+    ");
 
-    cmd_snapshot!(context, context.run().arg("--skip").arg("non-exist"), @r#"
+    cmd_snapshot!(context, context.run().arg("--skip").arg("non-exist"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -678,13 +666,11 @@ fn run_with_selectors() {
       - duration: [TIME]
 
         [TEMP_DIR]/
-        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
-        [TEMP_DIR]/
-        ['project3/project5/.pre-commit-config.yaml']
+        ['.pre-commit-config.yaml', 'nested/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml']
 
     ----- stderr -----
     warning: selector `--skip=non-exist` did not match any hooks
-    "#);
+    ");
 
     cmd_snapshot!(context, context.run().arg("--skip").arg("../"), @r"
     success: false
