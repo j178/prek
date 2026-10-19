@@ -77,9 +77,6 @@ jobs:
       # Match the deployment target in the training and final macOS builds.
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.platform.target == 'aarch64-apple-darwin' && '11.0' || matrix.platform.target == 'x86_64-apple-darwin' && '10.12' || '' }}
 
-      # Use Rust's bundled Mach-O LLD for identical code folding.
-      RUSTFLAGS: ${{ contains(matrix.platform.target, 'apple-darwin') && '-Clinker=rust-lld -Clinker-flavor=ld64.lld -Clink-arg=--icf=safe' || '' }}
-
       AWS_LC_SYS_PREBUILT_NASM: "0"
 
     steps:
@@ -103,19 +100,19 @@ jobs:
         with:
           enable-cache: false
 
+      - name: Configure release linker
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          source scripts/setup-release-linker.sh
+          echo "RUSTFLAGS=$RUSTFLAGS" >> "$GITHUB_ENV"
+
       - name: Train PGO on macOS ARM64 and Windows
         # Linux trains inside manylinux so both builds use the same toolchain and libraries.
         # The extra instrumented build is too slow on Intel macOS runners.
         if: runner.os != 'Linux' && matrix.platform.target != 'x86_64-apple-darwin'
         shell: bash
         run: |
-          if [ "$TARGET" = aarch64-pc-windows-msvc ]; then
-            # link.exe can corrupt ARM64 PGO profiles.
-            # https://github.com/rust-lang/rust/issues/156675
-            linker="$(cygpath -m "$(rustc --print sysroot)")/lib/rustlib/$TARGET/bin/rust-lld.exe"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clinker=$linker -Clinker-flavor=lld-link"
-          fi
-
           uv run scripts/pgo/train.py --target "$TARGET"
           echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$GITHUB_WORKSPACE/target/pgo/$TARGET/prek.profdata" >> "$GITHUB_ENV"
 
@@ -128,10 +125,7 @@ jobs:
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
-            # Use the same LLD and ICF settings for training and the final build.
-            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
-            test -x "$lld_dir/ld.lld"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
+            source scripts/setup-release-linker.sh
 
             uv run scripts/pgo/train.py --target "$TARGET"
             export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
@@ -201,12 +195,8 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
-          before-script-linux: |
-            # GCC 4.8 cannot use -fuse-ld=lld, so expose LLD as ld through -B.
-            lld_dir="$(mktemp -d)"
-            ln -s "$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/rust-lld" "$lld_dir/ld"
-            test -x "$lld_dir/ld"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-Wl,--icf=all"
+          before-script-linux: source scripts/setup-release-linker.sh
+          docker-options: -e TARGET
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -253,10 +243,8 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update --compatibility pypi
-          before-script-linux: |
-            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
-            test -x "$lld_dir/ld.lld"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
+          before-script-linux: source scripts/setup-release-linker.sh
+          docker-options: -e TARGET
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -304,10 +292,8 @@ jobs:
           manylinux: musllinux_1_1
           # Also support glibc systems older than the aarch64 GNU build's baseline.
           args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
-          before-script-linux: |
-            lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
-            test -x "$lld_dir/ld.lld"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-B$lld_dir -Clink-arg=-fuse-ld=lld -Clink-arg=-Wl,--icf=all"
+          before-script-linux: source scripts/setup-release-linker.sh
+          docker-options: -e TARGET
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
