@@ -21,7 +21,7 @@ permissions: {}
 
 env:
   ACTIONS_CACHE_MODE: none
-  UV_VERSION: "0.13.0"
+  UV_VERSION: "0.13.4"
 
 jobs:
   build:
