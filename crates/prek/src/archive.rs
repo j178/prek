@@ -128,7 +128,9 @@ pub async fn extract_archive(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
     let path = path.as_ref();
     let ext = ArchiveExtension::from_path(path)?;
     let extract_dir = path.with_file_name("extract");
+
     debug!(path = %path.display(), "Extracting archive");
+
     fs_err::tokio::create_dir_all(&extract_dir).await?;
 
     let file = fs_err::tokio::File::open(path).await?;
@@ -139,7 +141,9 @@ pub async fn extract_archive(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
         Err(Error::NonSingularArchive(_)) => extract_dir,
         Err(err) => return Err(err),
     };
+
     debug!(target = %extracted.display(), "Extracted archive");
+
     Ok(extracted)
 }
 

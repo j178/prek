@@ -111,6 +111,7 @@ async fn download_to_temp_file(
 ) -> Result<(TempDownload, Sha256Digest)> {
     let temp_dir = tempfile::tempdir_in(store.scratch_path())?;
     let path = temp_dir.path().join(filename);
+
     debug!(%url, "Downloading");
 
     let response = customize_request(REQWEST_CLIENT.get(url))
@@ -132,6 +133,7 @@ async fn download_to_temp_file(
         .await
         .with_context(|| format!("Failed to flush temporary download `{}`", path.display()))?;
     let computed_digest = reader.finish();
+
     debug!(%filename, "Downloaded");
 
     Ok((
