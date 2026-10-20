@@ -266,46 +266,42 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
 /// Unpack a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_gz<R: AsyncRead + Unpin>(
+pub async fn untar_gz<R: AsyncRead + Unpin + Send>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let reader = GzipDecoder::new(reader);
-
-    let mut archive = ArchiveBuilder::new(reader)
-        .set_preserve_mtime(true)
-        .set_preserve_permissions(true)
-        .set_allow_external_symlinks(false)
-        .build();
-
-    archive.unpack(target.as_ref()).await?;
-    Ok(())
+    let mut reader = GzipDecoder::new(reader);
+    untar(&mut reader, target.as_ref()).await
 }
 
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_xz<R: AsyncRead + Unpin>(
+pub async fn untar_xz<R: AsyncRead + Unpin + Send>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let reader = XzDecoder::new(reader);
+    let mut reader = XzDecoder::new(reader);
+    untar(&mut reader, target.as_ref()).await
+}
 
+// Erase the decoder type so tar extraction code is shared across compression formats.
+async fn untar(reader: &mut (dyn AsyncRead + Unpin + Send), target: &Path) -> Result<(), Error> {
     let mut archive = ArchiveBuilder::new(reader)
         .set_preserve_mtime(true)
         .set_preserve_permissions(true)
         .set_allow_external_symlinks(false)
         .build();
 
-    archive.unpack(target.as_ref()).await?;
+    archive.unpack(target).await?;
     Ok(())
 }
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
-pub async fn unpack<R: AsyncRead + Unpin>(
+pub async fn unpack<R: AsyncRead + Unpin + Send>(
     reader: R,
     ext: ArchiveExtension,
     target: impl AsRef<Path>,
