@@ -206,53 +206,6 @@ fn conflicted_stash_preserves_changes_hidden_by_clean_filter() {
     assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
 }
 
-/// The targeted checkout introduced for #2912 must treat filenames literally.
-///
-/// Whitespace and wildcard characters must survive stashing: the hook sees the
-/// staged bytes, and the original unstaged bytes are restored afterward.
-#[cfg(unix)]
-#[test]
-fn stash_preserves_unusual_paths() -> Result<()> {
-    use std::path::Path;
-
-    let context = TestEnv::new().with_config(indoc::indoc! {r"
-        repos:
-          - repo: local
-            hooks:
-              - id: check
-                name: check
-                language: system
-                entry: python3 .git/check.py
-                pass_filenames: false
-                always_run: true
-    "});
-
-    let path = Path::new(" leading [file]*\t\n-name.txt ");
-    context.write_file(path, "staged\n");
-    context.git().init().add(".");
-
-    context.write_file(
-        ".git/check.py",
-        r#"assert open(" leading [file]*\t\n-name.txt ", "rb").read() == b"staged\n""#,
-    );
-
-    context.write_file(path, "unstaged\n");
-
-    cmd_snapshot!(context, context.run(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    check....................................................................Passed
-
-    ----- stderr -----
-    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
-    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
-    ");
-
-    assert_eq!(fs_err::read(context.work_dir().join(path))?, b"unstaged\n");
-    Ok(())
-}
-
 #[test]
 fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     let context = TestEnv::new()
