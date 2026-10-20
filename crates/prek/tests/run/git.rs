@@ -76,7 +76,15 @@ fn staged_files_only() {
                 types: [text]
        "#})
         .with_file("file.txt", "Hello, world!")
+        .with_file(".gitattributes", "settings.txt filter=strip\n")
+        .with_file("settings.txt", "shared\n")
         .init_git();
+    context.git().run([
+        "config",
+        "filter.strip.clean",
+        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
+    ]);
+    context.write_file("settings.txt", "shared\nLOCAL=keep\n");
 
     // Non-staged files should be stashed and restored.
     context.write_file("file.txt", "Hello world again!");
@@ -98,6 +106,46 @@ fn staged_files_only() {
 
     let content = context.read("file.txt");
     assert_snapshot!(content, @"Hello world again!");
+    assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn stash_preserves_unusual_paths() -> Result<()> {
+    use std::path::Path;
+
+    let context = TestEnv::new().with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: check
+                name: check
+                language: system
+                entry: python3 .git/check.py
+                pass_filenames: false
+                always_run: true
+    "});
+    let path = Path::new(" leading [file]*\t\n-name.txt ");
+    context.write_file(path, "staged\n");
+    context.git().init().add(".");
+    context.write_file(
+        ".git/check.py",
+        r#"assert open(" leading [file]*\t\n-name.txt ", "rb").read() == b"staged\n""#,
+    );
+    context.write_file(path, "unstaged\n");
+
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check....................................................................Passed
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+    assert_eq!(fs_err::read(context.work_dir().join(path))?, b"unstaged\n");
+    Ok(())
 }
 
 #[test]
@@ -192,8 +240,16 @@ fn restaging_hook_preserves_conflicted_stash() {
         .with_file("doc.md", "ORIGINAL\nbody\n")
         .with_file("other.txt", "other original\n")
         .with_file("removed.txt", "keep this file\n")
+        .with_file(".gitattributes", "settings.txt filter=strip\n")
+        .with_file("settings.txt", "shared\n")
         .init_git();
     context.git().commit("Initial commit");
+    context.git().run([
+        "config",
+        "filter.strip.clean",
+        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
+    ]);
+    context.write_file("settings.txt", "shared\nLOCAL=keep\n");
     context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\n");
     context.git().add("doc.md");
     context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n");
@@ -248,6 +304,7 @@ fn restaging_hook_preserves_conflicted_stash() {
     assert_eq!(context.read("intent.txt"), "intent to add\n");
     assert_eq!(context.read("hook-added.txt"), "hook output\n");
     assert_eq!(context.read("untracked.txt"), "keep untracked content\n");
+    assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
 }
 
 #[test]
@@ -446,6 +503,7 @@ fn restore_after_checkout_failure() {
                     entry: python3 -c 'pass'
         "})
         .with_file("file.txt", "original\n")
+        .with_file(".gitattributes", "file.txt filter=fail\n")
         .init_git();
     context.git().commit("Initial commit");
     context.write_file("file.txt", "staged\n");
@@ -453,29 +511,50 @@ fn restore_after_checkout_failure() {
     context.write_file("file.txt", "unstaged\n");
     context.write_file("intent.txt", "intent\n");
     context.git().run(["add", "--intent-to-add", "intent.txt"]);
-    context.write_executable_file(
-        ".git/hooks/post-checkout",
-        "#!/bin/sh\necho 'checkout hook failed' >&2\nexit 1\n",
-    );
+    context.write_file(
+        ".git/smudge.py",
+        indoc::indoc! {r"
+            from pathlib import Path
+            import sys
 
-    cmd_snapshot!(context, context.run(), @r#"
+            marker = Path('.git/smudge-failed')
+            if not marker.exists():
+                marker.touch()
+                sys.exit(1)
+            sys.stdout.buffer.write(sys.stdin.buffer.read())
+        "},
+    );
+    context
+        .git()
+        .run([
+            "config",
+            "filter.fail.clean",
+            r#"python3 -c "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())""#,
+        ])
+        .run(["config", "filter.fail.smudge", "python3 .git/smudge.py"])
+        .run(["config", "filter.fail.required", "true"]);
+
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
     Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
     error: Failed to clean work tree
       caused by: Failed to checkout working tree
-      caused by: Command `[GIT] -c submodule.recurse=0 checkout -- [TEMP_DIR]/` exited with an error:
+      caused by: Command `[GIT] -c submodule.recurse=0 checkout-index --force --index -z --stdin` exited with an error:
 
     [status]
-    exit status: 1
+    exit status: 128
 
     [stderr]
-    checkout hook failed
-    "#);
+    error: external filter 'python3 .git/smudge.py' failed 1
+    error: external filter 'python3 .git/smudge.py' failed
+    fatal: file.txt: smudge filter fail failed
+    ");
     assert_eq!(context.read("file.txt"), "unstaged\n");
     assert_eq!(context.read("intent.txt"), "intent\n");
     cmd_snapshot!(context, context.git().command().args(["status", "--porcelain"]), @r#"
@@ -499,7 +578,7 @@ fn restore_when_interrupted_during_git_operations() -> Result<()> {
 
     use prek_consts::env_vars::EnvVarsRead;
 
-    for operation in ["rm", "write-tree", "checkout", "apply", "add"] {
+    for operation in ["rm", "write-tree", "checkout-index", "apply", "add"] {
         let context = TestEnv::new()
             .with_config(indoc::indoc! {r"
                 repos:

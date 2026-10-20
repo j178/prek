@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use anstream::eprintln;
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::EnvVars;
+use rustc_hash::FxHashSet;
 use tracing::{debug, error, trace};
 
 use crate::cleanup::add_cleanup;
@@ -110,17 +110,6 @@ impl SavedPatch {
         }))
     }
 
-    fn checkout(&self) -> Result<()> {
-        git_command()?
-            .args(["-c", "submodule.recurse=0", "checkout", "--"])
-            .arg(&self.root)
-            // Prevent recursive post-checkout hooks.
-            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
-            .output_sync()
-            .context("Failed to checkout working tree")?;
-        Ok(())
-    }
-
     fn restore_from_tree(&self) -> Result<()> {
         // Unstage hook additions without deleting files that were previously untracked.
         git_command()?
@@ -128,7 +117,16 @@ impl SavedPatch {
             .arg(&self.root)
             .output_sync()
             .context("Failed to restore the pre-hook index")?;
-        self.checkout()?;
+        // Hooks may have changed paths outside the saved patch, including the index.
+        // Query after reset so their staged changes and deletions are included too.
+        let git_root = git::root()?;
+        let paths = git::worktree_status_sync(git_root)?
+            .unstaged
+            .into_iter()
+            .map(|path| git_root.join(path))
+            .filter(|path| path.starts_with(&self.root))
+            .collect::<Vec<_>>();
+        git::checkout_files(git_root, &paths).context("Failed to checkout working tree")?;
         self.apply()
     }
 
@@ -196,7 +194,7 @@ struct PendingChanges {
 }
 
 impl PendingChanges {
-    fn prepare(&mut self, root: &Path, patch_dir: &Path) -> Result<()> {
+    fn prepare(&mut self, root: &Path, patch_dir: &Path, unstaged: &[PathBuf]) -> Result<()> {
         if !self.intent_to_add.is_empty() {
             git_command()?
                 .args(["rm", "--cached", "--"])
@@ -205,9 +203,10 @@ impl PendingChanges {
                 .context("Failed to clear intent-to-add changes")?;
         }
         self.patch = SavedPatch::save(root, patch_dir)?;
-        if let Some(patch) = &self.patch {
+        if self.patch.is_some() {
             debug!("Cleaning working tree");
-            patch.checkout()?;
+            git::checkout_files(git::root()?, unstaged)
+                .context("Failed to checkout working tree")?;
         }
         Ok(())
     }
@@ -257,9 +256,7 @@ impl WorktreeStash {
 
     fn restore_once(state: &Mutex<Option<PendingChanges>>) -> Result<RestoreOutcome> {
         // Keep cleanup on another thread from exiting before restoration finishes.
-        let mut guard = state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = state.lock().unwrap();
         let Some(state) = guard.take() else {
             return Ok(RestoreOutcome::Restored);
         };
@@ -268,12 +265,18 @@ impl WorktreeStash {
 
     /// Save unstaged changes and intent-to-add markers, then prepare the worktree for hooks.
     ///
-    /// Intent-to-add paths must be absolute; only paths under `root` are cleared.
-    pub fn save(store: &Store, root: &Path, mut intent_to_add: Vec<PathBuf>) -> Result<Self> {
-        intent_to_add.retain(|path| path.starts_with(root));
+    /// Paths in `status` must be absolute; only paths under `root` are cleared.
+    pub fn save(store: &Store, root: &Path, mut status: git::WorktreeStatus) -> Result<Self> {
+        status.intent_to_add.retain(|path| path.starts_with(root));
+        let intent_paths = status.intent_to_add.iter().collect::<FxHashSet<_>>();
+        // The status query compares filtered contents, so files whose only changes
+        // are hidden by clean filters must not be checked out.
+        status
+            .unstaged
+            .retain(|path| path.starts_with(root) && !intent_paths.contains(path));
         let stash = Self {
             state: Arc::new(Mutex::new(Some(PendingChanges {
-                intent_to_add,
+                intent_to_add: status.intent_to_add,
                 patch: None,
             }))),
         };
@@ -287,12 +290,9 @@ impl WorktreeStash {
         let result = {
             // Even write-tree can update the index cache. Finish preparation before allowing
             // Ctrl-C cleanup to restore it.
-            let mut guard = stash
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut guard = stash.state.lock().unwrap();
             let state = guard.as_mut().context("Worktree cleanup was interrupted")?;
-            state.prepare(root, &store.patches_dir())
+            state.prepare(root, &store.patches_dir(), &status.unstaged)
         };
         if let Err(err) = result {
             return match stash.restore() {
