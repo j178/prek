@@ -14,7 +14,7 @@ use crate::process::Cmd;
 use crate::store::Store;
 use crate::warn_user;
 
-/// A rustup executable that can operate on the system or a specified managed home.
+/// A rustup executable for inspecting and installing toolchains.
 pub(crate) struct Rustup {
     bin: PathBuf,
 }
@@ -150,24 +150,8 @@ impl Rustup {
         Ok(rustup_home.join("toolchains").join(installed_name))
     }
 
-    /// List toolchain directories in the given managed rustup home.
-    pub(crate) async fn list_managed_toolchains(rustup_home: &Path) -> Result<Vec<PathBuf>> {
-        let mut dirs = match fs_err::tokio::read_dir(rustup_home.join("toolchains")).await {
-            Ok(dirs) => dirs,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(err) => return Err(err.into()),
-        };
-
-        let mut entries = Vec::new();
-        while let Some(entry) = dirs.next_entry().await? {
-            entries.push(entry.path());
-        }
-
-        Ok(entries)
-    }
-
-    /// List toolchain directories in the user's rustup home.
-    pub(crate) async fn list_system_toolchains(&self) -> Result<Vec<PathBuf>> {
+    /// List toolchain directories in the current rustup home.
+    pub(crate) async fn list_toolchains(&self) -> Result<Vec<PathBuf>> {
         let output = Cmd::new(&self.bin)
             .arg("toolchain")
             .arg("list")
@@ -176,7 +160,7 @@ impl Rustup {
             .check(true)
             .output()
             .await
-            .context("Failed to list system toolchains")?;
+            .context("Failed to list Rust toolchains")?;
 
         let entries = str::from_utf8(&output.stdout)?
             .lines()
