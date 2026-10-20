@@ -56,9 +56,24 @@ impl<'a> RustInstaller<'a> {
     }
 
     async fn find_managed(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
-        let paths = Rustup::list_managed_toolchains(&self.root).await?;
+        let paths = self.list_managed_toolchains().await?;
 
         Ok(Self::select_toolchain(paths, request, None).await)
+    }
+
+    async fn list_managed_toolchains(&self) -> Result<Vec<PathBuf>> {
+        let mut dirs = match fs_err::tokio::read_dir(self.root.join("toolchains")).await {
+            Ok(dirs) => dirs,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(err) => return Err(err.into()),
+        };
+
+        let mut paths = Vec::new();
+        while let Some(entry) = dirs.next_entry().await? {
+            paths.push(entry.path());
+        }
+
+        Ok(paths)
     }
 
     async fn find_system(&self, request: &RustRequest) -> Result<Option<RustToolchain>> {
@@ -78,7 +93,7 @@ impl<'a> RustInstaller<'a> {
         }
 
         if let Some(rustup) = Rustup::find(&self.root) {
-            let paths = rustup.list_system_toolchains().await?;
+            let paths = rustup.list_toolchains().await?;
 
             return Ok(Self::select_toolchain(paths, request, Some(&managed_root)).await);
         }
