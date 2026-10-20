@@ -270,8 +270,6 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
 }
 
 /// Unpack the given tar archive into the destination directory.
-///
-/// Returns the list of unpacked files and their sizes.
 async fn untar_in<R: AsyncRead + Unpin>(
     reader: R,
     dst: &Path,
