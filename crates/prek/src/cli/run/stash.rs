@@ -118,8 +118,12 @@ impl SavedPatch {
             .output_sync()
             .context("Failed to restore the pre-hook index")?;
 
-        // Hooks may have changed paths outside the saved patch, including the index.
-        // Query after reset so their staged changes and deletions are included too.
+        // Only checkout Git-visible differences. A full checkout would overwrite
+        // changes hidden by clean filters, which the saved patch cannot restore.
+        //
+        // Recompute after reset: hooks may modify or delete files outside the initial
+        // unstaged paths, and resetting the index makes their staged changes appear
+        // as unstaged differences too.
         let git_root = git::root()?;
         let paths = git::worktree_status_sync(git_root)?
             .unstaged
