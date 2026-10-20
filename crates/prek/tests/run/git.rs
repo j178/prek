@@ -76,15 +76,7 @@ fn staged_files_only() {
                 types: [text]
        "#})
         .with_file("file.txt", "Hello, world!")
-        .with_file(".gitattributes", "settings.txt filter=strip\n")
-        .with_file("settings.txt", "shared\n")
         .init_git();
-    context.git().run([
-        "config",
-        "filter.strip.clean",
-        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
-    ]);
-    context.write_file("settings.txt", "shared\nLOCAL=keep\n");
 
     // Non-staged files should be stashed and restored.
     context.write_file("file.txt", "Hello world again!");
@@ -106,9 +98,118 @@ fn staged_files_only() {
 
     let content = context.read("file.txt");
     assert_snapshot!(content, @"Hello world again!");
+}
+
+/// Regression for <https://github.com/j178/prek/issues/2912>.
+///
+/// A clean filter hides machine-local settings from the saved patch. An unstaged
+/// edit in another file triggers stashing, which must leave those settings intact.
+#[test]
+fn stash_preserves_changes_hidden_by_clean_filter() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: check
+                    name: check
+                    language: system
+                    entry: python3 -c 'pass'
+        "})
+        .with_file(".gitattributes", "settings.txt filter=strip\n")
+        .with_file("settings.txt", "shared\n")
+        .with_file("file.txt", "staged\n")
+        .init_git();
+
+    context.git().run([
+        "config",
+        "filter.strip.clean",
+        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
+    ]);
+
+    context.write_file("settings.txt", "shared\nLOCAL=keep\n");
+    context.write_file("file.txt", "unstaged\n");
+
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check....................................................................Passed
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    assert_eq!(context.read("file.txt"), "unstaged\n");
     assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
 }
 
+/// Regression for <https://github.com/j178/prek/issues/2912>.
+///
+/// The hook adds filter-hidden settings and makes the saved patch conflict.
+/// Rollback must restore the visible edit without overwriting those settings.
+///
+/// Adding them inside the hook isolates rollback from the initial stash checkout.
+#[test]
+fn conflicted_stash_preserves_changes_hidden_by_clean_filter() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: conflict
+                    name: conflict
+                    language: system
+                    entry: python3 .git/conflict.py
+                    files: ^file\.txt$
+                    pass_filenames: false
+        "})
+        .with_file(".gitattributes", "settings.txt filter=strip\n")
+        .with_file("settings.txt", "shared\n")
+        .with_file("file.txt", "staged\n")
+        .init_git();
+
+    context.git().run([
+        "config",
+        "filter.strip.clean",
+        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
+    ]);
+
+    context.write_file(
+        ".git/conflict.py",
+        indoc::indoc! {r"
+            from pathlib import Path
+
+            Path('settings.txt').write_bytes(b'shared\nLOCAL=keep\n')
+            Path('file.txt').write_bytes(b'hook\n')
+        "},
+    );
+
+    context.write_file("file.txt", "unstaged\n");
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    conflict.................................................................Failed
+    - hook id: conflict
+    - files were modified by this hook
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    assert_eq!(context.read("file.txt"), "unstaged\n");
+    assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
+}
+
+/// The targeted checkout introduced for #2912 must treat filenames literally.
+///
+/// Whitespace and wildcard characters must survive stashing: the hook sees the
+/// staged bytes, and the original unstaged bytes are restored afterward.
 #[cfg(unix)]
 #[test]
 fn stash_preserves_unusual_paths() -> Result<()> {
@@ -125,13 +226,16 @@ fn stash_preserves_unusual_paths() -> Result<()> {
                 pass_filenames: false
                 always_run: true
     "});
+
     let path = Path::new(" leading [file]*\t\n-name.txt ");
     context.write_file(path, "staged\n");
     context.git().init().add(".");
+
     context.write_file(
         ".git/check.py",
         r#"assert open(" leading [file]*\t\n-name.txt ", "rb").read() == b"staged\n""#,
     );
+
     context.write_file(path, "unstaged\n");
 
     cmd_snapshot!(context, context.run(), @"
@@ -144,6 +248,7 @@ fn stash_preserves_unusual_paths() -> Result<()> {
     Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
     Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
     ");
+
     assert_eq!(fs_err::read(context.work_dir().join(path))?, b"unstaged\n");
     Ok(())
 }
@@ -240,16 +345,8 @@ fn restaging_hook_preserves_conflicted_stash() {
         .with_file("doc.md", "ORIGINAL\nbody\n")
         .with_file("other.txt", "other original\n")
         .with_file("removed.txt", "keep this file\n")
-        .with_file(".gitattributes", "settings.txt filter=strip\n")
-        .with_file("settings.txt", "shared\n")
         .init_git();
     context.git().commit("Initial commit");
-    context.git().run([
-        "config",
-        "filter.strip.clean",
-        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
-    ]);
-    context.write_file("settings.txt", "shared\nLOCAL=keep\n");
     context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\n");
     context.git().add("doc.md");
     context.write_file("doc.md", "ORIGINAL\nbody\nstaged edit\nUNSTAGED TAIL\n");
@@ -304,7 +401,6 @@ fn restaging_hook_preserves_conflicted_stash() {
     assert_eq!(context.read("intent.txt"), "intent to add\n");
     assert_eq!(context.read("hook-added.txt"), "hook output\n");
     assert_eq!(context.read("untracked.txt"), "keep untracked content\n");
-    assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
 }
 
 #[test]
@@ -489,6 +585,9 @@ fn restore_intent_and_unstaged_changes_from_subdirectory() {
     "#);
 }
 
+/// Preserve #2801 recovery coverage: a failed stash checkout must still restore
+/// unstaged contents and intent-to-add markers. Since #2912 uses checkout-index,
+/// which does not run post-checkout hooks, fail a required smudge filter once instead.
 #[test]
 fn restore_after_checkout_failure() {
     let context = TestEnv::new()
@@ -506,11 +605,13 @@ fn restore_after_checkout_failure() {
         .with_file(".gitattributes", "file.txt filter=fail\n")
         .init_git();
     context.git().commit("Initial commit");
+
     context.write_file("file.txt", "staged\n");
     context.git().add("file.txt");
     context.write_file("file.txt", "unstaged\n");
     context.write_file("intent.txt", "intent\n");
     context.git().run(["add", "--intent-to-add", "intent.txt"]);
+
     context.write_file(
         ".git/smudge.py",
         indoc::indoc! {r"
@@ -524,6 +625,7 @@ fn restore_after_checkout_failure() {
             sys.stdout.buffer.write(sys.stdin.buffer.read())
         "},
     );
+
     context
         .git()
         .run([
@@ -555,8 +657,10 @@ fn restore_after_checkout_failure() {
     error: external filter 'python3 .git/smudge.py' failed
     fatal: file.txt: smudge filter fail failed
     ");
+
     assert_eq!(context.read("file.txt"), "unstaged\n");
     assert_eq!(context.read("intent.txt"), "intent\n");
+
     cmd_snapshot!(context, context.git().command().args(["status", "--porcelain"]), @r#"
     success: true
     exit_code: 0
@@ -568,6 +672,8 @@ fn restore_after_checkout_failure() {
     "#);
 }
 
+// Preserve #2801 coverage for interruption during each Git mutation. The checkout
+// barrier targets checkout-index after #2912; the recovery expectations are unchanged.
 #[cfg(unix)]
 #[test]
 fn restore_when_interrupted_during_git_operations() -> Result<()> {

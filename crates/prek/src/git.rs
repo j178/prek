@@ -435,6 +435,7 @@ fn worktree_status_cmd(cwd: &Path) -> Result<Cmd, Error> {
         "--no-ext-diff",
         "--ignore-submodules",
     ]);
+
     Ok(cmd)
 }
 
@@ -480,8 +481,10 @@ pub(crate) fn checkout_files(cwd: &Path, paths: &[PathBuf]) -> Result<(), Error>
             writer.write_all(path_to_git_bytes(path)?)?;
             writer.write_all(b"\0")?;
         }
+
         writer.flush()?;
     }
+
     input.rewind()?;
 
     git_cmd()?
@@ -497,6 +500,7 @@ pub(crate) fn checkout_files(cwd: &Path, paths: &[PathBuf]) -> Result<(), Error>
         ])
         .stdin(input)
         .output_sync()?;
+
     Ok(())
 }
 

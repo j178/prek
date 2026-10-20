@@ -117,6 +117,7 @@ impl SavedPatch {
             .arg(&self.root)
             .output_sync()
             .context("Failed to restore the pre-hook index")?;
+
         // Hooks may have changed paths outside the saved patch, including the index.
         // Query after reset so their staged changes and deletions are included too.
         let git_root = git::root()?;
@@ -126,7 +127,9 @@ impl SavedPatch {
             .map(|path| git_root.join(path))
             .filter(|path| path.starts_with(&self.root))
             .collect::<Vec<_>>();
+
         git::checkout_files(git_root, &paths).context("Failed to checkout working tree")?;
+
         self.apply()
     }
 
@@ -202,12 +205,14 @@ impl PendingChanges {
                 .output_sync()
                 .context("Failed to clear intent-to-add changes")?;
         }
+
         self.patch = SavedPatch::save(root, patch_dir)?;
         if self.patch.is_some() {
             debug!("Cleaning working tree");
             git::checkout_files(git::root()?, unstaged)
                 .context("Failed to checkout working tree")?;
         }
+
         Ok(())
     }
 
@@ -216,8 +221,10 @@ impl PendingChanges {
             Some(patch) => patch.restore(),
             None => Ok(RestoreOutcome::Restored),
         };
+
         // Restore file contents before intent-to-add markers. Attempt both even if one fails.
         let intent = self.restore_intent();
+
         match (unstaged, intent) {
             (result, Ok(())) => result,
             (Ok(_), Err(err)) => Err(err),
@@ -260,6 +267,7 @@ impl WorktreeStash {
         let Some(state) = guard.take() else {
             return Ok(RestoreOutcome::Restored);
         };
+
         state.restore()
     }
 
@@ -269,17 +277,20 @@ impl WorktreeStash {
     pub fn save(store: &Store, root: &Path, mut status: git::WorktreeStatus) -> Result<Self> {
         status.intent_to_add.retain(|path| path.starts_with(root));
         let intent_paths = status.intent_to_add.iter().collect::<FxHashSet<_>>();
+
         // The status query compares filtered contents, so files whose only changes
         // are hidden by clean filters must not be checked out.
         status
             .unstaged
             .retain(|path| path.starts_with(root) && !intent_paths.contains(path));
+
         let stash = Self {
             state: Arc::new(Mutex::new(Some(PendingChanges {
                 intent_to_add: status.intent_to_add,
                 patch: None,
             }))),
         };
+
         let state = Arc::clone(&stash.state);
         add_cleanup(move || {
             if let Err(err) = Self::restore_once(&state) {
@@ -294,6 +305,7 @@ impl WorktreeStash {
             let state = guard.as_mut().context("Worktree cleanup was interrupted")?;
             state.prepare(root, &store.patches_dir(), &status.unstaged)
         };
+
         if let Err(err) = result {
             return match stash.restore() {
                 Ok(_) => Err(err),
@@ -302,6 +314,7 @@ impl WorktreeStash {
                 )),
             };
         }
+
         Ok(stash)
     }
 }
