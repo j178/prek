@@ -859,26 +859,24 @@ mod tests {
         use anyhow::{Context, Result};
         use async_compression::tokio::write::GzipEncoder;
         use aws_lc_rs::digest::{SHA256, digest};
+        use tar_codec::{ArchiveBuilder as _, EntryMetadata, FilePayload, TarEncoder};
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpListener;
         use tokio::task::JoinHandle;
-        use tokio_tar::{Builder, Header};
 
         use super::*;
 
         async fn uv_archive(contents: &[u8]) -> Result<Vec<u8>> {
-            let mut header = Header::new_gnu();
-            header.set_mode(0o755);
-            header.set_size(contents.len().try_into()?);
-
-            let mut archive = Builder::new(Vec::new());
-            archive
-                .append_data(&mut header, "uv-release/uv", contents)
-                .await?;
-            let archive = archive.into_inner().await?;
-
             let mut encoder = GzipEncoder::new(Vec::new());
-            encoder.write_all(&archive).await?;
+            let mut archive = TarEncoder::new(&mut encoder).builder();
+            archive
+                .add_file(
+                    "uv-release/uv",
+                    FilePayload::from(contents),
+                    EntryMetadata::default().executable(true),
+                )
+                .await?;
+            archive.finish().await?;
             encoder.shutdown().await?;
             Ok(encoder.into_inner())
         }
