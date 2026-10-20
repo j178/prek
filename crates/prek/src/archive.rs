@@ -29,7 +29,7 @@ use rustc_hash::FxHashSet;
 use tokio::io::{AsyncRead, BufReader};
 use tokio_tar::ArchiveBuilder;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::warn;
+use tracing::{debug, warn};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -128,16 +128,23 @@ pub async fn extract_archive(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
     let path = path.as_ref();
     let ext = ArchiveExtension::from_path(path)?;
     let extract_dir = path.with_file_name("extract");
+
+    debug!(path = %path.display(), "Extracting archive");
+
     fs_err::tokio::create_dir_all(&extract_dir).await?;
 
     let file = fs_err::tokio::File::open(path).await?;
     unpack(file, ext, &extract_dir).await?;
 
-    match strip_component(&extract_dir) {
-        Ok(top_level) => Ok(top_level),
-        Err(Error::NonSingularArchive(_)) => Ok(extract_dir),
-        Err(err) => Err(err),
-    }
+    let extracted = match strip_component(&extract_dir) {
+        Ok(top_level) => top_level,
+        Err(Error::NonSingularArchive(_)) => extract_dir,
+        Err(err) => return Err(err),
+    };
+
+    debug!(target = %extracted.display(), "Extracted archive");
+
+    Ok(extracted)
 }
 
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
