@@ -773,13 +773,11 @@ fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
     let Some(paths) = paths else {
         return true;
     };
-    if paths.is_empty() {
-        return false;
-    }
-
     // `which_in` skips non-executable files on Unix. Keep bare commands that
     // exist in `PATH` so process spawn reports `Permission denied`.
-    std::env::split_paths(paths).any(|dir| cwd.join(dir).join(program).is_file())
+    std::env::split_paths(paths)
+        .filter(|dir| !cfg!(windows) || !dir.as_os_str().is_empty())
+        .any(|dir| cwd.join(dir).join(program).is_file())
 }
 
 fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyhow::Error {
@@ -843,6 +841,14 @@ mod tests {
         )
         .expect("non-executable file in PATH should not fail as missing");
         assert_eq!(resolved, vec![OsString::from("my-tool")]);
+
+        let resolved = resolve_hook_command(
+            vec![OsString::from("my-tool")],
+            Some(OsStr::new("")),
+            dir.path(),
+        )
+        .expect("empty PATH on Unix searches cwd");
+        assert_eq!(resolved, vec![OsString::from("my-tool")]);
     }
 
     #[test]
@@ -850,17 +856,18 @@ mod tests {
         let dir = tempdir().expect("create temp dir");
         let cwd_file = dir.path().join("my-tool");
         write_file(&cwd_file, "not an executable in PATH\n");
+        let path_dir = dir.path().join("bin");
 
         let err = resolve_hook_command(
             vec![OsString::from("my-tool")],
-            Some(OsString::new().as_os_str()),
+            Some(path_dir.as_os_str()),
             dir.path(),
         )
         .unwrap_err();
-        assert!(
-            err.to_string()
-                .starts_with("Executable `my-tool` not found in PATH (<empty>);")
-        );
+        assert!(err.to_string().starts_with(&format!(
+            "Executable `my-tool` not found in PATH ({});",
+            path_dir.display()
+        )));
     }
 
     #[test]
