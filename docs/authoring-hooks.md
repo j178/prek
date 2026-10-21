@@ -97,7 +97,7 @@ manifest semantics. For the upstream reference, see:
 
 ### Editor completion and validation
 
-`prek` maintains a [`prek-hooks.schema.json`](https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json)
+`prek` maintains a [`prek-hooks.schema.json`](https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json)
 schema for `.pre-commit-hooks.yaml`. The schema stays in the `prek` repository
 instead of being registered with SchemaStore, so editors must opt into it
 explicitly.
@@ -105,7 +105,7 @@ explicitly.
 With YAML Language Server, add this directive at the top of the manifest:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json
 ```
 
 This enables completion and validation for both upstream fields and `prek`

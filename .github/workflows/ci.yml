@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -73,7 +73,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          [[ "$GH_REF" == "refs/heads/master" ]] && on_master_branch=1
+          [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
           [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
           [[ "$HAS_BUILD_SKIP_LABEL" == "true" ]] && has_build_skip_label=1
           [[ "$HAS_BUILD_SKIP_DOCKER_LABEL" == "true" ]] && has_build_skip_docker_label=1
@@ -103,7 +103,7 @@ jobs:
             [[ "$file" =~ ^scripts/hyperfine-.*\.sh$ ]] && bench_scripts_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ ]] && continue
             any_code_changed=1
-          done <<< "$(git diff --name-only "${BASE_SHA:-origin/master}...${HEAD_SHA}")"
+          done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...${HEAD_SHA}")"
 
           [[ $rust_code_changed || $rust_deps_changed || $rust_config_changed ]] && any_rust_changed=1
           [[ $rust_deps_changed || $rust_config_changed || $workflow_changed ]] && cache_relevant_changed=1
@@ -111,14 +111,14 @@ jobs:
           [[ $pyproject_changed || $release_binaries_workflow_changed ]] && release_build_changed=1
           [[ $rust_deps_changed || $rust_config_changed || $dockerfile_changed || $docker_workflow_changed ]] && docker_build_changed=1
 
-          [[ ! $has_skip_label && ($any_code_changed || $generated_from_code_changed || $on_master_branch) ]] && test_code=1
-          [[ $on_master_branch || $cache_relevant_changed ]] && save_rust_cache=1
-          [[ ! $has_skip_label && ($any_rust_changed || $bench_related_changed || $on_master_branch) ]] && run_bench=1
-          [[ ! $has_skip_label && ($workflow_changed || $zizmor_config_changed || $on_master_branch) ]] && run_zizmor=1
-          [[ ! $has_skip_label && ($docs_related_changed || $on_master_branch) ]] && check_docs=1
-          [[ $on_master_branch && $docs_related_changed ]] && publish_dev_docs=1
-          [[ ! $on_master_branch && ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
-          [[ ! $on_master_branch && ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_docker_label && $docker_build_changed ]] && build_docker=1
+          [[ ! $has_skip_label && ($any_code_changed || $generated_from_code_changed || $on_main_branch) ]] && test_code=1
+          [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
+          [[ ! $has_skip_label && ($any_rust_changed || $bench_related_changed || $on_main_branch) ]] && run_bench=1
+          [[ ! $has_skip_label && ($workflow_changed || $zizmor_config_changed || $on_main_branch) ]] && run_zizmor=1
+          [[ ! $has_skip_label && ($docs_related_changed || $on_main_branch) ]] && check_docs=1
+          [[ $on_main_branch && $docs_related_changed ]] && publish_dev_docs=1
+          [[ ! $on_main_branch && ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
+          [[ ! $on_main_branch && ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_docker_label && $docker_build_changed ]] && build_docker=1
 
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
           {

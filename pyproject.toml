@@ -23,7 +23,7 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/j178/prek"
-Changelog = "https://github.com/j178/prek/blob/master/CHANGELOG.md"
+Changelog = "https://github.com/j178/prek/blob/main/CHANGELOG.md"
 Releases = "https://github.com/j178/prek/releases"
 Homepage = "https://prek.j178.dev/"
 

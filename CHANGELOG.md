@@ -1665,7 +1665,7 @@ In this release:
 - Added a `prek cache size` subcommand so you can quickly see how much cache space prek is using. Thanks @MatthewMckee4!
 - Nested workspaces are easier to reason about: set `orphan: true` on a project to isolate it from parents so its files are processed only once.
 
-Want to show your project runs on prek? Add our README badge to your docs or repo homepage: [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
+Want to show your project runs on prek? Add our README badge to your docs or repo homepage: [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge-v0.json)](https://github.com/j178/prek)
 
 ### Enhancements
 

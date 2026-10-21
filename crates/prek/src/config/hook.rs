@@ -695,7 +695,7 @@ impl TryFrom<RemoteHook> for ManifestHook {
     schemars(title = ".pre-commit-hooks.yaml"),
     schemars(description = "The hook manifest for prek, a git hook manager written in Rust."),
     schemars(extend(
-        "$id" = "https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json"
+        "$id" = "https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json"
     )),
 )]
 pub(crate) struct Manifest {
