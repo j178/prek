@@ -11,13 +11,13 @@ The standalone installer automatically downloads and installs the correct binary
 Use `curl` to download the script and execute it with `sh`:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.sh | sh
 ```
 
 Use `irm` to download the script and execute it with `iex`:
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.ps1 | iex"
 ```
 
 Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies>) allows running a script from the internet.
@@ -35,11 +35,11 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 > By default, the standalone installer tries `$XDG_BIN_HOME`, then `$XDG_DATA_HOME/../bin`, and finally `~/.local/bin`. Set `PREK_INSTALL_DIR` to override these locations:
 >
 > ```bash
-> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
+> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.sh | env PREK_INSTALL_DIR="/custom/path" sh
 > ```
 >
 > ```powershell
-> powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
+> powershell -ExecutionPolicy ByPass -c {$env:PREK_INSTALL_DIR = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.ps1 | iex}
 > ```
 >
 > > **Note**
@@ -51,11 +51,11 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 > The installer adds the installation directory to your `PATH` by updating shell profiles on macOS and Linux, or the user environment on Windows. Set `PREK_NO_MODIFY_PATH=1` to skip this step:
 >
 > ```bash
-> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
+> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.sh | env PREK_NO_MODIFY_PATH=1 sh
 > ```
 >
 > ```powershell
-> powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
+> powershell -ExecutionPolicy ByPass -c {$env:PREK_NO_MODIFY_PATH = "1"; irm https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.ps1 | iex}
 > ```
 >
 > You can combine this with `PREK_INSTALL_DIR`. Add the directory to `PATH` yourself or invoke prek by its full path.
@@ -65,11 +65,11 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 > For temporary environments such as CI, set `PREK_UNMANAGED_INSTALL` to the desired installation directory. This also skips PATH modifications and disables `prek self update`:
 >
 > ```bash
-> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
+> curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.sh | env PREK_UNMANAGED_INSTALL="/custom/path" sh
 > ```
 >
 > ```powershell
-> powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.6/prek-installer.ps1 | iex}
+> powershell -ExecutionPolicy ByPass -c {$env:PREK_UNMANAGED_INSTALL = "C:\Custom\Path"; irm https://github.com/j178/prek/releases/download/v0.5.7/prek-installer.ps1 | iex}
 > ```
 >
 > Add the directory to `PATH` yourself or invoke prek by its full path. To update an unmanaged installation, rerun the installer for the desired version.
