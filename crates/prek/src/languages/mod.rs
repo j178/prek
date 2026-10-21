@@ -782,7 +782,7 @@ fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
 
 fn candidate_exists(path: &Path) -> bool {
     match path.metadata() {
-        Ok(metadata) => metadata.is_file(),
+        Ok(_) => true,
         // Treat metadata errors other than an absent entry as inconclusive so
         // process spawn can report the underlying OS error (e.g. `Permission denied`).
         Err(err) => !matches!(
@@ -931,6 +931,16 @@ mod tests {
             err.to_string(),
             format!("Executable `{}` does not exist", missing_abs.display())
         );
+
+        let existing_dir = dir.path().join("bin");
+        fs_err::create_dir(&existing_dir).expect("create directory");
+        let resolved = resolve_hook_command(
+            vec![OsString::from("./bin")],
+            Some(OsString::from("/usr/bin").as_os_str()),
+            dir.path(),
+        )
+        .expect("existing directory should defer to spawn");
+        assert_eq!(resolved, vec![existing_dir.into_os_string()]);
     }
 
     #[test]
