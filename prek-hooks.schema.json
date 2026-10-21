@@ -1,5 +1,5 @@
 {
-  "$id": "https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json",
+  "$id": "https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": ".pre-commit-hooks.yaml",
   "description": "The hook manifest for prek, a git hook manager written in Rust.",
