@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.7
+
+Released on 2026-10-21.
+
+### Enhancements
+
+- Support system Rust toolchains without rustup ([#2887](https://github.com/j178/prek/pull/2887))
+
+### Performance
+
+- Use blocking file checks for CPU-heavy builtin hooks ([#2910](https://github.com/j178/prek/pull/2910))
+
+### Other changes
+
+- Update CA root crates and uv for the eMudhra intermediate CA compromise ([#2919](https://github.com/j178/prek/pull/2919))
+
+### Contributors
+
+- @shaanmajid
+- @j178
+
 ## 0.5.6
 
 Released on 2026-10-19.
