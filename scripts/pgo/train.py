@@ -11,6 +11,7 @@ import argparse
 import os
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 from workloads import environment, fixture, run_command
@@ -98,7 +99,20 @@ def train(binary: Path, root: Path, profile_dir: Path) -> None:
 
 
 def verify(binary: Path, root: Path) -> None:
-    repo = fixture(root / "smoke", environment(root), 9)
+    env = environment(root)
+    profile = root / f"verify-{uuid.uuid4().hex}.profraw"
+    # LLVM_PROFILE_FILE overrides the path embedded by -Cprofile-generate.
+    run_command(
+        [binary, "--version"],
+        cwd=root,
+        env={**env, "LLVM_PROFILE_FILE": str(profile)},
+        timeout=120,
+        check=True,
+    )
+    if profile.exists():
+        raise RuntimeError(f"Release binary is PGO-instrumented: {binary}")
+
+    repo = fixture(root / "smoke", env, 9)
     repo.run(binary, "run", "--all-files")
 
     repo.write("change.txt", "staged change\n")
