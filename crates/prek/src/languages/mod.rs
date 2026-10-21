@@ -691,12 +691,9 @@ pub(crate) fn resolve_command(
 
     let resolved_binary = which::which_in(candidate, paths, cwd).unwrap_or_else(|_| {
         let candidate = Path::new(candidate);
-        let has_parent = candidate
-            .parent()
-            .is_some_and(|parent| !parent.as_os_str().is_empty());
         // `which_in` only returns executable files. Resolve an explicit relative
         // path against `cwd` so its shebang can still be inspected.
-        if candidate.is_absolute() || has_parent {
+        if candidate.is_absolute() || has_parent(candidate) {
             cwd.join(candidate).clean()
         } else {
             candidate.into()
@@ -744,19 +741,39 @@ fn resolve_hook_command(
     cwd: &Path,
 ) -> Result<Vec<OsString>> {
     let command = resolve_command(cmds, paths, cwd);
+    let env_path = if paths.is_none() {
+        EnvVars.var_os(EnvVars::PATH)
+    } else {
+        None
+    };
+    let paths = paths.or(env_path.as_deref());
+
     if let Some(program) = command.first()
-        && !Path::new(program).is_file()
+        && !program_exists(Path::new(program), paths, cwd)
     {
-        let env_path = if paths.is_none() {
-            EnvVars.var_os(EnvVars::PATH)
-        } else {
-            None
-        };
-        let paths = paths.or(env_path.as_deref());
         return Err(executable_not_found_error(program, paths));
     }
 
     Ok(command)
+}
+
+fn has_parent(path: &Path) -> bool {
+    path.parent()
+        .is_some_and(|parent| !parent.as_os_str().is_empty())
+}
+
+fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
+    if program.is_absolute() || has_parent(program) {
+        return cwd.join(program).is_file();
+    }
+
+    let Some(paths) = paths.filter(|paths| !paths.is_empty()) else {
+        return false;
+    };
+
+    // `which_in` skips non-executable files on Unix. Keep bare commands that
+    // exist in `PATH` so process spawn reports `Permission denied`.
+    std::env::split_paths(paths).any(|dir| cwd.join(dir).join(program).is_file())
 }
 
 fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyhow::Error {
@@ -796,6 +813,40 @@ mod tests {
         assert!(
             err.to_string()
                 .starts_with("Executable `__prek_nonexistent_command__` not found in PATH (")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_hook_command_preserves_non_executable_file_in_path() {
+        let dir = tempdir().expect("create temp dir");
+        let tool_path = dir.path().join("my-tool");
+        write_file(&tool_path, "echo hi\n");
+
+        let resolved = resolve_hook_command(
+            vec![OsString::from("my-tool")],
+            Some(dir.path().as_os_str()),
+            &CWD,
+        )
+        .expect("non-executable file in PATH should not fail as missing");
+        assert_eq!(resolved, vec![OsString::from("my-tool")]);
+    }
+
+    #[test]
+    fn resolve_hook_command_ignores_cwd_file_for_bare_command() {
+        let dir = tempdir().expect("create temp dir");
+        let cwd_file = dir.path().join("my-tool");
+        write_file(&cwd_file, "not an executable in PATH\n");
+
+        let err = resolve_hook_command(
+            vec![OsString::from("my-tool")],
+            Some(OsString::new().as_os_str()),
+            dir.path(),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("Executable `my-tool` not found in PATH (<empty>);")
         );
     }
 
