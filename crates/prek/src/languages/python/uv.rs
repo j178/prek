@@ -20,8 +20,13 @@ use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::warn_user;
 
-// The version range of `uv` we will install. Should update periodically.
-const CUR_UV_VERSION: &str = "0.13.4";
+// The default version of `uv` to install. Should update periodically.
+const DEFAULT_UV_VERSION: &str = "0.13.4";
+static UV_INSTALL_VERSION: LazyLock<String> = LazyLock::new(|| {
+    EnvVars
+        .var(EnvVars::PREK_UV_VERSION)
+        .unwrap_or_else(|_| DEFAULT_UV_VERSION.to_string())
+});
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
     LazyLock::new(|| VersionReq::parse(">=0.7.0").unwrap());
 
@@ -336,7 +341,7 @@ impl InstallSource {
     ) -> Result<DownloadedUv> {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let archive_name = format!("uv-{release_target}.{ext}");
-        let download_url = release_archive_url(base_url, CUR_UV_VERSION, &archive_name);
+        let download_url = release_archive_url(base_url, &UV_INSTALL_VERSION, &archive_name);
         let checksum_url = format!("{download_url}.sha256");
 
         let download = download_artifact(&download_url, &archive_name, store, async || {
@@ -364,12 +369,13 @@ impl InstallSource {
         target: &Path,
         source: &PyPiMirror,
     ) -> Result<()> {
+        let version = &*UV_INSTALL_VERSION;
         let platform_tag = get_wheel_platform_tag()?;
-        let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
+        let wheel_name = format!("uv-{version}-py3-none-{platform_tag}.whl");
 
         // Use PyPI JSON API instead of parsing HTML
         let api_url = match source {
-            PyPiMirror::Pypi => format!("https://pypi.org/pypi/uv/{CUR_UV_VERSION}/json"),
+            PyPiMirror::Pypi => format!("https://pypi.org/pypi/uv/{version}/json"),
             // For mirrors, we'll fall back to simple API approach
             _ => return self.install_from_simple_api(store, target, source).await,
         };
@@ -413,8 +419,9 @@ impl InstallSource {
         source: &PyPiMirror,
     ) -> Result<()> {
         // Fallback for mirrors that don't support JSON API
+        let version = &*UV_INSTALL_VERSION;
         let platform_tag = get_wheel_platform_tag()?;
-        let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
+        let wheel_name = format!("uv-{version}-py3-none-{platform_tag}.whl");
 
         let simple_url = format!("{}uv/", source.url());
 
@@ -481,7 +488,8 @@ impl InstallSource {
             .context("Failed to extract uv wheel")?;
 
         // Find the uv binary in the extracted contents
-        let data_dir = format!("uv-{CUR_UV_VERSION}.data");
+        let version = &*UV_INSTALL_VERSION;
+        let data_dir = format!("uv-{version}.data");
         let extracted_uv = extracted
             .join(data_dir)
             .join("scripts")
@@ -500,6 +508,7 @@ impl InstallSource {
     }
 
     async fn install_from_pip(&self, target: &Path) -> Result<()> {
+        let version = &*UV_INSTALL_VERSION;
         // When running `pip install` in multiple threads, it can fail
         // without extracting files properly.
         Cmd::new("python3")
@@ -511,7 +520,7 @@ impl InstallSource {
             .arg("--only-binary=:all:")
             .arg("--progress-bar=off")
             .arg("--disable-pip-version-check")
-            .arg(format!("uv=={CUR_UV_VERSION}"))
+            .arg(format!("uv=={version}"))
             .check(true)
             .output()
             .await?;
@@ -687,11 +696,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ensure_cur_uv_version_in_range() {
-        let version = Version::parse(CUR_UV_VERSION).expect("Invalid CUR_UV_VERSION");
+    fn ensure_default_uv_version_in_range() {
+        let version = Version::parse(DEFAULT_UV_VERSION).expect("Invalid DEFAULT_UV_VERSION");
         assert!(
             UV_VERSION_RANGE.matches(&version),
-            "CUR_UV_VERSION {CUR_UV_VERSION} does not satisfy the version requirement {}",
+            "DEFAULT_UV_VERSION {DEFAULT_UV_VERSION} does not satisfy the version requirement {}",
             *UV_VERSION_RANGE
         );
     }
@@ -889,7 +898,7 @@ mod tests {
             archive: Vec<u8>,
         ) {
             let archive_name = format!("uv-{release_target}.tar.gz");
-            let archive_path = format!("/{CUR_UV_VERSION}/{archive_name}");
+            let archive_path = format!("/{DEFAULT_UV_VERSION}/{archive_name}");
             let checksum = hex::encode(digest(&SHA256, &archive).as_ref());
             files.insert(
                 format!("{archive_path}.sha256"),
@@ -955,7 +964,8 @@ mod tests {
                 host.environment,
             )
             .context("Missing static musl target")?;
-            let working_uv = format!("#!/bin/sh\nprintf 'uv {CUR_UV_VERSION}\\n'\n").into_bytes();
+            let working_uv =
+                format!("#!/bin/sh\nprintf 'uv {DEFAULT_UV_VERSION}\\n'\n").into_bytes();
 
             let mut files = HashMap::new();
             add_release(

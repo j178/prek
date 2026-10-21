@@ -47,6 +47,7 @@ fn uv_source_none() -> anyhow::Result<()> {
 
     cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_UV_SOURCE, "none")
+        .env(EnvVars::PREK_UV_VERSION, "0.0.0")
         .env(EnvVars::PATH, &path), @r#"
     success: true
     exit_code: 0
@@ -55,6 +56,58 @@ fn uv_source_none() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "ci")]
+#[test]
+fn uv_version() -> anyhow::Result<()> {
+    let path = remove_bin_from_path("uv", None)?;
+
+    insta::allow_duplicates! {
+        for source in ["astral", "pypi"] {
+            let context = TestEnv::new()
+                .with_config(indoc::indoc! {r#"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: local
+                        name: local
+                        language: python
+                        entry: python -c 'print("Hello, world!")'
+                        always_run: true
+                        pass_filenames: false
+            "#})
+                .with_filter(r"(uv \d+\.\d+\.\d+)[^\n]*", "$1")
+                .init_git();
+
+            cmd_snapshot!(context, context.run()
+                .env(EnvVars::PREK_UV_SOURCE, source)
+                .env(EnvVars::PREK_UV_VERSION, "0.13.0")
+                .env(EnvVars::PATH, &path), @"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+            local....................................................................Passed
+
+            ----- stderr -----
+            ");
+
+            let uv_path = context
+                .home_dir()
+                .child(format!("tools/uv/uv{}", std::env::consts::EXE_SUFFIX));
+            cmd_snapshot!(context, std::process::Command::new(uv_path.path())
+                .arg("--version"), @"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+            uv 0.13.0
+
+            ----- stderr -----
+            ");
+        }
+    }
 
     Ok(())
 }

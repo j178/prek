@@ -55,7 +55,7 @@
       datasourceTemplate: 'pypi',
       packageNameTemplate: 'uv',
       matchStrings: [
-        'const\\s+CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+        'const\\s+DEFAULT_UV_VERSION\\s*:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
         'UV_VERSION:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
       ]
     },
