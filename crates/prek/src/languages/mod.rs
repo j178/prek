@@ -766,7 +766,7 @@ fn is_explicit_path(path: &Path) -> bool {
 
 fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
     if is_explicit_path(program) {
-        return cwd.join(program).is_file();
+        return candidate_exists(&cwd.join(program));
     }
 
     // When `PATH` is unset, let process spawn use the OS default search path.
@@ -777,7 +777,19 @@ fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
     // exist in `PATH` so process spawn reports `Permission denied`.
     std::env::split_paths(paths)
         .filter(|dir| !cfg!(windows) || !dir.as_os_str().is_empty())
-        .any(|dir| cwd.join(dir).join(program).is_file())
+        .any(|dir| candidate_exists(&cwd.join(dir).join(program)))
+}
+
+fn candidate_exists(path: &Path) -> bool {
+    match path.metadata() {
+        Ok(metadata) => metadata.is_file(),
+        // Treat metadata errors other than an absent entry as inconclusive so
+        // process spawn can report the underlying OS error (e.g. `Permission denied`).
+        Err(err) => !matches!(
+            err.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+        ),
+    }
 }
 
 fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyhow::Error {
@@ -804,6 +816,8 @@ mod tests {
     use std::ffi::OsString;
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
 
     use tempfile::tempdir;
@@ -848,6 +862,23 @@ mod tests {
             dir.path(),
         )
         .expect("empty PATH on Unix searches cwd");
+        assert_eq!(resolved, vec![OsString::from("my-tool")]);
+
+        let blocked_dir = dir.path().join("blocked");
+        fs_err::create_dir(&blocked_dir).expect("create blocked dir");
+        write_file(&blocked_dir.join("my-tool"), "echo hi\n");
+        fs_err::set_permissions(&blocked_dir, std::fs::Permissions::from_mode(0o000))
+            .expect("remove directory permissions");
+
+        let resolved = resolve_hook_command(
+            vec![OsString::from("my-tool")],
+            Some(blocked_dir.as_os_str()),
+            &CWD,
+        );
+        fs_err::set_permissions(&blocked_dir, std::fs::Permissions::from_mode(0o700))
+            .expect("restore directory permissions");
+
+        let resolved = resolved.expect("inaccessible PATH entry should defer to spawn");
         assert_eq!(resolved, vec![OsString::from("my-tool")]);
     }
 
