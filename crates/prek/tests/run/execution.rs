@@ -410,6 +410,34 @@ fn empty_entry() {
     ");
 }
 
+#[test]
+fn executable_not_found() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: missing
+                name: missing
+                language: system
+                entry: definitely-not-a-real-binary-xyz
+                pass_filenames: false
+                env:
+                  PATH: /custom/hook/bin
+       "})
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `missing`
+      caused by: Executable `definitely-not-a-real-binary-xyz` not found in PATH (/custom/hook/bin); shell aliases, functions and shell rc files are not loaded for hooks; use an absolute path or a wrapper script
+    ");
+}
+
 /// Test that hooks are run with stdin closed.
 #[test]
 fn run_with_stdin_closed() {

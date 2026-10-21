@@ -91,6 +91,13 @@ with:
 PREK_NO_FAST_PATH=1 prek run check-yaml --all-files
 ```
 
+## A hook executable is not found
+
+Hooks do not load shell startup files (`~/.zshrc`, `~/.bashrc`), shell aliases,
+or shell functions. If a hook works in an interactive terminal but fails in an
+IDE or Git GUI, use an absolute executable path, a wrapper script, or ensure the
+GUI process inherits the required `PATH`.
+
 ## Cache problems
 
 Inspect the cache before removing anything:
