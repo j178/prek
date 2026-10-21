@@ -1,6 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -674,20 +674,20 @@ pub(crate) async fn extract_metadata(hook: &mut Hook) -> Result<()> {
 
 /// Resolve the actual process invocation, honoring shebangs and PATH lookups.
 pub(crate) fn resolve_command(
-    cmds: Vec<OsString>,
+    mut cmds: Vec<OsString>,
     paths: Option<&OsStr>,
     cwd: &Path,
 ) -> Vec<OsString> {
+    let Some(candidate) = cmds.first() else {
+        return cmds;
+    };
+
     let env_path = if paths.is_none() {
         EnvVars.var_os(EnvVars::PATH)
     } else {
         None
     };
     let paths = paths.or(env_path.as_deref());
-
-    let Some(candidate) = cmds.first() else {
-        return cmds;
-    };
 
     let resolved_binary = which::which_in(candidate, paths, cwd).unwrap_or_else(|_| {
         let candidate = Path::new(candidate);
@@ -703,67 +703,6 @@ pub(crate) fn resolve_command(
         }
     });
 
-    resolve_shebang(cmds, resolved_binary, paths, cwd)
-}
-
-fn resolve_hook_command(
-    cmds: Vec<OsString>,
-    paths: Option<&OsStr>,
-    cwd: &Path,
-) -> Result<Vec<OsString>> {
-    let Some(candidate) = cmds.first() else {
-        return Ok(cmds);
-    };
-
-    let env_path = if paths.is_none() {
-        EnvVars.var_os(EnvVars::PATH)
-    } else {
-        None
-    };
-    let paths = paths.or(env_path.as_deref());
-
-    let resolved_binary = match which::which_in(candidate, paths, cwd) {
-        Ok(binary) => binary,
-        Err(which::Error::CannotFindBinaryPath) => {
-            let candidate_path = Path::new(candidate);
-            let has_parent = candidate_path
-                .parent()
-                .is_some_and(|parent| !parent.as_os_str().is_empty());
-            if candidate_path.is_absolute() || has_parent {
-                let path = cwd.join(candidate_path).clean();
-                if path.is_file() {
-                    path
-                } else {
-                    return Err(executable_not_found_error(candidate, paths));
-                }
-            } else {
-                return Err(executable_not_found_error(candidate, paths));
-            }
-        }
-        Err(_) => PathBuf::from(candidate),
-    };
-
-    Ok(resolve_shebang(cmds, resolved_binary, paths, cwd))
-}
-
-fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyhow::Error {
-    let executable = executable.to_string_lossy();
-    let searched_path = paths
-        .filter(|paths| !paths.is_empty())
-        .map_or_else(|| "<empty>".into(), OsStr::to_string_lossy);
-    anyhow::anyhow!(
-        "Executable `{executable}` not found in PATH ({searched_path}); \
-        shell aliases, functions and shell rc files are not loaded for hooks; \
-        use an absolute path or a wrapper script"
-    )
-}
-
-fn resolve_shebang(
-    mut cmds: Vec<OsString>,
-    resolved_binary: PathBuf,
-    paths: Option<&OsStr>,
-    cwd: &Path,
-) -> Vec<OsString> {
     let Ok(shebang_argv) = parse_shebang(&resolved_binary) else {
         cmds[0] = resolved_binary.into_os_string();
         return cmds;
@@ -799,6 +738,39 @@ fn resolve_shebang(
     shebang_argv
 }
 
+fn resolve_hook_command(
+    cmds: Vec<OsString>,
+    paths: Option<&OsStr>,
+    cwd: &Path,
+) -> Result<Vec<OsString>> {
+    let command = resolve_command(cmds, paths, cwd);
+    if let Some(program) = command.first()
+        && !Path::new(program).is_file()
+    {
+        let env_path = if paths.is_none() {
+            EnvVars.var_os(EnvVars::PATH)
+        } else {
+            None
+        };
+        let paths = paths.or(env_path.as_deref());
+        return Err(executable_not_found_error(program, paths));
+    }
+
+    Ok(command)
+}
+
+fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyhow::Error {
+    let executable = executable.to_string_lossy();
+    let searched_path = paths
+        .filter(|paths| !paths.is_empty())
+        .map_or_else(|| "<empty>".into(), OsStr::to_string_lossy);
+    anyhow::anyhow!(
+        "Executable `{executable}` not found in PATH ({searched_path}); \
+        shell aliases, functions and shell rc files are not loaded for hooks; \
+        use an absolute path or a wrapper script"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
@@ -810,11 +782,21 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{executable_not_found_error, resolve_command};
+    use super::{executable_not_found_error, resolve_command, resolve_hook_command};
     use crate::fs::{CWD, PathClean, make_executable};
 
     fn write_file(path: &Path, contents: &str) {
         fs_err::write(path, contents).expect("write test file");
+    }
+
+    #[test]
+    fn resolve_hook_command_errors_when_not_found() {
+        let cmd = OsString::from("__prek_nonexistent_command__");
+        let err = resolve_hook_command(vec![cmd], None, &CWD).unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("Executable `__prek_nonexistent_command__` not found in PATH (")
+        );
     }
 
     #[test]
