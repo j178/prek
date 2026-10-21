@@ -356,7 +356,8 @@ jobs:
             -E 'binary_id(prek::run) and test(run_basic)'
           echo "::endgroup::"
 
-          for source in github pypi aliyun pip invalid; do
+          # TODO: Restore aliyun once its PyPI mirror has synced uv 0.13.4.
+          for source in github pypi pip invalid; do
             echo "::group::Test install uv from $source"
             export PREK_UV_SOURCE=$source
             cargo llvm-cov nextest \
