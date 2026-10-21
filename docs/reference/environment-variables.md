@@ -76,6 +76,15 @@ With `none`, prek still uses a compatible uv found alongside the prek binary, on
 `PATH`, or in prek's cache. If none is available, prek returns an error instead of
 installing uv. This does not disable Python or package downloads by uv.
 
+### `PREK_UV_VERSION`
+
+Specify the exact uv version to install, for example `PREK_UV_VERSION=0.13.4`.
+If not set, prek uses its default uv version. This applies to all
+[`PREK_UV_SOURCE`](#prek_uv_source) installation sources.
+
+This only affects new uv installations. A compatible uv found alongside prek,
+on `PATH`, or in prek's cache is still reused, even if its version differs.
+
 ### `PREK_NATIVE_TLS`
 
 Use the system trusted store instead of the bundled `webpki-roots` crate.

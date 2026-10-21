@@ -47,6 +47,7 @@ fn uv_source_none() -> anyhow::Result<()> {
 
     cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_UV_SOURCE, "none")
+        .env(EnvVars::PREK_UV_VERSION, "0.0.0")
         .env(EnvVars::PATH, &path), @r#"
     success: true
     exit_code: 0
