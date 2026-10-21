@@ -128,17 +128,17 @@ GitHub stars as of October 8, 2026. For more projects, see the [GitHub dependent
 Show that your project uses prek with a badge in your README:
 
 ```markdown
-[![prek](https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg)](https://github.com/j178/prek)
+[![prek](https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg)](https://github.com/j178/prek)
 ```
 
 ```html
 <a href="https://github.com/j178/prek">
-  <img src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg" alt="prek">
+  <img src="https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg" alt="prek">
 </a>
 ```
 
 ```rst
-.. image:: https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg
+.. image:: https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg
    :target: https://github.com/j178/prek
    :alt: prek
 ```
@@ -1639,12 +1639,12 @@ For fields shared with upstream `pre-commit`, `prek` follows the upstream manife
 
 ### Editor completion and validation
 
-`prek` maintains a [`prek-hooks.schema.json`](<https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json>) schema for `.pre-commit-hooks.yaml`. The schema stays in the `prek` repository instead of being registered with SchemaStore, so editors must opt into it explicitly.
+`prek` maintains a [`prek-hooks.schema.json`](<https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json>) schema for `.pre-commit-hooks.yaml`. The schema stays in the `prek` repository instead of being registered with SchemaStore, so editors must opt into it explicitly.
 
 With YAML Language Server, add this directive at the top of the manifest:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json
 ```
 
 This enables completion and validation for both upstream fields and `prek` extensions such as glob filters, `env`, and `shell`.
@@ -5569,6 +5569,7 @@ This page lists the built-in Rust hooks, their supported arguments, and behavior
 For `repo: builtin`, the following hooks are supported:
 
 - [`trailing-whitespace`](<#trailing-whitespace>) (Trims trailing whitespace.)
+- [`expand-tabs`](<#expand-tabs>) (Replaces tabs with spaces at tab stops.)
 - [`check-added-large-files`](<#check-added-large-files>) (Prevents giant files from being committed.)
 - [`check-case-conflict`](<#check-case-conflict>) (Checks for files that would conflict in case-insensitive filesystems.)
 - [`check-illegal-windows-names`](<#check-illegal-windows-names>) (Checks for filenames which cannot be created on Windows.)
@@ -5675,6 +5676,27 @@ Trims trailing whitespace from each line.
 **Caveats**
 
 - `--markdown-linebreak-ext` values must be extensions only (no path separators).
+
+---
+
+### `expand-tabs`
+
+Expands tabs to the next tab stop, matching [`Lucas-C/pre-commit-hooks`'s `remove-tabs`](<https://github.com/Lucas-C/pre-commit-hooks/blob/master/pre_commit_hooks/remove_tabs.py>). The default width is 4. Columns count bytes, and both CR and LF reset the column. Other bytes and line endings are preserved. A zero or negative width deletes tabs.
+
+By default, this hook selects text files and excludes paths matching `(Makefile|debian/rules|.gitmodules)(\.in)?$`, including their `.in` templates. Override `exclude` to change this selection.
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: expand-tabs
+        args: [--tab-width=4]
+```
+
+- `--tab-width <N>`: Tab stop width (default: `4`).
+- `--check`: Report files containing tabs without modifying them.
+
+Returns a nonzero exit status when tabs are found. Files without tabs are not rewritten. This hook is available through `repo: builtin`.
 
 ---
 
@@ -7202,6 +7224,12 @@ Choose one source for installing uv, the Python package installer. Options:
 If not set, prek tries Astral's CDN, PyPI and its configured mirrors, then `pip` until one succeeds. The `github` source is used only when selected explicitly.
 
 With `none`, prek still uses a compatible uv found alongside the prek binary, on `PATH`, or in prek's cache. If none is available, prek returns an error instead of installing uv. This does not disable Python or package downloads by uv.
+
+### `PREK_UV_VERSION`
+
+Specify the exact uv version to install, for example `PREK_UV_VERSION=0.13.4`. If not set, prek uses its default uv version. This applies to all [`PREK_UV_SOURCE`](<#prek_uv_source>) installation sources.
+
+This only affects new uv installations. A compatible uv found alongside prek, on `PATH`, or in prek's cache is still reused, even if its version differs.
 
 ### `PREK_NATIVE_TLS`
 
