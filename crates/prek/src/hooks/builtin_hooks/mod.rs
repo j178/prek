@@ -23,6 +23,7 @@ mod check_commit_trailers;
 mod check_json5;
 mod check_jsonc;
 mod check_signed_commit;
+mod expand_tabs;
 mod pattern;
 
 #[derive(
@@ -61,6 +62,7 @@ pub(crate) enum BuiltinHooks {
     DestroyedSymlinks,
     DetectPrivateKey,
     EndOfFileFixer,
+    ExpandTabs,
     FileContentsSorter,
     FixByteOrderMarker,
     ForbidNewSubmodules,
@@ -89,6 +91,7 @@ impl BuiltinHooks {
             Self::EndOfFileFixer | Self::FixByteOrderMarker | Self::RequirementsTxtFixer => {
                 FixArgs::command()
             }
+            Self::ExpandTabs => expand_tabs::Args::command(),
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
@@ -142,6 +145,7 @@ impl BuiltinHooks {
             Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
             Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
             Self::EndOfFileFixer => Box::pin(fix_end_of_file::run(hook, filenames)),
+            Self::ExpandTabs => Box::pin(expand_tabs::run(hook, filenames)),
             Self::FileContentsSorter => Box::pin(file_contents_sorter::run(hook, filenames)),
             Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker::run(hook, filenames)),
             Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules::run(hook, filenames)),
@@ -456,6 +460,26 @@ impl BuiltinHook {
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::ExpandTabs => BuiltinHook {
+                id: "expand-tabs".to_string(),
+                name: "expand tabs".to_string(),
+                entry: "expand-tabs".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some("Replaces tabs with spaces at tab stops.".to_string()),
+                    types: Some(tags::TAG_SET_TEXT),
+                    exclude: Some(
+                        FilePattern::regex(r"(Makefile|debian/rules|.gitmodules)(\.in)?$")
+                            .map_err(|_| ())?,
+                    ),
+                    stages: Some(
+                        [Stage::PreCommit, Stage::PreMergeCommit, Stage::PrePush, Stage::Manual]
+                            .into(),
+                    ),
                     ..Default::default()
                 },
             },

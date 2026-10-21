@@ -1102,6 +1102,7 @@
         "destroyed-symlinks",
         "detect-private-key",
         "end-of-file-fixer",
+        "expand-tabs",
         "file-contents-sorter",
         "fix-byte-order-marker",
         "forbid-new-submodules",
