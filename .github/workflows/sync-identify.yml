@@ -38,5 +38,5 @@ jobs:
           branch: "sync-identify-tags"
           title: "Sync latest identify tags"
           body: "Automated update for identify tags."
-          base: "master"
+          base: "main"
           draft: true
