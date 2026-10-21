@@ -693,7 +693,7 @@ pub(crate) fn resolve_command(
         let candidate = Path::new(candidate);
         // `which_in` only returns executable files. Resolve an explicit relative
         // path against `cwd` so its shebang can still be inspected.
-        if candidate.is_absolute() || has_parent(candidate) {
+        if is_explicit_path(candidate) {
             cwd.join(candidate).clean()
         } else {
             candidate.into()
@@ -757,19 +757,25 @@ fn resolve_hook_command(
     Ok(command)
 }
 
-fn has_parent(path: &Path) -> bool {
-    path.parent()
-        .is_some_and(|parent| !parent.as_os_str().is_empty())
+fn is_explicit_path(path: &Path) -> bool {
+    path.is_absolute()
+        || path
+            .parent()
+            .is_some_and(|parent| !parent.as_os_str().is_empty())
 }
 
 fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
-    if program.is_absolute() || has_parent(program) {
+    if is_explicit_path(program) {
         return cwd.join(program).is_file();
     }
 
-    let Some(paths) = paths.filter(|paths| !paths.is_empty()) else {
-        return false;
+    // When `PATH` is unset, let process spawn use the OS default search path.
+    let Some(paths) = paths else {
+        return true;
     };
+    if paths.is_empty() {
+        return false;
+    }
 
     // `which_in` skips non-executable files on Unix. Keep bare commands that
     // exist in `PATH` so process spawn reports `Permission denied`.
@@ -777,7 +783,12 @@ fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
 }
 
 fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyhow::Error {
+    let executable_path = Path::new(executable);
     let executable = executable.to_string_lossy();
+    if is_explicit_path(executable_path) {
+        return anyhow::anyhow!("Executable `{executable}` does not exist");
+    }
+
     let searched_path = paths
         .filter(|paths| !paths.is_empty())
         .map_or_else(|| "<empty>".into(), OsStr::to_string_lossy);
@@ -799,7 +810,9 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{executable_not_found_error, resolve_command, resolve_hook_command};
+    use super::{
+        executable_not_found_error, program_exists, resolve_command, resolve_hook_command,
+    };
     use crate::fs::{CWD, PathClean, make_executable};
 
     fn write_file(path: &Path, contents: &str) {
@@ -847,6 +860,38 @@ mod tests {
         assert!(
             err.to_string()
                 .starts_with("Executable `my-tool` not found in PATH (<empty>);")
+        );
+    }
+
+    #[test]
+    fn program_exists_preserves_default_lookup_when_path_unset() {
+        assert!(program_exists(Path::new("sh"), None, &CWD));
+    }
+
+    #[test]
+    fn resolve_hook_command_errors_for_missing_explicit_paths() {
+        let dir = tempdir().expect("create temp dir");
+        let missing_abs = dir.path().join("missing-tool");
+        let err = resolve_hook_command(
+            vec![missing_abs.clone().into_os_string()],
+            Some(OsString::from("/usr/bin").as_os_str()),
+            dir.path(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("Executable `{}` does not exist", missing_abs.display())
+        );
+
+        let err = resolve_hook_command(
+            vec![OsString::from("./missing-tool")],
+            Some(OsString::from("/usr/bin").as_os_str()),
+            dir.path(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("Executable `{}` does not exist", missing_abs.display())
         );
     }
 
