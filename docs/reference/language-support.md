@@ -523,8 +523,6 @@ prek uses `uv` for creating virtual environments and installing dependencies:
 
 Set [`PREK_UV_SOURCE=none`](environment-variables.md#prek_uv_source) to
 disable automatic uv installation and require an existing compatible uv.
-Set [`PREK_UV_VERSION`](environment-variables.md#prek_uv_version) to choose the
-version used for new uv installations.
 
 !!! warning "Environment variables"
 
