@@ -34,26 +34,26 @@
 
 Show that your project uses prek with a badge in your README:
 
-[![prek](https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg)](https://github.com/j178/prek)
+[![prek](https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg)](https://github.com/j178/prek)
 
 === "Markdown"
 
     ```markdown
-    [![prek](https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg)](https://github.com/j178/prek)
+    [![prek](https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg)](https://github.com/j178/prek)
     ```
 
 === "HTML"
 
     ```html
     <a href="https://github.com/j178/prek">
-      <img src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg" alt="prek">
+      <img src="https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg" alt="prek">
     </a>
     ```
 
 === "reStructuredText (RST)"
 
     ```rst
-    .. image:: https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg
+    .. image:: https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg
        :target: https://github.com/j178/prek
        :alt: prek
     ```
