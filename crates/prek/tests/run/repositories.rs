@@ -1,5 +1,4 @@
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 
 use crate::common::{TestEnv, cmd_snapshot};
@@ -170,25 +169,132 @@ fn skipped_remote_repo_is_not_cloned() {
           - repo: builtin
             hooks:
               - id: end-of-file-fixer
-
+        "})
+        .with_file(
+            "child/.pre-commit-config.yaml",
+            indoc::indoc! {r"
+        repos:
           - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
             rev: v1.0.0
             hooks:
-              - id: ruff-check
-        "})
+              - id: end-of-file-fixer
+        "},
+        )
         .init_git();
 
     cmd_snapshot!(context,
-        context.run().arg("--all-files").arg("--skip").arg("ruff-check"),
-        @r"
+        context.run().args(["--all-files", "--skip", "child:end-of-file-fixer"]),
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
-    fix end of files.........................................................Passed
+    ✓ child
+      end-of-file-fixer.....................................................Skipped
+    ✓ <workspace>
+      fix end of files.......................................................Passed
 
     ----- stderr -----
     "
     );
+}
+
+#[test]
+fn all_remote_hooks_skipped() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: first
+              - id: second
+                name: Second hook
+                alias: second-alias
+                stages: [pre-commit]
+        "})
+        .init_git();
+
+    cmd_snapshot!(context, context.run().env("SKIP", "first,second-alias"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    first...................................................................Skipped
+    Second hook.............................................................Skipped
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run().env("SKIP", "first,second-alias").arg("second-alias"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Second hook.............................................................Skipped
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run().env("SKIP", "first,second-alias").args(["--hide-status", "skipped"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn skipped_remote_hooks_respect_filters_and_order() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        priorities:
+          checks: 1
+        default_stages: [pre-commit]
+        repos:
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: first
+                name: First hook
+                priority: checks
+                groups: [ci]
+              - id: manual-only
+                stages: [manual]
+                groups: [ci]
+              - id: excluded
+                groups: [slow]
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+                priority: checks
+                groups: [ci]
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
+            rev: v2.0.0
+            hooks:
+              - id: last
+                priority: checks
+                groups: [ci]
+        "})
+        .init_git();
+
+    cmd_snapshot!(context, context.run()
+        .args(["--group", "ci", "--stage", "pre-commit", "--skip", "first", "--skip", "manual-only", "--skip", "last"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    First hook..............................................................Skipped
+    fix end of files.........................................................Passed
+    last....................................................................Skipped
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run()
+        .args(["--group", "ci", "--stage", "manual", "--skip", "first", "--skip", "manual-only", "--skip", "last"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    manual-only.............................................................Skipped
+    fix end of files.........................................................Passed
+
+    ----- stderr -----
+    ");
 }
 
 #[test]
@@ -221,13 +327,15 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() {
     ", repo = hook_repo});
     context.git().add(".");
 
-    context
-        .run()
-        .arg("--all-files")
-        .arg("--skip")
-        .arg("missing-hook")
-        .assert()
-        .success();
+    cmd_snapshot!(context, context.run().args(["--all-files", "--skip", "missing-hook"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    missing-hook............................................................Skipped
+    Test Hook................................................................Passed
+
+    ----- stderr -----
+    ");
 }
 
 #[test]

@@ -107,20 +107,23 @@ impl<'a> HookInitFilters<'a> {
 /// Repository entries to initialize for one project, in configuration order.
 struct ProjectInitPlan<'a> {
     project: &'a Arc<Project>,
-    repo_configs: Vec<&'a config::Repo>,
+    repo_configs: Vec<(usize, &'a config::Repo)>,
 }
 
 impl<'a> ProjectInitPlan<'a> {
     fn new(project: &'a Arc<Project>, filters: HookInitFilters<'_>) -> Self {
         let mut repo_configs = Vec::with_capacity(project.config.repos.len());
+        let mut hook_idx = 0;
 
         for repo_config in &project.config.repos {
+            let first_hook_idx = hook_idx;
+            hook_idx += repo_config.hooks().count();
             if let config::Repo::Remote(repo) = repo_config {
                 if !filters.keeps_remote_repo(project, repo) {
                     continue;
                 }
             }
-            repo_configs.push(repo_config);
+            repo_configs.push((first_hook_idx, repo_config));
         }
 
         Self {
@@ -135,7 +138,7 @@ fn remote_configs_to_clone<'a>(projects: &[ProjectInitPlan<'a>]) -> Vec<&'a conf
     let mut remote_configs = Vec::new();
 
     for project in projects {
-        for &repo_config in &project.repo_configs {
+        for &(_, repo_config) in &project.repo_configs {
             let config::Repo::Remote(repo) = repo_config else {
                 continue;
             };
@@ -376,19 +379,14 @@ impl Project {
     ) -> Result<Vec<Hook>, Error> {
         let project = Arc::clone(plan.project);
         let mut hooks = Vec::new();
-        let mut push_hook = async |repo: &Arc<Repo>, hook_spec: HookSpec| {
-            let hook = Hook::from_spec(
-                Arc::clone(&project),
-                Arc::clone(repo),
-                hook_spec,
-                hooks.len(),
-            )
-            .await?;
+        let mut push_hook = async |repo: &Arc<Repo>, hook_spec: HookSpec, idx: usize| {
+            let hook =
+                Hook::from_spec(Arc::clone(&project), Arc::clone(repo), hook_spec, idx).await?;
             hooks.push(hook);
             Ok::<_, Error>(())
         };
 
-        for repo_config in plan.repo_configs {
+        for (first_hook_idx, repo_config) in plan.repo_configs {
             let repo = match repo_config {
                 config::Repo::Remote(repo_config) => {
                     let repo = remote_repos
@@ -403,7 +401,7 @@ impl Project {
 
             match repo_config {
                 config::Repo::Remote(repo_config) => {
-                    for hook_config in &repo_config.hooks {
+                    for (idx, hook_config) in repo_config.hooks.iter().enumerate() {
                         let Some(manifest_hook) = repo.manifest_hook(&hook_config.id) else {
                             return Err(Error::HookNotFound {
                                 hook: hook_config.id.clone(),
@@ -413,25 +411,25 @@ impl Project {
 
                         let hook_spec = HookSpec::from_remote(manifest_hook.clone(), hook_config);
 
-                        push_hook(&repo, hook_spec).await?;
+                        push_hook(&repo, hook_spec, first_hook_idx + idx).await?;
                     }
                 }
                 config::Repo::Local(repo_config) => {
-                    for hook_config in &repo_config.hooks {
+                    for (idx, hook_config) in repo_config.hooks.iter().enumerate() {
                         let hook_spec = HookSpec::from(hook_config.clone());
-                        push_hook(&repo, hook_spec).await?;
+                        push_hook(&repo, hook_spec, first_hook_idx + idx).await?;
                     }
                 }
                 config::Repo::Meta(repo_config) => {
-                    for hook_config in &repo_config.hooks {
+                    for (idx, hook_config) in repo_config.hooks.iter().enumerate() {
                         let hook_spec = HookSpec::from(hook_config.clone());
-                        push_hook(&repo, hook_spec).await?;
+                        push_hook(&repo, hook_spec, first_hook_idx + idx).await?;
                     }
                 }
                 config::Repo::Builtin(repo_config) => {
-                    for hook_config in &repo_config.hooks {
+                    for (idx, hook_config) in repo_config.hooks.iter().enumerate() {
                         let hook_spec = HookSpec::from(hook_config.clone());
-                        push_hook(&repo, hook_spec).await?;
+                        push_hook(&repo, hook_spec, first_hook_idx + idx).await?;
                     }
                 }
             }
@@ -874,6 +872,9 @@ impl Workspace {
     }
 
     /// Load and prepare hooks for all projects.
+    ///
+    /// Hooks preserve project and configuration order, with their original configuration indexes
+    /// even when repository entries are filtered out.
     pub(crate) async fn init_hooks(
         &self,
         store: &Store,

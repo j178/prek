@@ -292,12 +292,21 @@ impl Selectors {
 
     /// Select a hook and retain whether an explicit skip caused its exclusion.
     pub(super) fn select_hook(&self, hook: &Hook) -> HookSelection {
+        self.select_matching_hook(|selector| selector.matches_hook(hook))
+    }
+
+    /// Select a hook using only the ID and alias available in the project config.
+    pub(super) fn select_configured_hook(&self, hook: &ConfiguredHook<'_>) -> HookSelection {
+        self.select_matching_hook(|selector| selector.matches_configured_hook(hook))
+    }
+
+    fn select_matching_hook(&self, matches: impl Fn(&Selector) -> bool) -> HookSelection {
         let mut usage = self.usage.lock().unwrap();
 
         // Always check every selector to track usage
         let mut skipped = false;
         for (idx, skip) in self.skips.iter().enumerate() {
-            if skip.matches_hook(hook) {
+            if matches(skip) {
                 usage.use_exclude(idx);
                 skipped = true;
             }
@@ -307,7 +316,7 @@ impl Selectors {
         } else {
             let mut included = false;
             for (idx, include) in self.includes.iter().enumerate() {
-                if include.matches_hook(hook) {
+                if matches(include) {
                     usage.use_include(idx);
                     included = true;
                 }

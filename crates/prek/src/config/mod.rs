@@ -23,7 +23,7 @@ pub(crate) use pattern::{FilePattern, GlobPatterns};
 pub(crate) use priority::{Priority, PriorityAlias, validate_group_name};
 #[cfg(feature = "schemars")]
 pub(crate) use repo::{BuiltinRepo, LocalRepo, MetaRepo};
-pub(crate) use repo::{RemoteRepo, RemoteRepoKey, Repo};
+pub(crate) use repo::{HookConfigRef, RemoteRepo, RemoteRepoKey, Repo};
 pub(crate) use update::{StringOrList, UpdateOptions};
 
 use crate::fs::Simplified;

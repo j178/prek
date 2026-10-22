@@ -145,6 +145,7 @@ pub(crate) struct HookConfigRef<'a> {
     /// The hook name available without resolving a remote manifest.
     pub(crate) name: Option<&'a str>,
     pub(crate) priority: Option<&'a Priority>,
+    pub(crate) groups: Option<&'a [String]>,
     pub(crate) options: &'a HookOptions,
 }
 
@@ -154,6 +155,7 @@ impl<'a> From<&'a RemoteHook> for HookConfigRef<'a> {
             id: &hook.id,
             name: hook.name.as_deref(),
             priority: hook.priority.as_ref(),
+            groups: hook.groups.as_deref(),
             options: &hook.options,
         }
     }
@@ -165,6 +167,7 @@ impl<'a> From<&'a LocalHook> for HookConfigRef<'a> {
             id: &hook.id,
             name: Some(hook.name.as_str()),
             priority: hook.priority.as_ref(),
+            groups: hook.groups.as_deref(),
             options: &hook.options,
         }
     }
@@ -176,6 +179,7 @@ impl<'a> From<&'a MetaHook> for HookConfigRef<'a> {
             id: &hook.id,
             name: Some(hook.name.as_str()),
             priority: hook.priority.as_ref(),
+            groups: hook.groups.as_deref(),
             options: &hook.options,
         }
     }
@@ -187,6 +191,7 @@ impl<'a> From<&'a BuiltinHook> for HookConfigRef<'a> {
             id: &hook.id,
             name: Some(hook.name.as_str()),
             priority: hook.priority.as_ref(),
+            groups: hook.groups.as_deref(),
             options: &hook.options,
         }
     }

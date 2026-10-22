@@ -24,14 +24,15 @@ use crate::cli::run::filter::{RunInputMode, stage_uses_message_file_input};
 use crate::cli::run::install::{InstallCache, install_hooks};
 use crate::cli::run::stash::{RestoreOutcome, WorktreeStash};
 use crate::cli::run::{
-    CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
-    ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
+    CollectOptions, ConfiguredHook, FileSelection, FileTagCache, GroupFilters, HookFileFilter,
+    HookRunReporter, ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input,
+    project_status_marker,
 };
 use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
 use crate::concurrency::HOOK_CONCURRENCY;
-use crate::config::{HideStatus, PassFilenames, Stage};
+use crate::config::{self, HideStatus, PassFilenames, Stage, Stages};
 use crate::fs::CWD;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, HookKey, InstalledHook, SkippedHook};
 use crate::printer::Printer;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
@@ -45,7 +46,7 @@ use super::{DRY_RUN, FAILED, PASSED, SKIPPED};
 #[derive(Clone)]
 enum HookPlan<T> {
     Run(T),
-    Skip(Arc<Hook>),
+    Skip(Arc<SkippedHook>),
 }
 
 impl<T> HookPlan<T> {
@@ -57,16 +58,49 @@ impl<T> HookPlan<T> {
     }
 }
 
-impl<T> Deref for HookPlan<T>
+impl<T> HookPlan<T>
 where
     T: Deref<Target = Hook>,
 {
-    type Target = Hook;
-
-    fn deref(&self) -> &Self::Target {
+    fn project(&self) -> &Project {
         match self {
-            Self::Run(hook) => hook,
-            Self::Skip(hook) => hook,
+            Self::Run(hook) => hook.project(),
+            Self::Skip(hook) => &hook.project,
+        }
+    }
+
+    fn idx(&self) -> usize {
+        match self {
+            Self::Run(hook) => hook.idx,
+            Self::Skip(hook) => hook.idx,
+        }
+    }
+
+    fn id(&self) -> &str {
+        match self {
+            Self::Run(hook) => &hook.id,
+            Self::Skip(hook) => &hook.id,
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            Self::Run(hook) => &hook.name,
+            Self::Skip(hook) => &hook.name,
+        }
+    }
+
+    fn stages(&self) -> Stages {
+        match self {
+            Self::Run(hook) => hook.stages,
+            Self::Skip(hook) => hook.stages,
+        }
+    }
+
+    fn priority(&self) -> u32 {
+        match self {
+            Self::Run(hook) => hook.priority,
+            Self::Skip(hook) => hook.priority,
         }
     }
 }
@@ -167,14 +201,48 @@ pub(crate) async fn run(
             .await
             .context("Failed to init hooks")?
     };
+    let mut initialized_hooks = hooks.into_iter().peekable();
     let mut selected_hooks = Vec::new();
-    for hook in hooks {
-        let hook = match selectors.select_hook(&hook) {
-            HookSelection::Selected => HookPlan::Run(Arc::new(hook)),
-            HookSelection::Skipped => HookPlan::Skip(Arc::new(hook)),
-            HookSelection::NotSelected => continue,
-        };
-        if group_filters.matches_hook(&hook) {
+    for project in workspace.projects() {
+        for (idx, config) in project
+            .config()
+            .repos
+            .iter()
+            .flat_map(config::Repo::hooks)
+            .enumerate()
+        {
+            let key = HookKey {
+                project_idx: project.idx(),
+                hook_idx: idx,
+            };
+            let hook = if let Some(hook) = initialized_hooks.next_if(|hook| hook.key() == key) {
+                let selection = selectors.select_hook(&hook);
+                if selection == HookSelection::NotSelected || !group_filters.matches_hook(&hook) {
+                    continue;
+                }
+                match selection {
+                    HookSelection::Selected => HookPlan::Run(Arc::new(hook)),
+                    HookSelection::Skipped => HookPlan::Skip(Arc::new(SkippedHook::from(hook))),
+                    HookSelection::NotSelected => continue,
+                }
+            } else {
+                let configured_hook = ConfiguredHook::new(
+                    project.relative_path(),
+                    config.id,
+                    config.options.alias.as_deref(),
+                    config.groups,
+                );
+                if selectors.select_configured_hook(&configured_hook) != HookSelection::Skipped
+                    || !group_filters.matches_configured_hook(&configured_hook)
+                {
+                    continue;
+                }
+                HookPlan::Skip(Arc::new(SkippedHook::from_config(
+                    Arc::clone(project),
+                    &config,
+                    idx,
+                )?))
+            };
             selected_hooks.push(hook);
         }
     }
@@ -204,11 +272,11 @@ pub(crate) async fn run(
     let (stage_filter, input_mode) =
         infer_stage_and_input_mode(hook_stage, has_group_filters, &selected_hooks, &selectors);
     if let Some(stage_filter) = stage_filter {
-        selected_hooks.retain(|h| h.stages.contains(stage_filter));
+        selected_hooks.retain(|h| h.stages().contains(stage_filter));
     } else {
         // Group selection without an explicit stage uses normal file input, so
         // hooks that can only consume Git message files cannot run correctly.
-        selected_hooks.retain(|hook| !uses_only_message_file_input(hook));
+        selected_hooks.retain(|hook| !uses_only_message_file_input(hook.stages()));
     }
 
     if selected_hooks.is_empty() {
@@ -225,7 +293,7 @@ pub(crate) async fn run(
 
     debug!(
         "Hooks going to run: {:?}",
-        selected_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
+        selected_hooks.iter().map(HookPlan::id).collect::<Vec<_>>()
     );
 
     // Clear any unstaged changes from the git working directory.
@@ -347,11 +415,13 @@ fn infer_stage_and_input_mode(
 
     // Preserve legacy direct-hook execution: try `manual` only when the user
     // named hooks directly and none of those hooks can run as `pre-commit`.
-    let has_runnable_pre_commit_hook = selected_hooks
+    // If every hook is skipped, use their stages to keep their reports visible.
+    let has_runnable_hooks = selected_hooks.iter().any(|hook| hook.as_run().is_some());
+    let has_pre_commit_hook = selected_hooks
         .iter()
-        .filter_map(HookPlan::as_run)
-        .any(|hook| hook.stages.contains(Stage::PreCommit));
-    let stage = if selectors.includes_only_hook_targets() && !has_runnable_pre_commit_hook {
+        .filter(|hook| !has_runnable_hooks || hook.as_run().is_some())
+        .any(|hook| hook.stages().contains(Stage::PreCommit));
+    let stage = if selectors.includes_only_hook_targets() && !has_pre_commit_hook {
         Stage::Manual
     } else {
         Stage::PreCommit
@@ -359,8 +429,8 @@ fn infer_stage_and_input_mode(
     (Some(stage), RunInputMode::from(stage))
 }
 
-fn uses_only_message_file_input(hook: &Hook) -> bool {
-    !hook.stages.is_empty() && hook.stages.iter().all(stage_uses_message_file_input)
+fn uses_only_message_file_input(stages: Stages) -> bool {
+    !stages.is_empty() && stages.iter().all(stage_uses_message_file_input)
 }
 
 // `pre-commit` sets these environment variables for other git hooks.
@@ -585,7 +655,7 @@ async fn run_hooks<'paths>(
 
             // Sort hooks by priority (lower number means higher priority).
             // If two hooks have the same priority, preserve their original order from the config.
-            hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
+            hooks.sort_by_key(|hook| (hook.priority(), hook.idx()));
 
             project_runs.push(ProjectRun {
                 project,
@@ -737,7 +807,7 @@ impl PriorityGroupResult {
     fn hook_fail_fast(&self) -> bool {
         self.results.iter().any(|result| {
             result.status.was_executed()
-                && result.hook.fail_fast
+                && result.hook.as_run().is_some_and(|hook| hook.fail_fast)
                 && (self.modification.is_some() || result.status.is_failure())
         })
     }
@@ -949,8 +1019,8 @@ impl<'a> HookRunSession<'a> {
     ) -> Result<Vec<HookRunResult>> {
         debug!(
             "Running priority group with priority {}: {:?}",
-            group_hooks[0].priority,
-            group_hooks.iter().map(|hook| &hook.id).collect::<Vec<_>>()
+            group_hooks[0].priority(),
+            group_hooks.iter().map(HookPlan::id).collect::<Vec<_>>()
         );
 
         let runs = FuturesUnordered::new();
@@ -971,14 +1041,17 @@ impl<'a> HookRunSession<'a> {
 
     fn update_live_priority_group(&self, group: &PriorityGroupResult, filter: ReportFilter<'_>) {
         for result in &group.results {
+            let Some(hook) = result.hook.as_run() else {
+                continue;
+            };
             let status = result.status;
             match status {
                 RunStatus::Passed | RunStatus::Failed if filter.shows(status) => {
                     self.reporter
-                        .on_run_result(&result.hook, status == RunStatus::Passed);
+                        .on_run_result(hook, status == RunStatus::Passed);
                 }
                 RunStatus::Passed | RunStatus::Failed => {
-                    self.reporter.hide_run_result(&result.hook);
+                    self.reporter.hide_run_result(hook);
                 }
                 RunStatus::DryRun | RunStatus::Skipped(_) => {}
             }
@@ -1012,7 +1085,9 @@ impl<'a> HookRunSession<'a> {
         filter: ReportFilter<'_>,
     ) -> Result<()> {
         // Print results in a stable order (same order as config within the project).
-        group.results.sort_unstable_by_key(|result| result.hook.idx);
+        group
+            .results
+            .sort_unstable_by_key(|result| result.hook.idx());
 
         self.failed |= group.failed();
         self.modified_files |= group.modification.is_some();
@@ -1078,7 +1153,7 @@ impl<'a> HookRunSession<'a> {
             first_result = false;
             let prefix = format!("{hook_prefix}{connector}");
             self.status_printer
-                .write(&result.hook.name, &prefix, status)?;
+                .write(result.hook.name(), &prefix, status)?;
 
             if !status.is_skipped() && result.shows_details(self.verbose) {
                 self.render_hook_details(
@@ -1094,7 +1169,7 @@ impl<'a> HookRunSession<'a> {
             for result in group_results {
                 if !result.status.was_executed() && filter.shows(result.status) {
                     self.status_printer
-                        .write(&result.hook.name, hook_prefix, result.status)?;
+                        .write(result.hook.name(), hook_prefix, result.status)?;
                 }
             }
         }
@@ -1109,6 +1184,9 @@ impl<'a> HookRunSession<'a> {
         group_output_prefix: Option<&str>,
         modified_files: bool,
     ) -> Result<()> {
+        let Some(hook) = result.hook.as_run() else {
+            return Ok(());
+        };
         let detail_prefix = group_output_prefix.unwrap_or(hook_prefix);
         let mut stdout = if result.status.is_failure() {
             self.printer.stdout_important()
@@ -1119,16 +1197,16 @@ impl<'a> HookRunSession<'a> {
         writeln!(
             stdout,
             "{detail_prefix}{}",
-            format!("- hook id: {}", result.hook.id).dimmed()
+            format!("- hook id: {}", hook.id).dimmed()
         )?;
-        if !result.hook.alias.is_empty() && result.hook.alias != result.hook.id {
+        if !hook.alias.is_empty() && hook.alias != hook.id {
             writeln!(
                 stdout,
                 "{detail_prefix}{}",
-                format!("- hook alias: {}", result.hook.alias).dimmed()
+                format!("- hook alias: {}", hook.alias).dimmed()
             )?;
         }
-        if let Some(description) = result.hook.description.as_deref()
+        if let Some(description) = hook.description.as_deref()
             && let Some(description) = description.trim().lines().next()
         {
             let description = description.trim_end().trim_end_matches('.');
@@ -1138,7 +1216,7 @@ impl<'a> HookRunSession<'a> {
                 format!("- description: {description}").dimmed()
             )?;
         }
-        if self.verbose || result.hook.verbose {
+        if self.verbose || hook.verbose {
             writeln!(
                 stdout,
                 "{detail_prefix}{}",
@@ -1161,7 +1239,7 @@ impl<'a> HookRunSession<'a> {
         }
 
         let output = result.output.trim_ascii();
-        if output.is_empty() || result.hook.log_file.is_some() {
+        if output.is_empty() || hook.log_file.is_some() {
             return Ok(());
         }
         let text = sanitize_output(output);
@@ -1258,11 +1336,11 @@ impl Iterator for PriorityGroups {
 
     fn next(&mut self) -> Option<Self::Item> {
         let first = self.hooks.first()?;
-        let priority = first.priority;
+        let priority = first.priority();
         let next_priority = self
             .hooks
             .iter()
-            .position(|hook| hook.priority != priority)
+            .position(|hook| hook.priority() != priority)
             .unwrap_or(self.hooks.len());
 
         Some(self.hooks.drain(..next_priority).collect())
@@ -1457,13 +1535,10 @@ struct StatusPrinter {
 }
 
 impl StatusPrinter {
-    fn for_hooks<T>(hooks: &[T], printer: Printer) -> Self
-    where
-        T: Deref<Target = Hook>,
-    {
+    fn for_hooks(hooks: &[ScheduledHook], printer: Printer) -> Self {
         let name_len = hooks
             .iter()
-            .map(|hook| hook.name.width())
+            .map(|hook| hook.name().width())
             .max()
             .unwrap_or(0);
         let widest_status = RunStatus::Skipped(SkipReason::NoFiles);
@@ -1540,11 +1615,16 @@ impl HookRunResult {
     }
 
     fn shows_details(&self, verbose: bool) -> bool {
-        verbose || self.hook.verbose || self.status.is_failure()
+        self.hook
+            .as_run()
+            .is_some_and(|hook| verbose || hook.verbose || self.status.is_failure())
     }
 
     fn write_log_file(&self) -> Result<()> {
-        let Some(file) = self.hook.log_file.as_deref() else {
+        let Some(hook) = self.hook.as_run() else {
+            return Ok(());
+        };
+        let Some(file) = hook.log_file.as_deref() else {
             return Ok(());
         };
         let output = self.output.trim_ascii();
@@ -1600,7 +1680,7 @@ async fn run_hook(
         matched,
         filenames = filename_count,
         "Files for hook `{}` after filtering",
-        hook.id,
+        installed_hook.id,
     );
 
     if !matched && !installed_hook.always_run {

@@ -355,6 +355,59 @@ pub(crate) struct HookKey {
     pub(crate) hook_idx: usize,
 }
 
+/// Scheduling and display information for a hook that will not be executed.
+#[derive(Debug, Clone)]
+pub(crate) struct SkippedHook {
+    pub project: Arc<Project>,
+    pub idx: usize,
+    pub id: String,
+    pub name: String,
+    pub stages: Stages,
+    pub priority: u32,
+}
+
+impl SkippedHook {
+    pub(crate) fn from_config(
+        project: Arc<Project>,
+        hook: &config::HookConfigRef<'_>,
+        idx: usize,
+    ) -> Result<Self, Error> {
+        let priority = match hook.priority {
+            Some(priority) => priority.resolve(&project.config().priorities, hook.id)?,
+            None => u32::try_from(idx).map_err(|error| hook_error(hook.id, error))?,
+        };
+        let stages = hook
+            .options
+            .stages
+            .filter(|stages| !stages.is_empty())
+            .or(project.config().default_stages)
+            .unwrap_or(Stages::ALL);
+
+        Ok(Self {
+            project,
+            idx,
+            id: hook.id.to_owned(),
+            // The manifest name is unavailable when cloning was skipped.
+            name: hook.name.unwrap_or(hook.id).to_owned(),
+            stages,
+            priority,
+        })
+    }
+}
+
+impl From<Hook> for SkippedHook {
+    fn from(hook: Hook) -> Self {
+        Self {
+            project: hook.project,
+            idx: hook.idx,
+            id: hook.id,
+            name: hook.name,
+            stages: hook.stages,
+            priority: hook.priority,
+        }
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
