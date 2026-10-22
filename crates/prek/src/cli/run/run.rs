@@ -90,9 +90,9 @@ where
         }
     }
 
-    fn stages(&self) -> Stages {
+    fn stages(&self) -> Option<Stages> {
         match self {
-            Self::Run(hook) => hook.stages,
+            Self::Run(hook) => Some(hook.stages),
             Self::Skip(hook) => hook.stages,
         }
     }
@@ -275,11 +275,17 @@ pub(crate) async fn run(
     let (stage_filter, input_mode) =
         infer_stage_and_input_mode(hook_stage, has_group_filters, &selected_hooks, &selectors);
     if let Some(stage_filter) = stage_filter {
-        selected_hooks.retain(|h| h.stages().contains(stage_filter));
+        selected_hooks.retain(|hook| {
+            hook.stages()
+                .is_none_or(|stages| stages.contains(stage_filter))
+        });
     } else {
         // Group selection without an explicit stage uses normal file input, so
         // hooks that can only consume Git message files cannot run correctly.
-        selected_hooks.retain(|hook| !uses_only_message_file_input(hook.stages()));
+        selected_hooks.retain(|hook| {
+            hook.stages()
+                .is_none_or(|stages| !uses_only_message_file_input(stages))
+        });
     }
 
     if selected_hooks.is_empty() {
@@ -418,12 +424,13 @@ fn infer_stage_and_input_mode(
 
     // Preserve legacy direct-hook execution: try `manual` only when the user
     // named hooks directly and none of those hooks can run as `pre-commit`.
-    // If every hook is skipped, use their stages to keep their reports visible.
+    // If every hook is skipped, use their known stages to keep their reports visible.
     let has_runnable_hooks = selected_hooks.iter().any(|hook| hook.as_run().is_some());
     let has_pre_commit_hook = selected_hooks
         .iter()
         .filter(|hook| !has_runnable_hooks || hook.as_run().is_some())
-        .any(|hook| hook.stages().contains(Stage::PreCommit));
+        .filter_map(HookPlan::stages)
+        .any(|stages| stages.contains(Stage::PreCommit));
     let stage = if selectors.includes_only_hook_targets() && !has_pre_commit_hook {
         Stage::Manual
     } else {

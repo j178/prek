@@ -362,7 +362,8 @@ pub(crate) struct SkippedHook {
     pub idx: usize,
     pub id: String,
     pub name: String,
-    pub stages: Stages,
+    /// Unknown when the manifest is unavailable and stages were not overridden.
+    pub stages: Option<Stages>,
     pub priority: u32,
 }
 
@@ -376,12 +377,13 @@ impl SkippedHook {
             Some(priority) => priority.resolve(&project.config().priorities, hook.id)?,
             None => u32::try_from(idx).map_err(|error| hook_error(hook.id, error))?,
         };
-        let stages = hook
-            .options
-            .stages
-            .filter(|stages| !stages.is_empty())
-            .or(project.config().default_stages)
-            .unwrap_or(Stages::ALL);
+        let stages = hook.options.stages.map(|stages| {
+            if stages.is_empty() {
+                project.config().default_stages.unwrap_or(Stages::ALL)
+            } else {
+                stages
+            }
+        });
 
         Ok(Self {
             project,
@@ -402,7 +404,7 @@ impl From<Hook> for SkippedHook {
             idx: hook.idx,
             id: hook.id,
             name: hook.name,
-            stages: hook.stages,
+            stages: Some(hook.stages),
             priority: hook.priority,
         }
     }

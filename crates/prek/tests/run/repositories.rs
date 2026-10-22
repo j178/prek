@@ -211,10 +211,14 @@ fn all_remote_hooks_skipped() {
                 name: Second hook
                 alias: second-alias
                 stages: [pre-commit]
+              - id: manual-only
+                stages: [manual]
         "})
         .init_git();
 
-    cmd_snapshot!(context, context.run().env("SKIP", "first,second-alias"), @"
+    let skips = "first,second-alias,manual-only";
+
+    cmd_snapshot!(context, context.run().env("SKIP", skips), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -223,7 +227,7 @@ fn all_remote_hooks_skipped() {
 
     ----- stderr -----
     ");
-    cmd_snapshot!(context, context.run().env("SKIP", "first,second-alias").arg("second-alias"), @"
+    cmd_snapshot!(context, context.run().env("SKIP", skips).arg("second-alias"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,7 +235,17 @@ fn all_remote_hooks_skipped() {
 
     ----- stderr -----
     ");
-    cmd_snapshot!(context, context.run().env("SKIP", "first,second-alias").args(["--hide-status", "skipped"]), @"
+    cmd_snapshot!(context, context.run().env("SKIP", skips).args(["first", "manual-only"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    first...................................................................Skipped
+    manual-only.............................................................Skipped
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().env("SKIP", skips).args(["--hide-status", "skipped"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -258,6 +272,9 @@ fn skipped_remote_hooks_respect_filters_and_order() {
               - id: manual-only
                 stages: [manual]
                 groups: [ci]
+              - id: message-only
+                stages: [commit-msg]
+                groups: [ci]
               - id: excluded
                 groups: [slow]
           - repo: builtin
@@ -271,11 +288,14 @@ fn skipped_remote_hooks_respect_filters_and_order() {
               - id: last
                 priority: checks
                 groups: [ci]
+                stages: []
         "})
         .init_git();
 
-    cmd_snapshot!(context, context.run()
-        .args(["--group", "ci", "--stage", "pre-commit", "--skip", "first", "--skip", "manual-only", "--skip", "last"]), @"
+    let skips = "first,manual-only,message-only,last";
+
+    cmd_snapshot!(context, context.run().env("SKIP", skips)
+        .args(["--group", "ci", "--stage", "pre-commit"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -285,13 +305,26 @@ fn skipped_remote_hooks_respect_filters_and_order() {
 
     ----- stderr -----
     ");
-    cmd_snapshot!(context, context.run()
-        .args(["--group", "ci", "--stage", "manual", "--skip", "first", "--skip", "manual-only", "--skip", "last"]), @"
+    cmd_snapshot!(context, context.run().env("SKIP", skips)
+        .args(["--group", "ci", "--stage", "manual"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
+    First hook..............................................................Skipped
     manual-only.............................................................Skipped
     fix end of files.........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context, context.run().env("SKIP", skips).args(["--group", "ci"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    First hook..............................................................Skipped
+    manual-only.............................................................Skipped
+    fix end of files.........................................................Passed
+    last....................................................................Skipped
 
     ----- stderr -----
     ");
