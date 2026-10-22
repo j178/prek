@@ -19,7 +19,7 @@ use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
 use crate::hooks::{self, HookOutput};
-use crate::process::{Cmd, with_command_env};
+use crate::process::{self, Cmd, with_command_env};
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 mod bun;
@@ -126,8 +126,8 @@ trait LanguageBackend: Sync {
         self.prepare_execution_environment(hook, hook.work_dir(), &mut environment)
             .await?;
         let entry = self.prepare_hook_entry(store, hook, &environment)?;
-        let command =
-            resolve_hook_command(entry.to_vec(), environment.path(hook), hook.work_dir())?;
+        let paths = environment.path(hook);
+        let command = resolve_command(entry.to_vec(), paths, hook.work_dir());
         let run = async |batch: &[&Path]| {
             let output = environment
                 .command(hook, hook.work_dir(), &command)?
@@ -135,7 +135,8 @@ trait LanguageBackend: Sync {
                 .file_args(batch)
                 .stdin(Stdio::null())
                 .pty_output_with_sink(reporter.output_sink(progress))
-                .await?;
+                .await
+                .map_err(|err| explain_exec_error(err, &command, paths, hook.work_dir()))?;
 
             reporter.on_run_progress(progress, batch.len() as u64);
 
@@ -631,12 +632,13 @@ impl Language {
         self.backend()
             .prepare_execution_environment(hook, cwd, &mut environment)
             .await?;
-        let command = resolve_hook_command(command.to_vec(), environment.path(hook), cwd)?;
+        let paths = environment.path(hook);
+        let command = resolve_command(command.to_vec(), paths, cwd);
         environment
             .command(hook, cwd, &command)?
             .status()
             .await
-            .map_err(Into::into)
+            .map_err(|err| explain_exec_error(err, &command, paths, cwd))
     }
 }
 
@@ -741,12 +743,35 @@ pub(crate) fn resolve_command(
     shebang_argv
 }
 
-fn resolve_hook_command(
-    cmds: Vec<OsString>,
+/// Replaces a spawn `NotFound` with an actionable message when the executable is
+/// really missing.
+///
+/// This only runs after spawn has failed, so it never rejects a command the OS would
+/// run (on Windows, spawn also searches prek's directory, the system directories and
+/// the parent `PATH`). Other `NotFound` causes, such as a missing ELF loader, keep the
+/// OS error.
+fn explain_exec_error(
+    err: process::Error,
+    command: &[OsString],
     paths: Option<&OsStr>,
     cwd: &Path,
-) -> Result<Vec<OsString>> {
-    let command = resolve_command(cmds, paths, cwd);
+) -> anyhow::Error {
+    if let process::Error::Exec { cause, .. } = &err
+        && cause.kind() == std::io::ErrorKind::NotFound
+        && let Some(program) = command.first()
+        && let Some(missing) = missing_executable_error(program, paths, cwd)
+    {
+        return missing;
+    }
+    err.into()
+}
+
+/// Returns an actionable error if `program` cannot be found from `cwd` and `paths`.
+fn missing_executable_error(
+    program: &OsStr,
+    paths: Option<&OsStr>,
+    cwd: &Path,
+) -> Option<anyhow::Error> {
     let env_path = if paths.is_none() {
         EnvVars.var_os(EnvVars::PATH)
     } else {
@@ -754,13 +779,8 @@ fn resolve_hook_command(
     };
     let paths = paths.or(env_path.as_deref());
 
-    if let Some(program) = command.first()
-        && !program_exists(Path::new(program), paths, cwd)
-    {
-        return Err(executable_not_found_error(program, paths));
-    }
-
-    Ok(command)
+    (!program_exists(Path::new(program), paths, cwd))
+        .then(|| executable_not_found_error(program, paths))
 }
 
 /// Mirrors process spawn: any separator (including a trailing one such as
@@ -837,9 +857,7 @@ fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyh
 
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
-    use std::ffi::OsStr;
-    use std::ffi::OsString;
+    use std::ffi::{OsStr, OsString};
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
     #[cfg(unix)]
@@ -849,19 +867,33 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        ends_with_dir_marker, executable_not_found_error, is_explicit_path, program_exists,
-        resolve_command, resolve_hook_command,
+        ends_with_dir_marker, executable_not_found_error, explain_exec_error, is_explicit_path,
+        missing_executable_error, program_exists, resolve_command,
     };
     use crate::fs::{CWD, PathClean, make_executable};
+    use crate::process;
+
+    /// Resolves `cmds` and reports a missing executable as a failed spawn would.
+    fn resolve_and_check(
+        cmds: Vec<OsString>,
+        paths: Option<&OsStr>,
+        cwd: &Path,
+    ) -> anyhow::Result<Vec<OsString>> {
+        let command = resolve_command(cmds, paths, cwd);
+        match missing_executable_error(&command[0], paths, cwd) {
+            Some(err) => Err(err),
+            None => Ok(command),
+        }
+    }
 
     fn write_file(path: &Path, contents: &str) {
         fs_err::write(path, contents).expect("write test file");
     }
 
     #[test]
-    fn resolve_hook_command_errors_when_not_found() {
+    fn resolve_and_check_errors_when_not_found() {
         let cmd = OsString::from("__prek_nonexistent_command__");
-        let err = resolve_hook_command(vec![cmd], None, &CWD).unwrap_err();
+        let err = resolve_and_check(vec![cmd], None, &CWD).unwrap_err();
         assert!(
             err.to_string()
                 .starts_with("Executable `__prek_nonexistent_command__` not found in PATH (")
@@ -870,12 +902,12 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn resolve_hook_command_preserves_non_executable_file_in_path() {
+    fn resolve_and_check_preserves_non_executable_file_in_path() {
         let dir = tempdir().expect("create temp dir");
         let tool_path = dir.path().join("my-tool");
         write_file(&tool_path, "echo hi\n");
 
-        let resolved = resolve_hook_command(
+        let resolved = resolve_and_check(
             vec![OsString::from("my-tool")],
             Some(dir.path().as_os_str()),
             &CWD,
@@ -883,7 +915,7 @@ mod tests {
         .expect("non-executable file in PATH should not fail as missing");
         assert_eq!(resolved, vec![OsString::from("my-tool")]);
 
-        let resolved = resolve_hook_command(
+        let resolved = resolve_and_check(
             vec![OsString::from("my-tool")],
             Some(OsStr::new("")),
             dir.path(),
@@ -897,7 +929,7 @@ mod tests {
         fs_err::set_permissions(&blocked_dir, std::fs::Permissions::from_mode(0o000))
             .expect("remove directory permissions");
 
-        let resolved = resolve_hook_command(
+        let resolved = resolve_and_check(
             vec![OsString::from("my-tool")],
             Some(blocked_dir.as_os_str()),
             &CWD,
@@ -910,13 +942,13 @@ mod tests {
     }
 
     #[test]
-    fn resolve_hook_command_ignores_cwd_file_for_bare_command() {
+    fn resolve_and_check_ignores_cwd_file_for_bare_command() {
         let dir = tempdir().expect("create temp dir");
         let cwd_file = dir.path().join("my-tool");
         write_file(&cwd_file, "not an executable in PATH\n");
         let path_dir = dir.path().join("bin");
 
-        let err = resolve_hook_command(
+        let err = resolve_and_check(
             vec![OsString::from("my-tool")],
             Some(path_dir.as_os_str()),
             dir.path(),
@@ -934,10 +966,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_hook_command_errors_for_missing_explicit_paths() {
+    fn resolve_and_check_errors_for_missing_explicit_paths() {
         let dir = tempdir().expect("create temp dir");
         let missing_abs = dir.path().join("missing-tool");
-        let err = resolve_hook_command(
+        let err = resolve_and_check(
             vec![missing_abs.clone().into_os_string()],
             Some(OsString::from("/usr/bin").as_os_str()),
             dir.path(),
@@ -948,7 +980,7 @@ mod tests {
             format!("Executable `{}` does not exist", missing_abs.display())
         );
 
-        let err = resolve_hook_command(
+        let err = resolve_and_check(
             vec![OsString::from("./missing-tool")],
             Some(OsString::from("/usr/bin").as_os_str()),
             dir.path(),
@@ -961,7 +993,7 @@ mod tests {
 
         let existing_dir = dir.path().join("bin");
         fs_err::create_dir(&existing_dir).expect("create directory");
-        let resolved = resolve_hook_command(
+        let resolved = resolve_and_check(
             vec![OsString::from("./bin")],
             Some(OsString::from("/usr/bin").as_os_str()),
             dir.path(),
@@ -970,7 +1002,7 @@ mod tests {
         assert_eq!(resolved, vec![existing_dir.clone().into_os_string()]);
 
         for spelling in ["bin/", "./bin/"] {
-            let resolved = resolve_hook_command(
+            let resolved = resolve_and_check(
                 vec![OsString::from(spelling)],
                 Some(OsString::from("/usr/bin").as_os_str()),
                 dir.path(),
@@ -983,14 +1015,14 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn resolve_hook_command_keeps_trailing_dir_marker_for_file() {
+    fn resolve_and_check_keeps_trailing_dir_marker_for_file() {
         let dir = tempdir().expect("create temp dir");
         let tool = dir.path().join("bin");
         write_file(&tool, "#!/bin/sh\nexit 0\n");
         make_executable(&tool).expect("set executable bit");
 
         for spelling in ["bin/", "./bin/", "bin/."] {
-            let resolved = resolve_hook_command(
+            let resolved = resolve_and_check(
                 vec![OsString::from(spelling)],
                 Some(OsString::from("/usr/bin").as_os_str()),
                 dir.path(),
@@ -1004,6 +1036,46 @@ mod tests {
                 .expect_err("a trailing directory marker must not run the file");
             assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory, "{spelling}");
         }
+    }
+
+    #[test]
+    fn explain_exec_error_rewrites_only_confirmed_not_found() {
+        let exec_error = |kind| process::Error::Exec {
+            command: "tool".to_string(),
+            cause: std::io::Error::from(kind),
+        };
+        let missing = [OsString::from("__prek_nonexistent_command__")];
+
+        let err = explain_exec_error(
+            exec_error(std::io::ErrorKind::NotFound),
+            &missing,
+            None,
+            &CWD,
+        );
+        assert!(
+            err.to_string()
+                .starts_with("Executable `__prek_nonexistent_command__` not found in PATH (")
+        );
+
+        // Other spawn failures keep the OS error.
+        let err = explain_exec_error(
+            exec_error(std::io::ErrorKind::PermissionDenied),
+            &missing,
+            None,
+            &CWD,
+        );
+        assert_eq!(err.to_string(), "Failed to run `tool`");
+
+        // `NotFound` for an executable that exists (e.g. a missing ELF loader) keeps the OS error.
+        let dir = tempdir().expect("create temp dir");
+        write_file(&dir.path().join("my-tool"), "");
+        let err = explain_exec_error(
+            exec_error(std::io::ErrorKind::NotFound),
+            &[OsString::from("my-tool")],
+            Some(dir.path().as_os_str()),
+            &CWD,
+        );
+        assert_eq!(err.to_string(), "Failed to run `tool`");
     }
 
     #[test]
