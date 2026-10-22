@@ -691,9 +691,9 @@ pub(crate) fn resolve_command(
     let paths = paths.or(env_path.as_deref());
 
     let resolved_binary = if ends_with_dir_marker(Path::new(candidate)) {
-        // A trailing separator, `.` or `..` can only name a directory. Both `which_in`
-        // and `clean()` normalize it away (so `bin/` could run a regular file `bin`),
-        // so keep the spelling as written and let spawn report the OS error.
+        // A trailing separator, `.` or `..` can only name a directory. `which_in` and
+        // `clean()` both drop it, which would let `bin/` run a regular file named `bin`.
+        // Keep the spelling as written and let spawn report the OS error.
         cwd.join(candidate)
     } else {
         which::which_in(candidate, paths, cwd).unwrap_or_else(|_| {
@@ -779,8 +779,11 @@ fn missing_executable_error(
     };
     let paths = paths.or(env_path.as_deref());
 
-    (!program_exists(Path::new(program), paths, cwd))
-        .then(|| executable_not_found_error(program, paths))
+    if program_exists(Path::new(program), paths, cwd) {
+        None
+    } else {
+        Some(executable_not_found_error(program, paths))
+    }
 }
 
 /// Mirrors process spawn: any separator (including a trailing one such as
@@ -798,21 +801,23 @@ fn is_explicit_path(path: &Path) -> bool {
 /// `bin/.`, `../`), which the OS only resolves as a directory.
 fn ends_with_dir_marker(path: &Path) -> bool {
     let bytes = path.as_os_str().as_encoded_bytes();
-    let last_segment = bytes
-        .rsplit(|&b| std::path::is_separator(char::from(b)))
-        .next()
-        .unwrap_or_default();
-    bytes.len() > last_segment.len() && matches!(last_segment, b"" | b"." | b"..")
+    let Some(separator) = bytes
+        .iter()
+        .rposition(|&b| std::path::is_separator(char::from(b)))
+    else {
+        return false;
+    };
+    matches!(&bytes[separator + 1..], b"" | b"." | b"..")
 }
 
 fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
     if is_explicit_path(program) {
         // Only an absent entry is reported here. Other errors, such as `ENOTDIR`
         // for `file/`, are left to spawn so the OS error stays accurate.
-        return !cwd
-            .join(program)
-            .metadata()
-            .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound);
+        return match cwd.join(program).metadata() {
+            Ok(_) => true,
+            Err(err) => err.kind() != std::io::ErrorKind::NotFound,
+        };
     }
 
     // When `PATH` is unset, let process spawn use the OS default search path.
@@ -845,9 +850,10 @@ fn executable_not_found_error(executable: &OsStr, paths: Option<&OsStr>) -> anyh
         return anyhow::anyhow!("Executable `{executable}` does not exist");
     }
 
-    let searched_path = paths
-        .filter(|paths| !paths.is_empty())
-        .map_or_else(|| "<empty>".into(), OsStr::to_string_lossy);
+    let searched_path = match paths {
+        Some(paths) if !paths.is_empty() => paths.to_string_lossy(),
+        _ => "<empty>".into(),
+    };
     anyhow::anyhow!(
         "Executable `{executable}` not found in PATH ({searched_path}); \
         shell aliases, functions and shell rc files are not loaded for hooks; \
@@ -880,10 +886,12 @@ mod tests {
         cwd: &Path,
     ) -> anyhow::Result<Vec<OsString>> {
         let command = resolve_command(cmds, paths, cwd);
-        match missing_executable_error(&command[0], paths, cwd) {
-            Some(err) => Err(err),
-            None => Ok(command),
+        if let Some(program) = command.first()
+            && let Some(err) = missing_executable_error(program, paths, cwd)
+        {
+            return Err(err);
         }
+        Ok(command)
     }
 
     fn write_file(path: &Path, contents: &str) {
