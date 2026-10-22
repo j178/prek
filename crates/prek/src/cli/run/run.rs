@@ -201,8 +201,10 @@ pub(crate) async fn run(
             .await
             .context("Failed to init hooks")?
     };
+
     let mut initialized_hooks = hooks.into_iter().peekable();
     let mut selected_hooks = Vec::new();
+
     for project in workspace.projects() {
         for (idx, config) in project
             .config()
@@ -215,35 +217,36 @@ pub(crate) async fn run(
                 project_idx: project.idx(),
                 hook_idx: idx,
             };
-            let hook = if let Some(hook) = initialized_hooks.next_if(|hook| hook.key() == key) {
-                let selection = selectors.select_hook(&hook);
-                if selection == HookSelection::NotSelected || !group_filters.matches_hook(&hook) {
-                    continue;
-                }
-                match selection {
-                    HookSelection::Selected => HookPlan::Run(Arc::new(hook)),
-                    HookSelection::Skipped => HookPlan::Skip(Arc::new(SkippedHook::from(hook))),
-                    HookSelection::NotSelected => continue,
-                }
-            } else {
-                let configured_hook = ConfiguredHook::new(
-                    project.relative_path(),
-                    config.id,
-                    config.options.alias.as_deref(),
-                    config.groups,
-                );
-                if selectors.select_configured_hook(&configured_hook) != HookSelection::Skipped
-                    || !group_filters.matches_configured_hook(&configured_hook)
-                {
-                    continue;
-                }
-                HookPlan::Skip(Arc::new(SkippedHook::from_config(
-                    Arc::clone(project),
-                    &config,
-                    idx,
-                )?))
+            let hook = initialized_hooks.next_if(|hook| hook.key() == key);
+
+            // Aliases can come from the manifest; groups always come from the project config.
+            let alias = match &hook {
+                Some(hook) => Some(hook.alias.as_str()),
+                None => config.options.alias.as_deref(),
             };
-            selected_hooks.push(hook);
+            let target =
+                ConfiguredHook::new(project.relative_path(), config.id, alias, config.groups);
+
+            let selection = selectors.select_configured_hook(&target);
+            if selection == HookSelection::NotSelected
+                || !group_filters.matches_configured_hook(&target)
+            {
+                continue;
+            }
+
+            let plan = match (selection, hook) {
+                (HookSelection::Selected, Some(hook)) => HookPlan::Run(Arc::new(hook)),
+                (HookSelection::Skipped, Some(hook)) => {
+                    HookPlan::Skip(Arc::new(SkippedHook::from(hook)))
+                }
+                (HookSelection::Skipped, None) => {
+                    let hook = SkippedHook::from_config(Arc::clone(project), &config, idx)?;
+                    HookPlan::Skip(Arc::new(hook))
+                }
+                _ => continue,
+            };
+
+            selected_hooks.push(plan);
         }
     }
 

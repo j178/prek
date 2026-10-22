@@ -306,6 +306,7 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() {
             indoc::indoc! {r"
         - id: test-hook
           name: Test Hook
+          alias: manifest-alias
           entry: echo ok
           language: system
           always_run: true
@@ -327,7 +328,10 @@ fn skipped_same_key_remote_repo_entry_is_not_initialized() {
     ", repo = hook_repo});
     context.git().add(".");
 
-    cmd_snapshot!(context, context.run().args(["--all-files", "--skip", "missing-hook"]), @"
+    cmd_snapshot!(context, context.run()
+        .arg("--all-files")
+        .args(["--skip", "missing-hook"])
+        .args(["missing-hook", "manifest-alias"]), @"
     success: true
     exit_code: 0
     ----- stdout -----

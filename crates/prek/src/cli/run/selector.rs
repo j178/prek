@@ -295,7 +295,7 @@ impl Selectors {
         self.select_matching_hook(|selector| selector.matches_hook(hook))
     }
 
-    /// Select a hook using only the ID and alias available in the project config.
+    /// Select a hook from its ID, alias, and project path.
     pub(super) fn select_configured_hook(&self, hook: &ConfiguredHook<'_>) -> HookSelection {
         self.select_matching_hook(|selector| selector.matches_configured_hook(hook))
     }
