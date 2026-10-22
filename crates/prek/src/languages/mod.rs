@@ -236,16 +236,15 @@ impl ExecutionEnvironment {
     }
 
     /// Effective PATH after applying the hook's configured environment.
+    ///
+    /// [`Self::command`] applies `hook.env` in iteration order, and Windows merges
+    /// `Path`/`PATH` case-insensitively (last write wins), so take the last match.
     pub(crate) fn path<'a>(&'a self, hook: &'a InstalledHook) -> Option<&'a OsStr> {
         hook.env
             .iter()
-            .find_map(|(key, value)| {
-                if is_path_env(key) {
-                    Some(OsStr::new(value))
-                } else {
-                    None
-                }
-            })
+            .filter(|(key, _)| is_path_env(key))
+            .map(|(_, value)| OsStr::new(value))
+            .last()
             .or(self.language_path())
     }
 
@@ -757,11 +756,15 @@ fn resolve_hook_command(
     Ok(command)
 }
 
+/// Mirrors process spawn: any separator (including a trailing one such as
+/// `bin/`, `./`, `../`) or a root/prefix component makes this a path, not a PATH lookup.
 fn is_explicit_path(path: &Path) -> bool {
-    path.is_absolute()
+    path.components().count() > 1
         || path
-            .parent()
-            .is_some_and(|parent| !parent.as_os_str().is_empty())
+            .as_os_str()
+            .as_encoded_bytes()
+            .iter()
+            .any(|&b| std::path::is_separator(char::from(b)))
 }
 
 fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
@@ -823,7 +826,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        executable_not_found_error, program_exists, resolve_command, resolve_hook_command,
+        executable_not_found_error, is_explicit_path, program_exists, resolve_command,
+        resolve_hook_command,
     };
     use crate::fs::{CWD, PathClean, make_executable};
 
@@ -940,7 +944,32 @@ mod tests {
             dir.path(),
         )
         .expect("existing directory should defer to spawn");
-        assert_eq!(resolved, vec![existing_dir.into_os_string()]);
+        assert_eq!(resolved, vec![existing_dir.clone().into_os_string()]);
+
+        for spelling in ["bin/", "./bin/"] {
+            let resolved = resolve_hook_command(
+                vec![OsString::from(spelling)],
+                Some(OsString::from("/usr/bin").as_os_str()),
+                dir.path(),
+            )
+            .expect("trailing-separator directory should defer to spawn");
+            // `Path` equality compares components, so a trailing separator is ignored.
+            assert_eq!(Path::new(&resolved[0]), existing_dir);
+        }
+    }
+
+    #[test]
+    fn is_explicit_path_detects_separators() {
+        for path in ["./foo", "a/b", "/usr/bin/x", "bin/", "./", "../", "/"] {
+            assert!(is_explicit_path(Path::new(path)), "{path}");
+        }
+        for path in ["foo", ".", "..", "foo.sh"] {
+            assert!(!is_explicit_path(Path::new(path)), "{path}");
+        }
+        #[cfg(windows)]
+        for path in [r"bin\", r".\foo", "C:foo"] {
+            assert!(is_explicit_path(Path::new(path)), "{path}");
+        }
     }
 
     #[test]
