@@ -7,6 +7,7 @@
     // https://docs.renovatebot.com/presets-customManagers/#custommanagersgithubactionsversions
     // Update _VERSION environment variables in GitHub Action files.
     'customManagers:githubActionsVersions',
+    'customManagers:dockerfileVersions',
   ],
   schedule: ["* 0-3 * * 1"],
   prHourlyLimit: 10,
