@@ -688,16 +688,23 @@ pub(crate) fn resolve_command(
     };
     let paths = paths.or(env_path.as_deref());
 
-    let resolved_binary = which::which_in(candidate, paths, cwd).unwrap_or_else(|_| {
-        let candidate = Path::new(candidate);
-        // `which_in` only returns executable files. Resolve an explicit relative
-        // path against `cwd` so its shebang can still be inspected.
-        if is_explicit_path(candidate) {
-            cwd.join(candidate).clean()
-        } else {
-            candidate.into()
-        }
-    });
+    let resolved_binary = if ends_with_dir_marker(Path::new(candidate)) {
+        // A trailing separator, `.` or `..` can only name a directory. Both `which_in`
+        // and `clean()` normalize it away (so `bin/` could run a regular file `bin`),
+        // so keep the spelling as written and let spawn report the OS error.
+        cwd.join(candidate)
+    } else {
+        which::which_in(candidate, paths, cwd).unwrap_or_else(|_| {
+            let candidate = Path::new(candidate);
+            // `which_in` only returns executable files. Resolve an explicit relative
+            // path against `cwd` so its shebang can still be inspected.
+            if is_explicit_path(candidate) {
+                cwd.join(candidate).clean()
+            } else {
+                candidate.into()
+            }
+        })
+    };
 
     let Ok(shebang_argv) = parse_shebang(&resolved_binary) else {
         cmds[0] = resolved_binary.into_os_string();
@@ -767,9 +774,25 @@ fn is_explicit_path(path: &Path) -> bool {
             .any(|&b| std::path::is_separator(char::from(b)))
 }
 
+/// Whether the last segment is empty, `.` or `..` after a separator (`bin/`,
+/// `bin/.`, `../`), which the OS only resolves as a directory.
+fn ends_with_dir_marker(path: &Path) -> bool {
+    let bytes = path.as_os_str().as_encoded_bytes();
+    let last_segment = bytes
+        .rsplit(|&b| std::path::is_separator(char::from(b)))
+        .next()
+        .unwrap_or_default();
+    bytes.len() > last_segment.len() && matches!(last_segment, b"" | b"." | b"..")
+}
+
 fn program_exists(program: &Path, paths: Option<&OsStr>, cwd: &Path) -> bool {
     if is_explicit_path(program) {
-        return candidate_exists(&cwd.join(program));
+        // Only an absent entry is reported here. Other errors, such as `ENOTDIR`
+        // for `file/`, are left to spawn so the OS error stays accurate.
+        return !cwd
+            .join(program)
+            .metadata()
+            .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound);
     }
 
     // When `PATH` is unset, let process spawn use the OS default search path.
@@ -826,8 +849,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        executable_not_found_error, is_explicit_path, program_exists, resolve_command,
-        resolve_hook_command,
+        ends_with_dir_marker, executable_not_found_error, is_explicit_path, program_exists,
+        resolve_command, resolve_hook_command,
     };
     use crate::fs::{CWD, PathClean, make_executable};
 
@@ -955,6 +978,41 @@ mod tests {
             .expect("trailing-separator directory should defer to spawn");
             // `Path` equality compares components, so a trailing separator is ignored.
             assert_eq!(Path::new(&resolved[0]), existing_dir);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_hook_command_keeps_trailing_dir_marker_for_file() {
+        let dir = tempdir().expect("create temp dir");
+        let tool = dir.path().join("bin");
+        write_file(&tool, "#!/bin/sh\nexit 0\n");
+        make_executable(&tool).expect("set executable bit");
+
+        for spelling in ["bin/", "./bin/", "bin/."] {
+            let resolved = resolve_hook_command(
+                vec![OsString::from(spelling)],
+                Some(OsString::from("/usr/bin").as_os_str()),
+                dir.path(),
+            )
+            .expect("`ENOTDIR` should defer to spawn");
+            assert_eq!(resolved, vec![dir.path().join(spelling).into_os_string()]);
+
+            let err = std::process::Command::new(&resolved[0])
+                .current_dir(dir.path())
+                .status()
+                .expect_err("a trailing directory marker must not run the file");
+            assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory, "{spelling}");
+        }
+    }
+
+    #[test]
+    fn ends_with_dir_marker_detects_directory_spellings() {
+        for path in ["bin/", "./", "../", "bin/.", "bin/..", "/"] {
+            assert!(ends_with_dir_marker(Path::new(path)), "{path}");
+        }
+        for path in ["bin", "./bin", ".", "..", "foo."] {
+            assert!(!ends_with_dir_marker(Path::new(path)), "{path}");
         }
     }
 
