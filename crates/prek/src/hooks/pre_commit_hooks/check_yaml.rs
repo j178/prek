@@ -84,8 +84,6 @@ fn check_loaded(
             // high-reuse anchors that are common in compose-style files. See #1838.
             enforce_alias_anchor_ratio: false,
         },
-        // Comments do not affect syntax or structure validation. See #2501.
-        emit_comments: false,
         // Do not require `!!binary` scalars to decode as UTF-8. See #1102.
         ignore_binary_tag_for_string: true,
         // A YAML tag identifies a node's type or application-specific semantics.
@@ -96,7 +94,7 @@ fn check_loaded(
         reject_unsupported_tags: disallow_unknown_tags,
         // The scalar values are discarded, so only validate whether they are
         // legal YAML, not whether an untyped data model can represent them. See #2544.
-        reject_non_finite_typeless_float: false,
+        non_finite_float_policy: serde_saphyr::NonFiniteFloatPolicy::AsString,
     };
     let result = match simdutf8::compat::from_utf8(content) {
         Ok(content) if allow_multi_docs => {
@@ -135,15 +133,9 @@ fn check_syntax(display_path: &Path, content: &[u8]) -> HookOutput {
         }
     };
 
-    let options = granit_parser::options! {
-        // Comments do not affect syntax validation. See #2501.
-        emit_comments: false,
-    };
-
     // TODO: `granit-parser` resolves aliases while producing parser events, so this is stricter
     // than upstream's syntax-only mode for aliases that reference an undefined anchor.
-    for event in granit_parser::Parser::with_options(granit_parser::StrInput::new(content), options)
-    {
+    for event in granit_parser::Parser::new(granit_parser::StrInput::new(content)) {
         if let Err(error) = event {
             let error_message = format!(
                 "{}: Failed to yaml parse ({error})\n",
