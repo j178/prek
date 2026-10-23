@@ -16,7 +16,7 @@ fn reuses_managed_mise() {
               - id: mise-managed
                 name: mise managed
                 language: mise
-                language_version: "=2026.7.18"
+                language_version: "=2026.10.17"
                 entry: mise --version
                 additional_dependencies: ["github:ajeetdsouza/zoxide@0.10.0"]
                 always_run: true
@@ -26,12 +26,12 @@ fn reuses_managed_mise() {
         .init_git();
 
     let context = context.with_filter(
-        r"2026\.7\.18 [^\r\n]+ \(\d{4}-\d{2}-\d{2}\)",
-        "2026.7.18 [PLATFORM] ([DATE])",
+        r"2026\.10\.17 [^\r\n]+ \(\d{4}-\d{2}-\d{2}\)",
+        "2026.10.17 [PLATFORM] ([DATE])",
     );
 
     cmd_snapshot!(context, context.run()
-        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
+        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -39,10 +39,10 @@ fn reuses_managed_mise() {
     - hook id: mise-managed
     - duration: [TIME]
 
-      2026.7.18 [PLATFORM] ([DATE])
+      2026.10.17 [PLATFORM] ([DATE])
 
     ----- stderr -----
-    "#);
+    ");
 
     // A different environment requirement forces another installer call. With downloads disabled
     // and no system binary, this run can only reuse the managed mise installed above.
@@ -62,7 +62,7 @@ fn reuses_managed_mise() {
     context.git().add(".");
 
     cmd_snapshot!(context, context.run()
-        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @r#"
+        .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -70,10 +70,10 @@ fn reuses_managed_mise() {
     - hook id: mise-managed
     - duration: [TIME]
 
-      2026.7.18 [PLATFORM] ([DATE])
+      2026.10.17 [PLATFORM] ([DATE])
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
