@@ -567,9 +567,10 @@ impl Cmd {
 /// Diagnostic APIs used by execution methods and direct child-process callers.
 impl Cmd {
     fn exec_error(&self, cause: std::io::Error) -> Error {
-        let mut command = String::new();
-        let _ = write_command_line(&mut command, None, self.get_program(), self.display_args());
-        Error::Exec { command, cause }
+        Error::Exec {
+            command: self.to_string(),
+            cause,
+        }
     }
 
     fn status_error(&self, status: ExitStatus, output: Option<Output>) -> Error {
@@ -709,6 +710,8 @@ fn write_command_line<'a>(
 mod tests {
     use std::error::Error as _;
 
+    use anyhow::Context;
+
     use super::{Cmd, OutputSink, write_command_line};
 
     struct NullSink;
@@ -741,6 +744,98 @@ mod tests {
             .downcast_ref::<std::io::Error>()
             .expect("source is an io error");
         assert_eq!(io_error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[tokio::test]
+    async fn execution_errors_include_working_directory() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mut cmd = Cmd::new("__prek_missing_command__");
+        cmd.current_dir(dir.path())
+            .arg("--visible")
+            .hidden_args(["--hidden"])
+            .file_args(["file.txt"]);
+
+        let errors = [
+            cmd.spawn().err().context("spawn should fail")?,
+            cmd.status().await.err().context("status should fail")?,
+            cmd.output().await.err().context("output should fail")?,
+            cmd.output_sync()
+                .err()
+                .context("synchronous output should fail")?,
+            cmd.output_with_sink(NullSink)
+                .await
+                .err()
+                .context("streamed output should fail")?,
+        ];
+
+        for err in errors {
+            assert_eq!(
+                err.to_string(),
+                format!(
+                    "Failed to run `cd {} && __prek_missing_command__ --visible`",
+                    dir.path().display()
+                )
+            );
+            let source = err
+                .source()
+                .context("execution error should have a source")?;
+            let cause = source
+                .downcast_ref::<std::io::Error>()
+                .context("source should be an OS error")?;
+            assert_eq!(cause.kind(), std::io::ErrorKind::NotFound);
+            assert!(cause.raw_os_error().is_some());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn execution_context_preserves_os_error() -> anyhow::Result<()> {
+        let mut cmd = Cmd::new("tool");
+        cmd.current_dir("work");
+
+        for code in [libc::ENOENT, libc::EACCES, libc::ENOTDIR] {
+            let cause = std::io::Error::from_raw_os_error(code);
+            let kind = cause.kind();
+            let message = cause.to_string();
+            let err = cmd.exec_error(cause);
+
+            assert_eq!(err.to_string(), "Failed to run `cd work && tool`");
+            let source = err
+                .source()
+                .context("execution error should have a source")?;
+            let cause = source
+                .downcast_ref::<std::io::Error>()
+                .context("source should be an OS error")?;
+            assert_eq!(cause.raw_os_error(), Some(code));
+            assert_eq!(cause.kind(), kind);
+            assert_eq!(cause.to_string(), message);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn execution_error_reports_missing_working_directory() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let cwd = dir.path().join("missing");
+        let err = Cmd::new("/bin/sh")
+            .current_dir(&cwd)
+            .status()
+            .await
+            .err()
+            .context("missing working directory should fail")?;
+
+        assert_eq!(
+            err.to_string(),
+            format!("Failed to run `cd {} && /bin/sh`", cwd.display())
+        );
+        let source = err
+            .source()
+            .context("execution error should have a source")?;
+        let cause = source
+            .downcast_ref::<std::io::Error>()
+            .context("source should be an OS error")?;
+        assert_eq!(cause.kind(), std::io::ErrorKind::NotFound);
+        Ok(())
     }
 
     #[test]
