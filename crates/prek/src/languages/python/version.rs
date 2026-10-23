@@ -76,7 +76,11 @@ impl PythonRequest {
     }
 
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        let version = &install_info.language_version;
+        self.permits(&install_info.language_version)
+    }
+
+    /// Whether a concrete interpreter version is allowed by this request.
+    pub(crate) fn permits(&self, version: &semver::Version) -> bool {
         match self {
             PythonRequest::Any => true,
             PythonRequest::Major(major) => version.major == *major,
