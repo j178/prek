@@ -10,7 +10,15 @@ pub const PRE_COMMIT_CONFIG_YML: &str = ".pre-commit-config.yml";
 pub const PREK_TOML: &str = "prek.toml";
 pub const PRE_COMMIT_HOOKS_YAML: &str = ".pre-commit-hooks.yaml";
 
-pub const CONFIG_FILENAMES: &[&str] = &[PREK_TOML, PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML];
+/// Supported configuration paths relative to the project root, in precedence order.
+pub const CONFIG_PATHS: &[&str] = &[
+    PREK_TOML,
+    PRE_COMMIT_CONFIG_YAML,
+    PRE_COMMIT_CONFIG_YML,
+    ".config/prek.toml",
+    ".config/.pre-commit-config.yaml",
+    ".config/.pre-commit-config.yml",
+];
 
 /// Prepend paths to the current $PATH, returning the joined result.
 ///
