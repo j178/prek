@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::fs::DirEntry;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -245,29 +246,58 @@ impl Project {
     }
 
     pub(crate) fn find_config(path: &Path) -> Option<PathBuf> {
-        for name in CONFIG_FILENAMES {
-            let file = path.join(name);
-            if file.is_file() {
-                return Some(file);
-            }
-        }
-        None
+        Self::find_configs(path, None).next().map(|(_, path)| path)
     }
 
-    fn find_all_configs(path: &Path) -> Vec<(&'static str, PathBuf)> {
-        let mut configs = Vec::new();
-        for &name in CONFIG_FILENAMES {
-            let file = path.join(name);
-            if file.is_file() {
-                configs.push((name, file));
+    fn find_configs<'a>(
+        path: &'a Path,
+        entries: Option<&[DirEntry]>,
+    ) -> impl Iterator<Item = (&'static str, PathBuf)> + 'a {
+        let mut candidates = [true; CONFIG_FILENAMES.len()];
+        if let Some(entries) = entries {
+            candidates.fill(false);
+            for entry in entries {
+                let name = entry.file_name();
+                let name = name.as_encoded_bytes();
+                // Filesystems can normalize Unicode names. Only rule out absent ASCII names.
+                if !name.is_ascii() {
+                    candidates.fill(true);
+                    break;
+                }
+                for (&config, candidate) in CONFIG_FILENAMES.iter().zip(&mut candidates) {
+                    if name.eq_ignore_ascii_case(config.as_bytes()) {
+                        *candidate = true;
+                    }
+                }
             }
         }
-        configs
+
+        CONFIG_FILENAMES
+            .iter()
+            .zip(candidates)
+            .filter_map(move |(&name, candidate)| {
+                if !candidate {
+                    return None;
+                }
+                let file = path.join(name);
+                if file.is_file() {
+                    Some((name, file))
+                } else {
+                    None
+                }
+            })
     }
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
-        let present = Self::find_all_configs(path);
+        Self::from_directory_with_entries(path, None)
+    }
+
+    fn from_directory_with_entries(
+        path: &Path,
+        entries: Option<&[DirEntry]>,
+    ) -> Result<Self, Error> {
+        let present = Self::find_configs(path, entries).collect::<Vec<_>>();
 
         let Some((_, selected)) = present.first() else {
             return Err(Error::MissingConfigFile);
@@ -754,8 +784,8 @@ impl Workspace {
             .follow_links(false)
             .add_custom_ignore_filename(".prekignore")
             .build_parallel()
-            .run(|| {
-                Box::new(|result| {
+            .run_with_directory_entries(|| {
+                Box::new(|result, entries| {
                     let Ok(entry) = result else {
                         return WalkState::Continue;
                     };
@@ -791,7 +821,7 @@ impl Workspace {
                         return WalkState::Skip;
                     }
 
-                    match Project::from_directory(entry.path()) {
+                    match Project::from_directory_with_entries(entry.path(), entries) {
                         Ok(mut project) => {
                             let relative_path = entry
                                 .into_path()
