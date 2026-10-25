@@ -21,7 +21,7 @@ pub enum WalkState {
 
 /// Visits directories in parallel, respecting ignore files and repository boundaries.
 ///
-/// Rules come from `.prekignore`, `.ignore`, `.gitignore`, Git's
+/// Rules come from `custom_ignore_filename`, `.ignore`, `.gitignore`, Git's
 /// `info/exclude` and global excludes, in that precedence order. Parent rules
 /// apply as in upstream `ignore`. Hidden directories are skipped unless an
 /// ignore rule explicitly includes them. Child symlinks are never followed.
@@ -34,7 +34,7 @@ pub enum WalkState {
 /// Directory read failures and invalid ignore rules do not abort traversal.
 /// Valid rules from partially invalid ignore files still apply. Callback order
 /// is unspecified, and returning [`WalkState::Quit`] cancels asynchronously.
-pub fn walk<F>(root: &Path, visit: F)
+pub fn walk<F>(root: &Path, custom_ignore_filename: &str, visit: F)
 where
     F: Fn(&Path, Option<&[fs::DirEntry]>) -> WalkState + Sync,
 {
@@ -47,7 +47,7 @@ where
     };
     let work = Work {
         path: root.to_path_buf(),
-        ignore: Ignore::new(root),
+        ignore: Ignore::new(root, custom_ignore_filename),
     };
     rayon::in_place_scope(|scope| walker.run(scope, &work));
 }
@@ -150,9 +150,9 @@ mod tests {
 
     use super::{WalkState, walk};
 
-    fn collect(root: &Path) -> Vec<String> {
+    fn collect(root: &Path, custom_ignore_filename: &str) -> Vec<String> {
         let visited = Mutex::new(Vec::new());
-        walk(root, |path, _| {
+        walk(root, custom_ignore_filename, |path, _| {
             visited.lock().unwrap().push(
                 path.strip_prefix(root)
                     .unwrap()
@@ -177,7 +177,7 @@ mod tests {
             fs::create_dir_all(root.join(name)).unwrap();
         }
         let visited = Mutex::new(Vec::new());
-        walk(root, |path, entries| {
+        walk(root, ".prekignore", |path, entries| {
             let relative = path.strip_prefix(root).unwrap();
             visited.lock().unwrap().push(relative.to_path_buf());
             if relative.as_os_str().is_empty() {
@@ -244,7 +244,7 @@ mod tests {
         fs::write(root.join(".git/info/exclude"), "/by-exclude/\n").unwrap();
         fs::write(root.join("nested/.gitignore"), "!/ancestor-blocked/\n").unwrap();
         assert_eq!(
-            collect(root),
+            collect(root, ".prekignore"),
             [
                 "",
                 ".visible",
@@ -254,6 +254,22 @@ mod tests {
                 "resurrected"
             ]
         );
+    }
+
+    /// Caller-selected ignore names apply above and inside the root, even when also a standard name.
+    #[test]
+    fn custom_ignore_filename() {
+        for filename in [".projectignore", ".gitignore"] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().join("project");
+            for name in ["from-parent", "from-child", "kept"] {
+                fs::create_dir_all(root.join(name)).unwrap();
+            }
+            fs::write(temp.path().join(filename), "from-parent/\n").unwrap();
+            fs::write(root.join(filename), "from-child/\n").unwrap();
+            fs::write(root.join(".prekignore"), "kept/\n").unwrap();
+            assert_eq!(collect(&root, filename), ["", "kept"]);
+        }
     }
 
     /// Git rules require a Git or Jujutsu marker; plain directories still honor .ignore.
@@ -269,9 +285,9 @@ mod tests {
             fs::write(root.join(".ignore"), "/by-ignore/\n").unwrap();
             if let Some(marker) = marker {
                 fs::create_dir(root.join(marker)).unwrap();
-                assert_eq!(collect(root), ["", "kept"]);
+                assert_eq!(collect(root, ".prekignore"), ["", "kept"]);
             } else {
-                assert_eq!(collect(root), ["", "by-git", "kept"]);
+                assert_eq!(collect(root, ".prekignore"), ["", "by-git", "kept"]);
             }
         }
     }
@@ -298,7 +314,10 @@ mod tests {
         )
         .unwrap();
         fs::write(parent.join(".ignore"), "/project/from-ignore/\n").unwrap();
-        assert_eq!(collect(&root), ["", "nested", "nested/from-parent", "open"]);
+        assert_eq!(
+            collect(&root, ".prekignore"),
+            ["", "nested", "nested/from-parent", "open"]
+        );
     }
 
     /// Empty directories preserve parent rules, and an empty repository resets only Git rules.
@@ -319,7 +338,7 @@ mod tests {
         fs::write(parent.join(".gitignore"), "blocked/\n").unwrap();
         fs::write(parent.join(".prekignore"), "custom-blocked/\n").unwrap();
         assert_eq!(
-            collect(&parent.join("project")),
+            collect(&parent.join("project"), ".prekignore"),
             [
                 "",
                 "a",
@@ -344,7 +363,7 @@ mod tests {
                 .join(temp.path().file_name().unwrap())
                 .join("project"),
         ] {
-            assert_eq!(collect(&root), ["", "a", "a/kept"]);
+            assert_eq!(collect(&root, ".prekignore"), ["", "a", "a/kept"]);
         }
     }
 
@@ -366,7 +385,7 @@ mod tests {
         .unwrap();
         fs::write(private.join("commondir"), "../..\n").unwrap();
         fs::write(common.join("info/exclude"), "/excluded/\n").unwrap();
-        assert_eq!(collect(&root), ["", "kept"]);
+        assert_eq!(collect(&root, ".prekignore"), ["", "kept"]);
     }
 
     /// BOM-prefixed ignore files still apply valid rules when another glob is invalid.
@@ -377,7 +396,7 @@ mod tests {
         fs::create_dir(root.join("ignored")).unwrap();
         fs::create_dir(root.join("kept")).unwrap();
         fs::write(root.join(".ignore"), "\u{feff}ignored/\n*[z-a]\n").unwrap();
-        assert_eq!(collect(root), ["", "kept"]);
+        assert_eq!(collect(root, ".prekignore"), ["", "kept"]);
     }
 
     /// A symlinked root keeps canonical parent rules; child symlinks are not traversed.
@@ -395,7 +414,7 @@ mod tests {
         symlink("missing", root.join("broken")).unwrap();
         let alias = temp.path().join("alias");
         symlink(&root, &alias).unwrap();
-        assert_eq!(collect(&alias), ["", "kept"]);
+        assert_eq!(collect(&alias, ".prekignore"), ["", "kept"]);
     }
 
     /// An unreadable directory gets None, so callers can still probe known config names.
@@ -414,7 +433,7 @@ mod tests {
             return;
         }
         let visited = AtomicUsize::new(0);
-        walk(root, |path, entries| {
+        walk(root, ".prekignore", |path, entries| {
             assert_eq!(path, root);
             assert!(entries.is_none());
             assert!(path.join("prek.toml").is_file());
@@ -431,7 +450,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         fs::create_dir(temp.path().join("child")).unwrap();
         let visited = AtomicUsize::new(0);
-        walk(temp.path(), |_, _| {
+        walk(temp.path(), ".prekignore", |_, _| {
             visited.fetch_add(1, Ordering::Relaxed);
             WalkState::Quit
         });
@@ -444,7 +463,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let visited = AtomicUsize::new(0);
         let result = std::panic::catch_unwind(|| {
-            walk(temp.path(), |_, _| {
+            walk(temp.path(), ".prekignore", |_, _| {
                 visited.fetch_add(1, Ordering::Relaxed);
                 panic!("callback panic");
             });

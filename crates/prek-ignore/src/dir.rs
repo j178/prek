@@ -1,7 +1,7 @@
 //! Persistent ignore rules shared by directory traversal workers.
 
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fs::{self, File, FileType},
     io::{self, BufRead},
     path::{Path, PathBuf},
@@ -24,6 +24,7 @@ pub(crate) struct Ignore {
 struct Context {
     root: PathBuf,
     canonical_root: Option<PathBuf>,
+    custom_ignore_filename: OsString,
     global: Gitignore,
 }
 
@@ -41,7 +42,7 @@ struct Rules {
 }
 
 impl Ignore {
-    pub(crate) fn new(root: &Path) -> Self {
+    pub(crate) fn new(root: &Path, custom_ignore_filename: &str) -> Self {
         let global = match std::env::current_dir() {
             Ok(cwd) => {
                 let (matcher, error) = GitignoreBuilder::new(cwd).build_global();
@@ -60,6 +61,7 @@ impl Ignore {
             canonical_root: canonical_root
                 .clone()
                 .filter(|base| base.as_os_str() != root.as_os_str()),
+            custom_ignore_filename: custom_ignore_filename.into(),
             global,
         });
         let mut ignore = Self {
@@ -77,7 +79,8 @@ impl Ignore {
 
     /// A partial listing cannot prove that an ignore file is absent.
     pub(crate) fn add_child(&self, path: &Path, entries: Option<&[fs::DirEntry]>) -> Self {
-        let files = entries.map(IgnoreFilesFound::new);
+        let files = entries
+            .map(|entries| IgnoreFilesFound::new(entries, &self.context.custom_ignore_filename));
         self.add_rules(path, files.as_ref(), false)
     }
 
@@ -105,7 +108,7 @@ impl Ignore {
         let custom = load(
             files.is_none_or(|files| files.custom),
             dir,
-            OsStr::new(".prekignore"),
+            &self.context.custom_ignore_filename,
         );
         let ignore = load(
             files.is_none_or(|files| files.ignore),
@@ -213,15 +216,16 @@ struct IgnoreFilesFound {
 }
 
 impl IgnoreFilesFound {
-    fn new(entries: &[fs::DirEntry]) -> Self {
+    fn new(entries: &[fs::DirEntry], custom_ignore_filename: &OsStr) -> Self {
         let mut found = Self::default();
         for entry in entries {
-            match entry.file_name().as_encoded_bytes() {
+            let name = entry.file_name();
+            found.custom |= name == custom_ignore_filename;
+            match name.as_encoded_bytes() {
                 b".ignore" => found.ignore = true,
                 b".gitignore" => found.git_ignore = true,
                 b".git" => found.git = true,
                 b".jj" => found.jj = true,
-                b".prekignore" => found.custom = true,
                 _ => {}
             }
         }

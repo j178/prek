@@ -14,10 +14,10 @@ The original dual license is preserved in [LICENSE-MIT](LICENSE-MIT) and
 ## Changes from upstream
 
 - Renamed the crate to `prek-ignore` and integrated it into the prek workspace.
-- Replaced the general walker API with `walk(root, callback)` and `WalkState`.
+- Replaced the general walker API with `walk(root, custom_ignore_filename, callback)` and `WalkState`.
   The callback exposes borrowed, unfiltered directory
   listings so prek can discover configuration files without probing every
-  filename. The custom ignore filename is fixed to `.prekignore`.
+  filename. Prek supplies `.prekignore` as the custom ignore filename.
 - Restricted traversal to directories. Ordinary files and child symlinks are
   excluded before constructing paths, matching ignore rules or scheduling work.
 - Removed serial iteration, file-type definitions, override globs, incremental

@@ -792,7 +792,7 @@ impl Workspace {
             Vec::new()
         });
 
-        prek_ignore::walk(root, |path, entries| {
+        prek_ignore::walk(root, ".prekignore", |path, entries| {
             // Skip cookiecutter template directories
             if path
                 .file_name()
