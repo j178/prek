@@ -11,60 +11,22 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
-use {
-    globset::{Candidate, GlobBuilder, GlobSet, GlobSetBuilder},
-    regex_automata::util::pool::Pool,
-};
+use globset::{Candidate, GlobBuilder, GlobSet, GlobSetBuilder};
 
 use crate::{
     Error, Match, PartialErrorBuilder,
     pathutil::{is_file_name, strip_prefix},
 };
 
-/// Glob represents a single glob in a gitignore file.
-///
-/// This is used to report information about the highest precedent glob that
-/// matched in one or more gitignore files.
-#[derive(Clone, Debug)]
-pub struct Glob {
-    /// The original glob string.
-    original: String,
-    /// The actual glob string used to convert to a regex.
-    actual: String,
-    /// Whether this is a whitelisted glob or not.
-    is_whitelist: bool,
-    /// Whether this glob should only match directories or not.
-    is_only_dir: bool,
-}
-
-impl Glob {
-    /// Whether this was a whitelisted glob or not.
-    pub fn is_whitelist(&self) -> bool {
-        self.is_whitelist
-    }
-
-    /// Whether this glob must match a directory or not.
-    pub fn is_only_dir(&self) -> bool {
-        self.is_only_dir
-    }
-
-    /// Returns true if and only if this glob has a `**/` prefix.
-    fn has_doublestar_prefix(&self) -> bool {
-        self.actual.starts_with("**/") || self.actual == "**"
-    }
-}
-
 /// Gitignore is a matcher for the globs in one or more gitignore files
 /// in the same directory.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Gitignore {
     set: GlobSet,
     root: PathBuf,
-    globs: Vec<Glob>,
-    matches: Option<Arc<Pool<Vec<usize>>>>,
+    whitelists: Vec<bool>,
 }
 
 impl Gitignore {
@@ -75,8 +37,7 @@ impl Gitignore {
         Gitignore {
             set: GlobSet::empty(),
             root: PathBuf::from(""),
-            globs: vec![],
-            matches: None,
+            whitelists: vec![],
         }
     }
 
@@ -86,47 +47,18 @@ impl Gitignore {
         self.set.is_empty()
     }
 
-    /// Returns whether the given path (file or directory) matched a pattern in
-    /// this gitignore matcher.
-    ///
-    /// `is_dir` should be true if the path refers to a directory and false
-    /// otherwise.
-    ///
-    /// The given path is matched relative to the path given when building
-    /// the matcher. Specifically, before matching `path`, its prefix (as
-    /// determined by a common suffix of the directory containing this
-    /// gitignore) is stripped. If there is no common suffix/prefix overlap,
-    /// then `path` is assumed to be relative to this matcher.
-    pub fn matched<P: AsRef<Path>>(&self, path: P, is_dir: bool) -> Match<&Glob> {
+    /// Matches a directory, using the last matching rule in this ignore file.
+    pub fn matched(&self, path: &Path, matches: &mut Vec<usize>) -> Match {
         if self.is_empty() {
             return Match::None;
         }
-        self.matched_stripped(self.strip(path.as_ref()), is_dir)
-    }
-
-    /// Like matched, but takes a path that has already been stripped.
-    fn matched_stripped<P: AsRef<Path>>(&self, path: P, is_dir: bool) -> Match<&Glob> {
-        if self.is_empty() {
-            return Match::None;
+        self.set
+            .matches_candidate_into(&Candidate::new(self.strip(path)), matches);
+        match matches.last() {
+            Some(&index) if self.whitelists[index] => Match::Whitelist,
+            Some(_) => Match::Ignore,
+            None => Match::None,
         }
-        let path = path.as_ref();
-        let Some(pool) = &self.matches else {
-            return Match::None;
-        };
-        let mut matches = pool.get();
-        let candidate = Candidate::new(path);
-        self.set.matches_candidate_into(&candidate, &mut matches);
-        for &i in matches.iter().rev() {
-            let glob = &self.globs[i];
-            if !glob.is_only_dir() || is_dir {
-                return if glob.is_whitelist() {
-                    Match::Whitelist(glob)
-                } else {
-                    Match::Ignore(glob)
-                };
-            }
-        }
-        Match::None
     }
 
     /// Strips the given path such that it's suitable for matching with this
@@ -161,11 +93,11 @@ impl Gitignore {
 }
 
 /// Builds a matcher for a single set of globs from a .gitignore file.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct GitignoreBuilder {
     builder: GlobSetBuilder,
     root: PathBuf,
-    globs: Vec<Glob>,
+    whitelists: Vec<bool>,
 }
 
 impl GitignoreBuilder {
@@ -180,15 +112,15 @@ impl GitignoreBuilder {
         GitignoreBuilder {
             builder: GlobSetBuilder::new(),
             root: strip_prefix("./", root).unwrap_or(root).to_path_buf(),
-            globs: vec![],
+            whitelists: vec![],
         }
     }
 
     /// Builds a new matcher from the globs added so far.
     ///
     /// Once a matcher is built, no new globs can be added to it.
-    pub fn build(&self) -> Result<Gitignore, Error> {
-        if self.globs.is_empty() {
+    pub fn build(self) -> Result<Gitignore, Error> {
+        if self.whitelists.is_empty() {
             return Ok(Gitignore::empty());
         }
         let set = self.builder.build().map_err(|err| Error::Glob {
@@ -197,23 +129,12 @@ impl GitignoreBuilder {
         })?;
         Ok(Gitignore {
             set,
-            root: self.root.clone(),
-            globs: self.globs.clone(),
-            matches: Some(Arc::new(Pool::with_available_parallelism_capacity(
-                std::vec::Vec::new,
-            ))),
+            root: self.root,
+            whitelists: self.whitelists,
         })
     }
 
-    /// Build a global gitignore matcher using the configuration in this
-    /// builder.
-    ///
-    /// This consumes ownership of the builder unlike `build` because it
-    /// must mutate the builder to add the global gitignore globs.
-    ///
-    /// Note that this ignores the path given to this builder's constructor
-    /// and instead derives the path automatically from git's global
-    /// configuration.
+    /// Loads Git's global ignore file, retaining this builder's matching root.
     pub fn build_global(mut self) -> (Gitignore, Option<Error>) {
         match gitconfig_excludes_path() {
             None => (Gitignore::empty(), None),
@@ -248,7 +169,7 @@ impl GitignoreBuilder {
             Err(err) => return Some(Error::Io(err).with_path(path)),
             Ok(file) => file,
         };
-        log::debug!("opened gitignore file: {}", path.display());
+        tracing::debug!("opened gitignore file: {}", path.display());
         let rdr = BufReader::new(file);
         let mut errs = PartialErrorBuilder::default();
         for (i, line) in rdr.lines().enumerate() {
@@ -289,19 +210,15 @@ impl GitignoreBuilder {
         if line.is_empty() {
             return Ok(self);
         }
-        let mut glob = Glob {
-            original: line.to_string(),
-            actual: String::new(),
-            is_whitelist: false,
-            is_only_dir: false,
-        };
+        let original = line;
+        let mut is_whitelist = false;
         let mut is_absolute = false;
         if line.starts_with("\\!") || line.starts_with("\\#") {
             line = &line[1..];
             is_absolute = line.chars().nth(0) == Some('/');
         } else {
             if line.starts_with('!') {
-                glob.is_whitelist = true;
+                is_whitelist = true;
                 line = &line[1..];
             }
             if line.starts_with('/') {
@@ -313,10 +230,8 @@ impl GitignoreBuilder {
                 is_absolute = true;
             }
         }
-        // If it ends with a slash, then this should only match directories,
-        // but the slash should otherwise not be used while globbing.
+        // All candidates are directories, so a trailing slash only affects parsing.
         if line.as_bytes().last() == Some(&b'/') {
-            glob.is_only_dir = true;
             line = &line[..line.len() - 1];
             // If the slash was escaped, then remove the escape.
             // See: https://github.com/BurntSushi/ripgrep/issues/2236
@@ -324,34 +239,34 @@ impl GitignoreBuilder {
                 line = &line[..line.len() - 1];
             }
         }
-        glob.actual = line.to_string();
+        let mut actual = line.to_string();
         // If there is a literal slash, then this is a glob that must match the
         // entire path name. Otherwise, we should let it match anywhere, so use
         // a **/ prefix.
         if !is_absolute && !line.chars().any(|c| c == '/') {
             // ... but only if we don't already have a **/ prefix.
-            if !glob.has_doublestar_prefix() {
-                glob.actual = format!("**/{}", glob.actual);
+            if !(actual.starts_with("**/") || actual == "**") {
+                actual = format!("**/{actual}");
             }
         }
         // If the glob ends with `/**`, then we should only match everything
         // inside a directory, but not the directory itself. Standard globs
         // will match the directory. So we add `/*` to force the issue.
-        if glob.actual.ends_with("/**") {
-            glob.actual = format!("{}/*", glob.actual);
+        if actual.ends_with("/**") {
+            actual = format!("{actual}/*");
         }
-        let parsed = GlobBuilder::new(&glob.actual)
+        let parsed = GlobBuilder::new(&actual)
             .literal_separator(true)
             .case_insensitive(false)
             .backslash_escape(true)
             .allow_unclosed_class(true)
             .build()
             .map_err(|err| Error::Glob {
-                glob: Some(glob.original.clone()),
+                glob: Some(original.to_string()),
                 err: err.kind().to_string(),
             })?;
         self.builder.add(parsed);
-        self.globs.push(glob);
+        self.whitelists.push(is_whitelist);
         Ok(self)
     }
 }
@@ -453,24 +368,16 @@ fn excludes_file_default() -> Option<PathBuf> {
 fn parse_excludes_file(data: &[u8]) -> Option<PathBuf> {
     use std::sync::OnceLock;
 
-    use regex_automata::{meta::Regex, util::syntax};
+    use regex::bytes::Regex;
 
     // Preserve upstream's permissive lookup of quoted and unquoted paths
     // without introducing a full Git configuration parser.
     static RE: OnceLock<Option<Regex>> = OnceLock::new();
     let re = RE
-        .get_or_init(|| {
-            Regex::builder()
-                .configure(Regex::config().utf8_empty(false))
-                .syntax(syntax::Config::new().utf8(false))
-                .build(r#"(?im-u)^\s*excludesfile\s*=\s*"?\s*(\S+?)\s*"?\s*$"#)
-                .ok()
-        })
+        .get_or_init(|| Regex::new(r#"(?im-u)^\s*excludesfile\s*=\s*"?\s*(\S+?)\s*"?\s*$"#).ok())
         .as_ref()?;
-    let mut caps = re.create_captures();
-    re.captures(data, &mut caps);
-    let span = caps.get_group(1)?;
-    let candidate = &data[span];
+    let captures = re.captures(data)?;
+    let candidate = captures.get(1)?.as_bytes();
     std::str::from_utf8(candidate)
         .ok()
         .map(|s| PathBuf::from(expand_tilde(s)))
@@ -509,28 +416,22 @@ mod tests {
 
     macro_rules! ignored {
         ($name:ident, $root:expr, $gi:expr, $path:expr) => {
-            ignored!($name, $root, $gi, $path, false);
-        };
-        ($name:ident, $root:expr, $gi:expr, $path:expr, $is_dir:expr) => {
             #[doc = concat!("Checks the ignore pattern ", stringify!($gi), " against ", stringify!($path), ".")]
             #[test]
             fn $name() {
                 let gi = gi_from_str($root, $gi);
-                assert!(gi.matched($path, $is_dir).is_ignore());
+                assert!(gi.matched(Path::new($path), &mut Vec::new()).is_ignore());
             }
         };
     }
 
     macro_rules! not_ignored {
         ($name:ident, $root:expr, $gi:expr, $path:expr) => {
-            not_ignored!($name, $root, $gi, $path, false);
-        };
-        ($name:ident, $root:expr, $gi:expr, $path:expr, $is_dir:expr) => {
             #[doc = concat!("Checks the ignore pattern ", stringify!($gi), " against ", stringify!($path), ".")]
             #[test]
             fn $name() {
                 let gi = gi_from_str($root, $gi);
-                assert!(!gi.matched($path, $is_dir).is_ignore());
+                assert!(!gi.matched(Path::new($path), &mut Vec::new()).is_ignore());
             }
         };
     }
@@ -544,7 +445,7 @@ mod tests {
     ignored!(ig5, ROOT, "/*.c", "cat-file.c");
     ignored!(ig6, ROOT, "/src/*.rs", "src/main.rs");
     ignored!(ig7, ROOT, "!src/main.rs\n*.rs", "src/main.rs");
-    ignored!(ig8, ROOT, "foo/", "foo", true);
+    ignored!(ig8, ROOT, "foo/", "foo");
     ignored!(ig9, ROOT, "**/foo", "foo");
     ignored!(ig10, ROOT, "**/foo", "src/foo");
     ignored!(ig11, ROOT, "**/foo/**", "src/foo/bar");
@@ -563,10 +464,10 @@ mod tests {
     ignored!(ig24, ROOT, "target", "grep/target");
     ignored!(ig25, ROOT, "Cargo.lock", "./tabwriter-bin/Cargo.lock");
     ignored!(ig26, ROOT, "/foo/bar/baz", "./foo/bar/baz");
-    ignored!(ig27, ROOT, "foo/", "xyz/foo", true);
-    ignored!(ig28, "./src", "/llvm/", "./src/llvm", true);
-    ignored!(ig29, ROOT, "node_modules/ ", "node_modules", true);
-    ignored!(ig30, ROOT, "**/", "foo/bar", true);
+    ignored!(ig27, ROOT, "foo/", "xyz/foo");
+    ignored!(ig28, "./src", "/llvm/", "./src/llvm");
+    ignored!(ig29, ROOT, "node_modules/ ", "node_modules");
+    ignored!(ig30, ROOT, "**/", "foo/bar");
     ignored!(ig31, ROOT, "path1/*", "path1/foo");
     ignored!(ig32, ROOT, ".a/b", ".a/b");
     ignored!(ig33, "./", ".a/b", ".a/b");
@@ -588,13 +489,12 @@ mod tests {
     not_ignored!(ignot4, ROOT, "/*.c", "mozilla-sha1/sha1.c");
     not_ignored!(ignot5, ROOT, "/src/*.rs", "src/grep/src/main.rs");
     not_ignored!(ignot6, ROOT, "*.rs\n!src/main.rs", "src/main.rs");
-    not_ignored!(ignot7, ROOT, "foo/", "foo", false);
     not_ignored!(ignot8, ROOT, "**/foo/**", "wat/src/afoo/bar/baz");
     not_ignored!(ignot9, ROOT, "**/foo/**", "wat/src/fooa/bar/baz");
     not_ignored!(ignot10, ROOT, "**/foo/bar", "foo/src/bar");
     not_ignored!(ignot11, ROOT, "#foo", "#foo");
     not_ignored!(ignot12, ROOT, "\n\n\n", "foo");
-    not_ignored!(ignot13, ROOT, "foo/**", "foo", true);
+    not_ignored!(ignot13, ROOT, "foo/**", "foo");
     not_ignored!(
         ignot14,
         "./third_party/protobuf",
@@ -602,7 +502,7 @@ mod tests {
         "./third_party/protobuf/csharp/src/packages/repositories.config"
     );
     not_ignored!(ignot15, ROOT, "!/bar", "foo/bar");
-    not_ignored!(ignot16, ROOT, "*\n!**/", "foo", true);
+    not_ignored!(ignot16, ROOT, "*\n!**/", "foo");
     not_ignored!(ignot17, ROOT, "src/*.rs", "src/grep/src/main.rs");
     not_ignored!(ignot18, ROOT, "path1/*", "path2/path1/foo");
     not_ignored!(ignot19, ROOT, "s*.rs", "src/foo.rs");

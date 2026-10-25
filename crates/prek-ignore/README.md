@@ -14,9 +14,10 @@ The original dual license is preserved in [LICENSE-MIT](LICENSE-MIT) and
 ## Changes from upstream
 
 - Renamed the crate to `prek-ignore` and integrated it into the prek workspace.
-- Replaced the general walker API with `walk(root, custom_ignore_filename, callback)` and `WalkState`. The callback exposes borrowed, unfiltered directory
+- Replaced the general walker API with `walk(root, callback)` and `WalkState`.
+  The callback exposes borrowed, unfiltered directory
   listings so prek can discover configuration files without probing every
-  filename. Prek supplies `.prekignore` as the custom ignore file.
+  filename. The custom ignore filename is fixed to `.prekignore`.
 - Restricted traversal to directories. Ordinary files and child symlinks are
   excluded before constructing paths, matching ignore rules or scheduling work.
 - Removed serial iteration, file-type definitions, override globs, incremental
@@ -25,9 +26,18 @@ The original dual license is preserved in [LICENSE-MIT](LICENSE-MIT) and
 - Removed the matcher option switches, explicit ignore-file API and parent
   matcher cache used by multiple roots. The retained ignore behavior uses the
   defaults that prek previously selected.
-- Kept the upstream work-stealing algorithm. Idle workers use a timed condition
-  variable so completion, cancellation and panic can wake them immediately.
-  Ordinary task insertion does not acquire a notification lock.
+- Reused the workspace's Rayon scheduler for parallel traversal, task completion
+  and panic propagation. A cancellation flag skips queued work after `Quit` or
+  a panic, without maintaining a separate work queue or worker wakeup protocol.
+- Share ignore state through directories with no rules. Only new rules or a
+  repository boundary create a node. Global rules and root path translation
+  belong to the walk rather than each directory node.
+- Match only directories and retain just the compiled globs and their whitelist
+  flags. Traversal tasks supply reusable matching buffers. Pruned and leaf
+  directories do not build matchers.
+- Reused the workspace's `regex` and `tracing` dependencies in place of direct
+  `regex-automata` and `log` dependencies. `crossbeam-deque` is no longer a direct
+  dependency; those crates may still appear as transitive dependencies.
 - Use direct ignore-file probes when a directory listing is incomplete, since
   a partial listing cannot establish that a file is absent.
 - Reduced error types and dependencies to the retained behavior, adopted the

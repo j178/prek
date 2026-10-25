@@ -1,13 +1,10 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{
-        Arc, Condvar, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
 };
 
-use crossbeam_deque::{Stealer, Worker as Deque};
+use rayon::Scope;
 
 use crate::{dir::Ignore, pathutil::is_hidden_entry};
 
@@ -24,7 +21,7 @@ pub enum WalkState {
 
 /// Visits directories in parallel, respecting ignore files and repository boundaries.
 ///
-/// Rules come from `custom_ignore_filename`, `.ignore`, `.gitignore`, Git's
+/// Rules come from `.prekignore`, `.ignore`, `.gitignore`, Git's
 /// `info/exclude` and global excludes, in that precedence order. Parent rules
 /// apply as in upstream `ignore`. Hidden directories are skipped unless an
 /// ignore rule explicitly includes them. Child symlinks are never followed.
@@ -37,78 +34,48 @@ pub enum WalkState {
 /// Directory read failures and invalid ignore rules do not abort traversal.
 /// Valid rules from partially invalid ignore files still apply. Callback order
 /// is unspecified, and returning [`WalkState::Quit`] cancels asynchronously.
-pub fn walk<F>(root: &Path, custom_ignore_filename: &str, visit: F)
+pub fn walk<F>(root: &Path, visit: F)
 where
     F: Fn(&Path, Option<&[fs::DirEntry]>) -> WalkState + Sync,
 {
     if !root.is_dir() {
         return;
     }
-    let threads = std::thread::available_parallelism()
-        .map_or(1, std::num::NonZero::get)
-        .min(12);
-    let shared = Arc::new(Shared {
-        quit_now: AtomicBool::new(false),
-        active_workers: AtomicUsize::new(threads),
-        wait_lock: Mutex::new(()),
-        wakeup: Condvar::new(),
-    });
-    let initial = Work {
-        path: root.to_path_buf(),
-        ignore: Ignore::new(root, custom_ignore_filename),
+    let walker = Walker {
+        quit: AtomicBool::new(false),
+        visit,
     };
-    let stacks = Stack::new_for_each_thread(threads, initial);
-    std::thread::scope(|scope| {
-        for stack in stacks {
-            let worker = Worker {
-                stack,
-                shared: shared.clone(),
-                visit: &visit,
-            };
-            scope.spawn(move || worker.run());
-        }
-    });
+    let work = Work {
+        path: root.to_path_buf(),
+        ignore: Ignore::new(root),
+    };
+    rayon::in_place_scope(|scope| walker.run(scope, &work));
 }
 
-type Visitor<'a> = dyn Fn(&Path, Option<&[fs::DirEntry]>) -> WalkState + Sync + 'a;
-
-#[derive(Debug)]
-enum Message {
-    Work(Work),
-    Quit,
-}
-
-#[derive(Debug)]
 struct Work {
     path: PathBuf,
     ignore: Ignore,
 }
 
-struct Shared {
-    quit_now: AtomicBool,
-    active_workers: AtomicUsize,
-    wait_lock: Mutex<()>,
-    wakeup: Condvar,
+struct Walker<F> {
+    quit: AtomicBool,
+    visit: F,
 }
 
-struct Worker<'a> {
-    stack: Stack,
-    shared: Arc<Shared>,
-    visit: &'a Visitor<'a>,
-}
-
-impl Worker<'_> {
-    fn run(mut self) {
-        while let Some(work) = self.get_work() {
-            if self.run_one(&work) == WalkState::Quit {
-                self.quit_now();
-            }
+impl<F> Walker<F>
+where
+    F: Fn(&Path, Option<&[fs::DirEntry]>) -> WalkState + Sync,
+{
+    fn run<'scope>(&'scope self, scope: &Scope<'scope>, work: &Work) {
+        if self.quit.load(Ordering::Relaxed) {
+            return;
         }
-    }
-
-    fn run_one(&self, work: &Work) -> WalkState {
+        let _cancel_on_panic = CancelOnPanic(&self.quit);
         let Ok(reader) = fs::read_dir(&work.path) else {
-            return (self.visit)(&work.path, None);
+            if (self.visit)(&work.path, None) == WalkState::Quit {
+                self.quit.store(true, Ordering::Relaxed);
+            }
+            return;
         };
         let mut entries = Vec::new();
         let mut complete = true;
@@ -123,221 +90,49 @@ impl Worker<'_> {
         } else {
             None
         };
-        let ignore = work.ignore.add_child(&work.path, listing);
-        let state = (self.visit)(&work.path, listing);
-        if state != WalkState::Continue {
-            return state;
+        match (self.visit)(&work.path, listing) {
+            WalkState::Quit => {
+                self.quit.store(true, Ordering::Relaxed);
+                return;
+            }
+            WalkState::Skip => return,
+            WalkState::Continue => {}
         }
-        for entry in entries {
-            // Only directories can contain projects. File entries still remain
-            // available in the listing above for configuration discovery.
-            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-                continue;
+        let mut directories = entries
+            .iter()
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+            .peekable();
+        if directories.peek().is_none() {
+            return;
+        }
+        // Ignore rules only affect children. Pruned and leaf directories need no matcher.
+        let ignore = work.ignore.add_child(&work.path, listing);
+        let mut matches = Vec::new();
+        for entry in directories {
+            if self.quit.load(Ordering::Relaxed) {
+                break;
             }
             let path = entry.path();
-            let matched = ignore.matched(&path);
-            if matched.is_ignore() || (matched.is_none() && is_hidden_entry(&entry, &path)) {
+            let matched = ignore.matched(&path, &mut matches);
+            if matched.is_ignore() || (matched.is_none() && is_hidden_entry(entry, &path)) {
                 continue;
             }
-            self.send(Work {
+            let work = Work {
                 path,
                 ignore: ignore.clone(),
-            });
-        }
-        WalkState::Continue
-    }
-}
-
-/// A work-stealing stack.
-#[derive(Debug)]
-struct Stack {
-    /// This thread's index.
-    index: usize,
-    /// The thread-local stack.
-    deque: Deque<Message>,
-    /// The work stealers.
-    stealers: Arc<[Stealer<Message>]>,
-}
-
-impl Stack {
-    /// Start at the root; workers steal subdirectories as they are discovered.
-    fn new_for_each_thread(threads: usize, root: Work) -> Vec<Stack> {
-        // Using new_lifo() ensures each worker operates depth-first, not
-        // breadth-first. We do depth-first because a breadth first traversal
-        // on wide directories with a lot of gitignores is disastrous (for
-        // example, searching a directory tree containing all of crates.io).
-        let deques: Vec<Deque<Message>> = std::iter::repeat_with(Deque::new_lifo)
-            .take(threads)
-            .collect();
-        let stealers =
-            Arc::<[Stealer<Message>]>::from(deques.iter().map(Deque::stealer).collect::<Vec<_>>());
-        let stacks: Vec<Stack> = deques
-            .into_iter()
-            .enumerate()
-            .map(|(index, deque)| Stack {
-                index,
-                deque,
-                stealers: stealers.clone(),
-            })
-            .collect();
-        if let Some(stack) = stacks.first() {
-            stack.push(Message::Work(root));
-        }
-        stacks
-    }
-
-    /// Push a message.
-    fn push(&self, msg: Message) {
-        self.deque.push(msg);
-    }
-
-    /// Pop a message.
-    fn pop(&self) -> Option<Message> {
-        self.deque.pop().or_else(|| self.steal())
-    }
-
-    /// Steal a message from another queue.
-    fn steal(&self) -> Option<Message> {
-        // For fairness, try to steal from index + 1, index + 2, ... len - 1,
-        // then wrap around to 0, 1, ... index - 1.
-        let (left, right) = self.stealers.split_at(self.index);
-        // Don't steal from ourselves
-        let right = &right[1..];
-
-        right
-            .iter()
-            .chain(left.iter())
-            .map(|s| s.steal_batch_and_pop(&self.deque))
-            .find_map(crossbeam_deque::Steal::success)
-    }
-}
-
-impl Worker<'_> {
-    /// Returns the next directory to descend into.
-    ///
-    /// If all work has been exhausted, then this returns None. The worker
-    /// should then subsequently quit.
-    fn get_work(&mut self) -> Option<Work> {
-        let mut value = self.recv();
-        loop {
-            // Simulate a priority channel: If quit_now flag is set, we can
-            // receive only quit messages.
-            if self.is_quit_now() {
-                value = Some(Message::Quit);
-            }
-            match value {
-                Some(Message::Work(work)) => {
-                    return Some(work);
-                }
-                Some(Message::Quit) => {
-                    // Repeat quit message to wake up sleeping threads, if
-                    // any. The domino effect will ensure that every thread
-                    // will quit.
-                    self.send_quit();
-                    return None;
-                }
-                None => {
-                    if self.deactivate_worker() == 0 {
-                        // If deactivate_worker() returns 0, every worker thread
-                        // is currently within the critical section between the
-                        // acquire in deactivate_worker() and the release in
-                        // activate_worker() below.  For this to happen, every
-                        // worker's local deque must be simultaneously empty,
-                        // meaning there is no more work left at all.
-                        self.send_quit();
-                        return None;
-                    }
-                    // Wait for next `Work` or `Quit` message.
-                    let mut guard = self
-                        .shared
-                        .wait_lock
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    loop {
-                        if self.is_quit_now() {
-                            return None;
-                        }
-                        if let Some(v) = self.recv() {
-                            self.activate_worker();
-                            value = Some(v);
-                            break;
-                        }
-                        // Poll for new work without synchronizing every push.
-                        // Termination wakes all waiters immediately instead of
-                        // waiting for this timeout on each worker.
-                        let dur = std::time::Duration::from_millis(1);
-                        guard = self
-                            .shared
-                            .wakeup
-                            .wait_timeout(guard, dur)
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .0;
-                    }
-                }
-            }
+            };
+            scope.spawn(move |scope| self.run(scope, &work));
         }
     }
-
-    /// Indicates that all workers should quit immediately.
-    fn quit_now(&self) {
-        self.shared.quit_now.store(true, AtomicOrdering::SeqCst);
-        self.wake_workers();
-    }
-
-    /// Returns true if this worker should quit immediately.
-    fn is_quit_now(&self) -> bool {
-        self.shared.quit_now.load(AtomicOrdering::SeqCst)
-    }
-
-    /// Send work.
-    fn send(&self, work: Work) {
-        self.stack.push(Message::Work(work));
-    }
-
-    /// Send a quit message.
-    fn send_quit(&self) {
-        self.stack.push(Message::Quit);
-        self.wake_workers();
-    }
-
-    /// Wake idle workers promptly when the walk finishes or is cancelled.
-    fn wake_workers(&self) {
-        // Pair with the queue check under this lock so termination cannot
-        // arrive between checking the queue and going to sleep. The lock
-        // protects no data, so poisoning does not prevent shutdown.
-        let _guard = self
-            .shared
-            .wait_lock
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.shared.wakeup.notify_all();
-    }
-
-    /// Receive work.
-    fn recv(&self) -> Option<Message> {
-        self.stack.pop()
-    }
-
-    /// Deactivates a worker and returns the number of currently active workers.
-    fn deactivate_worker(&self) -> usize {
-        self.shared
-            .active_workers
-            .fetch_sub(1, AtomicOrdering::Acquire)
-            - 1
-    }
-
-    /// Reactivates a worker.
-    fn activate_worker(&self) {
-        self.shared
-            .active_workers
-            .fetch_add(1, AtomicOrdering::Release);
-    }
 }
 
-impl Drop for Worker<'_> {
+/// Rayon propagates panics after draining the scope. Cancel queued callbacks first.
+struct CancelOnPanic<'a>(&'a AtomicBool);
+
+impl Drop for CancelOnPanic<'_> {
     fn drop(&mut self) {
         if std::thread::panicking() {
-            self.quit_now();
+            self.0.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -357,7 +152,7 @@ mod tests {
 
     fn collect(root: &Path) -> Vec<String> {
         let visited = Mutex::new(Vec::new());
-        walk(root, ".prekignore", |path, _| {
+        walk(root, |path, _| {
             visited.lock().unwrap().push(
                 path.strip_prefix(root)
                     .unwrap()
@@ -382,7 +177,7 @@ mod tests {
             fs::create_dir_all(root.join(name)).unwrap();
         }
         let visited = Mutex::new(Vec::new());
-        walk(root, ".prekignore", |path, entries| {
+        walk(root, |path, entries| {
             let relative = path.strip_prefix(root).unwrap();
             visited.lock().unwrap().push(relative.to_path_buf());
             if relative.as_os_str().is_empty() {
@@ -506,6 +301,53 @@ mod tests {
         assert_eq!(collect(&root), ["", "nested", "nested/from-parent", "open"]);
     }
 
+    /// Empty directories preserve parent rules, and an empty repository resets only Git rules.
+    #[test]
+    fn rules_across_empty_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let parent = temp.path();
+        for name in [
+            ".git",
+            "project/a/b/blocked",
+            "project/a/b/kept",
+            "project/a/b/nested/.git",
+            "project/a/b/nested/blocked",
+            "project/a/b/nested/custom-blocked",
+        ] {
+            fs::create_dir_all(parent.join(name)).unwrap();
+        }
+        fs::write(parent.join(".gitignore"), "blocked/\n").unwrap();
+        fs::write(parent.join(".prekignore"), "custom-blocked/\n").unwrap();
+        assert_eq!(
+            collect(&parent.join("project")),
+            [
+                "",
+                "a",
+                "a/b",
+                "a/b/kept",
+                "a/b/nested",
+                "a/b/nested/blocked"
+            ]
+        );
+    }
+
+    /// Dot components in absolute and relative roots preserve canonical parent-rule matching.
+    #[test]
+    fn dot_components_in_root() {
+        let temp = tempfile::tempdir_in(".").unwrap();
+        fs::create_dir_all(temp.path().join("project/a/blocked")).unwrap();
+        fs::create_dir_all(temp.path().join("project/a/kept")).unwrap();
+        fs::write(temp.path().join(".ignore"), "/project/a/blocked/\n").unwrap();
+        for root in [
+            temp.path().join("./project"),
+            Path::new("./.")
+                .join(temp.path().file_name().unwrap())
+                .join("project"),
+        ] {
+            assert_eq!(collect(&root), ["", "a", "a/kept"]);
+        }
+    }
+
     /// Git worktree files resolve excludes from the common repository directory.
     #[test]
     fn linked_worktree_excludes() {
@@ -572,7 +414,7 @@ mod tests {
             return;
         }
         let visited = AtomicUsize::new(0);
-        walk(root, ".prekignore", |path, entries| {
+        walk(root, |path, entries| {
             assert_eq!(path, root);
             assert!(entries.is_none());
             assert!(path.join("prek.toml").is_file());
@@ -589,7 +431,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         fs::create_dir(temp.path().join("child")).unwrap();
         let visited = AtomicUsize::new(0);
-        walk(temp.path(), ".prekignore", |_, _| {
+        walk(temp.path(), |_, _| {
             visited.fetch_add(1, Ordering::Relaxed);
             WalkState::Quit
         });
@@ -602,7 +444,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let visited = AtomicUsize::new(0);
         let result = std::panic::catch_unwind(|| {
-            walk(temp.path(), ".prekignore", |_, _| {
+            walk(temp.path(), |_, _| {
                 visited.fetch_add(1, Ordering::Relaxed);
                 panic!("callback panic");
             });

@@ -2096,12 +2096,12 @@ dependencies = [
 name = "prek-ignore"
 version = "0.5.7"
 dependencies = [
- "crossbeam-deque",
  "globset",
- "log",
  "memchr",
- "regex-automata",
+ "rayon",
+ "regex",
  "tempfile",
+ "tracing",
  "winapi-util",
 ]
 

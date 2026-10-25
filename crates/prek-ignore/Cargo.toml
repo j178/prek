@@ -8,11 +8,11 @@ repository = { workspace = true }
 license = "Unlicense OR MIT"
 
 [dependencies]
-crossbeam-deque = { workspace = true }
 globset = { workspace = true }
-log = { workspace = true }
 memchr = { workspace = true }
-regex-automata = { workspace = true }
+rayon = { workspace = true }
+regex = { workspace = true }
+tracing = { workspace = true }
 
 [target."cfg(windows)".dependencies]
 winapi-util = { workspace = true }

@@ -82,12 +82,6 @@ impl PartialErrorBuilder {
         self.0.push(error);
     }
 
-    fn maybe_push(&mut self, error: Option<Error>) {
-        if let Some(error) = error {
-            self.push(error);
-        }
-    }
-
     fn maybe_push_ignore_io(&mut self, error: Option<Error>) {
         if let Some(error) = error {
             if !error.is_io() {
@@ -105,19 +99,19 @@ impl PartialErrorBuilder {
     }
 }
 
-#[derive(Clone, Debug)]
-enum Match<T> {
+#[derive(Clone, Copy, Debug)]
+enum Match {
     None,
-    Ignore(T),
-    Whitelist(T),
+    Ignore,
+    Whitelist,
 }
 
-impl<T> Match<T> {
-    fn is_none(&self) -> bool {
+impl Match {
+    fn is_none(self) -> bool {
         matches!(self, Self::None)
     }
-    fn is_ignore(&self) -> bool {
-        matches!(self, Self::Ignore(_))
+    fn is_ignore(self) -> bool {
+        matches!(self, Self::Ignore)
     }
     fn or(self, other: Self) -> Self {
         if self.is_none() { other } else { self }
