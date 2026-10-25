@@ -253,15 +253,32 @@ impl Project {
         path: &'a Path,
         entries: Option<&[DirEntry]>,
     ) -> impl Iterator<Item = (&'static str, PathBuf)> + 'a {
-        let mut candidates = [true; CONFIG_FILENAMES.len()];
+        #[derive(Clone, Copy)]
+        enum Candidate {
+            Absent,
+            File,
+            Probe,
+        }
+
+        let mut candidates = [Candidate::Probe; CONFIG_FILENAMES.len()];
         if let Some(entries) = entries {
-            candidates.fill(false);
+            candidates.fill(Candidate::Absent);
             for entry in entries {
                 let name = entry.file_name();
                 let name = name.as_encoded_bytes();
                 for (&config, candidate) in CONFIG_FILENAMES.iter().zip(&mut candidates) {
-                    if name.eq_ignore_ascii_case(config.as_bytes()) {
-                        *candidate = true;
+                    if !name.eq_ignore_ascii_case(config.as_bytes()) {
+                        continue;
+                    }
+                    if name == config.as_bytes() {
+                        *candidate = match entry.file_type() {
+                            Ok(file_type) if file_type.is_file() => Candidate::File,
+                            Ok(file_type) if !file_type.is_symlink() => Candidate::Absent,
+                            _ => Candidate::Probe,
+                        };
+                    } else if matches!(candidate, Candidate::Absent) {
+                        // Let the filesystem decide whether differently cased names match.
+                        *candidate = Candidate::Probe;
                     }
                 }
             }
@@ -271,11 +288,11 @@ impl Project {
             .iter()
             .zip(candidates)
             .filter_map(move |(&name, candidate)| {
-                if !candidate {
+                if matches!(candidate, Candidate::Absent) {
                     return None;
                 }
                 let file = path.join(name);
-                if file.is_file() {
+                if matches!(candidate, Candidate::File) || file.is_file() {
                     Some((name, file))
                 } else {
                     None
