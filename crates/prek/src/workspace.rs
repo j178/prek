@@ -245,8 +245,8 @@ impl Project {
         })
     }
 
-    pub(crate) fn find_config(path: &Path) -> Option<PathBuf> {
-        Self::find_configs(path, None).next().map(|(_, path)| path)
+    pub(crate) fn has_config(path: &Path) -> bool {
+        Self::find_configs(path, None).next().is_some()
     }
 
     fn find_configs<'a>(
@@ -656,7 +656,7 @@ impl Workspace {
         let workspace_root = dir
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
-            .find(|p| Project::find_config(p).is_some())
+            .find(|p| Project::has_config(p))
             .ok_or(Error::MissingConfigFile)?
             .to_path_buf();
 

@@ -110,7 +110,7 @@ fn configured_project_roots(target: &Path, git_root: &Path) -> Vec<PathBuf> {
     target
         .ancestors()
         .take_while(|path| path.starts_with(git_root))
-        .filter(|path| Project::find_config(path).is_some())
+        .filter(|path| Project::has_config(path))
         .map(Path::to_path_buf)
         .collect()
 }
