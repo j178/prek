@@ -45,8 +45,7 @@ globset = { version = "0.4.18" }
 granit-parser = { version = "1.2.1" }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
-# TODO: Publish the fork or use an upstream release before publishing prek to crates.io.
-ignore = { git = "https://github.com/prek-ci/ripgrep", rev = "b314f3f8ded4080d9c9bad5b351e597e167482eb" }
+ignore = { package = "prek-ignore", version = "0.4.33" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.15.0" }

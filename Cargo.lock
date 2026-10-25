@@ -1053,7 +1053,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf760ebf69878d9fd8f110c89703d90ce35095324d1f1edcb595c63945ee757"
 dependencies = [
  "bitflags 2.13.0",
- "ignore 0.4.33 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ignore",
  "walkdir",
 ]
 
@@ -1310,21 +1310,6 @@ name = "ignore"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b69833ed729dc5aa7d19541d96d6cf8e9137194207a04916d658e43168402f"
-dependencies = [
- "crossbeam-deque",
- "globset",
- "log",
- "memchr",
- "regex-automata",
- "same-file",
- "walkdir",
- "winapi-util",
-]
-
-[[package]]
-name = "ignore"
-version = "0.4.33"
-source = "git+https://github.com/prek-ci/ripgrep?rev=b314f3f8ded4080d9c9bad5b351e597e167482eb#b314f3f8ded4080d9c9bad5b351e597e167482eb"
 dependencies = [
  "crossbeam-deque",
  "globset",
@@ -2029,7 +2014,6 @@ dependencies = [
  "granit-parser",
  "hex",
  "http",
- "ignore 0.4.33 (git+https://github.com/prek-ci/ripgrep?rev=b314f3f8ded4080d9c9bad5b351e597e167482eb)",
  "indicatif",
  "indoc",
  "insta",
@@ -2046,6 +2030,7 @@ dependencies = [
  "predicates",
  "prek-consts",
  "prek-identify",
+ "prek-ignore",
  "prek-pty",
  "pretty_assertions",
  "rayon",
@@ -2105,6 +2090,22 @@ dependencies = [
  "shlex",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "prek-ignore"
+version = "0.4.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b3e3ad7a73329b46198304ff3ec50832359f18acb697844afdab4e12a30c775"
+dependencies = [
+ "crossbeam-deque",
+ "globset",
+ "log",
+ "memchr",
+ "regex-automata",
+ "same-file",
+ "walkdir",
+ "winapi-util",
 ]
 
 [[package]]
