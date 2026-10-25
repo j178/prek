@@ -31,12 +31,12 @@ fn ignored_config_symlink() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Directory enumeration preserves the filesystem's case and Unicode name matching.
+/// Directory enumeration preserves the filesystem's ASCII case matching.
 /// Backup filenames do not become configs.
 #[test]
 fn filesystem_name_matching() {
     insta::allow_duplicates! {
-        for filename in ["PREK.TOML", "pre\u{212a}.toml", "prek.toml.bak"] {
+        for filename in ["PREK.TOML", "prek.toml.bak"] {
             let context = TestEnv::new()
                 .with_config("repos: []")
                 .with_file(

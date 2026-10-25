@@ -259,11 +259,6 @@ impl Project {
             for entry in entries {
                 let name = entry.file_name();
                 let name = name.as_encoded_bytes();
-                // Filesystems can normalize Unicode names. Only rule out absent ASCII names.
-                if !name.is_ascii() {
-                    candidates.fill(true);
-                    break;
-                }
                 for (&config, candidate) in CONFIG_FILENAMES.iter().zip(&mut candidates) {
                     if name.eq_ignore_ascii_case(config.as_bytes()) {
                         *candidate = true;
