@@ -14,6 +14,7 @@ license = "MIT"
 [workspace.dependencies]
 prek-consts = { path = "crates/prek-consts", version = "0.5.7" }
 prek-identify = { path = "crates/prek-identify", version = "0.5.7" }
+prek-ignore = { path = "crates/prek-ignore", version = "0.5.7" }
 prek-pty = { path = "crates/prek-pty", version = "0.5.7" }
 
 aho-corasick = { version = "1.1.4" }
@@ -34,6 +35,7 @@ clap = { version = "4.6.0", features = ["derive", "env", "string", "wrap_help"] 
 clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
 clap_complete_nushell = { version = "4.6.2" }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std"] }
+crossbeam-deque = { version = "0.8.3" }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
@@ -45,7 +47,6 @@ globset = { version = "0.4.18" }
 granit-parser = { version = "1.2.1" }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
-ignore = { package = "prek-ignore", version = "0.4.33" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.15.0" }
@@ -55,11 +56,13 @@ libc = { version = "0.2.182" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "0.4.5", features = ["static"] }
+log = { version = "0.4.20" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.14.0", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
 rayon = { version = "1.11.0" }
+regex-automata = { version = "0.4.18", default-features = false, features = ["std", "meta"] }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "stream",
   "json",
@@ -111,6 +114,7 @@ url = { version = "2.5.8" }
 walkdir = { version = "2.5.0" }
 webpki-root-certs = { version = "1.0.6" }
 which = { version = "8.0.0" }
+winapi-util = { version = "0.1.2" }
 xml = { version = "1.3.0" }
 
 # dev-dependencies

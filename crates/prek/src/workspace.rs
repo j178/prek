@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use ignore::WalkState;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
+use prek_ignore::WalkState;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -792,85 +792,71 @@ impl Workspace {
             Vec::new()
         });
 
-        ignore::WalkBuilder::new(root)
-            .follow_links(false)
-            .add_custom_ignore_filename(".prekignore")
-            .build_parallel()
-            .run_with_directory_entries(|| {
-                Box::new(|result, entries| {
-                    let Ok(entry) = result else {
-                        return WalkState::Continue;
-                    };
-                    let Some(file_type) = entry.file_type() else {
-                        return WalkState::Continue;
-                    };
-                    if !file_type.is_dir() {
-                        return WalkState::Continue;
-                    }
-
-                    // Skip cookiecutter template directories
-                    if entry.file_name().to_str().is_some_and(|filename| {
-                        filename.starts_with("{{")
-                            && filename.ends_with("}}")
-                            && filename.contains("cookiecutter")
-                    }) {
-                        trace!(
-                            path = %entry.path().user_display(),
-                            "Skipping cookiecutter template directory"
-                        );
-                        return WalkState::Skip;
-                    }
-
-                    // Do not descend into git submodules
-                    if submodules
-                        .iter()
-                        .any(|submodule| entry.path().starts_with(submodule))
-                    {
-                        trace!(
-                            path = %entry.path().user_display(),
-                            "Skipping git submodule"
-                        );
-                        return WalkState::Skip;
-                    }
-
-                    match Project::from_directory_with_entries(entry.path(), entries) {
-                        Ok(mut project) => {
-                            let relative_path = entry
-                                .into_path()
-                                .strip_prefix(root)
-                                .expect("Entry path should be relative to the root")
-                                .to_path_buf();
-                            project.with_relative_path(relative_path);
-
-                            if let Ok(projects) = projects.lock().unwrap().as_mut() {
-                                projects.push(project);
-                            }
-                        }
-                        Err(Error::MissingConfigFile) => {}
-                        Err(e) => {
-                            // Exit early if the path is selected
-                            if let Some(selectors) = selectors {
-                                let relative_path = entry
-                                    .path()
-                                    .strip_prefix(root)
-                                    .expect("Entry path should be relative to the root");
-                                if selectors.matches_path(relative_path) {
-                                    *projects.lock().unwrap() = Err(e);
-                                    return WalkState::Quit;
-                                }
-                            }
-                            // Otherwise, just log the error and continue
-                            error!(
-                                path = %entry.path().user_display(),
-                                "Skipping project due to error: {e}"
-                            );
-                            return WalkState::Skip;
-                        }
-                    }
-
-                    WalkState::Continue
+        prek_ignore::walk(root, ".prekignore", |path, entries| {
+            // Skip cookiecutter template directories
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|filename| {
+                    filename.starts_with("{{")
+                        && filename.ends_with("}}")
+                        && filename.contains("cookiecutter")
                 })
-            });
+            {
+                trace!(
+                    path = %path.user_display(),
+                    "Skipping cookiecutter template directory"
+                );
+                return WalkState::Skip;
+            }
+
+            // Do not descend into git submodules
+            if submodules
+                .iter()
+                .any(|submodule| path.starts_with(submodule))
+            {
+                trace!(
+                    path = %path.user_display(),
+                    "Skipping git submodule"
+                );
+                return WalkState::Skip;
+            }
+
+            match Project::from_directory_with_entries(path, entries) {
+                Ok(mut project) => {
+                    let relative_path = path
+                        .strip_prefix(root)
+                        .expect("Entry path should be relative to the root")
+                        .to_path_buf();
+                    project.with_relative_path(relative_path);
+
+                    if let Ok(projects) = projects.lock().unwrap().as_mut() {
+                        projects.push(project);
+                    }
+                }
+                Err(Error::MissingConfigFile) => {}
+                Err(e) => {
+                    // Exit early if the path is selected
+                    if let Some(selectors) = selectors {
+                        let relative_path = path
+                            .strip_prefix(root)
+                            .expect("Entry path should be relative to the root");
+                        if selectors.matches_path(relative_path) {
+                            *projects.lock().unwrap() = Err(e);
+                            return WalkState::Quit;
+                        }
+                    }
+                    // Otherwise, just log the error and continue
+                    error!(
+                        path = %path.user_display(),
+                        "Skipping project due to error: {e}"
+                    );
+                    return WalkState::Skip;
+                }
+            }
+
+            WalkState::Continue
+        });
 
         let projects = projects.into_inner().unwrap()?;
         if projects.is_empty() {

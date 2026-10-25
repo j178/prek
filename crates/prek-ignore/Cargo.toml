@@ -1,0 +1,24 @@
+[package]
+name = "prek-ignore"
+description = "Directory discovery and ignore matching for prek"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+repository = { workspace = true }
+license = "Unlicense OR MIT"
+
+[dependencies]
+crossbeam-deque = { workspace = true }
+globset = { workspace = true }
+log = { workspace = true }
+memchr = { workspace = true }
+regex-automata = { workspace = true }
+
+[target."cfg(windows)".dependencies]
+winapi-util = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

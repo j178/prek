@@ -2094,17 +2094,14 @@ dependencies = [
 
 [[package]]
 name = "prek-ignore"
-version = "0.4.33"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b3e3ad7a73329b46198304ff3ec50832359f18acb697844afdab4e12a30c775"
+version = "0.5.7"
 dependencies = [
  "crossbeam-deque",
  "globset",
  "log",
  "memchr",
  "regex-automata",
- "same-file",
- "walkdir",
+ "tempfile",
  "winapi-util",
 ]
 
