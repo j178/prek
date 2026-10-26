@@ -1,0 +1,26 @@
+[package]
+name = "prek-update"
+description = "Self-update support for standalone prek installations"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+prek-consts = { workspace = true }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+reqwest = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+
+[target."cfg(windows)".dependencies]
+self-replace = { workspace = true }
+
+[lints]
+workspace = true

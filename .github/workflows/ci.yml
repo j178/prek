@@ -436,7 +436,7 @@ jobs:
             --workspace \
             --cargo-profile no-debug \
             --profile ci-core \
-            --features ci,schemars \
+            --features ci,schemars,self-update \
             -E "${CI_CORE_FILTER}"
 
       - name: "Upload coverage reports to Codecov"
@@ -507,7 +507,7 @@ jobs:
             --output-path lcov.info `
             --workspace `
             --cargo-profile no-debug `
-            --features ci,schemars `
+            --features ci,schemars,self-update `
             --profile ci-core `
             -E $env:CI_CORE_FILTER
 

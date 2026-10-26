@@ -14,7 +14,7 @@ license = { workspace = true }
 default = ["docker"]
 # Adds self-update functionality. This feature is only enabled for prek built binarys
 # and should be left unselected when building prek for package managers.
-self-update = ["dep:axoupdater"]
+self-update = ["dep:prek-update"]
 # Enable the profiler for benchmarking
 profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable tests that depend on the CI environment
@@ -28,6 +28,7 @@ schemars = ["dep:schemars", "prek-identify/schemars"]
 prek-consts = { workspace = true }
 prek-identify = { workspace = true, features = ["serde"] }
 prek-ignore = { workspace = true }
+prek-update = { workspace = true, optional = true }
 
 aho-corasick = { workspace = true }
 annotate-snippets = { workspace = true }
@@ -38,7 +39,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 async-compression = { workspace = true }
 async_zip = { workspace = true }
-axoupdater = { workspace = true, optional = true }
 bstr = { workspace = true }
 cargo_metadata = { workspace = true }
 clap = { workspace = true }
