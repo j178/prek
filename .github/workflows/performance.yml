@@ -44,9 +44,9 @@ jobs:
 
       - name: Build head branch
         id: bloat_head
+        shell: bash
         run: |
-          # Build head branch
-          cargo bloat --profile profiling | tee bloat_head.txt >&1
+          cargo bloat --locked --profile profiling -p prek --bin prek --features self-update | tee bloat_head.txt
 
       - name: Checkout base
         run: |
@@ -54,9 +54,9 @@ jobs:
 
       - name: Build base branch
         id: bloat_base
+        shell: bash
         run: |
-          # Build base branch
-          cargo bloat --profile profiling | tee bloat_base.txt >&1
+          cargo bloat --locked --profile profiling -p prek --bin prek --features self-update | tee bloat_base.txt
 
       - name: Compare bloat results
         shell: python
