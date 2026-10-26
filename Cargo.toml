@@ -30,7 +30,6 @@ async_zip = { version = "0.0.22", package = "astral_async_zip", features = ["def
 asyncband = { version = "0.7.1", features = ["once-cell", "once-map", "semaphore"] }
 aws-lc-rs = { version = "1.17.0", default-features = false, features = ["aws-lc-sys"] }
 bstr = { version = "1.11.0", default-features = false, features = ["std"] }
-cargo_metadata = { version = "0.23.1" }
 clap = { version = "4.6.0", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = { version = "4.6.0", features = ["unstable-dynamic"] }
 clap_complete_nushell = { version = "4.6.2" }
