@@ -84,7 +84,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
-tokio = { version = "1.47.1", features = [
+tokio = { version = "1.53.3", features = [
   "fs",
   "io-std",
   "io-util",
