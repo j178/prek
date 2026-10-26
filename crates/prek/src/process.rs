@@ -364,53 +364,45 @@ impl Cmd {
         // We intentionally do not make the child a session leader/foreground process group here.
         // When we did, termenv detected it as foreground and ran OSC probes, which then hung.
 
-        // Keep Command's slave handles until output capture finishes. On macOS,
-        // closing the last slave handle discards unread output.
-        let result = async {
-            let mut child = self.spawn()?;
-            let mut buffer = [0u8; 4096];
-            let mut bytes = Vec::new();
+        // Command retains its slave handles until it is dropped. This keeps macOS
+        // from discarding unread output when the child exits.
+        let mut child = self.spawn()?;
+        let mut buffer = [0u8; 4096];
+        let mut bytes = Vec::new();
 
-            let status = loop {
-                tokio::select! {
-                    read_result = pty.read(&mut buffer) => {
-                        match read_result {
-                            Ok(0) => break child.wait().await.map_err(|cause| self.exec_error(cause))?,
+        let status = loop {
+            tokio::select! {
+                read_result = pty.read(&mut buffer) => {
+                    match read_result {
+                        Ok(0) => break child.wait().await.map_err(|cause| self.exec_error(cause))?,
+                        Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
+                        // Linux reports PTY master EOF as EIO after all slave handles close.
+                        Err(err) if err.raw_os_error() == Some(libc::EIO) => {
+                            break child.wait().await.map_err(|cause| self.exec_error(cause))?;
+                        }
+                        Err(err) => return Err(Error::PtySetup(err)),
+                    }
+                }
+                status = child.wait() => {
+                    let status = status.map_err(|cause| self.exec_error(cause))?;
+                    // Child exit can be observed before the PTY read future is woken. Drain any
+                    // bytes already available so fast commands do not lose their final output.
+                    loop {
+                        match pty.try_read(&mut buffer) {
+                            Ok(0) => break,
                             Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
+                            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
                             // Linux reports PTY master EOF as EIO after all slave handles close.
-                            Err(err) if err.raw_os_error() == Some(libc::EIO) => {
-                                break child.wait().await.map_err(|cause| self.exec_error(cause))?;
-                            }
+                            Err(err) if err.raw_os_error() == Some(libc::EIO) => break,
                             Err(err) => return Err(Error::PtySetup(err)),
                         }
                     }
-                    status = child.wait() => {
-                        let status = status.map_err(|cause| self.exec_error(cause))?;
-                        // Child exit can be observed before the PTY read future is woken. Drain any
-                        // bytes already available so fast commands do not lose their final output.
-                        loop {
-                            match pty.try_read(&mut buffer) {
-                                Ok(0) => break,
-                                Ok(n) => write_output_chunk(&mut bytes, &mut sink, &buffer[..n]),
-                                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
-                                // Linux reports PTY master EOF as EIO after all slave handles close.
-                                Err(err) if err.raw_os_error() == Some(libc::EIO) => break,
-                                Err(err) => return Err(Error::PtySetup(err)),
-                            }
-                        }
-                        break status;
-                    }
+                    break status;
                 }
-            };
+            }
+        };
 
-            self.maybe_check_captured_output(MergedOutput { status, bytes })
-        }
-        .await;
-
-        // Also release the handles when spawning or capturing output fails.
-        self.inner.stdout(Stdio::piped());
-        self.inner.stderr(Stdio::piped());
-        result
+        self.maybe_check_captured_output(MergedOutput { status, bytes })
     }
 
     /// Equivalent to [`std::process::Command::status`]
