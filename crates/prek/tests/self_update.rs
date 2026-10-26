@@ -321,7 +321,8 @@ fn downgrade_reports_installer_failure() -> Result<()> {
                         $ErrorActionPreference = 'Stop'
                         Set-Content "$env:PREK_INSTALL_DIR/bin/prek.exe" 'incomplete installation'
                         [Console]::Error.WriteLine('simulated install failure')
-                        exit 17
+                        # Exit the process directly so PowerShell does not reduce the status to 1.
+                        [Environment]::Exit(17)
                     "#}
                 } else {
                     "#!/bin/sh\nprintf 'simulated install failure\\n' >&2\nexit 17\n"
