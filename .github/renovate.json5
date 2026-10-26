@@ -9,7 +9,7 @@
     'customManagers:githubActionsVersions',
     'customManagers:dockerfileVersions',
   ],
-  schedule: ["* 0-3 * * 1"],
+  schedule: ["* * 1,15 * *"],
   prHourlyLimit: 10,
   labels: [
     'internal'
