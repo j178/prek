@@ -364,13 +364,9 @@ impl Cmd {
         // We intentionally do not make the child a session leader/foreground process group here.
         // When we did, termenv detected it as foreground and ran OSC probes, which then hung.
 
-        let child = self.spawn();
-        // Command retains its stdio handles after spawning. Close the parent copies
-        // so EOF reflects child-side descriptors, including on spawn failure.
-        self.inner.stdout(Stdio::piped());
-        self.inner.stderr(Stdio::piped());
-        let mut child = child?;
-
+        // Command retains its slave handles until it is dropped. This keeps macOS
+        // from discarding unread output when the child exits.
+        let mut child = self.spawn()?;
         let mut buffer = [0u8; 4096];
         let mut bytes = Vec::new();
 
@@ -405,10 +401,6 @@ impl Cmd {
                 }
             }
         };
-
-        child.stdin.take();
-        child.stdout.take();
-        child.stderr.take();
 
         self.maybe_check_captured_output(MergedOutput { status, bytes })
     }

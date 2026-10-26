@@ -95,8 +95,8 @@ impl Pts {
     /// Consume the child end to create stdout and stderr handles.
     ///
     /// Callers should give the child null stdin and avoid making this its
-    /// controlling terminal. Parent copies of these handles must be closed after
-    /// spawning so they do not keep the terminal open after the child exits.
+    /// controlling terminal. Keep a parent copy of the child-side handles until
+    /// output capture completes: macOS discards unread output when the last one closes.
     pub fn into_stdio(self) -> io::Result<(Stdio, Stdio)> {
         Ok((self.0.try_clone()?.into(), self.0.into()))
     }

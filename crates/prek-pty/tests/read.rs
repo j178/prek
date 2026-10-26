@@ -13,7 +13,9 @@ use tokio::io::{AsyncRead, ReadBuf};
 async fn read_into_partially_filled_buffer() -> Result<(), Box<dyn std::error::Error>> {
     let (mut pty, pts) = prek_pty::open()?;
     let (stdout, stderr) = pts.into_stdio()?;
-    let mut child = tokio::process::Command::new("/bin/sh")
+    // Keep Command's slave handles alive until the output has been read.
+    let mut command = tokio::process::Command::new("/bin/sh");
+    let mut child = command
         .args(["-c", "printf output"])
         .stdin(Stdio::null())
         .stdout(stdout)
