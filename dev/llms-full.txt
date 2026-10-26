@@ -128,17 +128,17 @@ GitHub stars as of October 8, 2026. For more projects, see the [GitHub dependent
 Show that your project uses prek with a badge in your README:
 
 ```markdown
-[![prek](https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg)](https://github.com/j178/prek)
+[![prek](https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg)](https://github.com/j178/prek)
 ```
 
 ```html
 <a href="https://github.com/j178/prek">
-  <img src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg" alt="prek">
+  <img src="https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg" alt="prek">
 </a>
 ```
 
 ```rst
-.. image:: https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg
+.. image:: https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg
    :target: https://github.com/j178/prek
    :alt: prek
 ```
@@ -1639,12 +1639,12 @@ For fields shared with upstream `pre-commit`, `prek` follows the upstream manife
 
 ### Editor completion and validation
 
-`prek` maintains a [`prek-hooks.schema.json`](<https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json>) schema for `.pre-commit-hooks.yaml`. The schema stays in the `prek` repository instead of being registered with SchemaStore, so editors must opt into it explicitly.
+`prek` maintains a [`prek-hooks.schema.json`](<https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json>) schema for `.pre-commit-hooks.yaml`. The schema stays in the `prek` repository instead of being registered with SchemaStore, so editors must opt into it explicitly.
 
 With YAML Language Server, add this directive at the top of the manifest:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/master/prek-hooks.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/j178/prek/main/prek-hooks.schema.json
 ```
 
 This enables completion and validation for both upstream fields and `prek` extensions such as glob filters, `env`, and `shell`.

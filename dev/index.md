@@ -107,17 +107,17 @@ GitHub stars as of October 8, 2026. For more projects, see the [GitHub dependent
 Show that your project uses prek with a badge in your README:
 
 ```markdown
-[![prek](https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg)](https://github.com/j178/prek)
+[![prek](https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg)](https://github.com/j178/prek)
 ```
 
 ```html
 <a href="https://github.com/j178/prek">
-  <img src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg" alt="prek">
+  <img src="https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg" alt="prek">
 </a>
 ```
 
 ```rst
-.. image:: https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge.svg
+.. image:: https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg
    :target: https://github.com/j178/prek
    :alt: prek
 ```
