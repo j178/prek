@@ -76,7 +76,7 @@ pub enum Error {
     Status { command: String, error: StatusError },
     #[cfg(not(windows))]
     #[error("Failed to open pty")]
-    Pty(#[from] prek_pty::Error),
+    Pty(#[source] std::io::Error),
     #[error("Failed to setup subprocess for pty")]
     PtySetup(#[from] std::io::Error),
 }
@@ -342,8 +342,8 @@ impl Cmd {
 
     #[cfg(not(windows))]
     async fn run_on_pty<S: OutputSink>(&mut self, mut sink: S) -> Result<MergedOutput, Error> {
-        let (mut pty, pts) = prek_pty::open()?;
-        let (_, stdout, stderr) = pts.setup_subprocess()?;
+        let (mut pty, pts) = prek_pty::open().map_err(Error::Pty)?;
+        let (stdout, stderr) = pts.into_stdio()?;
 
         self.inner.stdin(Stdio::null());
         self.inner.stdout(stdout);
@@ -364,11 +364,9 @@ impl Cmd {
         // We intentionally do not make the child a session leader/foreground process group here.
         // When we did, termenv detected it as foreground and ran OSC probes, which then hung.
 
+        // Command retains its slave handles until it is dropped. This keeps macOS
+        // from discarding unread output when the child exits.
         let mut child = self.spawn()?;
-        // The parent must not keep the slave side open; otherwise EOF no longer
-        // represents only the child-side descriptors closing.
-        drop(pts);
-
         let mut buffer = [0u8; 4096];
         let mut bytes = Vec::new();
 
@@ -403,10 +401,6 @@ impl Cmd {
                 }
             }
         };
-
-        child.stdin.take();
-        child.stdout.take();
-        child.stderr.take();
 
         self.maybe_check_captured_output(MergedOutput { status, bytes })
     }
@@ -856,5 +850,23 @@ mod tests {
             .expect("pty command should succeed");
 
         assert_eq!(output.bytes, b"\x1b[2Kraw\xff");
+    }
+
+    /// Both output streams must see a terminal, while stdin immediately reports EOF.
+    #[tokio::test]
+    async fn pty_output_connects_only_output_streams() -> Result<(), super::Error> {
+        let output = Cmd::new("/bin/sh")
+            .arg("-c")
+            .arg(
+                "test ! -t 0 && test -t 1 && test -t 2 || exit 1; \
+                 if read -r line; then exit 2; fi; \
+                 printf stdout; printf stderr >&2",
+            )
+            .run_on_pty(NullSink)
+            .await?;
+
+        assert!(output.status.success());
+        assert_eq!(output.bytes, b"stdoutstderr");
+        Ok(())
     }
 }

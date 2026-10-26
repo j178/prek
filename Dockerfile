@@ -1,6 +1,6 @@
 FROM --platform=$BUILDPLATFORM docker.io/astral/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b AS uv
 
-FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS build
+FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 AS build
 
 # Keep the snapshot at least as recent as the Ubuntu base image.
 ARG UBUNTU_SNAPSHOT=20260928T000000Z

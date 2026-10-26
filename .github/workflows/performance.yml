@@ -44,9 +44,9 @@ jobs:
 
       - name: Build head branch
         id: bloat_head
+        shell: bash
         run: |
-          # Build head branch
-          cargo bloat --profile profiling | tee bloat_head.txt >&1
+          cargo bloat --locked --profile profiling -p prek --bin prek --features self-update --message-format json -n 0 > bloat_head.json
 
       - name: Checkout base
         run: |
@@ -54,61 +54,98 @@ jobs:
 
       - name: Build base branch
         id: bloat_base
+        shell: bash
         run: |
-          # Build base branch
-          cargo bloat --profile profiling | tee bloat_base.txt >&1
+          cargo bloat --locked --profile profiling -p prek --bin prek --features self-update --message-format json -n 0 > bloat_base.json
 
       - name: Compare bloat results
         shell: python
         run: |
-          import re
+          import json
+          from collections import Counter
+          from html import escape
           from pathlib import Path
 
-          def parse_size(text):
-              match = re.search(r'([\d.]+)\s*([KMGT]i?B)\s+\.text section size', text)
-              if not match:
-                  raise ValueError("Could not find .text section size")
-              value, unit = float(match.group(1)), match.group(2)
-              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
-              size = value * multipliers.get(unit, 1)
-              return size, f"{value} {unit}"
+          base = json.loads(Path("bloat_base.json").read_text())
+          head = json.loads(Path("bloat_head.json").read_text())
 
-          head_text = Path('bloat_head.txt').read_text()
-          base_text = Path('bloat_base.txt').read_text()
+          def symbol_sizes(report):
+              sizes = Counter()
+              # Multiple symbols can share a demangled name, especially async functions.
+              for symbol in report["functions"]:
+                  sizes[symbol["name"]] += symbol["size"]
+              return sizes
 
-          head_bytes, head_size = parse_size(head_text)
-          base_bytes, base_size = parse_size(base_text)
+          base_symbols = symbol_sizes(base)
+          head_symbols = symbol_sizes(head)
+          changes = [
+              {
+                  "name": name,
+                  "base": base_symbols[name],
+                  "head": head_symbols[name],
+                  "delta": head_symbols[name] - base_symbols[name],
+              }
+              for name in base_symbols.keys() | head_symbols.keys()
+              if base_symbols[name] != head_symbols[name]
+          ]
+          changes.sort(key=lambda change: (-abs(change["delta"]), change["name"]))
+          Path("bloat-diff.json").write_text(json.dumps(changes, indent=2) + "\n")
 
-          pct_change = ((head_bytes - base_bytes) / base_bytes) * 100
-          pct_display = f"{pct_change:+.2f}%"
-          comparison = f"""\
-          ### 📦 Cargo Bloat Comparison
-          **`.text` size change:** {pct_display} ({base_size} → {head_size})
+          lines = [
+              "### 📦 Cargo Bloat Comparison",
+              "",
+              "Build: `profiling` + `self-update` (with debug info).",
+              "",
+              "| Metric | Base (bytes) | Head (bytes) | Change |",
+              "| --- | ---: | ---: | ---: |",
+          ]
+          for label, key in [("`.text`", "text-section-size"), ("File", "file-size")]:
+              before, after = base[key], head[key]
+              delta = after - before
+              percent = delta / before * 100
+              lines.append(f"| {label} | {before:,} | {after:,} | {delta:+,} ({percent:+.2f}%) |")
 
-          <details>
-            <summary>Expand for cargo-bloat output</summary>
-
-          #### Head Branch Results
-          ```
-          {head_text}
-          ```
-
-          #### Base Branch Results
-          ```
-          {base_text}
-          ```
-          </details>
-          """
-
-          Path("bloat-comparison.txt").write_text(comparison)
+          lines.extend([
+              "",
+              "<details>",
+              "<summary>Largest symbol changes</summary>",
+          ])
+          increases = [change for change in changes if change["delta"] > 0]
+          decreases = [change for change in changes if change["delta"] < 0]
+          for title, symbols in [("Increases", increases), ("Decreases", decreases)]:
+              if not symbols:
+                  continue
+              lines.extend(["", f"#### {title}", ""])
+              lines.extend([
+                  "| Symbol | Base (bytes) | Head (bytes) | Change (bytes) |",
+                  "| --- | ---: | ---: | ---: |",
+              ])
+              for symbol in symbols[:10]:
+                  name = symbol["name"]
+                  if len(name) > 240:
+                      name = name[:240] + "…"
+                  name = escape(name).replace("|", "&#124;").replace("\n", " ")
+                  lines.append(
+                      f"| <code>{name}</code> | {symbol['base']:,} | {symbol['head']:,} | {symbol['delta']:+,} |"
+                  )
+          lines.extend([
+              "",
+              "</details>",
+          ])
+          Path("bloat-comparison.txt").write_text("\n".join(lines) + "\n")
 
       - name: Upload bloat results
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
           # Make sure to update the bot if you rename the artifact.
           name: bloat-check-results
-          path: bloat-comparison.txt
+          path: |
+            bloat-comparison.txt
+            bloat_base.json
+            bloat_head.json
+            bloat-diff.json
 
   hyperfine-benchmark:
     runs-on: ubuntu-latest

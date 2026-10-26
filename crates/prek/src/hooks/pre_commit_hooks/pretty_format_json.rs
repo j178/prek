@@ -7,7 +7,6 @@ use clap::Parser;
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::ser::{Formatter, PrettyFormatter};
-use similar::TextDiff;
 
 use crate::hook::Hook;
 use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
@@ -106,10 +105,7 @@ fn check_file(file_path: &Path, display_path: &Path, args: &PreparedArgs) -> Res
                 let message = format!("Fixing file {}\n", display_path.display());
                 Ok(HookOutput::known(1, message.into_bytes(), true))
             } else {
-                let normalized_content = normalize_newlines(&original_content);
-                let diff =
-                    generate_diff(normalized_content.as_ref(), &prettified_json, display_path);
-                let message = format!("{}: not pretty-formatted.\n{diff}", display_path.display());
+                let message = format!("{}: not pretty-formatted.\n", display_path.display());
                 Ok(HookOutput::unchanged(1, message.into_bytes()))
             }
         }
@@ -210,40 +206,6 @@ fn with_original_line_ending<'a>(content: &'a str, original: &str) -> Cow<'a, st
     } else {
         Cow::Owned(content.replace('\n', line_ending))
     }
-}
-
-/// Normalize line endings only for diff generation.
-///
-/// The no-change path uses `matches_pretty_format` to avoid allocation. A diff
-/// needs complete line slices, so we build the normalized string only after a
-/// real formatting difference has been found.
-fn normalize_newlines(content: &str) -> Cow<'_, str> {
-    let bytes = content.as_bytes();
-    if !bytes.contains(&b'\r') {
-        return Cow::Borrowed(content);
-    }
-
-    let mut normalized = String::with_capacity(content.len());
-    let mut index = 0;
-    let mut chunk_start = 0;
-
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\r' => {
-                normalized.push_str(&content[chunk_start..index]);
-                normalized.push('\n');
-                index += 1;
-                if bytes.get(index) == Some(&b'\n') {
-                    index += 1;
-                }
-                chunk_start = index;
-            }
-            _ => index += 1,
-        }
-    }
-
-    normalized.push_str(&content[chunk_start..]);
-    Cow::Owned(normalized)
 }
 
 struct JsonFormatter<'a> {
@@ -443,17 +405,6 @@ fn reorder_keys(value: &mut Value, top_keys: &[String], sort_keys: bool) {
     }
 }
 
-fn generate_diff(original: &str, formatted: &str, display_path: &Path) -> String {
-    TextDiff::from_lines(original, formatted)
-        .unified_diff()
-        .context_radius(3)
-        .header(
-            &display_path.display().to_string(),
-            &display_path.display().to_string(),
-        )
-        .to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -645,24 +596,7 @@ mod tests {
 
         assert_eq!(result.exit_status, 1);
         let output = String::from_utf8(result.output)?;
-        let expected = indoc::indoc! {r#"
-        non_pretty.json: not pretty-formatted.
-        --- non_pretty.json
-        +++ non_pretty.json
-        @@ -1,9 +1,9 @@
-         {
-        -  "foo": "bar",
-           "alist": [
-             2,
-             34,
-             234
-           ],
-        -  "blah": null
-        +  "blah": null,
-        +  "foo": "bar"
-         }
-        "#};
-        assert_eq!(output, expected);
+        assert_eq!(output, "non_pretty.json: not pretty-formatted.\n");
         assert_eq!(
             fs_err::tokio::read_to_string(dir.path().join("non_pretty.json")).await?,
             UNSORTED_JSON

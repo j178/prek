@@ -1,14 +1,15 @@
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::fs::DirEntry;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use ignore::WalkState;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_PATHS;
+use prek_ignore::WalkState;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -244,8 +245,8 @@ impl Project {
         })
     }
 
-    pub(crate) fn find_config(path: &Path) -> Option<PathBuf> {
-        Self::find_configs(path).next().map(|(_, path)| path)
+    pub(crate) fn has_config(path: &Path) -> bool {
+        Self::find_configs(path, None).next().is_some()
     }
 
     /// Return the project root for configs stored directly in `config_dir`.
@@ -258,20 +259,68 @@ impl Project {
         }
     }
 
-    fn find_configs(path: &Path) -> impl Iterator<Item = (&'static str, PathBuf)> + '_ {
-        CONFIG_PATHS.iter().filter_map(move |&name| {
-            let file = path.join(name);
-            if file.is_file() {
-                Some((name, file))
-            } else {
-                None
+    fn find_configs<'a>(
+        path: &'a Path,
+        entries: Option<&[DirEntry]>,
+    ) -> impl Iterator<Item = (&'static str, PathBuf)> + 'a {
+        #[derive(Clone, Copy)]
+        enum Candidate {
+            Absent,
+            File,
+            Probe,
+        }
+
+        let mut candidates = [Candidate::Probe; CONFIG_PATHS.len()];
+        if let Some(entries) = entries {
+            candidates.fill(Candidate::Absent);
+            for entry in entries {
+                let name = entry.file_name();
+                let name = name.as_encoded_bytes();
+                for (&config, candidate) in CONFIG_PATHS.iter().zip(&mut candidates) {
+                    let first = config.split_once('/').map_or(config, |(dir, _)| dir);
+                    if !name.eq_ignore_ascii_case(first.as_bytes()) {
+                        continue;
+                    }
+                    if name == config.as_bytes() {
+                        *candidate = match entry.file_type() {
+                            Ok(file_type) if file_type.is_file() => Candidate::File,
+                            Ok(file_type) if !file_type.is_symlink() => Candidate::Absent,
+                            _ => Candidate::Probe,
+                        };
+                    } else if matches!(candidate, Candidate::Absent) {
+                        // Nested paths and differently cased names still require a filesystem lookup.
+                        *candidate = Candidate::Probe;
+                    }
+                }
             }
-        })
+        }
+
+        CONFIG_PATHS
+            .iter()
+            .zip(candidates)
+            .filter_map(move |(&name, candidate)| {
+                if matches!(candidate, Candidate::Absent) {
+                    return None;
+                }
+                let file = path.join(name);
+                if matches!(candidate, Candidate::File) || file.is_file() {
+                    Some((name, file))
+                } else {
+                    None
+                }
+            })
     }
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
-        let present = Self::find_configs(path).collect::<Vec<_>>();
+        Self::from_directory_with_entries(path, None)
+    }
+
+    fn from_directory_with_entries(
+        path: &Path,
+        entries: Option<&[DirEntry]>,
+    ) -> Result<Self, Error> {
+        let present = Self::find_configs(path, entries).collect::<Vec<_>>();
 
         let Some((_, selected)) = present.first() else {
             return Err(Error::MissingConfigFile);
@@ -636,7 +685,7 @@ impl Workspace {
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
             .filter(|p| Project::root_for_config_dir(p, git_root) == *p)
-            .find(|p| Project::find_config(p).is_some())
+            .find(|p| Project::has_config(p))
             .ok_or(Error::MissingConfigFile)?
             .to_path_buf();
 
@@ -757,90 +806,76 @@ impl Workspace {
             Vec::new()
         });
 
-        ignore::WalkBuilder::new(root)
-            .follow_links(false)
-            .add_custom_ignore_filename(".prekignore")
-            .build_parallel()
-            .run(|| {
-                Box::new(|result| {
-                    let Ok(entry) = result else {
-                        return WalkState::Continue;
-                    };
-                    let Some(file_type) = entry.file_type() else {
-                        return WalkState::Continue;
-                    };
-                    if !file_type.is_dir() {
-                        return WalkState::Continue;
-                    }
+        prek_ignore::walk(root, ".prekignore", |path, entries| {
+            // Ignore rules can expose config directories already checked by their owner.
+            if Project::root_for_config_dir(path, root) != path {
+                return WalkState::Skip;
+            }
 
-                    // Ignore rules can expose config directories already checked by their owner.
-                    if Project::root_for_config_dir(entry.path(), root) != entry.path() {
-                        return WalkState::Skip;
-                    }
-
-                    // Skip cookiecutter template directories
-                    if entry.file_name().to_str().is_some_and(|filename| {
-                        filename.starts_with("{{")
-                            && filename.ends_with("}}")
-                            && filename.contains("cookiecutter")
-                    }) {
-                        trace!(
-                            path = %entry.path().user_display(),
-                            "Skipping cookiecutter template directory"
-                        );
-                        return WalkState::Skip;
-                    }
-
-                    // Do not descend into git submodules
-                    if submodules
-                        .iter()
-                        .any(|submodule| entry.path().starts_with(submodule))
-                    {
-                        trace!(
-                            path = %entry.path().user_display(),
-                            "Skipping git submodule"
-                        );
-                        return WalkState::Skip;
-                    }
-
-                    match Project::from_directory(entry.path()) {
-                        Ok(mut project) => {
-                            let relative_path = entry
-                                .into_path()
-                                .strip_prefix(root)
-                                .expect("Entry path should be relative to the root")
-                                .to_path_buf();
-                            project.with_relative_path(relative_path);
-
-                            if let Ok(projects) = projects.lock().unwrap().as_mut() {
-                                projects.push(project);
-                            }
-                        }
-                        Err(Error::MissingConfigFile) => {}
-                        Err(e) => {
-                            // Exit early if the path is selected
-                            if let Some(selectors) = selectors {
-                                let relative_path = entry
-                                    .path()
-                                    .strip_prefix(root)
-                                    .expect("Entry path should be relative to the root");
-                                if selectors.matches_path(relative_path) {
-                                    *projects.lock().unwrap() = Err(e);
-                                    return WalkState::Quit;
-                                }
-                            }
-                            // Otherwise, just log the error and continue
-                            error!(
-                                path = %entry.path().user_display(),
-                                "Skipping project due to error: {e}"
-                            );
-                            return WalkState::Skip;
-                        }
-                    }
-
-                    WalkState::Continue
+            // Skip cookiecutter template directories
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|filename| {
+                    filename.starts_with("{{")
+                        && filename.ends_with("}}")
+                        && filename.contains("cookiecutter")
                 })
-            });
+            {
+                trace!(
+                    path = %path.user_display(),
+                    "Skipping cookiecutter template directory"
+                );
+                return WalkState::Skip;
+            }
+
+            // Do not descend into git submodules
+            if submodules
+                .iter()
+                .any(|submodule| path.starts_with(submodule))
+            {
+                trace!(
+                    path = %path.user_display(),
+                    "Skipping git submodule"
+                );
+                return WalkState::Skip;
+            }
+
+            match Project::from_directory_with_entries(path, entries) {
+                Ok(mut project) => {
+                    let relative_path = path
+                        .strip_prefix(root)
+                        .expect("Entry path should be relative to the root")
+                        .to_path_buf();
+                    project.with_relative_path(relative_path);
+
+                    if let Ok(projects) = projects.lock().unwrap().as_mut() {
+                        projects.push(project);
+                    }
+                }
+                Err(Error::MissingConfigFile) => {}
+                Err(e) => {
+                    // Exit early if the path is selected
+                    if let Some(selectors) = selectors {
+                        let relative_path = path
+                            .strip_prefix(root)
+                            .expect("Entry path should be relative to the root");
+                        if selectors.matches_path(relative_path) {
+                            *projects.lock().unwrap() = Err(e);
+                            return WalkState::Quit;
+                        }
+                    }
+                    // Otherwise, just log the error and continue
+                    error!(
+                        path = %path.user_display(),
+                        "Skipping project due to error: {e}"
+                    );
+                    return WalkState::Skip;
+                }
+            }
+
+            WalkState::Continue
+        });
 
         let projects = projects.into_inner().unwrap()?;
         if projects.is_empty() {

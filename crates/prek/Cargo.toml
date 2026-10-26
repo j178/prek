@@ -14,7 +14,7 @@ license = { workspace = true }
 default = ["docker"]
 # Adds self-update functionality. This feature is only enabled for prek built binarys
 # and should be left unselected when building prek for package managers.
-self-update = ["dep:axoupdater"]
+self-update = ["dep:prek-update"]
 # Enable the profiler for benchmarking
 profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable tests that depend on the CI environment
@@ -27,6 +27,8 @@ schemars = ["dep:schemars", "prek-identify/schemars"]
 [dependencies]
 prek-consts = { workspace = true }
 prek-identify = { workspace = true, features = ["serde"] }
+prek-ignore = { workspace = true }
+prek-update = { workspace = true, optional = true }
 
 aho-corasick = { workspace = true }
 annotate-snippets = { workspace = true }
@@ -37,9 +39,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 async-compression = { workspace = true }
 async_zip = { workspace = true }
-axoupdater = { workspace = true, optional = true }
 bstr = { workspace = true }
-cargo_metadata = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 clap_complete_nushell = { workspace = true }
@@ -53,7 +53,6 @@ fs-err = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-ignore = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
@@ -61,9 +60,6 @@ json5 = { workspace = true }
 jsonc-parser = { workspace = true }
 globset = { workspace = true }
 granit-parser = { workspace = true }
-# Enable static linking for liblzma
-# This is required for the `xz` feature in `async-compression`
-liblzma = { workspace = true }
 asyncband = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
@@ -82,7 +78,6 @@ serde_stacker = { workspace = true }
 serde-saphyr = { workspace = true }
 shlex = { workspace = true }
 simdutf8 = { workspace = true }
-similar = { workspace = true }
 ssl-certs = { workspace = true }
 strum = { workspace = true }
 target-lexicon = { workspace = true }
@@ -136,9 +131,6 @@ pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
 pkg-fmt = "zip"
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
-
-[package.metadata.cargo-shear]
-ignored = ["liblzma"]
 
 [lints]
 workspace = true

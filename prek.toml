@@ -62,7 +62,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/tombi-toml/tombi-pre-commit"
-rev = "c96e08ac5fa1474f3ae716009539a6ed16267465"  # frozen: v1.8.1
+rev = "2ae053bf3904a74ea4b127dffc525480a7f16cc1"  # frozen: v1.8.7
 hooks = [
   { id = "tombi-format", args = ["--offline"], files = '\.toml$' },
 ]
