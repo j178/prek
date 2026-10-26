@@ -23,7 +23,7 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::path::{Component, Path, PathBuf};
 
-use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
+use async_compression::tokio::bufread::GzipDecoder;
 use async_zip::base::read::stream::ZipFileReader;
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncRead, BufReader};
@@ -54,7 +54,6 @@ pub enum ArchiveExtension {
     Zip,
     TarGz,
     TarBz2,
-    TarXz,
     TarZst,
     TarLzma,
 }
@@ -80,11 +79,9 @@ impl ArchiveExtension {
             "whl" => Ok(Self::Zip), // Wheel files are zip files
             "tgz" => Ok(Self::TarGz),
             "tbz" => Ok(Self::TarBz2),
-            "txz" => Ok(Self::TarXz),
             "tlz" => Ok(Self::TarLzma),
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
-            "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
             "lz" | "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
             _ => Err(Error::UnsupportedArchive(path.as_ref().to_path_buf())),
@@ -98,7 +95,6 @@ impl Display for ArchiveExtension {
             Self::Zip => f.write_str("zip"),
             Self::TarGz => f.write_str("tar.gz"),
             Self::TarBz2 => f.write_str("tar.bz2"),
-            Self::TarXz => f.write_str("tar.xz"),
             Self::TarZst => f.write_str("tar.zst"),
             Self::TarLzma => f.write_str("tar.lzma"),
         }
@@ -278,24 +274,7 @@ pub async fn untar_gz<R: AsyncRead + Unpin + Send>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut reader = GzipDecoder::new(reader);
-    untar(&mut reader, target.as_ref()).await
-}
-
-/// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
-///
-/// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_xz<R: AsyncRead + Unpin + Send>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(), Error> {
-    let reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut reader = XzDecoder::new(reader);
-    untar(&mut reader, target.as_ref()).await
-}
-
-// Erase the decoder type so tar extraction code is shared across compression formats.
-async fn untar(reader: &mut (dyn AsyncRead + Unpin + Send), target: &Path) -> Result<(), Error> {
+    let reader = GzipDecoder::new(reader);
     let mut archive = ArchiveBuilder::new(reader)
         .set_preserve_mtime(true)
         .set_preserve_permissions(true)
@@ -306,8 +285,7 @@ async fn untar(reader: &mut (dyn AsyncRead + Unpin + Send), target: &Path) -> Re
     Ok(())
 }
 
-/// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
-/// without requiring `Seek`.
+/// Unpack a `.zip` or `.tar.gz` archive into the target directory, without requiring `Seek`.
 pub async fn unpack<R: AsyncRead + Unpin + Send>(
     reader: R,
     ext: ArchiveExtension,
@@ -316,7 +294,6 @@ pub async fn unpack<R: AsyncRead + Unpin + Send>(
     match ext {
         ArchiveExtension::Zip => unzip(reader, target).await,
         ArchiveExtension::TarGz => untar_gz(reader, target).await,
-        ArchiveExtension::TarXz => untar_xz(reader, target).await,
         _ => Err(Error::UnsupportedArchive(target.as_ref().to_path_buf())),
     }
 }
