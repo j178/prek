@@ -135,24 +135,19 @@ jobs:
               "",
               "</details>",
               "",
-              "Complete JSON reports and the full symbol diff are available in the `bloat-check-data` workflow artifact.",
+              "Complete JSON reports and the full symbol diff are available in the `bloat-check-results` workflow artifact.",
           ])
           Path("bloat-comparison.txt").write_text("\n".join(lines) + "\n")
 
       - name: Upload bloat results
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
           # Make sure to update the bot if you rename the artifact.
           name: bloat-check-results
-          path: bloat-comparison.txt
-
-      - name: Upload full bloat data
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: bloat-check-data
           path: |
+            bloat-comparison.txt
             bloat_base.json
             bloat_head.json
             bloat-diff.json
