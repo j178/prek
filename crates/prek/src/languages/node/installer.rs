@@ -219,7 +219,7 @@ impl NodeInstaller {
             // Node.js 16 and later are required for arm64 on macOS.
             arch = "x64";
         }
-        let ext = if cfg!(windows) { "zip" } else { "tar.xz" };
+        let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
 
         let filename = format!("node-v{}-{os}-{arch}.{ext}", version.version());
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());

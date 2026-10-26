@@ -190,7 +190,7 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
 
   check-docs:
     needs: plan
@@ -602,7 +602,7 @@ jobs:
 
       - name: "Install mise"
         if: ${{ contains(format(' {0} ', matrix.languages), ' mise ') }}
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
         with:
           version: ${{ env.MISE_VERSION }}
           install: false
@@ -625,7 +625,7 @@ jobs:
 
       - name: "Install Ruby"
         if: ${{ contains(format(' {0} ', matrix.languages), ' ruby ') }}
-        uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1.328.0
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1.329.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
@@ -652,9 +652,9 @@ jobs:
 
       - name: "Install Pixi"
         if: ${{ contains(format(' {0} ', matrix.languages), ' conda ') }}
-        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
-          pixi-version: v0.81.0
+          pixi-version: v0.82.0
           run-install: false
           cache: false
 
@@ -685,7 +685,7 @@ jobs:
 
       - name: "Install Julia"
         if: ${{ contains(format(' {0} ', matrix.languages), ' julia ') }}
-        uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
+        uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
         with:
           version: ${{ env.JULIA_VERSION }}
 

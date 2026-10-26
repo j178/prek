@@ -32,7 +32,7 @@ dev = ["rooster"]
 docs = [
   "llmstxt-standalone>=0.2.0",
   "mike",
-  "zensical>=0.0.69",
+  "zensical>=0.0.71",
 ]
 docker = ["cargo-zigbuild>=0.23.4"]
 
