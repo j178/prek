@@ -439,6 +439,9 @@ jobs:
             --features ci,schemars \
             -E "${CI_CORE_FILTER}"
 
+      - name: "Test self-update"
+        run: cargo test --locked -p prek --profile no-debug --features self-update --test self_update
+
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:

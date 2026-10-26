@@ -50,11 +50,7 @@ impl InstallSource {
 
     #[cfg(feature = "self-update")]
     fn is_standalone_installer() -> anyhow::Result<bool> {
-        use axoupdater::AxoUpdater;
-
-        let mut updater = AxoUpdater::new_for("prek");
-        let updater = updater.load_receipt()?;
-        Ok(updater.check_receipt_is_for_this_executable()?)
+        prek_update::Updater::load_receipt()?.check_receipt_is_for_this_executable()
     }
 
     /// Detect the install source from the current executable path.
