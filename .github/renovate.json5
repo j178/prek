@@ -101,6 +101,7 @@
     {
       groupName: 'Docker images',
       matchManagers: ['dockerfile'],
+      minimumGroupSize: 2,
       separateMajorMinor: false,
     },
     // Disable updates for GitHub runners: we'd only pin them to a specific version
