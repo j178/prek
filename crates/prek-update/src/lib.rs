@@ -5,6 +5,9 @@
 mod github;
 mod receipt;
 
+#[cfg(test)]
+mod tests;
+
 use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};

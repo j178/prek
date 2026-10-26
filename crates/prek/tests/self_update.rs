@@ -1,4 +1,4 @@
-#![cfg(all(feature = "self-update", unix))]
+#![cfg(feature = "self-update")]
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -116,9 +116,9 @@ fn release(base: &str, tag: &str) -> Value {
         "url": format!("{base}/api/v3/repos/j178/prek/releases/1"),
         "prerelease": false,
         "assets": [{
-            "name": "prek-installer.sh",
+            "name": if cfg!(windows) { "prek-installer.ps1" } else { "prek-installer.sh" },
             "url": format!("{base}/api/v3/repos/j178/prek/releases/assets/1"),
-            "browser_download_url": format!("{base}/installer.sh"),
+            "browser_download_url": format!("{base}/installer"),
         }],
     })
 }
@@ -126,7 +126,7 @@ fn release(base: &str, tag: &str) -> Value {
 fn installation(context: &TestEnv, version: &str) -> Result<PathBuf> {
     let prefix = context.work_dir().join("install");
     fs_err::create_dir_all(prefix.join("bin"))?;
-    let executable = prefix.join("bin/prek");
+    let executable = prefix.join(format!("bin/prek{}", std::env::consts::EXE_SUFFIX));
     fs_err::copy(assert_cmd::cargo::cargo_bin!("prek"), &executable)?;
     context.write_file(
         "prek-receipt.json",
@@ -141,6 +141,27 @@ fn installation(context: &TestEnv, version: &str) -> Result<PathBuf> {
         }))?,
     );
     Ok(executable)
+}
+
+fn successful_installer() -> &'static str {
+    if cfg!(windows) {
+        indoc::indoc! {r#"
+            $ErrorActionPreference = 'Stop'
+            Copy-Item "$env:PREK_INSTALL_DIR/bin/prek.exe.previous.exe" "$env:PREK_INSTALL_DIR/bin/prek.exe"
+        "#}
+    } else {
+        "#!/bin/sh\nexit 0\n"
+    }
+}
+
+fn check_executable(executable: &Path) -> Result<()> {
+    let output = Command::new(executable).arg("--version").output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
 }
 
 fn command(context: &TestEnv, executable: &Path, server: &Server) -> Command {
@@ -179,15 +200,25 @@ fn updates_legacy_installation() -> Result<()> {
                 Response::ok(release(base, "v0.2.0").to_string()),
             ),
             (
-                "/installer.sh".into(),
-                Response::ok(indoc::indoc! {r#"
-                #!/bin/sh
-                set -eu
-                test "$CARGO_DIST_FORCE_INSTALL_DIR" = "$PREK_INSTALL_DIR"
-                test "$PREK_NO_MODIFY_PATH" = 1
-                test -z "${PSModulePath+x}"
-                printf '%s' "$PREK_INSTALL_DIR" > "$PREK_INSTALL_DIR/updated"
-            "#}),
+                "/installer".into(),
+                Response::ok(if cfg!(windows) {
+                    indoc::indoc! {r#"
+                        $ErrorActionPreference = 'Stop'
+                        if ($env:CARGO_DIST_FORCE_INSTALL_DIR -ne $env:PREK_INSTALL_DIR) { throw 'Wrong installation root' }
+                        if ($env:PREK_NO_MODIFY_PATH -ne '1') { throw 'Wrong PATH preference' }
+                        Copy-Item "$env:PREK_INSTALL_DIR/bin/prek.exe.previous.exe" "$env:PREK_INSTALL_DIR/bin/prek.exe"
+                        [System.IO.File]::WriteAllText("$env:PREK_INSTALL_DIR/updated", $env:PREK_INSTALL_DIR)
+                    "#}
+                } else {
+                    indoc::indoc! {r#"
+                        #!/bin/sh
+                        set -eu
+                        test "$CARGO_DIST_FORCE_INSTALL_DIR" = "$PREK_INSTALL_DIR"
+                        test "$PREK_NO_MODIFY_PATH" = 1
+                        test -z "${PSModulePath+x}"
+                        printf '%s' "$PREK_INSTALL_DIR" > "$PREK_INSTALL_DIR/updated"
+                    "#}
+                }),
             ),
         ])
     })?;
@@ -208,6 +239,7 @@ fn updates_legacy_installation() -> Result<()> {
         context.read("install/updated"),
         context.work_dir().join("install").to_string_lossy()
     );
+    check_executable(&executable)?;
     let requests = server.finish()?;
     let authorization = requests
         .iter()
@@ -254,7 +286,7 @@ fn latest_falls_back_to_paginated_releases() -> Result<()> {
                 "/page2".into(),
                 Response::ok(json!([release(base, "prek-v0.3.0")]).to_string()),
             ),
-            ("/installer.sh".into(), Response::ok("#!/bin/sh\nexit 0\n")),
+            ("/installer".into(), Response::ok(successful_installer())),
         ])
     })?;
     cmd_snapshot!(context, command(&context, &executable, &server), @"
@@ -266,6 +298,7 @@ fn latest_falls_back_to_paginated_releases() -> Result<()> {
     info: Checking for updates...
     success: Upgraded prek from v0.1.0 to v0.3.0! https://github.com/j178/prek/releases/tag/prek-v0.3.0
     ");
+    check_executable(&executable)?;
     assert_eq!(server.finish()?.len(), 4);
     Ok(())
 }
@@ -273,7 +306,7 @@ fn latest_falls_back_to_paginated_releases() -> Result<()> {
 /// Explicit tags allow downgrades, while a failed installer must surface its captured stderr.
 #[test]
 fn downgrade_reports_installer_failure() -> Result<()> {
-    let context = TestEnv::new();
+    let context = TestEnv::new().with_filter("exit code: 17", "exit status: 17");
     let executable = installation(&context, "0.3.0")?;
     let server = Server::new(|base| {
         HashMap::from([
@@ -282,8 +315,17 @@ fn downgrade_reports_installer_failure() -> Result<()> {
                 Response::ok(release(base, "v0.2.0").to_string()),
             ),
             (
-                "/installer.sh".into(),
-                Response::ok("#!/bin/sh\nprintf 'simulated install failure\\n' >&2\nexit 17\n"),
+                "/installer".into(),
+                Response::ok(if cfg!(windows) {
+                    indoc::indoc! {r#"
+                        $ErrorActionPreference = 'Stop'
+                        Set-Content "$env:PREK_INSTALL_DIR/bin/prek.exe" 'incomplete installation'
+                        [Console]::Error.WriteLine('simulated install failure')
+                        exit 17
+                    "#}
+                } else {
+                    "#!/bin/sh\nprintf 'simulated install failure\\n' >&2\nexit 17\n"
+                }),
             ),
         ])
     })?;
@@ -298,7 +340,48 @@ fn downgrade_reports_installer_failure() -> Result<()> {
     simulated install failure
     ");
     assert_eq!(server.finish()?.len(), 2);
-    assert!(executable.exists());
+    // On Windows, the failing installer overwrote the destination; the restored binary must run.
+    check_executable(&executable)?;
+    Ok(())
+}
+
+/// Failure to start the installer must also restore the running executable on Windows.
+#[test]
+fn installer_launch_failure_preserves_executable() -> Result<()> {
+    let context = TestEnv::new().with_filter(
+        r"(?s)(error: Failed to execute the prek installer).*",
+        "$1\n",
+    );
+    let executable = installation(&context, "0.1.0")?;
+    let server = Server::new(|base| {
+        HashMap::from([
+            (
+                "/api/v3/repos/j178/prek/releases/latest".into(),
+                Response::ok(release(base, "v0.2.0").to_string()),
+            ),
+            (
+                "/installer".into(),
+                // A missing interpreter fails before any installer code runs.
+                Response::ok("#!/missing-prek-test-interpreter\n"),
+            ),
+        ])
+    })?;
+    let mut command = command(&context, &executable, &server);
+    if cfg!(windows) {
+        context.write_file("powershell.exe", "not an executable");
+        command.env("PATH", context.work_dir().as_ref());
+    }
+    cmd_snapshot!(context, command, @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    info: Checking for updates...
+    error: Failed to execute the prek installer
+    ");
+    assert_eq!(server.finish()?.len(), 2);
+    check_executable(&executable)?;
     Ok(())
 }
 

@@ -164,3 +164,126 @@ impl GitHubRelease {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Preserve the installer's GitHub/GHE endpoint rules, including invalid overrides.
+    #[test]
+    fn api_configuration() -> Result<()> {
+        if crate::tests::is_child() {
+            let expected = EnvVars.var("PREK_UPDATE_TEST_EXPECTED")?;
+            let actual = github_api("some-app");
+            if expected == "error" {
+                assert!(actual.is_err());
+            } else {
+                assert_eq!(actual?, expected);
+            }
+            return Ok(());
+        }
+
+        for (github, enterprise, expected) in [
+            (None, None, "https://api.github.com"),
+            (
+                Some("https://github.example"),
+                None,
+                "https://api.github.example",
+            ),
+            (
+                Some("https://github.example:8443/ignored"),
+                None,
+                "https://api.github.example:8443",
+            ),
+            (Some("https://127.0.0.1"), None, "error"),
+            (Some("not a URL"), None, "error"),
+            (
+                None,
+                Some("https://github.example"),
+                "https://github.example/api/v3",
+            ),
+            (
+                None,
+                Some("http://127.0.0.1:8080"),
+                "http://127.0.0.1:8080/api/v3",
+            ),
+            (
+                None,
+                Some("https://github.example/prefix/"),
+                "https://github.example/prefix/api/v3",
+            ),
+            (None, Some("not a URL"), "error"),
+            (
+                Some("https://github.example"),
+                Some("https://enterprise.example"),
+                "error",
+            ),
+        ] {
+            let mut command = crate::tests::child()?;
+            command
+                .env_remove("SOME_APP_INSTALLER_GITHUB_BASE_URL")
+                .env_remove("SOME_APP_INSTALLER_GHE_BASE_URL")
+                .env("PREK_UPDATE_TEST_EXPECTED", expected);
+            if let Some(github) = github {
+                command.env("SOME_APP_INSTALLER_GITHUB_BASE_URL", github);
+            }
+            if let Some(enterprise) = enterprise {
+                command.env("SOME_APP_INSTALLER_GHE_BASE_URL", enterprise);
+            }
+            crate::tests::check_child(&mut command)?;
+        }
+        Ok(())
+    }
+
+    /// Follow only the next page when GitHub includes several relations or extra parameters.
+    #[test]
+    fn pagination_links() {
+        for (header, expected) in [
+            (
+                r#"<https://api.github.com/releases?page=1>; rel="prev", <https://api.github.com/releases?page=3>; rel="next", <https://api.github.com/releases?page=9>; rel="last"#,
+                Some("https://api.github.com/releases?page=3"),
+            ),
+            (
+                r#" <https://api.github.com/releases?page=2>; type="application/json"; rel="next" "#,
+                Some("https://api.github.com/releases?page=2"),
+            ),
+            (
+                r#"<https://api.github.com/releases?page=1>; rel="prev""#,
+                None,
+            ),
+            ("", None),
+        ] {
+            assert_eq!(next_page(header), expected, "{header}");
+        }
+    }
+
+    /// Accept cargo-dist tag formats while retaining the original tag for release links.
+    #[test]
+    fn release_tags() -> Result<()> {
+        for (tag, version) in [
+            ("1.2.3", "1.2.3"),
+            ("v1.2.3", "1.2.3"),
+            ("prek-1.2.3", "1.2.3"),
+            ("prek-v1.2.3", "1.2.3"),
+            ("releases/prek-v1.2.3-rc.1+build.2", "1.2.3-rc.1+build.2"),
+        ] {
+            let release = GitHubRelease {
+                tag_name: tag.into(),
+                assets: Vec::new(),
+                prerelease: false,
+            }
+            .into_release("prek")?;
+            assert_eq!(release.version, version.parse::<Version>()?);
+            assert_eq!(release.tag_name, tag);
+        }
+        for tag in ["latest", "v1.2", "another-v1.2.3"] {
+            let release = GitHubRelease {
+                tag_name: tag.into(),
+                assets: Vec::new(),
+                prerelease: false,
+            };
+            assert!(release.into_release("prek").is_err(), "{tag}");
+        }
+        Ok(())
+    }
+}

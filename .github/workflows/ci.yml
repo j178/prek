@@ -516,6 +516,12 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: "Test self-update"
+        working-directory: ${{ env.PREK_WORKSPACE }}
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
+          cargo test --locked -p prek --profile no-debug --features self-update --test self_update
+
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
