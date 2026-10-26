@@ -436,11 +436,8 @@ jobs:
             --workspace \
             --cargo-profile no-debug \
             --profile ci-core \
-            --features ci,schemars \
+            --features ci,schemars,self-update \
             -E "${CI_CORE_FILTER}"
-
-      - name: "Test self-update"
-        run: cargo test --locked -p prek --profile no-debug --features self-update --test self_update
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -510,17 +507,11 @@ jobs:
             --output-path lcov.info `
             --workspace `
             --cargo-profile no-debug `
-            --features ci,schemars `
+            --features ci,schemars,self-update `
             --profile ci-core `
             -E $env:CI_CORE_FILTER
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: "Test self-update"
-        working-directory: ${{ env.PREK_WORKSPACE }}
-        run: |
-          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
-          cargo test --locked -p prek --profile no-debug --features self-update --test self_update
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1

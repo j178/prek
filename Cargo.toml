@@ -55,7 +55,6 @@ libc = { version = "0.2.182" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.14.0", default-features = false, features = ["macros"] }
-pprof = { version = "0.15.0" }
 rayon = { version = "1.11.0" }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "stream",
@@ -118,6 +117,7 @@ assert_fs = { version = "1.1.2" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.7.0" }
 markdown = { version = "1.0.0" }
+pprof = { version = "0.15.0" }
 predicates = { version = "3.1.2" }
 pretty_assertions = { version = "1.4.1" }
 regex = { version = "1.11.0" }
