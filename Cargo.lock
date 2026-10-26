@@ -2610,9 +2610,9 @@ dependencies = [
 
 [[package]]
 name = "ssl-certs"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bec6ae64c07c77e2f158e26315a42be873612fa4a0b94104ffaf5a165df4a40"
+checksum = "3c4fe8e658dd9ac6d14e0280696918b384c1940067ed6e74425cbb5d12bb8f8e"
 dependencies = [
  "rustls-pki-types",
 ]
