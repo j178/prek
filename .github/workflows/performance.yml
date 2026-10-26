@@ -113,10 +113,9 @@ jobs:
           increases = [change for change in changes if change["delta"] > 0]
           decreases = [change for change in changes if change["delta"] < 0]
           for title, symbols in [("Increases", increases), ("Decreases", decreases)]:
-              lines.extend(["", f"#### {title}", ""])
               if not symbols:
-                  lines.append("None.")
                   continue
+              lines.extend(["", f"#### {title}", ""])
               lines.extend([
                   "| Symbol | Base (bytes) | Head (bytes) | Change (bytes) |",
                   "| --- | ---: | ---: | ---: |",
