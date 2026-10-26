@@ -27,6 +27,7 @@ schemars = ["dep:schemars", "prek-identify/schemars"]
 [dependencies]
 prek-consts = { workspace = true }
 prek-identify = { workspace = true, features = ["serde"] }
+prek-ignore = { workspace = true }
 
 aho-corasick = { workspace = true }
 annotate-snippets = { workspace = true }
@@ -53,7 +54,6 @@ fs-err = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-ignore = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }

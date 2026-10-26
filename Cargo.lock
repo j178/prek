@@ -1992,7 +1992,6 @@ dependencies = [
  "granit-parser",
  "hex",
  "http",
- "ignore",
  "indicatif",
  "indoc",
  "insta",
@@ -2008,6 +2007,7 @@ dependencies = [
  "predicates",
  "prek-consts",
  "prek-identify",
+ "prek-ignore",
  "prek-pty",
  "pretty_assertions",
  "rayon",
@@ -2067,6 +2067,19 @@ dependencies = [
  "shlex",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "prek-ignore"
+version = "0.5.7"
+dependencies = [
+ "globset",
+ "memchr",
+ "rayon",
+ "regex",
+ "tempfile",
+ "tracing",
+ "winapi-util",
 ]
 
 [[package]]
