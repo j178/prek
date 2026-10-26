@@ -61,9 +61,6 @@ json5 = { workspace = true }
 jsonc-parser = { workspace = true }
 globset = { workspace = true }
 granit-parser = { workspace = true }
-# Enable static linking for liblzma
-# This is required for the `xz` feature in `async-compression`
-liblzma = { workspace = true }
 asyncband = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
@@ -136,9 +133,6 @@ pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
 pkg-fmt = "zip"
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
-
-[package.metadata.cargo-shear]
-ignored = ["liblzma"]
 
 [lints]
 workspace = true

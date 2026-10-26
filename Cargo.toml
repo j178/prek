@@ -22,7 +22,7 @@ anstream = { version = "1.0.0" }
 anstyle-parse = { version = "1.0.0" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
-async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
+async-compression = { version = "0.4.18", features = ["gzip", "tokio"] }
 async-trait = { version = "0.1.89" }
 async_zip = { version = "0.0.22", package = "astral_async_zip", features = ["deflate-read", "tokio"] }
 asyncband = { version = "0.7.1", features = ["once-cell", "once-map", "semaphore"] }
@@ -52,9 +52,6 @@ itertools = { version = "0.15.0" }
 json5 = { version = "1.3.0" }
 jsonc-parser = { version = "0.34.0", features = ["serde"] }
 libc = { version = "0.2.182" }
-# Enable static linking for liblzma
-# This is required for the `xz` feature in `async-compression`
-liblzma = { version = "0.4.5", features = ["static"] }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 phf = { version = "0.14.0", default-features = false, features = ["macros"] }
@@ -171,9 +168,6 @@ jod = "jod"
 
 [workspace.metadata.typos.files]
 extend-exclude = ["scripts/macports"]
-
-[workspace.metadata.cargo-shear]
-ignored = ["liblzma"]
 
 [profile.dev.package]
 # Insta suggests compiling these packages in opt mode for faster testing.
