@@ -75,9 +75,20 @@
   packageRules: [
     // Bump Python dependencies without raising the minimum supported Python version.
     {
+      groupName: 'Python dependencies',
       matchManagers: ['pep621'],
       matchDepTypes: ['!requires-python'],
       rangeStrategy: 'bump',
+      separateMajorMinor: false,
+    },
+    {
+      groupName: 'CI tools',
+      matchManagers: ['custom.regex'],
+      matchFileNames: [
+        '.github/workflows/**',
+        'crates/prek/src/languages/python/uv.rs',
+      ],
+      separateMajorMinor: false,
     },
     // Group all GitHub Actions updates together
     {
@@ -95,14 +106,7 @@
     // Disable updates for GitHub runners: we'd only pin them to a specific version
     // if there was a deliberate reason to do so
     {
-      groupName: 'GitHub runners',
-      matchManagers: [
-        'github-actions'
-      ],
-      matchDatasources: [
-        'github-runners'
-      ],
-      description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
+      matchDatasources: ['github-runners'],
       enabled: false
     },
     {
