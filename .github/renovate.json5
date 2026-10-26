@@ -9,7 +9,7 @@
     'customManagers:githubActionsVersions',
     'customManagers:dockerfileVersions',
   ],
-  schedule: ["* 0-3 * * 1"],
+  schedule: ["* * 1,15 * *"],
   prHourlyLimit: 10,
   labels: [
     'internal'
@@ -101,6 +101,7 @@
     {
       groupName: 'Docker images',
       matchManagers: ['dockerfile'],
+      minimumGroupSize: 2,
       separateMajorMinor: false,
     },
     // Disable updates for GitHub runners: we'd only pin them to a specific version
