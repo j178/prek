@@ -94,7 +94,7 @@ jobs:
           lines = [
               "### 📦 Cargo Bloat Comparison",
               "",
-              "Profile: `profiling`, with `self-update` enabled. File size includes debug information.",
+              "Build: `profiling` + `self-update` (with debug info).",
               "",
               "| Metric | Base (bytes) | Head (bytes) | Change |",
               "| --- | ---: | ---: | ---: |",
@@ -109,8 +109,6 @@ jobs:
               "",
               "<details>",
               "<summary>Largest symbol changes</summary>",
-              "",
-              "Repeated demangled names are summed. Inlining can move code between symbols, so these estimates do not sum exactly to the `.text` change.",
           ])
           increases = [change for change in changes if change["delta"] > 0]
           decreases = [change for change in changes if change["delta"] < 0]
@@ -134,8 +132,6 @@ jobs:
           lines.extend([
               "",
               "</details>",
-              "",
-              "Complete JSON reports and the full symbol diff are available in the `bloat-check-results` workflow artifact.",
           ])
           Path("bloat-comparison.txt").write_text("\n".join(lines) + "\n")
 
