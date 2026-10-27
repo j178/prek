@@ -6,7 +6,7 @@ mod common;
 fn list_builtins_defaults_to_verbose_output() {
     let context = TestEnv::new();
 
-    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @"
+    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -99,12 +99,6 @@ fn list_builtins_defaults_to_verbose_output() {
       flags:
             --check  Report files that would change without modifying them
 
-    expand-tabs
-      Replaces tabs with spaces at tab stops.
-      flags:
-            --tab-width <N>  Tab stop width in bytes; zero or negative values delete tabs [default: 4]
-            --check          Report files that would change without modifying them
-
     file-contents-sorter
       Sorts the lines in specified files (defaults to alphabetical).
       flags:
@@ -166,7 +160,7 @@ fn list_builtins_defaults_to_verbose_output() {
 
 
     ----- stderr -----
-    ");
+    "#);
 }
 
 #[test]
@@ -282,11 +276,6 @@ fn list_builtins_json() {
         "id": "end-of-file-fixer",
         "name": "fix end of files",
         "description": "Ensures that a file is either empty, or ends with one newline."
-      },
-      {
-        "id": "expand-tabs",
-        "name": "expand tabs",
-        "description": "Replaces tabs with spaces at tab stops."
       },
       {
         "id": "file-contents-sorter",
