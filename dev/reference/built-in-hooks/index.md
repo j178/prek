@@ -7,7 +7,6 @@ This page lists the built-in Rust hooks, their supported arguments, and behavior
 For `repo: builtin`, the following hooks are supported:
 
 - [`trailing-whitespace`](<#trailing-whitespace>) (Trims trailing whitespace.)
-- [`expand-tabs`](<#expand-tabs>) (Replaces tabs with spaces at tab stops.)
 - [`check-added-large-files`](<#check-added-large-files>) (Prevents giant files from being committed.)
 - [`check-case-conflict`](<#check-case-conflict>) (Checks for files that would conflict in case-insensitive filesystems.)
 - [`check-illegal-windows-names`](<#check-illegal-windows-names>) (Checks for filenames which cannot be created on Windows.)
@@ -114,27 +113,6 @@ Trims trailing whitespace from each line.
 **Caveats**
 
 - `--markdown-linebreak-ext` values must be extensions only (no path separators).
-
----
-
-### `expand-tabs`
-
-Expands tabs to the next tab stop, matching [`Lucas-C/pre-commit-hooks`'s `remove-tabs`](<https://github.com/Lucas-C/pre-commit-hooks/blob/master/pre_commit_hooks/remove_tabs.py>). The default width is 4. Columns count bytes, and both CR and LF reset the column. Other bytes and line endings are preserved. A zero or negative width deletes tabs.
-
-By default, this hook selects text files and excludes paths matching `(Makefile|debian/rules|.gitmodules)(\.in)?$`, including their `.in` templates. Override `exclude` to change this selection.
-
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: expand-tabs
-        args: [--tab-width=4]
-```
-
-- `--tab-width <N>`: Tab stop width (default: `4`).
-- `--check`: Report files containing tabs without modifying them.
-
-Returns a nonzero exit status when tabs are found. Files without tabs are not rewritten. This hook is available through `repo: builtin`.
 
 ---
 
