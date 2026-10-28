@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
-use memchr::memchr2;
+use memchr::{memchr, memchr2};
 
 use crate::hook::Hook;
 use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
@@ -36,24 +35,18 @@ enum IndentStyle {
     Tabs,
 }
 
-/// Whether a file's indentation differs from the requested style.
-///
-/// In check mode `Changed` means the file would change, since nothing is written.
-enum Outcome {
-    Unchanged,
-    Changed,
-}
-
 /// Runs the `normalize-indentation` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
-    let (style, tab_size, check) = (args.indent, usize::from(args.tab_size), args.check);
+    let tab_size = usize::from(args.tab_size);
 
     run_blocking_file_checks(
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, display_path| fix_file(file_path, display_path, style, tab_size, check),
+        move |file_path, display_path| {
+            fix_file(file_path, display_path, args.indent, tab_size, args.check)
+        },
     )
     .await
 }
@@ -65,133 +58,101 @@ fn fix_file(
     tab_size: usize,
     check: bool,
 ) -> Result<HookOutput> {
-    match (process_file(file_path, style, tab_size, check)?, check) {
-        (Outcome::Unchanged, _) => Ok(HookOutput::unchanged(0, Vec::new())),
-        (Outcome::Changed, true) => Ok(HookOutput::unchanged(
-            1,
-            format!(
-                "{}: indentation needs normalization\n",
-                display_path.display()
-            )
-            .into_bytes(),
-        )),
-        (Outcome::Changed, false) => Ok(HookOutput::known(
-            1,
-            format!("Fixing {}\n", display_path.display()).into_bytes(),
-            true,
-        )),
-    }
-}
-
-/// Normalizes the file, or only checks it when `check` is set.
-///
-/// The file is processed one chunk at a time, and check mode stops at the first chunk that
-/// would change.
-fn process_file(path: &Path, style: IndentStyle, tab_size: usize, check: bool) -> Result<Outcome> {
-    let contents = fs_err::read(path)?;
+    let contents = fs_err::read(file_path)?;
 
     // Binary files can be passed explicitly, bypassing the text file filter.
-    if contents.find_byte(0).is_some() {
-        return Ok(Outcome::Unchanged);
+    if memchr(0, &contents).is_some() {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    let bom_len = if contents.starts_with(BOM) {
+    let mut line_start = if contents.starts_with(BOM) {
         BOM.len()
     } else {
         0
     };
-    let mut output = contents[..bom_len].to_vec();
-    let mut changed = false;
+    let mut output = Vec::new();
+    let mut copied = 0;
 
-    for chunk in line_chunks(&contents[bom_len..]) {
-        let rewritten = reindent(chunk, style, tab_size);
-        if check {
-            if rewritten.is_some() {
-                return Ok(Outcome::Changed);
+    for line in line_chunks(&contents[line_start..]) {
+        let mut indent_end = line_start;
+        let mut columns = 0;
+        let mut spaces = 0;
+        let mut needs_fix = false;
+        for &byte in line {
+            match byte {
+                b' ' => {
+                    columns += 1;
+                    spaces += 1;
+                }
+                b'\t' => {
+                    columns += tab_size - columns % tab_size;
+                    needs_fix |= matches!(style, IndentStyle::Spaces) || spaces > 0;
+                }
+                _ => break,
             }
-        } else {
-            changed |= rewritten.is_some();
-            output.extend_from_slice(rewritten.as_deref().unwrap_or(chunk));
+            indent_end += 1;
         }
+        // Canonical tab indentation ends with fewer than one tab stop of spaces.
+        if matches!(style, IndentStyle::Tabs) && spaces >= tab_size {
+            needs_fix = true;
+        }
+
+        // Blank and whitespace-only lines are left to the trailing whitespace hook.
+        let blank = matches!(contents.get(indent_end), None | Some(b'\r' | b'\n'));
+        if needs_fix && !blank {
+            if check {
+                return Ok(HookOutput::unchanged(
+                    1,
+                    format!(
+                        "{}: indentation needs normalization\n",
+                        display_path.display()
+                    )
+                    .into_bytes(),
+                ));
+            }
+            if copied == 0 {
+                output.reserve(contents.len());
+            }
+            // Copy untouched spans verbatim, including the BOM and line endings.
+            output.extend_from_slice(&contents[copied..line_start]);
+            let (tabs, spaces) = match style {
+                IndentStyle::Spaces => (0, columns),
+                IndentStyle::Tabs => (columns / tab_size, columns % tab_size),
+            };
+            output.resize(output.len() + tabs, b'\t');
+            output.resize(output.len() + spaces, b' ');
+            copied = indent_end;
+        }
+
+        line_start += line.len();
     }
 
-    if !changed {
-        return Ok(Outcome::Unchanged);
+    if copied == 0 {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
     }
-    fs_err::write(path, &output)?;
-    Ok(Outcome::Changed)
+    output.extend_from_slice(&contents[copied..]);
+    fs_err::write(file_path, &output)?;
+    Ok(HookOutput::known(
+        1,
+        format!("Fixing {}\n", display_path.display()).into_bytes(),
+        true,
+    ))
 }
 
-const fn is_indent(byte: u8) -> bool {
-    matches!(byte, b' ' | b'\t')
-}
-
-const fn is_terminator(byte: u8) -> bool {
-    matches!(byte, b'\r' | b'\n')
-}
-
-/// Splits `bytes` after its longest prefix of bytes that satisfy `predicate`.
-fn split_prefix(bytes: &[u8], predicate: fn(u8) -> bool) -> (&[u8], &[u8]) {
-    let len = bytes.iter().take_while(|byte| predicate(**byte)).count();
-    bytes.split_at(len)
-}
-
-/// Splits `contents` into chunks that each start at the beginning of a line.
-///
-/// A chunk is the text of one line followed by its terminators, including any directly
-/// following empty lines. Only the start of a chunk can hold indentation to rewrite, since
-/// the empty lines that follow it have none.
-fn line_chunks(contents: &[u8]) -> impl Iterator<Item = &[u8]> {
-    let mut rest = contents;
+// Keep consecutive terminators together so empty lines need no separate processing.
+fn line_chunks(mut contents: &[u8]) -> impl Iterator<Item = &[u8]> {
     std::iter::from_fn(move || {
-        if rest.is_empty() {
+        if contents.is_empty() {
             return None;
         }
-
-        let text_len = memchr2(b'\r', b'\n', rest).unwrap_or(rest.len());
-        let (terminators, _) = split_prefix(&rest[text_len..], is_terminator);
-        let (chunk, tail) = rest.split_at(text_len + terminators.len());
-        rest = tail;
-        Some(chunk)
-    })
-}
-
-/// Returns `chunk` with normalized indentation, or `None` if it is already normalized.
-fn reindent(chunk: &[u8], style: IndentStyle, tab_size: usize) -> Option<Vec<u8>> {
-    let (indent, rest) = split_prefix(chunk, is_indent);
-
-    // Blank and whitespace-only lines are left to the trailing whitespace hook.
-    if rest.first().is_none_or(|byte| is_terminator(*byte)) {
-        return None;
-    }
-
-    let canonical = canonical_indent(indent_columns(indent, tab_size), style, tab_size);
-    if indent.iter().copied().eq(canonical.clone()) {
-        return None;
-    }
-    Some(canonical.chain(rest.iter().copied()).collect())
-}
-
-fn canonical_indent(
-    columns: usize,
-    style: IndentStyle,
-    tab_size: usize,
-) -> impl Iterator<Item = u8> + Clone {
-    let (tabs, spaces) = match style {
-        IndentStyle::Spaces => (0, columns),
-        IndentStyle::Tabs => (columns / tab_size, columns % tab_size),
-    };
-    std::iter::repeat_n(b'\t', tabs).chain(std::iter::repeat_n(b' ', spaces))
-}
-
-/// Width of `indent` in columns, where a tab advances to the next multiple of `tab_size`.
-fn indent_columns(indent: &[u8], tab_size: usize) -> usize {
-    indent.iter().fold(0, |column, byte| {
-        if *byte == b'\t' {
-            column + tab_size - column % tab_size
-        } else {
-            column + 1
-        }
+        let text_len = memchr2(b'\r', b'\n', contents).unwrap_or(contents.len());
+        let terminators = contents[text_len..]
+            .iter()
+            .take_while(|&&byte| matches!(byte, b'\r' | b'\n'))
+            .count();
+        let (line, rest) = contents.split_at(text_len + terminators);
+        contents = rest;
+        Some(line)
     })
 }
 
@@ -204,7 +165,7 @@ mod tests {
         let dir = tempdir()?;
         let path = dir.path().join("file.txt");
         fs_err::write(&path, input)?;
-        process_file(&path, style, tab_size, false)?;
+        fix_file(&path, &path, style, tab_size, false)?;
         Ok(fs_err::read(&path)?)
     }
 
@@ -259,6 +220,11 @@ mod tests {
     fn only_leading_whitespace_changes() -> Result<()> {
         assert_eq!(spaces(b"\ta\tb  c\t\n", 4)?, b"    a\tb  c\t\n");
         assert_eq!(tabs(b"    a    b\n", 4)?, b"\ta    b\n");
+        // Preserve untouched spans between edits, including mixed line endings and EOF.
+        assert_eq!(
+            spaces(b"header\r\n\tone\nunchanged\r\ttwo\r\nfooter", 4)?,
+            b"header\r\n    one\nunchanged\r    two\r\nfooter"
+        );
         Ok(())
     }
 
@@ -377,10 +343,19 @@ mod tests {
 
     #[test]
     fn normalized_file_passes() -> Result<()> {
-        let (output, contents) = run_on(b"    foo\n", &["--check"])?;
-        assert_eq!(output.exit_status, 0);
-        assert_eq!(output.output, b"");
-        assert_eq!(contents, b"    foo\n");
+        // Both modes must pass canonical indentation, including partial tab stops.
+        for (input, style) in [
+            (b"    foo\n".as_slice(), "spaces"),
+            (b"\tfoo\n\t  bar\n  baz\n", "tabs"),
+        ] {
+            let flags = ["--indent", style, "--check"];
+            for flags in [&flags[..2], &flags[..]] {
+                let (output, contents) = run_on(input, flags)?;
+                assert_eq!(output.exit_status, 0);
+                assert_eq!(output.output, b"");
+                assert_eq!(contents, input);
+            }
+        }
         Ok(())
     }
 
