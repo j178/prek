@@ -1298,6 +1298,136 @@ fn mixed_line_ending_hook() {
 }
 
 #[test]
+fn normalize_indentation_hook() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+    "})
+        .with_file("mixed.txt", "\tone\n  \ttwo\n\n\t\n  three\tx\n")
+        .with_file("spaces.txt", "    one\n      two\n")
+        .with_file("empty.txt", "")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    normalize indentation....................................................Failed
+    - hook id: normalize-indentation
+    - description: Converts leading indentation to spaces or tabs
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing mixed.txt
+
+    ----- stderr -----
+    ");
+    assert_eq!(
+        context.read("mixed.txt"),
+        "    one\n    two\n\n\t\n  three\tx\n"
+    );
+
+    context.git().add(".");
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    normalize indentation....................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Tabs with a custom tab size, where partial tab stops keep their spaces.
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+                args: ['--indent=tabs', '--tab-size=2']
+    "});
+    context.git().add(".");
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    normalize indentation....................................................Failed
+    - hook id: normalize-indentation
+    - description: Converts leading indentation to spaces or tabs
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing mixed.txt
+      Fixing spaces.txt
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("spaces.txt"), "\t\tone\n\t\t\ttwo\n");
+}
+
+#[test]
+fn normalize_indentation_check_does_not_modify_files() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+                args: ['--check']
+    "})
+        .with_file("tabs.txt", "\tone\n")
+        .with_file("spaces.txt", "    one\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    normalize indentation....................................................Failed
+    - hook id: normalize-indentation
+    - description: Converts leading indentation to spaces or tabs
+    - exit code: 1
+
+      tabs.txt: indentation needs normalization
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("tabs.txt"), "\tone\n");
+}
+
+#[test]
+fn normalize_indentation_rejects_zero_tab_size() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+                args: ['--tab-size=0']
+    "})
+        .with_file("file.txt", "\tone\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `normalize-indentation`
+      caused by: error: invalid value '0' for '--tab-size <TAB_SIZE>': 0 is not in 1..=255
+
+      caused by: 0 is not in 1..=255
+    ");
+}
+
+#[test]
 fn check_added_large_files_hook() {
     // Create an initial commit
     let context = TestEnv::new()

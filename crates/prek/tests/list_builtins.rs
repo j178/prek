@@ -126,6 +126,14 @@ fn list_builtins_defaults_to_verbose_output() {
         -b, --branch <BRANCH>  Branch to protect (repeatable) [default: main master]
         -p, --pattern <REGEX>  Regular expression matching branches to protect (repeatable)
 
+    normalize-indentation
+      Converts leading indentation to spaces or tabs.
+      flags:
+            --indent <INDENT>      Indentation style to enforce [default: spaces] [possible values:
+                                   spaces, tabs]
+            --tab-size <TAB_SIZE>  Number of columns between tab stops (1-255) [default: 4]
+            --check                Report files that need changes without modifying them
+
     pretty-format-json
       Checks that JSON files are pretty-formatted.
       flags:
@@ -301,6 +309,11 @@ fn list_builtins_json() {
         "id": "no-commit-to-branch",
         "name": "don't commit to branch",
         "description": "Protects specific branches from direct commits."
+      },
+      {
+        "id": "normalize-indentation",
+        "name": "normalize indentation",
+        "description": "Converts leading indentation to spaces or tabs."
       },
       {
         "id": "pretty-format-json",

@@ -1107,6 +1107,7 @@
         "forbid-new-submodules",
         "mixed-line-ending",
         "no-commit-to-branch",
+        "normalize-indentation",
         "pretty-format-json",
         "require-filename-pattern",
         "require-pattern",

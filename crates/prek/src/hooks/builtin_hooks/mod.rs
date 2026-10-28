@@ -23,6 +23,7 @@ mod check_commit_trailers;
 mod check_json5;
 mod check_jsonc;
 mod check_signed_commit;
+mod normalize_indentation;
 mod pattern;
 
 #[derive(
@@ -66,6 +67,7 @@ pub(crate) enum BuiltinHooks {
     ForbidNewSubmodules,
     MixedLineEnding,
     NoCommitToBranch,
+    NormalizeIndentation,
     PrettyFormatJson,
     RequireFilenamePattern,
     RequirePattern,
@@ -92,6 +94,7 @@ impl BuiltinHooks {
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
+            Self::NormalizeIndentation => normalize_indentation::Args::command(),
             Self::PrettyFormatJson => pretty_format_json::Args::command(),
             Self::TrailingWhitespace => fix_trailing_whitespace::Args::command(),
             _ => return None,
@@ -147,6 +150,7 @@ impl BuiltinHooks {
             Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules::run(hook, filenames)),
             Self::MixedLineEnding => Box::pin(mixed_line_ending::run(hook, filenames)),
             Self::NoCommitToBranch => Box::pin(no_commit_to_branch::run(hook)),
+            Self::NormalizeIndentation => Box::pin(normalize_indentation::run(hook, filenames)),
             Self::PrettyFormatJson => Box::pin(pretty_format_json::run(hook, filenames)),
             Self::RequireFilenamePattern => Box::pin(std::future::ready(
                 pattern::require_filename_pattern(hook, filenames),
@@ -522,6 +526,21 @@ impl BuiltinHook {
                     ),
                     pass_filenames: Some(PassFilenames::None),
                     always_run: Some(true),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::NormalizeIndentation => BuiltinHook {
+                id: "normalize-indentation".to_string(),
+                name: "normalize indentation".to_string(),
+                entry: "normalize-indentation".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Converts leading indentation to spaces or tabs.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },
