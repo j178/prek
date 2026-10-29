@@ -42,7 +42,7 @@ fastrand = { version = "2.4.1", default-features = false }
 fs-err = { version = "3.3.0", features = ["tokio"] }
 futures-util = { version = "0.3.31", default-features = false, features = ["alloc"] }
 globset = { version = "0.4.18" }
-granit-parser = { version = "1.2.1" }
+granit-parser = { version = "2.0.0", default-features = false, features = ["std", "error_messages"] }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
 indicatif = { version = "0.18.0" }
@@ -69,7 +69,8 @@ seahash = { version = "4.1.0" }
 self-replace = { version = "1.5.0" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
-serde-saphyr = { version = "1.2.0", default-features = false, features = ["deserialize", "serialize"] }
+# TODO: Upgrade after https://github.com/bourumir-wyngs/serde-saphyr/issues/227 is fixed to avoid duplicate error messages.
+serde-saphyr = { version = "2.0.0", default-features = false, features = ["deserialize", "serialize"] }
 serde_json = { version = "1.0.132", features = ["preserve_order", "unbounded_depth"] }
 serde_stacker = { version = "0.1.12" }
 shlex = { version = "2.0.0" }

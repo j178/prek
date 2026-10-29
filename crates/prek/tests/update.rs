@@ -2418,7 +2418,7 @@ fn update_with_invalid_config_file() {
         .with_file(PRE_COMMIT_CONFIG_YAML, "invalid_yaml: [unclosed_list")
         .init_git();
 
-    cmd_snapshot!(context, context.update(), @"
+    cmd_snapshot!(context, context.update(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2430,7 +2430,8 @@ fn update_with_invalid_config_file() {
       |
     1 | invalid_yaml: [unclosed_list
       |               ^ unclosed bracket '['
-    ");
+      caused by: unclosed bracket '[' at line 1, column 15
+    "#);
 }
 
 #[test]
