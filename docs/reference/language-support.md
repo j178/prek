@@ -105,6 +105,7 @@ Below is how prek handles each language (with notes when it differs from pre-com
 prek installs Bun hooks via `bun install` and runs the configured entry. The repository should contain a `package.json`. `entry` should match a provided bin name or be a Bun command. `additional_dependencies` are supported.
 
 Bun hooks run without needing a pre-installed Bun runtime when toolchain download is available.
+On Linux, prek downloads the musl build when a glibc loader is unavailable, including on Alpine Linux.
 
 #### `language_version`
 

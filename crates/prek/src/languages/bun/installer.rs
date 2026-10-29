@@ -9,7 +9,7 @@ use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxBuildHasher;
-use target_lexicon::{Architecture, HOST, OperatingSystem};
+use target_lexicon::{Architecture, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
 use crate::archive;
@@ -198,19 +198,7 @@ impl BunInstaller {
 
     /// Install a specific version of Bun.
     async fn download(&self, store: &Store, version: &BunVersion) -> Result<BunResult> {
-        let arch = match HOST.architecture {
-            Architecture::X86_64 => "x64",
-            Architecture::Aarch64(_) => "aarch64",
-            _ => anyhow::bail!("Unsupported architecture"),
-        };
-        let os = match HOST.operating_system {
-            OperatingSystem::Darwin(_) => "darwin",
-            OperatingSystem::Linux => "linux",
-            OperatingSystem::Windows => "windows",
-            _ => anyhow::bail!("Unsupported OS"),
-        };
-
-        let filename = format!("bun-{os}-{arch}.zip");
+        let filename = release_filename(&HOST, has_glibc(&HOST).await?)?;
         let url =
             format!("https://github.com/oven-sh/bun/releases/download/bun-v{version}/{filename}");
         let checksum_url = format!(
@@ -234,8 +222,7 @@ impl BunInstaller {
             fs_err::tokio::remove_dir_all(&target).await?;
         }
 
-        // The ZIP extracts to bun-{os}-{arch}/bun, we need to move the contents
-        // to {version}/bin/bun
+        // Move the binary from the archive's top-level directory to {version}/bin/bun.
         let extracted_binary = extracted.join("bun").with_extension(EXE_EXTENSION);
         let target_bin_dir = bin_dir(&target);
         fs_err::tokio::create_dir_all(&target_bin_dir).await?;
@@ -285,6 +272,62 @@ impl BunInstaller {
     }
 }
 
+async fn has_glibc(host: &Triple) -> Result<bool> {
+    // Static musl builds of prek can also run on glibc systems. Check the loader
+    // Bun needs at runtime, not the libc prek was compiled against.
+    let loader = match (host.operating_system, host.architecture) {
+        (OperatingSystem::Linux, Architecture::X86_64) => "/lib64/ld-linux-x86-64.so.2",
+        (OperatingSystem::Linux, Architecture::Aarch64(_)) => "/lib/ld-linux-aarch64.so.1",
+        _ => return Ok(false),
+    };
+    probe_glibc_loader(Path::new(loader)).await
+}
+
+async fn probe_glibc_loader(loader: &Path) -> Result<bool> {
+    if !loader
+        .try_exists()
+        .with_context(|| format!("Failed to check for glibc loader at {}", loader.display()))?
+    {
+        return Ok(false);
+    }
+
+    // gcompat may occupy this path, but rejects direct invocation. Check only
+    // the exit status: glibc's version banner can be distro-branded, and
+    // --list-tunables would exclude glibc versions older than 2.33.
+    let output = Cmd::new(loader)
+        .arg("--version")
+        .check(false)
+        .output()
+        .await
+        .context("Failed to query glibc loader version")?;
+    let version = String::from_utf8_lossy(&output.stdout);
+    let available = output.status.success();
+    debug!(loader = %loader.display(), %version, glibc_available = available, "Detected Bun runtime libc");
+    Ok(available)
+}
+
+fn release_filename(host: &Triple, glibc_available: bool) -> Result<String> {
+    let arch = match host.architecture {
+        Architecture::X86_64 => "x64",
+        Architecture::Aarch64(_) => "aarch64",
+        _ => anyhow::bail!("Unsupported architecture"),
+    };
+    let os = match host.operating_system {
+        OperatingSystem::Darwin(_) => "darwin",
+        OperatingSystem::Linux => "linux",
+        OperatingSystem::Windows => "windows",
+        _ => anyhow::bail!("Unsupported OS"),
+    };
+
+    let suffix = if host.operating_system == OperatingSystem::Linux && !glibc_available {
+        "-musl"
+    } else {
+        ""
+    };
+
+    Ok(format!("bun-{os}-{arch}{suffix}.zip"))
+}
+
 pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
     // Bun installs global packages to $BUN_INSTALL/bin/ on all platforms
     prefix.join("bin")
@@ -295,5 +338,107 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
         prefix.join("node_modules")
     } else {
         prefix.join("lib").join("node_modules")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Missing loaders and failed probes select musl, regardless of banner text.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn glibc_loader_detection() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let loader = temp.path().join("ld.so");
+        assert!(!probe_glibc_loader(&loader).await?);
+
+        for (version, exit_code, expected) in [
+            ("ld.so (GNU libc) stable release version 2.41.", 0, true),
+            (
+                "ld.so (Debian GLIBC 2.41) stable release version 2.41.",
+                0,
+                true,
+            ),
+            (
+                "ld.so (Gentoo 2.39-r6 p4) stable release version 2.39.",
+                0,
+                true,
+            ),
+            ("musl libc", 1, false),
+            ("This is the gcompat ELF interpreter stub.", 1, false),
+            ("GNU libc", 1, false),
+        ] {
+            fs_err::write(
+                &loader,
+                format!("#!/bin/sh\nprintf '%s\\n' '{version}'\nexit {exit_code}\n"),
+            )?;
+            crate::fs::make_executable(&loader)?;
+            assert_eq!(probe_glibc_loader(&loader).await?, expected, "{version}");
+        }
+
+        // A directory cannot be executed, even with shell fallback on macOS.
+        fs_err::remove_file(&loader)?;
+        fs_err::create_dir(&loader)?;
+        assert!(probe_glibc_loader(&loader).await.is_err());
+        Ok(())
+    }
+
+    // Both Linux architectures need musl archives when the glibc loader is absent,
+    // regardless of the libc prek was compiled against.
+    #[test]
+    fn linux_without_glibc() -> Result<()> {
+        for (triple, expected) in [
+            ("x86_64-unknown-linux-musl", "bun-linux-x64-musl.zip"),
+            ("aarch64-unknown-linux-musl", "bun-linux-aarch64-musl.zip"),
+            ("x86_64-unknown-linux-gnu", "bun-linux-x64-musl.zip"),
+            ("aarch64-unknown-linux-gnu", "bun-linux-aarch64-musl.zip"),
+        ] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert_eq!(release_filename(&host, false)?, expected);
+        }
+        Ok(())
+    }
+
+    // A musl-built prek running on glibc Linux must keep using the glibc archive.
+    #[test]
+    fn linux_with_glibc() -> Result<()> {
+        for (triple, expected) in [
+            ("x86_64-unknown-linux-gnu", "bun-linux-x64.zip"),
+            ("aarch64-unknown-linux-gnu", "bun-linux-aarch64.zip"),
+            ("x86_64-unknown-linux-musl", "bun-linux-x64.zip"),
+            ("aarch64-unknown-linux-musl", "bun-linux-aarch64.zip"),
+        ] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert_eq!(release_filename(&host, true)?, expected);
+        }
+        Ok(())
+    }
+
+    // The libc probe must not change macOS or Windows archive names.
+    #[test]
+    fn non_linux_platforms() -> Result<()> {
+        for (triple, expected) in [
+            ("x86_64-apple-darwin", "bun-darwin-x64.zip"),
+            ("aarch64-apple-darwin", "bun-darwin-aarch64.zip"),
+            ("x86_64-pc-windows-msvc", "bun-windows-x64.zip"),
+            ("aarch64-pc-windows-msvc", "bun-windows-aarch64.zip"),
+        ] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            for glibc_available in [false, true] {
+                assert_eq!(release_filename(&host, glibc_available)?, expected);
+            }
+        }
+        Ok(())
+    }
+
+    // Unsupported CPUs and operating systems must still fail before downloading.
+    #[test]
+    fn unsupported_platforms() -> Result<()> {
+        for triple in ["riscv64gc-unknown-linux-gnu", "x86_64-unknown-freebsd"] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert!(release_filename(&host, false).is_err());
+        }
+        Ok(())
     }
 }
