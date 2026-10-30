@@ -20,6 +20,7 @@ use crate::http::download_artifact;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::libc::Libc;
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -198,7 +199,7 @@ impl BunInstaller {
 
     /// Install a specific version of Bun.
     async fn download(&self, store: &Store, version: &BunVersion) -> Result<BunResult> {
-        let filename = release_filename(&HOST, has_glibc(&HOST).await?)?;
+        let filename = release_filename(&HOST, Libc::detect().await?)?;
         let url =
             format!("https://github.com/oven-sh/bun/releases/download/bun-v{version}/{filename}");
         let checksum_url = format!(
@@ -272,41 +273,7 @@ impl BunInstaller {
     }
 }
 
-async fn has_glibc(host: &Triple) -> Result<bool> {
-    // Static musl builds of prek can also run on glibc systems. Check the loader
-    // Bun needs at runtime, not the libc prek was compiled against.
-    let loader = match (host.operating_system, host.architecture) {
-        (OperatingSystem::Linux, Architecture::X86_64) => "/lib64/ld-linux-x86-64.so.2",
-        (OperatingSystem::Linux, Architecture::Aarch64(_)) => "/lib/ld-linux-aarch64.so.1",
-        _ => return Ok(false),
-    };
-    probe_glibc_loader(Path::new(loader)).await
-}
-
-async fn probe_glibc_loader(loader: &Path) -> Result<bool> {
-    if !loader
-        .try_exists()
-        .with_context(|| format!("Failed to check for glibc loader at {}", loader.display()))?
-    {
-        return Ok(false);
-    }
-
-    // gcompat may occupy this path, but rejects direct invocation. Check only
-    // the exit status: glibc's version banner can be distro-branded, and
-    // --list-tunables would exclude glibc versions older than 2.33.
-    let output = Cmd::new(loader)
-        .arg("--version")
-        .check(false)
-        .output()
-        .await
-        .context("Failed to query glibc loader version")?;
-    let version = String::from_utf8_lossy(&output.stdout);
-    let available = output.status.success();
-    debug!(loader = %loader.display(), %version, glibc_available = available, "Detected Bun runtime libc");
-    Ok(available)
-}
-
-fn release_filename(host: &Triple, glibc_available: bool) -> Result<String> {
+fn release_filename(host: &Triple, libc: Option<Libc>) -> Result<String> {
     let arch = match host.architecture {
         Architecture::X86_64 => "x64",
         Architecture::Aarch64(_) => "aarch64",
@@ -319,7 +286,7 @@ fn release_filename(host: &Triple, glibc_available: bool) -> Result<String> {
         _ => anyhow::bail!("Unsupported OS"),
     };
 
-    let suffix = if host.operating_system == OperatingSystem::Linux && !glibc_available {
+    let suffix = if host.operating_system == OperatingSystem::Linux && libc == Some(Libc::Musl) {
         "-musl"
     } else {
         ""
@@ -345,49 +312,10 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
-    // Missing loaders and failed probes select musl, regardless of banner text.
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn glibc_loader_detection() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let loader = temp.path().join("ld.so");
-        assert!(!probe_glibc_loader(&loader).await?);
-
-        for (version, exit_code, expected) in [
-            ("ld.so (GNU libc) stable release version 2.41.", 0, true),
-            (
-                "ld.so (Debian GLIBC 2.41) stable release version 2.41.",
-                0,
-                true,
-            ),
-            (
-                "ld.so (Gentoo 2.39-r6 p4) stable release version 2.39.",
-                0,
-                true,
-            ),
-            ("musl libc", 1, false),
-            ("This is the gcompat ELF interpreter stub.", 1, false),
-            ("GNU libc", 1, false),
-        ] {
-            fs_err::write(
-                &loader,
-                format!("#!/bin/sh\nprintf '%s\\n' '{version}'\nexit {exit_code}\n"),
-            )?;
-            crate::fs::make_executable(&loader)?;
-            assert_eq!(probe_glibc_loader(&loader).await?, expected, "{version}");
-        }
-
-        // A directory cannot be executed, even with shell fallback on macOS.
-        fs_err::remove_file(&loader)?;
-        fs_err::create_dir(&loader)?;
-        assert!(probe_glibc_loader(&loader).await.is_err());
-        Ok(())
-    }
-
-    // Both Linux architectures need musl archives when the glibc loader is absent,
+    // Both Linux architectures need musl archives when musl is detected,
     // regardless of the libc prek was compiled against.
     #[test]
-    fn linux_without_glibc() -> Result<()> {
+    fn linux_with_musl() -> Result<()> {
         for (triple, expected) in [
             ("x86_64-unknown-linux-musl", "bun-linux-x64-musl.zip"),
             ("aarch64-unknown-linux-musl", "bun-linux-aarch64-musl.zip"),
@@ -395,7 +323,7 @@ mod tests {
             ("aarch64-unknown-linux-gnu", "bun-linux-aarch64-musl.zip"),
         ] {
             let host = triple.parse().map_err(anyhow::Error::msg)?;
-            assert_eq!(release_filename(&host, false)?, expected);
+            assert_eq!(release_filename(&host, Some(Libc::Musl))?, expected);
         }
         Ok(())
     }
@@ -410,7 +338,7 @@ mod tests {
             ("aarch64-unknown-linux-musl", "bun-linux-aarch64.zip"),
         ] {
             let host = triple.parse().map_err(anyhow::Error::msg)?;
-            assert_eq!(release_filename(&host, true)?, expected);
+            assert_eq!(release_filename(&host, Some(Libc::Glibc))?, expected);
         }
         Ok(())
     }
@@ -425,9 +353,7 @@ mod tests {
             ("aarch64-pc-windows-msvc", "bun-windows-aarch64.zip"),
         ] {
             let host = triple.parse().map_err(anyhow::Error::msg)?;
-            for glibc_available in [false, true] {
-                assert_eq!(release_filename(&host, glibc_available)?, expected);
-            }
+            assert_eq!(release_filename(&host, None)?, expected);
         }
         Ok(())
     }
@@ -437,7 +363,7 @@ mod tests {
     fn unsupported_platforms() -> Result<()> {
         for triple in ["riscv64gc-unknown-linux-gnu", "x86_64-unknown-freebsd"] {
             let host = triple.parse().map_err(anyhow::Error::msg)?;
-            assert!(release_filename(&host, false).is_err());
+            assert!(release_filename(&host, None).is_err());
         }
         Ok(())
     }
