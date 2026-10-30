@@ -44,7 +44,7 @@ mod hooks;
 mod http;
 mod install_source;
 mod languages;
-mod platform;
+mod libc;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]

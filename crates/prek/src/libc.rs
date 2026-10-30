@@ -82,14 +82,7 @@ async fn is_glibc(loader: &Path) -> Result<bool> {
     // normally link the ABI loader path to ld-<major>.<minor>.so.
     let resolved = fs_err::canonicalize(loader)?;
     if let Some(name) = resolved.file_name().and_then(|name| name.to_str())
-        && let Some(version) = name
-            .strip_prefix("ld-")
-            .and_then(|name| name.strip_suffix(".so"))
-        && let Some((major, minor)) = version.split_once('.')
-        && !major.is_empty()
-        && !minor.is_empty()
-        && major.bytes().all(|byte| byte.is_ascii_digit())
-        && minor.bytes().all(|byte| byte.is_ascii_digit())
+        && is_versioned_glibc_loader(name)
     {
         return Ok(true);
     }
@@ -109,6 +102,23 @@ async fn is_glibc(loader: &Path) -> Result<bool> {
             .lines()
             .chain(stderr.lines())
             .any(|line| line.starts_with("ld.so (") && line.contains(") ")))
+}
+
+fn is_versioned_glibc_loader(name: &str) -> bool {
+    let Some(version) = name
+        .strip_prefix("ld-")
+        .and_then(|name| name.strip_suffix(".so"))
+    else {
+        return false;
+    };
+    let Some((major, minor)) = version.split_once('.') else {
+        return false;
+    };
+
+    !major.is_empty()
+        && !minor.is_empty()
+        && major.bytes().all(|byte| byte.is_ascii_digit())
+        && minor.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 #[cfg(all(test, unix))]
