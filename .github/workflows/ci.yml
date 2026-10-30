@@ -828,6 +828,8 @@ jobs:
       - language-tests
       - ecosystem-cpython
       - build-dev-binaries
+      - build-release-binaries
+      - build-docker
     runs-on: ubuntu-latest
     steps:
       - name: "Check required jobs passed"
