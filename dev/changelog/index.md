@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.8
+
+Released on 2026-10-30.
+
+### Enhancements
+
+- Add `normalize-indentation` builtin hook ([\#2967](<https://github.com/j178/prek/pull/2967>))
+- Allow overriding the uv install version ([\#2923](<https://github.com/j178/prek/pull/2923>))
+- Embed dependency metadata in release binaries ([\#2976](<https://github.com/j178/prek/pull/2976>))
+- Select musl Bun builds when glibc is unavailable ([\#2972](<https://github.com/j178/prek/pull/2972>))
+
+### Performance
+
+- Improve workspace discovery performance ([\#2936](<https://github.com/j178/prek/pull/2936>))
+
+### Bug fixes
+
+- Preserve clean-filtered files during stashing ([\#2915](<https://github.com/j178/prek/pull/2915>))
+
+### Contributors
+
+- @j178
+- @tchernobog
+
 ## 0.5.7
 
 Released on 2026-10-21.
