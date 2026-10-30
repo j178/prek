@@ -15,7 +15,7 @@ use crate::archive;
 use crate::checksum::Sha256Digest;
 use crate::fs::LockedFile;
 use crate::git;
-use crate::http::{REQWEST_CLIENT, download_artifact};
+use crate::http::{download_artifact, reqwest_client};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
@@ -256,7 +256,7 @@ impl GoInstaller {
 
     async fn fetch_checksum(version: &str, filename: &str) -> Result<Option<Sha256Digest>> {
         let url = "https://go.dev/dl/?mode=json&include=all";
-        let response = REQWEST_CLIENT
+        let response = reqwest_client()?
             .get(url)
             .send()
             .await

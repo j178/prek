@@ -15,7 +15,7 @@ use tracing::{debug, trace, warn};
 use crate::archive;
 use crate::checksum::{digest_from_sha256sums, fetch_checksum_with};
 use crate::fs::LockedFile;
-use crate::http::{DownloadChecksumPolicy, REQWEST_CLIENT, download_artifact_with};
+use crate::http::{DownloadChecksumPolicy, download_artifact_with, reqwest_client};
 use crate::languages::ruby::RubyRequest;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
@@ -290,7 +290,7 @@ impl RubyInstaller {
         let (api_url, is_github) = rv_ruby_api_url(&EnvVars);
         let suffix = format!(".{platform}.tar.gz");
 
-        let req = REQWEST_CLIENT
+        let req = reqwest_client()?
             .get(&api_url)
             .header("Accept", "application/vnd.github+json");
         let req = maybe_add_github_auth(req, is_github, &EnvVars);

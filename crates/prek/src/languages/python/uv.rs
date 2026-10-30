@@ -15,7 +15,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use crate::archive;
 use crate::checksum::{digest_from_sha256sums, fetch_checksum};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, TempDownload, download_artifact};
+use crate::http::{TempDownload, download_artifact, reqwest_client};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::warn_user;
@@ -381,7 +381,7 @@ impl InstallSource {
         };
 
         debug!("Fetching uv metadata from: {}", api_url);
-        let response = REQWEST_CLIENT
+        let response = reqwest_client()?
             .get(&api_url)
             .header("Accept", "*/*")
             .send()
@@ -426,7 +426,7 @@ impl InstallSource {
         let simple_url = format!("{}uv/", source.url());
 
         debug!("Fetching from simple API: {}", simple_url);
-        let response = REQWEST_CLIENT
+        let response = reqwest_client()?
             .get(&simple_url)
             .header(ACCEPT, "*/*")
             .send()

@@ -85,9 +85,22 @@ If not set, prek uses its default uv version. This applies to all
 This only affects new uv installations. A compatible uv found alongside prek,
 on `PATH`, or in prek's cache is still reused, even if its version differs.
 
+### `PREK_SYSTEM_CERTS`
+
+Set to `true` to use the system trust store through
+[`rustls-platform-verifier`](https://crates.io/crates/rustls-platform-verifier).
+By default, prek uses the certificates bundled with
+[`webpki-root-certs`](https://crates.io/crates/webpki-root-certs).
+
+On Linux, this requires an available system CA bundle.
+
+When `SSL_CERT_FILE` or `SSL_CERT_DIR` is set to a non-empty value, prek uses only
+certificates loaded from those paths, regardless of this setting. System and
+bundled certificates are not loaded.
+
 ### `PREK_NATIVE_TLS`
 
-Use the system trusted store instead of the bundled `webpki-roots` crate.
+Deprecated alias for [`PREK_SYSTEM_CERTS`](#prek_system_certs).
 
 ### `PREK_DOWNLOAD_CHECKSUM_POLICY`
 
@@ -191,7 +204,7 @@ prek also honors variables owned by Git, ecosystem tools, or its HTTP stack:
 
 | Variable | Effect |
 | -- | -- |
-| `SSL_CERT_FILE`, `SSL_CERT_DIR` | Add certificate locations used by HTTPS requests |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | Non-empty values replace the default HTTPS trust roots |
 | `GITHUB_TOKEN` | Authenticate supported GitHub API requests, including self-update and an exact GitHub Ruby mirror |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and lowercase forms | Configure inherited network proxy behavior |
 

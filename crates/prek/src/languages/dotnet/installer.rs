@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use super::version::DotnetVersion;
 use crate::fs::LockedFile;
-use crate::http::REQWEST_CLIENT;
+use crate::http::reqwest_client;
 use crate::languages::dotnet::DotnetRequest;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
 use crate::process::Cmd;
@@ -239,7 +239,7 @@ impl DotnetInstaller {
         let script_dir = tempfile::tempdir()?;
         let script_path = script_dir.path().join(script_name);
 
-        let response = REQWEST_CLIENT
+        let response = reqwest_client()?
             .get(script_url)
             .send()
             .await?
