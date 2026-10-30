@@ -100,6 +100,11 @@ jobs:
         with:
           enable-cache: false
 
+      - name: Install cargo-auditable
+        if: runner.os != 'Linux'
+        shell: bash
+        run: scripts/install-cargo-tools.sh cargo-auditable
+
       - name: Configure release linker
         if: runner.os != 'Linux'
         shell: bash
@@ -112,6 +117,8 @@ jobs:
         # The extra instrumented build is too slow on Intel macOS runners.
         if: runner.os != 'Linux' && matrix.platform.target != 'x86_64-apple-darwin'
         shell: bash
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.${{ runner.os == 'Windows' && 'cmd' || 'sh' }}
         run: |
           uv run scripts/pgo/train.py --target "$TARGET"
           echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$GITHUB_WORKSPACE/target/pgo/$TARGET/prek.profdata" >> "$GITHUB_ENV"
@@ -125,11 +132,14 @@ jobs:
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            scripts/install-cargo-tools.sh cargo-auditable
             source scripts/setup-release-linker.sh
 
             uv run scripts/pgo/train.py --target "$TARGET"
             export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-use=$PWD/target/pgo/$TARGET/prek.profdata"
-          docker-options: -e TARGET
+          docker-options: -e TARGET -e CARGO
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.${{ runner.os == 'Windows' && 'cmd' || 'sh' }}
 
       - name: Smoke-test release binary
         shell: bash
@@ -195,8 +205,12 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
-          before-script-linux: source scripts/setup-release-linker.sh
-          docker-options: -e TARGET
+          before-script-linux: |
+            scripts/install-cargo-tools.sh cargo-auditable
+            source scripts/setup-release-linker.sh
+          docker-options: -e TARGET -e CARGO
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -243,8 +257,12 @@ jobs:
           target: ${{ env.TARGET }}
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update --compatibility pypi
-          before-script-linux: source scripts/setup-release-linker.sh
-          docker-options: -e TARGET
+          before-script-linux: |
+            scripts/install-cargo-tools.sh cargo-auditable
+            source scripts/setup-release-linker.sh
+          docker-options: -e TARGET -e CARGO
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -292,8 +310,12 @@ jobs:
           manylinux: musllinux_1_1
           # Also support glibc systems older than the aarch64 GNU build's baseline.
           args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
-          before-script-linux: source scripts/setup-release-linker.sh
-          docker-options: -e TARGET
+          before-script-linux: |
+            scripts/install-cargo-tools.sh cargo-auditable
+            source scripts/setup-release-linker.sh
+          docker-options: -e TARGET -e CARGO
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
       - name: "Upload wheels"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -321,3 +343,30 @@ jobs:
           path: |
             *.tar.gz
             *.sha256
+
+  check-sboms:
+    name: Check release dependency metadata
+    needs: [native, linux-ppc64le, musllinux, musllinux-cross]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install rust-audit-info
+        run: scripts/install-cargo-tools.sh rust-audit-info
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: wheels-*
+          path: wheels
+          merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: artifacts-*
+          path: archives
+          merge-multiple: true
+
+      - name: Check wheels and archives
+        run: python3 scripts/check-release-artifact-sboms.py wheels/*.whl archives/*.tar.gz archives/*.zip
