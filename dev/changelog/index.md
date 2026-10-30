@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.8
+## 0.5.9
 
 Released on 2026-10-30.
 
