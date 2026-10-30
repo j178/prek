@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "aho-corasick",
  "annotate-snippets",
@@ -1873,14 +1873,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-identify"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "prek-ignore"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "globset",
  "memchr",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "prek-pty"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "rustix",
  "tokio",
@@ -1917,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "prek-update"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "anyhow",
  "fs-err",
