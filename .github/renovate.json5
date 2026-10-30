@@ -35,6 +35,15 @@
     'rust-toolchain',
   ],
   customManagers: [
+    // Release tool versions are shared by CI and Docker builds.
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^scripts/install-cargo-tools\\.sh$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[A-Z_]+_VERSION=(?<currentValue>\\S+)',
+      ],
+      versioningTemplate: 'semver',
+    },
     // Update komac and its release archive checksum together.
     {
       customType: 'regex',
@@ -86,6 +95,7 @@
       matchManagers: ['custom.regex'],
       matchFileNames: [
         '.github/workflows/**',
+        'scripts/install-cargo-tools.sh',
         'crates/prek/src/languages/python/uv.rs',
       ],
       separateMajorMinor: false,

@@ -61,8 +61,9 @@ jobs:
     name: ${{ needs.plan.outputs.action }} Docker image
     needs: plan
     runs-on: ubuntu-latest
+    # Dry runs must not enter the protected release environment.
     environment:
-      name: release
+      name: ${{ needs.plan.outputs.push == 'true' && 'release' || '' }}
     permissions:
       contents: read
       packages: write
@@ -137,7 +138,7 @@ jobs:
     name: ${{ needs.plan.outputs.action }} Alpine Docker image
     runs-on: ubuntu-latest
     environment:
-      name: release
+      name: ${{ needs.plan.outputs.push == 'true' && 'release' || '' }}
     needs:
       - plan
       - docker-publish-base
