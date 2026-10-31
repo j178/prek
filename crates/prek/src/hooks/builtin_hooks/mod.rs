@@ -25,6 +25,7 @@ mod check_jsonc;
 mod check_signed_commit;
 mod normalize_indentation;
 mod pattern;
+mod replace_pattern;
 
 #[derive(
     Debug,
@@ -69,6 +70,7 @@ pub(crate) enum BuiltinHooks {
     NoCommitToBranch,
     NormalizeIndentation,
     PrettyFormatJson,
+    ReplacePattern,
     RequireFilenamePattern,
     RequirePattern,
     RequirementsTxtFixer,
@@ -96,6 +98,7 @@ impl BuiltinHooks {
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
             Self::NormalizeIndentation => normalize_indentation::Args::command(),
             Self::PrettyFormatJson => pretty_format_json::Args::command(),
+            Self::ReplacePattern => replace_pattern::Args::command(),
             Self::TrailingWhitespace => fix_trailing_whitespace::Args::command(),
             _ => return None,
         })
@@ -152,6 +155,7 @@ impl BuiltinHooks {
             Self::NoCommitToBranch => Box::pin(no_commit_to_branch::run(hook)),
             Self::NormalizeIndentation => Box::pin(normalize_indentation::run(hook, filenames)),
             Self::PrettyFormatJson => Box::pin(pretty_format_json::run(hook, filenames)),
+            Self::ReplacePattern => Box::pin(replace_pattern::run(hook, filenames)),
             Self::RequireFilenamePattern => Box::pin(std::future::ready(
                 pattern::require_filename_pattern(hook, filenames),
             )),
@@ -553,6 +557,21 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("Checks that JSON files are pretty-formatted.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::ReplacePattern => BuiltinHook {
+                id: "replace-pattern".to_string(),
+                name: "replace patterns".to_string(),
+                entry: "replace-pattern".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Replaces regular expression matches in text files.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
