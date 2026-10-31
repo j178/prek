@@ -35,10 +35,10 @@ jobs:
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: cargo-bloat
 
@@ -168,7 +168,7 @@ jobs:
           mkdir -p "$HYPERFINE_BIN_DIR"
           echo "$HYPERFINE_BIN_DIR" >> "$GITHUB_PATH"
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -192,7 +192,7 @@ jobs:
           cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: hyperfine
 
