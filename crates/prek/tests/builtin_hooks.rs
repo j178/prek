@@ -356,6 +356,179 @@ fn require_filename_pattern_hook_accepts_any_pattern_for_basename() {
     ");
 }
 
+/// Check mode reports only changed lines without writing; normalized matches pass.
+#[test]
+fn replace_pattern_hook_check_and_fix() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--check, --ignore-case, '\bfoobar\b', FOOBAR]
+                files: '\.txt$'
+    "})
+        .with_files([
+            ("mixed.txt", "foobar FooBar\r\nFOOBAR\nfoobar"),
+            ("normalized.txt", "FOOBAR\n"),
+        ])
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    replace patterns.........................................................Failed
+    - hook id: replace-pattern
+    - description: Replaces regular expression matches in text files
+    - exit code: 1
+
+      mixed.txt:1: matching text would be replaced
+      mixed.txt:3: matching text would be replaced
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("mixed.txt"), "foobar FooBar\r\nFOOBAR\nfoobar");
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--ignore-case, '\bfoobar\b', FOOBAR]
+                files: '\.txt$'
+    "});
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    replace patterns.........................................................Failed
+    - hook id: replace-pattern
+    - description: Replaces regular expression matches in text files
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing mixed.txt
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("mixed.txt"), "FOOBAR FOOBAR\r\nFOOBAR\nFOOBAR");
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    replace patterns.........................................................Passed
+
+    ----- stderr -----
+    ");
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--check, --ignore-case, '\bfoobar\b', FOOBAR]
+                files: '\.txt$'
+    "});
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    replace patterns.........................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Multiline diagnostics locate the first changed block, skipping already normalized matches.
+#[test]
+fn replace_pattern_hook_check_reports_multiline_match() {
+    let contents = "BEGIN\nEND\n\nbegin\nend\nbegin\nend\n";
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--check, --ignore-case, --multiline, '^begin.*?end$', "BEGIN\nEND"]
+                files: '\.txt$'
+    "#})
+        .with_file("file.txt", contents)
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    replace patterns.........................................................Failed
+    - hook id: replace-pattern
+    - description: Replaces regular expression matches in text files
+    - exit code: 1
+
+      file.txt:4: matching text would be replaced
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("file.txt"), contents);
+}
+
+/// Invalid references must fail before writing, even when a pattern never matches.
+#[test]
+fn replace_pattern_hook_rejects_unknown_capture() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: ['(?P<name>foo)', '${typo}']
+                files: '\.txt$'
+    "})
+        .with_file("file.txt", "no match\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `replace-pattern`
+      caused by: Invalid replacement template `${typo}`
+      caused by: Unknown capture group `typo`
+    ");
+    assert_eq!(context.read("file.txt"), "no match\n");
+}
+
+/// A backtracking error after an earlier replacement must leave the whole file intact.
+#[test]
+fn replace_pattern_hook_runtime_error_does_not_write() {
+    let contents = format!("foo\n{}", "a".repeat(40));
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: ['foo|^(a|aa)+(?=b)$', bar]
+                files: '\.txt$'
+    "})
+        .with_file("file.txt", &contents)
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `replace-pattern`
+      caused by: Failed to replace pattern in `file.txt:2`
+      caused by: Error executing regex: Max limit for backtracking count exceeded
+    ");
+    assert_eq!(context.read("file.txt"), contents);
+}
+
 #[test]
 fn require_pattern_hook_reports_files_without_any_match() {
     let context = TestEnv::new()

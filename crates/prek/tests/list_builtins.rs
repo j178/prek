@@ -6,7 +6,7 @@ mod common;
 fn list_builtins_defaults_to_verbose_output() {
     let context = TestEnv::new();
 
-    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @r#"
+    cmd_snapshot!(context, context.command().arg("util").arg("list-builtins"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -143,6 +143,13 @@ fn list_builtins_defaults_to_verbose_output() {
             --no-sort-keys     Preserve object key order
             --top-keys <KEYS>  Object keys to move to the front, comma-separated
 
+    replace-pattern
+      Replaces regular expression matches in text files.
+      flags:
+        -i, --ignore-case  Match the pattern case-insensitively
+        -m, --multiline    Search each file as a whole
+            --check        Report files that need changes without modifying them
+
     require-filename-pattern
       Fails if any selected filename does not match a regular expression.
       flags:
@@ -168,7 +175,7 @@ fn list_builtins_defaults_to_verbose_output() {
 
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -319,6 +326,11 @@ fn list_builtins_json() {
         "id": "pretty-format-json",
         "name": "pretty format json",
         "description": "Checks that JSON files are pretty-formatted."
+      },
+      {
+        "id": "replace-pattern",
+        "name": "replace patterns",
+        "description": "Replaces regular expression matches in text files."
       },
       {
         "id": "require-filename-pattern",

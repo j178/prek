@@ -1109,6 +1109,7 @@
         "no-commit-to-branch",
         "normalize-indentation",
         "pretty-format-json",
+        "replace-pattern",
         "require-filename-pattern",
         "require-pattern",
         "requirements-txt-fixer",
