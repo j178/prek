@@ -13,14 +13,13 @@ concurrency:
 permissions: {}
 
 env:
-  # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
-  # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
   UV_VERSION: "0.13.4"
   NODE_VERSION: "20"
   BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
-  # The mise tests install 2026.7.18 separately to cover managed downloads.
-  MISE_VERSION: "2026.8.3"
+  # The mise tests also install a managed copy to cover downloads.
+  # renovate: datasource=github-releases depName=jdx/mise
+  MISE_VERSION: "2026.10.17"
   PYTHON_VERSION: "3.12"
   PHP_VERSION: "8.4"
   RUBY_VERSION: "3.4"

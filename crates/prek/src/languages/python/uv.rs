@@ -27,8 +27,9 @@ static UV_INSTALL_VERSION: LazyLock<String> = LazyLock::new(|| {
         .var(EnvVars::PREK_UV_VERSION)
         .unwrap_or_else(|_| DEFAULT_UV_VERSION.to_string())
 });
+// Older releases trust the compromised eMudhra intermediates (CVE-2026-111943).
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
-    LazyLock::new(|| VersionReq::parse(">=0.7.0").unwrap());
+    LazyLock::new(|| VersionReq::parse(">=0.13.4").unwrap());
 
 // Base URLs for the uv release archive. Astral's CDN mirrors GitHub release assets under
 // `/github/<repo>/releases/download/...` and is the default; GitHub stays reachable via

@@ -358,7 +358,7 @@ fn language_version() -> Result<()> {
 
 /// Test `rustup` installer.
 #[test]
-fn rustup_installer() {
+fn rustup_installer() -> anyhow::Result<()> {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
@@ -375,6 +375,28 @@ fn rustup_installer() {
 
     let context = context.with_filter(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X");
 
+    #[cfg(unix)]
+    {
+        use assert_fs::fixture::PathChild;
+
+        let rustup_home = context.home_dir().child("tools/rustup");
+        fs_err::create_dir_all(&rustup_home)?;
+        let rustup = rustup_home.child("rustup");
+        fs_err::write(
+            &rustup,
+            indoc::indoc! {r#"
+            #!/bin/sh
+            if [ "$1" = --version ]; then
+                echo 'rustup 1.29.1'
+            else
+                echo 'unsafe rustup was reused' >&2
+                exit 1
+            fi
+        "#},
+        )?;
+        crate::common::make_executable(&rustup)?;
+    }
+
     cmd_snapshot!(context, context.run().arg("-v").env(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME, "non-exist-rustup"), @r#"
     success: true
     exit_code: 0
@@ -387,6 +409,8 @@ fn rustup_installer() {
 
     ----- stderr -----
     "#);
+
+    Ok(())
 }
 
 /// Test that `additional_dependencies` with cli: prefix are installed correctly.
