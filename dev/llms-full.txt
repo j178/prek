@@ -5612,6 +5612,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-xml`](<#check-xml>) (Checks XML files for parseable syntax.)
 - [`deny-filename-pattern`](<#deny-filename-pattern>) (Fails if any selected filename matches a regular expression.)
 - [`deny-pattern`](<#deny-pattern>) (Fails if any file contains a matching regular expression.)
+- [`replace-pattern`](<#replace-pattern>) (Replaces regular expression matches in text files.)
 - [`require-filename-pattern`](<#require-filename-pattern>) (Fails if any selected filename does not match a regular expression.)
 - [`require-pattern`](<#require-pattern>) (Fails if any file does not contain a matching regular expression.)
 - [`mixed-line-ending`](<#mixed-line-ending>) (Replaces or checks mixed line endings.)
@@ -6130,6 +6131,73 @@ repos:
         args: ['^\s*#import\s+.+:\s*\*']
         files: \.typ$
 ```
+
+---
+
+### `replace-pattern`
+
+Replaces all non-overlapping matches of one regular expression in each selected text file. Use one hook entry per replacement rule, with the standard `files`, `exclude`, and type filters to select files.
+
+**Supported arguments**
+
+- `PATTERN REPLACEMENT` (both required)
+
+  - A single regular expression and its replacement template.
+  - An empty replacement deletes matches. Use `--` before values beginning with `-`.
+- `-i`, `--ignore-case`
+
+  - Match case-insensitively.
+- `-m`, `--multiline`
+
+  - Search each file as a whole, with `^` and `$` matching line boundaries and `.` matching newlines, as in [`deny-pattern`](<#deny-pattern>).
+- `--check`
+
+  - Report files whose contents would change without modifying them.
+  - Report each affected line as `path:line: matching text would be replaced`. With `--multiline`, report the start line of the first match that would change in each file.
+
+Replacement templates support `$0` for the entire match, `$1` or `${1}` for numbered capture groups, and `$name` or `${name}` for named groups. Use braces to separate a reference from adjacent text, such as `${1}_suffix`, and `$$` for a literal `$`. Unknown capture groups are errors; optional groups that did not match expand to empty strings. Backslashes are literal: use your YAML or TOML string syntax to insert a newline, rather than passing a literal `\n`.
+
+By default, matching is performed on each line without its line ending. Existing line endings and untouched bytes are preserved.
+
+The hook fails only when the replacement changes file contents, including in `--check` mode.
+
+```toml
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "replace-pattern"
+name = "normalize product name"
+args = ["--ignore-case", '\bfoobar\b', "FOOBAR"]
+files = '\.md$'
+
+[[repos.hooks]]
+id = "replace-pattern"
+name = "migrate environment variable"
+args = ['\bOLD_([A-Z_]+)\b', 'NEW_${1}']
+files = '\.(sh|yaml)$'
+```
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: replace-pattern
+        name: normalize product name
+        args: [--ignore-case, '\bfoobar\b', FOOBAR]
+        files: '\.md$'
+      - id: replace-pattern
+        name: migrate environment variable
+        args: ['\bOLD_([A-Z_]+)\b', 'NEW_${1}']
+        files: '\.(sh|yaml)$'
+```
+
+> [!WARNING]
+>
+> **Caveats**
+>
+> - Inserted text is not searched again during the same run, but rules need not be idempotent: replacing `foo` with `foobar` changes the file again on the next run.
+> - Rules run in configuration order by default, so later rules see earlier changes. Rules that modify the same files should not share a concurrent [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>).
 
 ---
 
