@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use owo_colors::OwoColorize;
-use prek_consts::CONFIG_FILENAMES;
+use prek_consts::CONFIG_PATHS;
 use same_file::is_same_file;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
@@ -193,10 +193,7 @@ fn get_hook_types(
             .clone()
             .unwrap_or_default()
     } else {
-        let fallbacks = CONFIG_FILENAMES
-            .iter()
-            .map(Path::new)
-            .filter(|p| p.exists());
+        let fallbacks = CONFIG_PATHS.iter().map(Path::new).filter(|p| p.exists());
         if let Some(path) = config.into_iter().chain(fallbacks).next() {
             match load_config(path) {
                 Ok(cfg) => cfg.default_install_hook_types.unwrap_or_default(),

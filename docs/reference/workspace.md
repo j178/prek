@@ -7,9 +7,12 @@ commands, see [Monorepos](../monorepos.md).
 ## Discovery
 
 Without `--config`, prek searches upward from the current working directory for
-`prek.toml`, `.pre-commit-config.yaml`, or `.pre-commit-config.yml`. It stops at
-the first directory with a config, which becomes the workspace root. The search
-never goes above the Git repository root.
+`prek.toml`, `.pre-commit-config.yaml`, or `.pre-commit-config.yml`, checking each
+directory and then its `.config/` subdirectory. It stops at the first project
+with a config, which becomes the workspace root. A config in `.config/` belongs
+to its parent directory; `.config/` does not become a separate project, even
+when prek is invoked from inside it. The search never goes above the Git
+repository root.
 
 From the workspace root, prek recursively discovers projects in subdirectories.
 The workspace root can be inside the Git repository; it need not be the Git
@@ -27,7 +30,8 @@ Project discovery respects:
 - `.prekignore` files, which use Git ignore syntax and apply to their directory
   and its descendants.
 
-Discovery skips hidden directories, Cookiecutter template directories such as
+Discovery checks `.config/` for project configs but otherwise skips hidden
+directories, Cookiecutter template directories such as
 `{{cookiecutter.project_slug}}`, and Git submodules. It does not follow directory
 symlinks.
 

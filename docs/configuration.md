@@ -19,6 +19,13 @@ prek reads one config per project. Keep an existing `.pre-commit-config.yaml`, o
 If several of these files exist in one directory, prek uses the first one in
 the order above. Use one file per project to make it clear which config applies.
 
+Configs can also live in the project's `.config/` directory, for example
+`.config/prek.toml` or `.config/.pre-commit-config.yaml`. Files in the project
+directory take precedence over files in `.config/`, which use the same filename
+order. The project root remains the parent of `.config/`: hook working
+directories, filenames, and file filters are relative to that project root.
+This also applies to nested projects in a workspace.
+
 To convert a YAML config, run
 [`prek util yaml-to-toml`](reference/cli.md#prek-util-yaml-to-toml). The conversion
 does not preserve YAML comments. If the config must also work with upstream
