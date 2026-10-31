@@ -1119,6 +1119,13 @@ See the [built-in hook reference](<https://prek.j178.dev/dev/reference/built-in-
 
 For supported hooks from `https://github.com/pre-commit/pre-commit-hooks`, prek runs the built-in implementation automatically. Your existing remote config can stay compatible with upstream pre-commit. The `rev` field does not affect fast-path detection. It still selects the manifest that prek reads and the repository implementation used for fallback.
 
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"  # Enables fast path
+rev = "v6.0.0"  # Used for the manifest and fallback, not fast-path detection
+hooks = [{ id = "trailing-whitespace" }]
+```
+
 ```yaml
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks  # Enables fast path
@@ -1136,6 +1143,15 @@ See [fast-path support](<https://prek.j178.dev/dev/reference/built-in-hooks/#aut
 ### Run the repository implementation
 
 To use the pinned repository implementation for a single hook, explicitly set the language declared by that hook:
+
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "check-yaml", language = "python" },  # Use the pinned repository implementation
+]
+```
 
 ```yaml
 repos:
@@ -1690,6 +1706,15 @@ Example:
 When users configure a hook with `args`, `prek` passes those arguments before the list of file paths. If `args` is empty or omitted, only file paths are provided.
 
 Example end-user config:
+
+```toml
+[[repos]]
+repo = "https://github.com/example/hook-repo"
+rev = "v1.0.0"
+hooks = [
+  { id = "my-hook", args = ["--max-line-length=120"] }
+]
+```
 
 ```yaml
 repos:
@@ -5643,6 +5668,15 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 Example:
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"] },
+  { id = "check-added-large-files", args = ["--maxkb=1024"] }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -5774,6 +5808,14 @@ Sorts the non-empty lines in each matched file and rewrites the file when the no
 
 Example:
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "file-contents-sorter", files = '^requirements(-dev)?\.txt$' }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -5869,6 +5911,19 @@ Attempts to load all JSON5 files to verify syntax.
 Checks `.jsonc` files for parseable syntax.
 
 To check JSONC stored in `.json` files, such as `tsconfig.json`, override the default file-type filter:
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "check-jsonc",
+    types = ["json"],
+    files = '(^|/)tsconfig\.json$',
+    args = ["--allow-trailing-commas"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -6014,6 +6069,14 @@ The standard `files`, `exclude`, and type filters select which project-relative 
 
 Each matching file is reported once as `path: filename matches a denied pattern`.
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "deny-filename-pattern", name = "disallow spaces in filenames", args = ['\s'] }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -6045,6 +6108,19 @@ Fails when any selected text file matches a configured regular expression. When 
 
 By default, each matching line is reported as `path:line:contents`. A line matching more than one pattern is reported only once. With `--multiline`, the earliest match in each file is reported as `path:start-line:matched-block`.
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "deny-pattern",
+    name = "disallow wildcard imports",
+    args = ['^\s*#import\s+.+:\s*\*'],
+    files = '\.typ$'
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -6062,6 +6138,19 @@ repos:
 Fails when the final path component (the basename) of any selected file does not match at least one configured regular expression. This is a per-file requirement: every selected basename must match, while different basenames may match different patterns.
 
 `require-filename-pattern` supports the same positional `PATTERN...` and `-i` / `--ignore-case` arguments as [`deny-filename-pattern`](<#deny-filename-pattern>). Matching uses search semantics; use `^` and `$` when the pattern must match the entire basename. Files without a match are reported as `path: filename does not match any required pattern`.
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "require-filename-pattern",
+    name = "python tests naming",
+    args = ['^test_.*\.py$', '^__init__\.py$', '^conftest\.py$'],
+    files = '(^|/)tests/.+\.py$'
+  }
+]
+```
 
 ```yaml
 repos:
@@ -6083,6 +6172,19 @@ repos:
 Fails when any selected text file does not match at least one configured regular expression. This is a per-file requirement: every file must match, while different files may match different patterns.
 
 `require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](<#deny-pattern>). Files without a match are reported as `path: file does not match any required pattern`.
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "require-pattern",
+    name = "require a copyright notice",
+    args = ["--ignore-case", "copyright"],
+    files = '\.(rs|py)$'
+  }
+]
+```
 
 ```yaml
 repos:
@@ -6254,6 +6356,19 @@ Configure at least one rule. You can repeat either argument and combine required
 Trailer keys are case-insensitive, so `Signed-off-by` and `signed-off-by` are equivalent. Value patterns are case-sensitive by default; prefix a pattern with `(?i)` to ignore case. Patterns can match part of a value; use `^` and `$` to match the whole value.
 
 For example, require a sign-off and reject co-authors named Claude:
+
+```toml
+default_install_hook_types = ["commit-msg", "pre-push"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "check-commit-trailers",
+    args = ["--require=Signed-off-by", '--deny=Co-authored-by=(?i)^claude\b']
+  }
+]
+```
 
 ```yaml
 default_install_hook_types: [commit-msg, pre-push]
@@ -6432,6 +6547,20 @@ When Pixi is selected, prek imports a remote hook's `environment.yml` into an is
 
 Example:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "conda-hook",
+    name = "Conda hook",
+    language = "conda",
+    entry = "python -c \"import colorama; print('ok')\"",
+    additional_dependencies = ["colorama"]
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -6457,6 +6586,20 @@ Hooks can provide applications in either of the ways supported by pre-commit:
 - `additional_dependencies`, passed directly to `cs fetch` and `cs install`.
 
 Example:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "scalafmt",
+    name = "scalafmt",
+    language = "coursier",
+    entry = "scalafmt --version",
+    additional_dependencies = ["scalafmt:3.6.1"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -6504,6 +6647,20 @@ executables:
 #### `additional_dependencies`
 
 Use `package` for the latest compatible version or `package:version` to pin a version:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "dart-hook",
+    name = "Dart hook",
+    language = "dart",
+    entry = "dart ./bin/hook.dart",
+    additional_dependencies = ["path", "args:2.7.0"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -6586,6 +6743,21 @@ prek first looks for a matching system-installed `dotnet`, then falls back to do
 
 Tools are installed into the hook's isolated `tools/` directory. Specify them in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
 
+```toml
+[[repos]]
+repo = "https://github.com/example/csharpier-hook"
+rev = "v1.0.0"
+hooks = [
+  {
+    id = "csharpier",
+    additional_dependencies = [
+      "csharpier:1.2.6",  # Pin to a specific version
+      "dotnet-format",  # Or install the latest version available
+    ],
+  },
+]
+```
+
 ```yaml
 repos:
   - repo: https://github.com/example/csharpier-hook
@@ -6665,6 +6837,21 @@ The hook entry should point at an executable installed by LuaRocks.
 List the tools a hook needs in `additional_dependencies`, using mise tool specifications such as `aqua:golangci/golangci-lint@2`. Before running `entry`, prek installs those tools in an isolated environment and adds their executables to `PATH`.
 
 When downloads are allowed and no compatible mise installation is available, prek downloads mise automatically. Installed tools and other mise data stay in prek's hook cache and do not modify the user's mise setup.
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "golangci-lint",
+    name = "golangci-lint",
+    language = "mise",
+    additional_dependencies = ["aqua:golangci/golangci-lint@2"],
+    entry = "golangci-lint run --fast-only ./...",
+    pass_filenames = false
+  }
+]
+```
 
 ```yaml
 repos:
@@ -6777,7 +6964,13 @@ For Python hooks **without** `additional_dependencies`, prek can read PEP 723 in
 
 **Example:**
 
-`.pre-commit-config.yaml`:
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "echo", name = "echo", language = "python", entry = "./echo.py" }
+]
+```
 
 ```yaml
 repos:
@@ -6806,7 +6999,7 @@ main()
 **Important notes:**
 
 - The first part of the `entry` field must be a path to a local Python script
-- If `additional_dependencies` is specified in `.pre-commit-config.yaml`, script metadata will be ignored
+- If `additional_dependencies` is specified in the project configuration, script metadata will be ignored
 - When both `language_version` (in config) and `requires-python` (in script) are set, script metadata takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
 
@@ -6992,6 +7185,20 @@ Supported formats:
 
 Deno supports npm packages via the `npm:` prefix. For hooks that use npm packages, specify the entry using `deno run npm:package`:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "eslint",
+    name = "ESLint",
+    language = "deno",
+    entry = "deno run -A npm:eslint",
+    types_or = ["ts", "tsx", "javascript", "jsx"]
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -7000,10 +7207,24 @@ repos:
         name: ESLint
         language: deno
         entry: deno run -A npm:eslint
-        types: [ts, tsx, js, jsx]
+        types_or: [ts, tsx, javascript, jsx]
 ```
 
 For JSR packages, use the `jsr:` prefix in a `deno run` entry:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "biome",
+    name = "Biome",
+    language = "deno",
+    entry = "deno run -A jsr:@biomejs/biome",
+    types_or = ["ts", "tsx", "javascript", "jsx"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -7013,10 +7234,25 @@ repos:
         name: Biome
         language: deno
         entry: deno run -A jsr:@biomejs/biome
-        types: [ts, tsx, js, jsx]
+        types_or: [ts, tsx, javascript, jsx]
 ```
 
 For executable-style additional dependencies, use the package specifier directly:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "semver-version",
+    name = "semver version",
+    language = "deno",
+    entry = "semver-tool 1.2.3",
+    additional_dependencies = ["npm:semver@7:semver-tool"],
+    pass_filenames = false
+  }
+]
+```
 
 ```yaml
 repos:
@@ -7035,6 +7271,27 @@ repos:
 
 Deno's built-in commands (`deno fmt`, `deno lint`, `deno check`) work directly:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "deno-fmt",
+    name = "Deno Format",
+    language = "deno",
+    entry = "deno fmt",
+    types_or = ["ts", "tsx", "javascript", "jsx", "json", "markdown"]
+  },
+  {
+    id = "deno-lint",
+    name = "Deno Lint",
+    language = "deno",
+    entry = "deno lint",
+    types_or = ["ts", "tsx", "javascript", "jsx"]
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -7043,12 +7300,12 @@ repos:
         name: Deno Format
         language: deno
         entry: deno fmt
-        types: [ts, tsx, js, jsx, json, md]
+        types_or: [ts, tsx, javascript, jsx, json, markdown]
       - id: deno-lint
         name: Deno Lint
         language: deno
         entry: deno lint
-        types: [ts, tsx, js, jsx]
+        types_or: [ts, tsx, javascript, jsx]
 ```
 
 > [!NOTE]
@@ -7426,6 +7683,8 @@ The linked language sections describe the complete backend-specific behavior.
 
 `language: script` already resolves its script path from the remote hook checkout:
 
+.pre-commit-hooks.yaml
+
 ```yaml
 - id: check
   name: Check files
@@ -7435,6 +7694,8 @@ The linked language sections describe the complete backend-specific behavior.
 
 For a command-style language, use the prek-only `{hook_repo}` placeholder when the command or one of its arguments must refer to a file shipped in the hook repository:
 
+.pre-commit-hooks.yaml
+
 ```yaml
 - id: helm-lint
   name: Helm lint
@@ -7442,6 +7703,8 @@ For a command-style language, use the prek-only `{hook_repo}` placeholder when t
   additional_dependencies: ["helm@4", "yq@4"]
   entry: "{hook_repo}/scripts/lint-helm-charts.sh"
 ```
+
+.pre-commit-hooks.yaml
 
 ```yaml
 - id: check-config
@@ -7668,7 +7931,16 @@ export GIT_ASKPASS=/path/to/credential-script
 
 ### Option 2: SSH URLs
 
-Use SSH URLs in your `.pre-commit-config.yaml` instead of HTTPS:
+Use SSH URLs in your project configuration instead of HTTPS:
+
+```toml
+[[repos]]
+repo = "git@github.com:myorg/private-hooks.git"
+rev = "v1.0.0"
+hooks = [
+  { id = "my-hook" }
+]
+```
 
 ```yaml
 repos:
@@ -7921,6 +8193,21 @@ Rather than jumping straight to one headline number, we will build the picture f
 
 The simplest way to expose framework cost is to make the hook do almost nothing. Here every hook is a local `language: system` hook whose entry is `true`. `always_run: true` and `pass_filenames: false` ensure that every hook runs exactly once with the same tiny payload:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "noop-01",
+    name = "no-op 01",
+    entry = "true",
+    language = "system",
+    always_run = true,
+    pass_filenames = false
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -7962,6 +8249,29 @@ This benchmark deliberately uses hooks for which prek has built-in implementatio
 The fast path is automatic when a supported hook matches. Priority requires a little more information: you need to tell prek which hooks are independent and can safely run together.
 
 Hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) may run at the same time. Only group hooks that are independent. In the benchmark, hooks which can modify overlapping text files remain ordered, and read-only checks share a named priority. This excerpt shows the grouping:
+
+```toml
+[priorities]
+trim = 0
+eof = 10
+line-endings = 20
+bom = 30
+checks = 40
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "trailing-whitespace", priority = "trim" },
+  { id = "end-of-file-fixer", priority = "eof" },
+  { id = "mixed-line-ending", priority = "line-endings" },
+  { id = "fix-byte-order-marker", priority = "bom" },
+  { id = "check-json", priority = "checks" },
+  { id = "check-yaml", priority = "checks" },
+  { id = "check-toml", priority = "checks" },
+  { id = "check-xml", priority = "checks" }
+]
+```
 
 ```yaml
 priorities:

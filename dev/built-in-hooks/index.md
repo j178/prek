@@ -51,6 +51,13 @@ See the [built-in hook reference](<https://prek.j178.dev/dev/reference/built-in-
 
 For supported hooks from `https://github.com/pre-commit/pre-commit-hooks`, prek runs the built-in implementation automatically. Your existing remote config can stay compatible with upstream pre-commit. The `rev` field does not affect fast-path detection. It still selects the manifest that prek reads and the repository implementation used for fallback.
 
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"  # Enables fast path
+rev = "v6.0.0"  # Used for the manifest and fallback, not fast-path detection
+hooks = [{ id = "trailing-whitespace" }]
+```
+
 ```yaml
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks  # Enables fast path
@@ -68,6 +75,15 @@ See [fast-path support](<https://prek.j178.dev/dev/reference/built-in-hooks/#aut
 ### Run the repository implementation
 
 To use the pinned repository implementation for a single hook, explicitly set the language declared by that hook:
+
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "check-yaml", language = "python" },  # Use the pinned repository implementation
+]
+```
 
 ```yaml
 repos:

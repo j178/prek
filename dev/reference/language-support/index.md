@@ -124,6 +124,20 @@ When Pixi is selected, prek imports a remote hook's `environment.yml` into an is
 
 Example:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "conda-hook",
+    name = "Conda hook",
+    language = "conda",
+    entry = "python -c \"import colorama; print('ok')\"",
+    additional_dependencies = ["colorama"]
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -149,6 +163,20 @@ Hooks can provide applications in either of the ways supported by pre-commit:
 - `additional_dependencies`, passed directly to `cs fetch` and `cs install`.
 
 Example:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "scalafmt",
+    name = "scalafmt",
+    language = "coursier",
+    entry = "scalafmt --version",
+    additional_dependencies = ["scalafmt:3.6.1"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -196,6 +224,20 @@ executables:
 #### `additional_dependencies`
 
 Use `package` for the latest compatible version or `package:version` to pin a version:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "dart-hook",
+    name = "Dart hook",
+    language = "dart",
+    entry = "dart ./bin/hook.dart",
+    additional_dependencies = ["path", "args:2.7.0"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -278,6 +320,21 @@ prek first looks for a matching system-installed `dotnet`, then falls back to do
 
 Tools are installed into the hook's isolated `tools/` directory. Specify them in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
 
+```toml
+[[repos]]
+repo = "https://github.com/example/csharpier-hook"
+rev = "v1.0.0"
+hooks = [
+  {
+    id = "csharpier",
+    additional_dependencies = [
+      "csharpier:1.2.6",  # Pin to a specific version
+      "dotnet-format",  # Or install the latest version available
+    ],
+  },
+]
+```
+
 ```yaml
 repos:
   - repo: https://github.com/example/csharpier-hook
@@ -357,6 +414,21 @@ The hook entry should point at an executable installed by LuaRocks.
 List the tools a hook needs in `additional_dependencies`, using mise tool specifications such as `aqua:golangci/golangci-lint@2`. Before running `entry`, prek installs those tools in an isolated environment and adds their executables to `PATH`.
 
 When downloads are allowed and no compatible mise installation is available, prek downloads mise automatically. Installed tools and other mise data stay in prek's hook cache and do not modify the user's mise setup.
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "golangci-lint",
+    name = "golangci-lint",
+    language = "mise",
+    additional_dependencies = ["aqua:golangci/golangci-lint@2"],
+    entry = "golangci-lint run --fast-only ./...",
+    pass_filenames = false
+  }
+]
+```
 
 ```yaml
 repos:
@@ -469,7 +541,13 @@ For Python hooks **without** `additional_dependencies`, prek can read PEP 723 in
 
 **Example:**
 
-`.pre-commit-config.yaml`:
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "echo", name = "echo", language = "python", entry = "./echo.py" }
+]
+```
 
 ```yaml
 repos:
@@ -498,7 +576,7 @@ main()
 **Important notes:**
 
 - The first part of the `entry` field must be a path to a local Python script
-- If `additional_dependencies` is specified in `.pre-commit-config.yaml`, script metadata will be ignored
+- If `additional_dependencies` is specified in the project configuration, script metadata will be ignored
 - When both `language_version` (in config) and `requires-python` (in script) are set, script metadata takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
 
@@ -684,6 +762,20 @@ Supported formats:
 
 Deno supports npm packages via the `npm:` prefix. For hooks that use npm packages, specify the entry using `deno run npm:package`:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "eslint",
+    name = "ESLint",
+    language = "deno",
+    entry = "deno run -A npm:eslint",
+    types_or = ["ts", "tsx", "javascript", "jsx"]
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -692,10 +784,24 @@ repos:
         name: ESLint
         language: deno
         entry: deno run -A npm:eslint
-        types: [ts, tsx, js, jsx]
+        types_or: [ts, tsx, javascript, jsx]
 ```
 
 For JSR packages, use the `jsr:` prefix in a `deno run` entry:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "biome",
+    name = "Biome",
+    language = "deno",
+    entry = "deno run -A jsr:@biomejs/biome",
+    types_or = ["ts", "tsx", "javascript", "jsx"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -705,10 +811,25 @@ repos:
         name: Biome
         language: deno
         entry: deno run -A jsr:@biomejs/biome
-        types: [ts, tsx, js, jsx]
+        types_or: [ts, tsx, javascript, jsx]
 ```
 
 For executable-style additional dependencies, use the package specifier directly:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "semver-version",
+    name = "semver version",
+    language = "deno",
+    entry = "semver-tool 1.2.3",
+    additional_dependencies = ["npm:semver@7:semver-tool"],
+    pass_filenames = false
+  }
+]
+```
 
 ```yaml
 repos:
@@ -727,6 +848,27 @@ repos:
 
 Deno's built-in commands (`deno fmt`, `deno lint`, `deno check`) work directly:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "deno-fmt",
+    name = "Deno Format",
+    language = "deno",
+    entry = "deno fmt",
+    types_or = ["ts", "tsx", "javascript", "jsx", "json", "markdown"]
+  },
+  {
+    id = "deno-lint",
+    name = "Deno Lint",
+    language = "deno",
+    entry = "deno lint",
+    types_or = ["ts", "tsx", "javascript", "jsx"]
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -735,12 +877,12 @@ repos:
         name: Deno Format
         language: deno
         entry: deno fmt
-        types: [ts, tsx, js, jsx, json, md]
+        types_or: [ts, tsx, javascript, jsx, json, markdown]
       - id: deno-lint
         name: Deno Lint
         language: deno
         entry: deno lint
-        types: [ts, tsx, js, jsx]
+        types_or: [ts, tsx, javascript, jsx]
 ```
 
 > [!NOTE]

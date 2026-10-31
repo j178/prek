@@ -81,6 +81,15 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 Example:
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"] },
+  { id = "check-added-large-files", args = ["--maxkb=1024"] }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -212,6 +221,14 @@ Sorts the non-empty lines in each matched file and rewrites the file when the no
 
 Example:
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "file-contents-sorter", files = '^requirements(-dev)?\.txt$' }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -307,6 +324,19 @@ Attempts to load all JSON5 files to verify syntax.
 Checks `.jsonc` files for parseable syntax.
 
 To check JSONC stored in `.json` files, such as `tsconfig.json`, override the default file-type filter:
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "check-jsonc",
+    types = ["json"],
+    files = '(^|/)tsconfig\.json$',
+    args = ["--allow-trailing-commas"]
+  }
+]
+```
 
 ```yaml
 repos:
@@ -452,6 +482,14 @@ The standard `files`, `exclude`, and type filters select which project-relative 
 
 Each matching file is reported once as `path: filename matches a denied pattern`.
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "deny-filename-pattern", name = "disallow spaces in filenames", args = ['\s'] }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -483,6 +521,19 @@ Fails when any selected text file matches a configured regular expression. When 
 
 By default, each matching line is reported as `path:line:contents`. A line matching more than one pattern is reported only once. With `--multiline`, the earliest match in each file is reported as `path:start-line:matched-block`.
 
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "deny-pattern",
+    name = "disallow wildcard imports",
+    args = ['^\s*#import\s+.+:\s*\*'],
+    files = '\.typ$'
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: builtin
@@ -500,6 +551,19 @@ repos:
 Fails when the final path component (the basename) of any selected file does not match at least one configured regular expression. This is a per-file requirement: every selected basename must match, while different basenames may match different patterns.
 
 `require-filename-pattern` supports the same positional `PATTERN...` and `-i` / `--ignore-case` arguments as [`deny-filename-pattern`](<#deny-filename-pattern>). Matching uses search semantics; use `^` and `$` when the pattern must match the entire basename. Files without a match are reported as `path: filename does not match any required pattern`.
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "require-filename-pattern",
+    name = "python tests naming",
+    args = ['^test_.*\.py$', '^__init__\.py$', '^conftest\.py$'],
+    files = '(^|/)tests/.+\.py$'
+  }
+]
+```
 
 ```yaml
 repos:
@@ -521,6 +585,19 @@ repos:
 Fails when any selected text file does not match at least one configured regular expression. This is a per-file requirement: every file must match, while different files may match different patterns.
 
 `require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](<#deny-pattern>). Files without a match are reported as `path: file does not match any required pattern`.
+
+```toml
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "require-pattern",
+    name = "require a copyright notice",
+    args = ["--ignore-case", "copyright"],
+    files = '\.(rs|py)$'
+  }
+]
+```
 
 ```yaml
 repos:
@@ -692,6 +769,19 @@ Configure at least one rule. You can repeat either argument and combine required
 Trailer keys are case-insensitive, so `Signed-off-by` and `signed-off-by` are equivalent. Value patterns are case-sensitive by default; prefix a pattern with `(?i)` to ignore case. Patterns can match part of a value; use `^` and `$` to match the whole value.
 
 For example, require a sign-off and reject co-authors named Claude:
+
+```toml
+default_install_hook_types = ["commit-msg", "pre-push"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  {
+    id = "check-commit-trailers",
+    args = ["--require=Signed-off-by", '--deny=Co-authored-by=(?i)^claude\b']
+  }
+]
+```
 
 ```yaml
 default_install_hook_types: [commit-msg, pre-push]

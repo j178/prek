@@ -128,6 +128,15 @@ When users configure a hook with `args`, `prek` passes those arguments before th
 
 Example end-user config:
 
+```toml
+[[repos]]
+repo = "https://github.com/example/hook-repo"
+rev = "v1.0.0"
+hooks = [
+  { id = "my-hook", args = ["--max-line-length=120"] }
+]
+```
+
 ```yaml
 repos:
   - repo: https://github.com/example/hook-repo

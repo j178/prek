@@ -99,7 +99,16 @@ export GIT_ASKPASS=/path/to/credential-script
 
 ### Option 2: SSH URLs
 
-Use SSH URLs in your `.pre-commit-config.yaml` instead of HTTPS:
+Use SSH URLs in your project configuration instead of HTTPS:
+
+```toml
+[[repos]]
+repo = "git@github.com:myorg/private-hooks.git"
+rev = "v1.0.0"
+hooks = [
+  { id = "my-hook" }
+]
+```
 
 ```yaml
 repos:

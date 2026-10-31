@@ -12,6 +12,21 @@ Rather than jumping straight to one headline number, we will build the picture f
 
 The simplest way to expose framework cost is to make the hook do almost nothing. Here every hook is a local `language: system` hook whose entry is `true`. `always_run: true` and `pass_filenames: false` ensure that every hook runs exactly once with the same tiny payload:
 
+```toml
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "noop-01",
+    name = "no-op 01",
+    entry = "true",
+    language = "system",
+    always_run = true,
+    pass_filenames = false
+  }
+]
+```
+
 ```yaml
 repos:
   - repo: local
@@ -53,6 +68,29 @@ This benchmark deliberately uses hooks for which prek has built-in implementatio
 The fast path is automatic when a supported hook matches. Priority requires a little more information: you need to tell prek which hooks are independent and can safely run together.
 
 Hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) may run at the same time. Only group hooks that are independent. In the benchmark, hooks which can modify overlapping text files remain ordered, and read-only checks share a named priority. This excerpt shows the grouping:
+
+```toml
+[priorities]
+trim = 0
+eof = 10
+line-endings = 20
+bom = 30
+checks = 40
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "trailing-whitespace", priority = "trim" },
+  { id = "end-of-file-fixer", priority = "eof" },
+  { id = "mixed-line-ending", priority = "line-endings" },
+  { id = "fix-byte-order-marker", priority = "bom" },
+  { id = "check-json", priority = "checks" },
+  { id = "check-yaml", priority = "checks" },
+  { id = "check-toml", priority = "checks" },
+  { id = "check-xml", priority = "checks" }
+]
+```
 
 ```yaml
 priorities:
