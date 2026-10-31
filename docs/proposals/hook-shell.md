@@ -10,9 +10,17 @@ string is parsed into argv, then `args` and matching filenames are appended to
 that argv. This is predictable and avoids ambient-shell differences, but it is
 surprising for users who write hook entries as shell snippets:
 
-```yaml
-entry: uv run mypy || uv run pyright
-```
+=== "prek.toml"
+
+    ```toml
+    entry = "uv run mypy || uv run pyright"
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    entry: uv run mypy || uv run pyright
+    ```
 
 The command above looks like a shell command, but without shell execution the
 operators are passed as argv tokens to the process. Multiline entries have a
@@ -28,20 +36,41 @@ current no-shell default.
 
 A new optional field `shell` is added to hook options.
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: test-all
-        name: Run pytest across Python versions
-        language: system
-        entry: |
-          uv run --python=3.10 --isolated pytest
-          uv run --python=3.11 --isolated pytest
-          uv run --python=3.12 --isolated pytest
-          uv run --python=3.13 --isolated pytest
-        shell: bash
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+
+    [[repos.hooks]]
+    id = "test-all"
+    name = "Run pytest across Python versions"
+    language = "system"
+    entry = """
+    uv run --python=3.10 --isolated pytest
+    uv run --python=3.11 --isolated pytest
+    uv run --python=3.12 --isolated pytest
+    uv run --python=3.13 --isolated pytest
+    """
+    shell = "bash"
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: test-all
+            name: Run pytest across Python versions
+            language: system
+            entry: |
+              uv run --python=3.10 --isolated pytest
+              uv run --python=3.11 --isolated pytest
+              uv run --python=3.12 --isolated pytest
+              uv run --python=3.13 --isolated pytest
+            shell: bash
+    ```
 
 - **Type**: enum
 - **Default**: `null`
@@ -203,11 +232,19 @@ feature:
 If custom shells become necessary later, the enum can be extended with a
 structured form such as:
 
-```yaml
-shell:
-  command: zsh
-  args: [-e]
-```
+=== "prek.toml"
+
+    ```toml
+    shell = { command = "zsh", args = ["-e"] }
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    shell:
+      command: zsh
+      args: [-e]
+    ```
 
 That extension can be added without breaking the simple enum values.
 

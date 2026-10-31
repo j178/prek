@@ -156,7 +156,7 @@ The linked language sections describe the complete backend-specific behavior.
 
 `language: script` already resolves its script path from the remote hook checkout:
 
-```yaml
+```yaml title=".pre-commit-hooks.yaml"
 - id: check
   name: Check files
   language: script
@@ -167,7 +167,7 @@ For a command-style language, use the prek-only `{hook_repo}` placeholder when
 the command or one of its arguments must refer to a file shipped in the hook
 repository:
 
-```yaml
+```yaml title=".pre-commit-hooks.yaml"
 - id: helm-lint
   name: Helm lint
   language: mise
@@ -175,7 +175,7 @@ repository:
   entry: "{hook_repo}/scripts/lint-helm-charts.sh"
 ```
 
-```yaml
+```yaml title=".pre-commit-hooks.yaml"
 - id: check-config
   name: Check config
   language: system

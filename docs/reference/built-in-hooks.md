@@ -83,15 +83,28 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 Example:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: trailing-whitespace
-        args: [--markdown-linebreak-ext=md]
-      - id: check-added-large-files
-        args: [--maxkb=1024]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"] },
+      { id = "check-added-large-files", args = ["--maxkb=1024"] }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: trailing-whitespace
+            args: [--markdown-linebreak-ext=md]
+          - id: check-added-large-files
+            args: [--maxkb=1024]
+    ```
 
 ---
 
@@ -205,13 +218,25 @@ Sorts the non-empty lines in each matched file and rewrites the file when the no
 
 Example:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: file-contents-sorter
-        files: ^requirements(-dev)?\.txt$
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "file-contents-sorter", files = '^requirements(-dev)?\.txt$' }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: file-contents-sorter
+            files: ^requirements(-dev)?\.txt$
+    ```
 
 ---
 
@@ -300,15 +325,32 @@ Checks `.jsonc` files for parseable syntax.
 To check JSONC stored in `.json` files, such as `tsconfig.json`, override the default
 file-type filter:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: check-jsonc
-        types: [json]
-        files: '(^|/)tsconfig\.json$'
-        args: [--allow-trailing-commas]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "check-jsonc",
+        types = ["json"],
+        files = '(^|/)tsconfig\.json$',
+        args = ["--allow-trailing-commas"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: check-jsonc
+            types: [json]
+            files: '(^|/)tsconfig\.json$'
+            args: [--allow-trailing-commas]
+    ```
 
 **Supported arguments**
 
@@ -432,14 +474,26 @@ The standard `files`, `exclude`, and type filters select which project-relative 
 
 Each matching file is reported once as `path: filename matches a denied pattern`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: deny-filename-pattern
-        name: disallow spaces in filenames
-        args: ['\s']
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "deny-filename-pattern", name = "disallow spaces in filenames", args = ['\s'] }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: deny-filename-pattern
+            name: disallow spaces in filenames
+            args: ['\s']
+    ```
 
 ---
 
@@ -461,15 +515,32 @@ When multiple patterns are provided, matching any one of them is sufficient.
 
 By default, each matching line is reported as `path:line:contents`. A line matching more than one pattern is reported only once. With `--multiline`, the earliest match in each file is reported as `path:start-line:matched-block`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: deny-pattern
-        name: disallow wildcard imports
-        args: ['^\s*#import\s+.+:\s*\*']
-        files: \.typ$
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "deny-pattern",
+        name = "disallow wildcard imports",
+        args = ['^\s*#import\s+.+:\s*\*'],
+        files = '\.typ$'
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: deny-pattern
+            name: disallow wildcard imports
+            args: ['^\s*#import\s+.+:\s*\*']
+            files: \.typ$
+    ```
 
 ---
 
@@ -479,18 +550,35 @@ Fails when the final path component (the basename) of any selected file does not
 
 `require-filename-pattern` supports the same positional `PATTERN...` and `-i` / `--ignore-case` arguments as [`deny-filename-pattern`](#deny-filename-pattern). Matching uses search semantics; use `^` and `$` when the pattern must match the entire basename. Files without a match are reported as `path: filename does not match any required pattern`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: require-filename-pattern
-        name: python tests naming
-        args:
-          - '^test_.*\.py$'
-          - '^__init__\.py$'
-          - '^conftest\.py$'
-        files: '(^|/)tests/.+\.py$'
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "require-filename-pattern",
+        name = "python tests naming",
+        args = ['^test_.*\.py$', '^__init__\.py$', '^conftest\.py$'],
+        files = '(^|/)tests/.+\.py$'
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: require-filename-pattern
+            name: python tests naming
+            args:
+              - '^test_.*\.py$'
+              - '^__init__\.py$'
+              - '^conftest\.py$'
+            files: '(^|/)tests/.+\.py$'
+    ```
 
 ---
 
@@ -500,15 +588,32 @@ Fails when any selected text file does not match at least one configured regular
 
 `require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](#deny-pattern). Files without a match are reported as `path: file does not match any required pattern`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: require-pattern
-        name: require a copyright notice
-        args: [--ignore-case, copyright]
-        files: '\.(rs|py)$'
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "require-pattern",
+        name = "require a copyright notice",
+        args = ["--ignore-case", "copyright"],
+        files = '\.(rs|py)$'
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: require-pattern
+            name: require a copyright notice
+            args: [--ignore-case, copyright]
+            files: '\.(rs|py)$'
+    ```
 
 ---
 
@@ -683,16 +788,33 @@ the whole value.
 
 For example, require a sign-off and reject co-authors named Claude:
 
-```yaml
-default_install_hook_types: [commit-msg, pre-push]
-repos:
-  - repo: builtin
-    hooks:
-      - id: check-commit-trailers
-        args:
-          - --require=Signed-off-by
-          - '--deny=Co-authored-by=(?i)^claude\b'
-```
+=== "prek.toml"
+
+    ```toml
+    default_install_hook_types = ["commit-msg", "pre-push"]
+
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "check-commit-trailers",
+        args = ["--require=Signed-off-by", '--deny=Co-authored-by=(?i)^claude\b']
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    default_install_hook_types: [commit-msg, pre-push]
+    repos:
+      - repo: builtin
+        hooks:
+          - id: check-commit-trailers
+            args:
+              - --require=Signed-off-by
+              - '--deny=Co-authored-by=(?i)^claude\b'
+    ```
 
 This configuration allows commits without a co-author. If co-authors are listed,
 none may match the denied pattern: a commit listing both Alice and Claude still

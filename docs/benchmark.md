@@ -29,17 +29,36 @@ nothing. Here every hook is a local `language: system` hook whose entry is
 `true`. `always_run: true` and `pass_filenames: false` ensure that every hook
 runs exactly once with the same tiny payload:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: noop-01
-        name: no-op 01
-        entry: "true"
-        language: system
-        always_run: true
-        pass_filenames: false
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "noop-01",
+        name = "no-op 01",
+        entry = "true",
+        language = "system",
+        always_run = true,
+        pass_filenames = false
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: noop-01
+            name: no-op 01
+            entry: "true"
+            language: system
+            always_run: true
+            pass_filenames: false
+    ```
 
 The full configuration repeats this definition with unique IDs through
 `noop-10`. Both measurements load that same configuration; the one-hook case
@@ -108,35 +127,62 @@ the same time. Only group hooks that are independent. In the benchmark, hooks
 which can modify overlapping text files remain ordered, and read-only checks
 share a named priority. This excerpt shows the grouping:
 
-```yaml
-priorities:
-  trim: 0
-  eof: 10
-  line-endings: 20
-  bom: 30
-  checks: 40
+=== "prek.toml"
 
-repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: trailing-whitespace
-        priority: trim
-      - id: end-of-file-fixer
-        priority: eof
-      - id: mixed-line-ending
-        priority: line-endings
-      - id: fix-byte-order-marker
-        priority: bom
-      - id: check-json
-        priority: checks
-      - id: check-yaml
-        priority: checks
-      - id: check-toml
-        priority: checks
-      - id: check-xml
-        priority: checks
-```
+    ```toml
+    [priorities]
+    trim = 0
+    eof = 10
+    line-endings = 20
+    bom = 30
+    checks = 40
+
+    [[repos]]
+    repo = "https://github.com/pre-commit/pre-commit-hooks"
+    rev = "v6.0.0"
+    hooks = [
+      { id = "trailing-whitespace", priority = "trim" },
+      { id = "end-of-file-fixer", priority = "eof" },
+      { id = "mixed-line-ending", priority = "line-endings" },
+      { id = "fix-byte-order-marker", priority = "bom" },
+      { id = "check-json", priority = "checks" },
+      { id = "check-yaml", priority = "checks" },
+      { id = "check-toml", priority = "checks" },
+      { id = "check-xml", priority = "checks" }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    priorities:
+      trim: 0
+      eof: 10
+      line-endings: 20
+      bom: 30
+      checks: 40
+
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v6.0.0
+        hooks:
+          - id: trailing-whitespace
+            priority: trim
+          - id: end-of-file-fixer
+            priority: eof
+          - id: mixed-line-ending
+            priority: line-endings
+          - id: fix-byte-order-marker
+            priority: bom
+          - id: check-json
+            priority: checks
+          - id: check-yaml
+            priority: checks
+          - id: check-toml
+            priority: checks
+          - id: check-xml
+            priority: checks
+    ```
 
 With the fast path retained, priority scheduling lowers the median from 105 ms
 to 94 ms, another 11% reduction. That is 16.37x faster than the no-fast-path

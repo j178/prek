@@ -34,28 +34,60 @@ their own run profiles without changing Git hook stage semantics.
 
 A new optional field `groups` is added to project hook configuration.
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: format
-        name: Format Python
-        entry: ruff format
-        language: system
-        groups: ["format", "ci"]
+=== "prek.toml"
 
-      - id: lint
-        name: Lint Python
-        entry: ruff check
-        language: system
-        groups: ["lint", "ci"]
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "format",
+        name = "Format Python",
+        entry = "ruff format",
+        language = "system",
+        groups = ["format", "ci"]
+      },
+      {
+        id = "lint",
+        name = "Lint Python",
+        entry = "ruff check",
+        language = "system",
+        groups = ["lint", "ci"]
+      },
+      {
+        id = "typecheck",
+        name = "Typecheck Python",
+        entry = "pyright",
+        language = "system",
+        groups = ["slow", "agent"]
+      }
+    ]
+    ```
 
-      - id: typecheck
-        name: Typecheck Python
-        entry: pyright
-        language: system
-        groups: ["slow", "agent"]
-```
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: format
+            name: Format Python
+            entry: ruff format
+            language: system
+            groups: ["format", "ci"]
+
+          - id: lint
+            name: Lint Python
+            entry: ruff check
+            language: system
+            groups: ["lint", "ci"]
+
+          - id: typecheck
+            name: Typecheck Python
+            entry: pyright
+            language: system
+            groups: ["slow", "agent"]
+    ```
 
 - **Type**: list of strings
 - **Default**: empty list
@@ -69,22 +101,6 @@ current project wants to run hooks, not an intrinsic property of a hook
 repository. If a remote hook manifest contains `groups`, `prek` should warn and
 ignore the field, the same way it treats other config-only hook fields such as
 `priority`.
-
-For `prek.toml`, use the same field name:
-
-```toml
-[[repos]]
-repo = "local"
-hooks = [
-  {
-    id = "format",
-    name = "Format Python",
-    entry = "ruff format",
-    language = "system",
-    groups = ["format", "ci"],
-  },
-]
-```
 
 ## CLI
 
@@ -286,10 +302,20 @@ keeps only ungrouped hooks, while `--no-group @ungrouped` removes them.
 
 A hook may belong to multiple groups:
 
-```yaml
-- id: ruff
-  groups: ["lint", "python", "ci"]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos.hooks]]
+    id = "ruff"
+    groups = ["lint", "python", "ci"]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    - id: ruff
+      groups: ["lint", "python", "ci"]
+    ```
 
 The hook matches any include group, every listed required group, and is excluded
 by any exclude group:
@@ -305,9 +331,17 @@ by any exclude group:
 Duplicate group names on the same hook should be treated as a single group
 membership. Implementations may deduplicate during parsing or matching.
 
-```yaml
-groups: ["ci", "ci"]
-```
+=== "prek.toml"
+
+    ```toml
+    groups = ["ci", "ci"]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    groups: ["ci", "ci"]
+    ```
 
 ### Invalid Group Names
 
@@ -318,9 +352,17 @@ for special CLI selectors.
 
 Invalid examples:
 
-```yaml
-groups: ["", "ci slow", " ci", "ci\nslow", "@custom"]
-```
+=== "prek.toml"
+
+    ```toml
+    groups = ["", "ci slow", " ci", "ci\nslow", "@custom"]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    groups: ["", "ci slow", " ci", "ci\nslow", "@custom"]
+    ```
 
 Apart from the reserved `@` namespace, no fixed vocabulary should be enforced.
 In particular, `ci`, `agent`, `slow`, `format`, and `lint` are examples, not
