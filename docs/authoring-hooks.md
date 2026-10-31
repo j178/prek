@@ -164,14 +164,27 @@ provided.
 
 Example end-user config:
 
-```yaml
-repos:
-  - repo: https://github.com/example/hook-repo
-    rev: v1.0.0
-    hooks:
-      - id: my-hook
-        args: [--max-line-length=120]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/example/hook-repo"
+    rev = "v1.0.0"
+    hooks = [
+      { id = "my-hook", args = ["--max-line-length=120"] }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/example/hook-repo
+        rev: v1.0.0
+        hooks:
+          - id: my-hook
+            args: [--max-line-length=120]
+    ```
 
 Invocation shape:
 

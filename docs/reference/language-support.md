@@ -149,16 +149,34 @@ with `pixi add ...` when Pixi is selected.
 
 Example:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: conda-hook
-        name: Conda hook
-        language: conda
-        entry: python -c "import colorama; print('ok')"
-        additional_dependencies: [colorama]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "conda-hook",
+        name = "Conda hook",
+        language = "conda",
+        entry = "python -c \"import colorama; print('ok')\"",
+        additional_dependencies = ["colorama"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: conda-hook
+            name: Conda hook
+            language: conda
+            entry: python -c "import colorama; print('ok')"
+            additional_dependencies: [colorama]
+    ```
 
 #### `language_version`
 
@@ -180,17 +198,35 @@ Hooks can provide applications in either of the ways supported by pre-commit:
 
 Example:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: scalafmt
-        name: scalafmt
-        language: coursier
-        entry: scalafmt --version
-        additional_dependencies:
-          - scalafmt:3.6.1
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "scalafmt",
+        name = "scalafmt",
+        language = "coursier",
+        entry = "scalafmt --version",
+        additional_dependencies = ["scalafmt:3.6.1"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: scalafmt
+            name: scalafmt
+            language: coursier
+            entry: scalafmt --version
+            additional_dependencies:
+              - scalafmt:3.6.1
+    ```
 
 #### `language_version`
 
@@ -236,18 +272,36 @@ the entrypoint name, matching Dart's pub behavior.
 Use `package` for the latest compatible version or `package:version` to pin a
 version:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: dart-hook
-        name: Dart hook
-        language: dart
-        entry: dart ./bin/hook.dart
-        additional_dependencies:
-          - path
-          - args:2.7.0
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "dart-hook",
+        name = "Dart hook",
+        language = "dart",
+        entry = "dart ./bin/hook.dart",
+        additional_dependencies = ["path", "args:2.7.0"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: dart-hook
+            name: Dart hook
+            language: dart
+            entry: dart ./bin/hook.dart
+            additional_dependencies:
+              - path
+              - args:2.7.0
+    ```
 
 #### `language_version`
 
@@ -316,18 +370,37 @@ prek first looks for a matching system-installed `dotnet`, then falls back to do
 
 Tools are installed into the hook's isolated `tools/` directory. Specify them in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
 
-```yaml
-repos:
-  - repo: https://github.com/example/csharpier-hook
-    rev: v1.0.0
-    hooks:
-      - id: csharpier
-        additional_dependencies:
-          # Pin to a specific version
-          - "csharpier:1.2.6"
-          # Or install the latest version available
-          - "dotnet-format"
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/example/csharpier-hook"
+    rev = "v1.0.0"
+    hooks = [
+      {
+        id = "csharpier",
+        additional_dependencies = [
+          "csharpier:1.2.6",  # Pin to a specific version
+          "dotnet-format",  # Or install the latest version available
+        ],
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/example/csharpier-hook
+        rev: v1.0.0
+        hooks:
+          - id: csharpier
+            additional_dependencies:
+              # Pin to a specific version
+              - "csharpier:1.2.6"
+              # Or install the latest version available
+              - "dotnet-format"
+    ```
 
 ### fail
 
@@ -401,17 +474,36 @@ When downloads are allowed and no compatible mise installation is available,
 prek downloads mise automatically. Installed tools and other mise data stay in prek's hook cache and do not
 modify the user's mise setup.
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: golangci-lint
-        name: golangci-lint
-        language: mise
-        additional_dependencies: ["aqua:golangci/golangci-lint@2"]
-        entry: golangci-lint run --fast-only ./...
-        pass_filenames: false
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "golangci-lint",
+        name = "golangci-lint",
+        language = "mise",
+        additional_dependencies = ["aqua:golangci/golangci-lint@2"],
+        entry = "golangci-lint run --fast-only ./...",
+        pass_filenames = false
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: golangci-lint
+            name: golangci-lint
+            language: mise
+            additional_dependencies: ["aqua:golangci/golangci-lint@2"]
+            entry: golangci-lint run --fast-only ./...
+            pass_filenames: false
+    ```
 
 #### `language_version`
 
@@ -537,17 +629,27 @@ For Python hooks **without** `additional_dependencies`, prek can read PEP 723 in
 
 **Example:**
 
-`.pre-commit-config.yaml`:
+=== "prek.toml"
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: echo
-        name: echo
-        language: python
-        entry: ./echo.py
-```
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      { id = "echo", name = "echo", language = "python", entry = "./echo.py" }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: echo
+            name: echo
+            language: python
+            entry: ./echo.py
+    ```
 
 `echo.py`:
 
@@ -566,7 +668,7 @@ main()
 **Important notes:**
 
 - The first part of the `entry` field must be a path to a local Python script
-- If `additional_dependencies` is specified in `.pre-commit-config.yaml`, script metadata will be ignored
+- If `additional_dependencies` is specified in the project configuration, script metadata will be ignored
 - When both `language_version` (in config) and `requires-python` (in script) are set, script metadata takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
 
@@ -745,64 +847,144 @@ Supported formats:
 
 Deno supports npm packages via the `npm:` prefix. For hooks that use npm packages, specify the entry using `deno run npm:package`:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: eslint
-        name: ESLint
-        language: deno
-        entry: deno run -A npm:eslint
-        types: [ts, tsx, js, jsx]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "eslint",
+        name = "ESLint",
+        language = "deno",
+        entry = "deno run -A npm:eslint",
+        types_or = ["ts", "tsx", "javascript", "jsx"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: eslint
+            name: ESLint
+            language: deno
+            entry: deno run -A npm:eslint
+            types_or: [ts, tsx, javascript, jsx]
+    ```
 
 For JSR packages, use the `jsr:` prefix in a `deno run` entry:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: biome
-        name: Biome
-        language: deno
-        entry: deno run -A jsr:@biomejs/biome
-        types: [ts, tsx, js, jsx]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "biome",
+        name = "Biome",
+        language = "deno",
+        entry = "deno run -A jsr:@biomejs/biome",
+        types_or = ["ts", "tsx", "javascript", "jsx"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: biome
+            name: Biome
+            language: deno
+            entry: deno run -A jsr:@biomejs/biome
+            types_or: [ts, tsx, javascript, jsx]
+    ```
 
 For executable-style additional dependencies, use the package specifier directly:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: semver-version
-        name: semver version
-        language: deno
-        entry: semver-tool 1.2.3
-        additional_dependencies:
-          - npm:semver@7:semver-tool
-        pass_filenames: false
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "semver-version",
+        name = "semver version",
+        language = "deno",
+        entry = "semver-tool 1.2.3",
+        additional_dependencies = ["npm:semver@7:semver-tool"],
+        pass_filenames = false
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: semver-version
+            name: semver version
+            language: deno
+            entry: semver-tool 1.2.3
+            additional_dependencies:
+              - npm:semver@7:semver-tool
+            pass_filenames: false
+    ```
 
 #### Built-in commands
 
 Deno's built-in commands (`deno fmt`, `deno lint`, `deno check`) work directly:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: deno-fmt
-        name: Deno Format
-        language: deno
-        entry: deno fmt
-        types: [ts, tsx, js, jsx, json, md]
-      - id: deno-lint
-        name: Deno Lint
-        language: deno
-        entry: deno lint
-        types: [ts, tsx, js, jsx]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "deno-fmt",
+        name = "Deno Format",
+        language = "deno",
+        entry = "deno fmt",
+        types_or = ["ts", "tsx", "javascript", "jsx", "json", "markdown"]
+      },
+      {
+        id = "deno-lint",
+        name = "Deno Lint",
+        language = "deno",
+        entry = "deno lint",
+        types_or = ["ts", "tsx", "javascript", "jsx"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: deno-fmt
+            name: Deno Format
+            language: deno
+            entry: deno fmt
+            types_or: [ts, tsx, javascript, jsx, json, markdown]
+          - id: deno-lint
+            name: Deno Lint
+            language: deno
+            entry: deno lint
+            types_or: [ts, tsx, javascript, jsx]
+    ```
 
 !!! note "prek-only"
 
