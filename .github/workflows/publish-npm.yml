@@ -36,7 +36,7 @@ jobs:
         with:
           cache: ""
           package-manager-cache: false
-          node-version: "24.x"
+          node-version: "26.x"
           registry-url: "https://registry.npmjs.org"
       - name: "Install uv"
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
