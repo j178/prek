@@ -6,6 +6,8 @@ This page explains how prek works beneath its CLI and configuration.
 
 `prek run` coordinates configuration, Git state, downloaded hook sources, and reusable tool environments. Each invocation follows four phases: resolve the work to do, collect its input, prepare the required environments, and execute the hooks under deterministic scheduling rules. Most state exists only for the current run; downloaded repositories and installed environments are retained for later runs.
 
+![How prek turns configuration and Git state into a hook plan, project file views, prepared environments, and ordered hook execution](<https://prek.j178.dev/dev/assets/prek-architecture.svg>)
+
 Solid blue arrows show the ordered path through a run. Dashed gray arrows show context or cache access. The execution layer is expanded because project nesting, priority barriers, hook concurrency, and command batching all affect observable behavior.
 
 One ordering detail is important: remote hook repositories are resolved before file collection. Their manifests can affect which hooks exist and whether the selected stage expects normal files, a Git message file, or no files. A remote checkout supplies hook code and installation input, but hooks still run from the project that uses them.

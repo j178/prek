@@ -1,5 +1,7 @@
 # prek
 
+![prek](<https://prek.j178.dev/assets/logo.png>)
+
 prek is a framework for running hooks on your code. It runs them before you commit changes, on demand, or in CI. These hooks can format files, catch lint errors, detect secrets, or run any other command your project defines. prek also installs and manages the tools and dependencies they need.
 
 You may already be familiar with the [pre-commit](<https://pre-commit.com/>) tool. prek is a reimagined version of it, built in Rust. It is faster and distributed as a single binary with no runtime dependencies. It is fully compatible with pre-commit configurations and hooks, so you can use it as a drop-in replacement without changing your setup.
@@ -105,6 +107,8 @@ GitHub stars as of October 8, 2026. For more projects, see the [GitHub dependent
 ## Badges
 
 Show that your project uses prek with a badge in your README:
+
+[![prek](<https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg>)](<https://github.com/j178/prek>)
 
 ```markdown
 [![prek](https://raw.githubusercontent.com/j178/prek/main/docs/assets/badge.svg)](https://github.com/j178/prek)

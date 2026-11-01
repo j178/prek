@@ -41,6 +41,8 @@ repos:
 
 The full configuration repeats this definition with unique IDs through `noop-10`. Both measurements load that same configuration; the one-hook case selects only `noop-01`, while the ten-hook case runs all hooks sequentially. These are generic hooks, so prek's built-in fast path is not involved.
 
+![Horizontal bars comparing framework-dominated runtimes](<https://prek.j178.dev/dev/assets/benchmark-framework.svg>)
+
 This is still not a measurement of literally zero hook cost: the runner must launch a child process for every `true`. The one-hook case mostly exposes fixed startup and repository-processing costs. With ten hooks, both runners repeat dispatch and modification checks; prek saves 234 ms in absolute time, while the relative gap narrows from 3.40x to 1.78x.
 
 That gives us a useful lower bound, but not yet a representative hook workload. The next question is what happens when the hooks perform real, predictable work and prek can apply its own runtime optimizations.
@@ -57,9 +59,13 @@ We first set `PREK_NO_FAST_PATH=1`, so prek runs the original Python hook implem
 
 The `pre-commit` reference takes 1,942 ms. prek completes the same workload in 1,534 ms, 21% less time. We use that 1,534 ms result as the baseline for the remaining stages.
 
+![Horizontal bars comparing pre-commit with prek without the fast path](<https://prek.j178.dev/dev/assets/benchmark-no-fast-path.svg>)
+
 ### 2\. Fast path
 
 Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration. prek's [automatic fast path](<https://prek.j178.dev/dev/built-in-hooks/#use-the-automatic-fast-path>) recognizes the 13 hooks and runs their built-in Rust implementations. The median falls from 1,534 ms to 105 ms: 93% less time, or a 14.59x speedup.
+
+![Horizontal bars showing the effect of the fast path](<https://prek.j178.dev/dev/assets/benchmark-fast-path.svg>)
 
 This benchmark deliberately uses hooks for which prek has built-in implementations. That keeps the execution path predictable, but it also makes the fast path unusually visible. Treat this result as an explanation of where time can be removed, not as a promise for every workload.
 
@@ -124,6 +130,8 @@ repos:
 
 With the fast path retained, priority scheduling lowers the median from 105 ms to 94 ms, another 11% reduction. That is 16.37x faster than the no-fast-path baseline.
 
+![Horizontal bars showing the effect of priority scheduling](<https://prek.j178.dev/dev/assets/benchmark-priority.svg>)
+
 ### 4\. Two projects
 
 Priority scheduling shortens the critical path inside one project. The final stage applies the same idea one level higher by splitting structured data and text files into two sibling projects:
@@ -143,9 +151,13 @@ Each project declares only the hooks it owns. Common checks appear in both proje
 
 Adding the second project lowers the median from 94 ms to 80 ms, another 15% reduction.
 
+![Horizontal bars showing the effect of two concurrent projects](<https://prek.j178.dev/dev/assets/benchmark-projects.svg>)
+
 ### Summary
 
 Put together, the four measurements form the complete optimization ladder:
+
+![Horizontal bar chart of the runtime optimization ladder](<https://prek.j178.dev/dev/assets/benchmark-runtime.svg>)
 
 Across the complete ladder, prek falls from 1,534 ms to 80 ms: 94.8% less time, or a 19.19x speedup. The final configuration is 24.29x faster than the `pre-commit` reference.
 
