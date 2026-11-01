@@ -52,6 +52,8 @@ jobs:
             brew style --except-cops FormulaAudit/Homepage,FormulaAudit/Desc,FormulaAuditStrict --fix "Formula/${filename}" || true
 
             git add "Formula/${filename}"
-            git commit -m "${name} ${version}"
+            if ! git diff --cached --quiet; then
+              git commit -m "${name} ${version}"
+            fi
           done
           git push

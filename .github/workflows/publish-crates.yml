@@ -32,6 +32,6 @@ jobs:
       - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: auth
       - name: "Publish to crates.io"
-        run: cargo publish --workspace
+        run: python3 scripts/publish-packages.py crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
