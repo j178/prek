@@ -82,6 +82,11 @@
     }
   ],
   packageRules: [
+    {
+      groupName: 'Rust dependencies',
+      matchManagers: ['cargo'],
+      matchIsBreaking: false,
+    },
     // Bump Python dependencies without raising the minimum supported Python version.
     {
       groupName: 'Python dependencies',
@@ -98,6 +103,12 @@
         'scripts/install-cargo-tools.sh',
         'crates/prek/src/languages/python/uv.rs',
       ],
+      separateMajorMinor: false,
+    },
+    {
+      groupName: 'CI tools',
+      matchManagers: ['github-actions'],
+      matchDepTypes: ['uses-with'],
       separateMajorMinor: false,
     },
     // Group all GitHub Actions updates together
