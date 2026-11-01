@@ -3,7 +3,7 @@
 set -eu
 
 # renovate: datasource=crate depName=cargo-auditable
-CARGO_AUDITABLE_VERSION=0.7.6
+CARGO_AUDITABLE_VERSION=0.7.7
 # renovate: datasource=crate depName=rust-audit-info
 RUST_AUDIT_INFO_VERSION=0.5.4
 
