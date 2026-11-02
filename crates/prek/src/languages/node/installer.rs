@@ -136,7 +136,11 @@ impl NodeInstaller {
             anyhow::bail!("No suitable Node version found for toolchain policy: {policy}");
         }
 
-        let resolved_version = self.resolve_version(request).await?;
+        let versions = self
+            .list_remote_versions()
+            .await
+            .context("Failed to list remote versions")?;
+        let resolved_version = Self::resolve_version(request, versions)?;
         trace!(version = %resolved_version, "Downloading node");
 
         self.download(store, &resolved_version).await
@@ -175,15 +179,18 @@ impl NodeInstaller {
             .context("No installed node version matches the request")
     }
 
-    async fn resolve_version(&self, req: &NodeRequest) -> Result<NodeVersion> {
+    fn resolve_version(req: &NodeRequest, versions: Vec<NodeVersion>) -> Result<NodeVersion> {
         // Latest versions come first, so we can find the latest matching version.
-        let versions = self
-            .list_remote_versions()
-            .await
-            .context("Failed to list remote versions")?;
         let version = versions
             .into_iter()
-            .find(|version| req.matches(version))
+            .find(|version| {
+                // Only Range requests can name a prerelease, e.g. `=27.0.0-alpha.0.0.0`.
+                // Let `req.matches` check those; reject prereleases for other requests.
+                if !version.version.pre.is_empty() && !matches!(req, NodeRequest::Range(_)) {
+                    return false;
+                }
+                req.matches(version)
+            })
             .context("Version not found on remote")?;
         Ok(version)
     }
@@ -336,5 +343,39 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
         prefix.join("node_modules")
     } else {
         prefix.join("lib").join("node_modules")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An alpha at the head of the remote index must not become the default
+    /// download, but an explicit prerelease request must still select it.
+    #[test]
+    fn resolve_version_requires_explicit_prerelease() -> Result<()> {
+        let index = r#"[
+            {"version":"v27.0.0-alpha.0.0.0","lts":false},
+            {"version":"v26.13.0","lts":"Lithium"}
+        ]"#;
+
+        for (request, expected) in [
+            ("", Some("26.13.0")),
+            ("27", None),
+            ("27.0", None),
+            ("27.0.0", None),
+            (">=26", Some("26.13.0")),
+            ("=27.0.0-alpha.0.0.0", Some("27.0.0-alpha.0.0.0")),
+        ] {
+            let result =
+                NodeInstaller::resolve_version(&request.parse()?, serde_json::from_str(index)?);
+            if let Some(expected) = expected {
+                assert_eq!(result?.version().to_string(), expected, "{request:?}");
+            } else {
+                assert!(result.is_err(), "{request:?}");
+            }
+        }
+
+        Ok(())
     }
 }
