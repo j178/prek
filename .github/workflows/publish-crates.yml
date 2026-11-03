@@ -20,7 +20,7 @@ jobs:
       # For crates.io's trusted publishing.
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -29,7 +29,7 @@ jobs:
 
       - name: "Install Rust toolchain"
         run: rustup show
-      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - uses: rust-lang/crates-io-auth-action@v1.0.6
         id: auth
       - name: "Publish to crates.io"
         run: python3 scripts/publish-packages.py crates

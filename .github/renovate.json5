@@ -116,7 +116,8 @@
       groupName: 'GitHub Actions',
       matchManagers: ['github-actions'],
       matchDepTypes: ['action'],
-      // Pin GitHub Actions to immutable SHAs
+      // Renovate skips inline pinning for workflows managed by actions.lock.
+      // Keep other references, including documentation examples, pinned.
       pinDigests: true
     },
     {
