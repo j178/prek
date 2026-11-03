@@ -29,7 +29,7 @@ fn uv_source_none() -> anyhow::Result<()> {
 
     cmd_snapshot!(context, context.run()
         .env(EnvVars::PREK_UV_SOURCE, "none")
-        .env(EnvVars::PATH, &path), @r#"
+        .env(EnvVars::PATH, &path), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -37,12 +37,41 @@ fn uv_source_none() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to install hook `local`
       caused by: Failed to install uv
-      caused by: No compatible uv found and automatic installation is disabled by PREK_UV_SOURCE=none. Install uv (>=0.7.0) and add it to PATH
-    "#);
+      caused by: No compatible uv found and automatic installation is disabled by PREK_UV_SOURCE=none. Install uv (>=0.13.4) and add it to PATH
+    ");
     uv_dir.assert(predicates::path::missing());
 
     fs_err::create_dir_all(&uv_dir)?;
     let uv_path = uv_dir.child(format!("uv{}", std::env::consts::EXE_SUFFIX));
+    #[cfg(unix)]
+    {
+        fs_err::write(
+            &uv_path,
+            indoc::indoc! {r#"
+            #!/bin/sh
+            if [ "$1" = --version ]; then
+                echo 'uv 0.13.3'
+            else
+                echo 'unsafe uv was reused' >&2
+                exit 1
+            fi
+        "#},
+        )?;
+        crate::common::make_executable(&uv_path)?;
+
+        cmd_snapshot!(context, context.run()
+            .env(EnvVars::PREK_UV_SOURCE, "none")
+            .env(EnvVars::PATH, &path), @"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Failed to install hook `local`
+          caused by: Failed to install uv
+          caused by: No compatible uv found and automatic installation is disabled by PREK_UV_SOURCE=none. Install uv (>=0.13.4) and add it to PATH
+        ");
+    }
     fs_err::copy(which::which("uv")?, &uv_path)?;
 
     cmd_snapshot!(context, context.run()

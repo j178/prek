@@ -24,8 +24,8 @@ use crate::languages::version::{
 use crate::process::Cmd;
 use crate::store::Store;
 
-// This is the first release where MISE_CEILING_PATHS also isolates early .miserc discovery.
-const MIN_MISE_VERSION: Version = Version::new(2026, 5, 18);
+// Older releases trust the compromised eMudhra intermediates (CVE-2026-111943).
+const MIN_MISE_VERSION: Version = Version::new(2026, 10, 17);
 
 static MISE_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
     EnvVars

@@ -4,8 +4,9 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
+use semver::Version;
 use target_lexicon::HOST;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::checksum::{Sha256Digest, fetch_checksum};
 use crate::fs::{LockedFile, make_executable};
@@ -18,6 +19,9 @@ use crate::warn_user;
 pub(crate) struct Rustup {
     bin: PathBuf,
 }
+
+// Older releases trust the compromised eMudhra intermediates (CVE-2026-111943).
+const MIN_RUSTUP_VERSION: Version = Version::new(1, 29, 2);
 
 static RUSTUP_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
     EnvVars
@@ -65,16 +69,52 @@ impl Rustup {
         Some(Self { bin })
     }
 
-    /// Install rustup if not already installed.
+    async fn validate_version(&self) -> Result<()> {
+        let output = Cmd::new(&self.bin)
+            .arg("--version")
+            .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
+            .check(true)
+            .output()
+            .await?;
+        let version = str::from_utf8(&output.stdout)?
+            .split_whitespace()
+            .nth(1)
+            .context("Failed to parse rustup version output")?
+            .parse::<Version>()?;
+        if version < MIN_RUSTUP_VERSION {
+            anyhow::bail!("rustup {version} is older than the required {MIN_RUSTUP_VERSION}");
+        }
+        Ok(())
+    }
+
+    // Offline toolchain discovery can still use old rustup, but downloads need patched TLS.
+    async fn find_for_install(managed_root: &Path) -> Option<Self> {
+        let managed = managed_root.join("rustup").with_extension(EXE_EXTENSION);
+        let candidates = std::iter::once(managed)
+            .filter(|path| path.is_file())
+            .chain(which::which_all(&*RUSTUP_BINARY_NAME).into_iter().flatten());
+        for bin in candidates {
+            let rustup = Self { bin };
+            match rustup.validate_version().await {
+                Ok(()) => return Some(rustup),
+                Err(err) => {
+                    warn!(path = %rustup.bin.display(), %err, "Skipping incompatible rustup");
+                }
+            }
+        }
+        None
+    }
+
+    /// Find or install a rustup release suitable for downloading toolchains.
     pub(crate) async fn install(store: &Store, rustup_home: &Path) -> Result<Self> {
-        if let Some(rustup) = Self::find(rustup_home) {
+        if let Some(rustup) = Self::find_for_install(rustup_home).await {
             return Ok(rustup);
         }
 
         fs_err::tokio::create_dir_all(&rustup_home).await?;
         let _lock = LockedFile::acquire(rustup_home.join(".lock"), "rustup").await?;
 
-        if let Some(rustup) = Self::find(rustup_home) {
+        if let Some(rustup) = Self::find_for_install(rustup_home).await {
             trace!("Using rustup at {}", rustup.bin.display());
             return Ok(rustup);
         }
@@ -106,6 +146,12 @@ impl Rustup {
         })
         .await?;
         make_executable(download.path())?;
+
+        Self {
+            bin: download.path().to_path_buf(),
+        }
+        .validate_version()
+        .await?;
 
         debug!(path = %target.display(), "Installing rustup");
         crate::fs::rename_with_retry(download.path(), &target).await?;

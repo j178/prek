@@ -508,8 +508,8 @@ modify the user's mise setup.
 #### `language_version`
 
 `language_version` selects the mise CLI, not the installed tools. Prek requires
-mise 2026.5.18 or newer. Supported values are `default`, `system`, exact releases
-such as `=2026.7.18`, and semver ranges such as `>=2026.7, <2027`.
+mise 2026.10.17 or newer. Supported values are `default`, `system`, exact releases
+such as `=2026.10.17`, and semver ranges such as `>=2026.10.17, <2027`.
 
 ### node
 
