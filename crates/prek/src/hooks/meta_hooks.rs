@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use prek_consts::CONFIG_FILENAMES;
+use prek_consts::CONFIG_PATHS;
 
 use crate::cli::run::HookRunReporter;
 use crate::cli::run::{
@@ -67,7 +67,7 @@ impl MetaHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
         let hook_id = MetaHooks::from_str(id).map_err(|_| ())?;
         let config_file_glob =
-            FilePattern::glob(CONFIG_FILENAMES.iter().map(ToString::to_string).collect()).unwrap();
+            FilePattern::glob(CONFIG_PATHS.iter().map(ToString::to_string).collect()).unwrap();
 
         Ok(match hook_id {
             MetaHooks::CheckHooksApply => MetaHook {
@@ -198,7 +198,8 @@ fn load_meta_projects(hook: &Hook, filenames: &[&Path]) -> Result<Vec<Project>> 
         .iter()
         .map(|filename| {
             let path = relative_path.join(filename);
-            let mut project = Project::from_config_file(path.into(), None)?;
+            let mut project =
+                Project::from_config_file(path.into(), Some(hook.project().path().to_path_buf()))?;
             project.with_relative_path(relative_path.to_path_buf());
             Ok(project)
         })

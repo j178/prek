@@ -8,7 +8,7 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use prek_consts::CONFIG_FILENAMES;
+use prek_consts::CONFIG_PATHS;
 use prek_ignore::WalkState;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -249,6 +249,16 @@ impl Project {
         Self::find_configs(path, None).next().is_some()
     }
 
+    /// Return the project root for configs stored directly in `config_dir`.
+    /// A `.config` directory belongs to its parent unless it is the discovery boundary itself.
+    fn root_for_config_dir<'a>(config_dir: &'a Path, boundary: &Path) -> &'a Path {
+        if config_dir != boundary && config_dir.ends_with(".config") {
+            config_dir.parent().unwrap_or(config_dir)
+        } else {
+            config_dir
+        }
+    }
+
     fn find_configs<'a>(
         path: &'a Path,
         entries: Option<&[DirEntry]>,
@@ -260,14 +270,15 @@ impl Project {
             Probe,
         }
 
-        let mut candidates = [Candidate::Probe; CONFIG_FILENAMES.len()];
+        let mut candidates = [Candidate::Probe; CONFIG_PATHS.len()];
         if let Some(entries) = entries {
             candidates.fill(Candidate::Absent);
             for entry in entries {
                 let name = entry.file_name();
                 let name = name.as_encoded_bytes();
-                for (&config, candidate) in CONFIG_FILENAMES.iter().zip(&mut candidates) {
-                    if !name.eq_ignore_ascii_case(config.as_bytes()) {
+                for (&config, candidate) in CONFIG_PATHS.iter().zip(&mut candidates) {
+                    let first = config.split_once('/').map_or(config, |(dir, _)| dir);
+                    if !name.eq_ignore_ascii_case(first.as_bytes()) {
                         continue;
                     }
                     if name == config.as_bytes() {
@@ -277,14 +288,14 @@ impl Project {
                             _ => Candidate::Probe,
                         };
                     } else if matches!(candidate, Candidate::Absent) {
-                        // Let the filesystem decide whether differently cased names match.
+                        // Nested paths and differently cased names still require a filesystem lookup.
                         *candidate = Candidate::Probe;
                     }
                 }
             }
         }
 
-        CONFIG_FILENAMES
+        CONFIG_PATHS
             .iter()
             .zip(candidates)
             .filter_map(move |(&name, candidate)| {
@@ -328,7 +339,7 @@ impl Project {
             );
         }
 
-        Self::from_config_file(Cow::Borrowed(selected), None)
+        Self::from_config_file(Cow::Borrowed(selected), Some(path.to_path_buf()))
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
@@ -508,7 +519,7 @@ pub(crate) struct WorkspaceCache {
 }
 
 impl WorkspaceCache {
-    const CURRENT_VERSION: u32 = 1;
+    const CURRENT_VERSION: u32 = 2;
     /// Maximum cache age before forcing rediscovery (1 hour)
     const MAX_CACHE_AGE: u64 = 60 * 60;
 
@@ -673,6 +684,7 @@ impl Workspace {
         let workspace_root = dir
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
+            .filter(|p| Project::root_for_config_dir(p, git_root) == *p)
             .find(|p| Project::has_config(p))
             .ok_or(Error::MissingConfigFile)?
             .to_path_buf();
@@ -708,13 +720,15 @@ impl Workspace {
             let projects: Result<Vec<_>, _> = cache
                 .config_files
                 .into_iter()
-                .map(
-                    |config_file| match Project::from_config_file(config_file.path.into(), None) {
+                .map(|config_file| {
+                    let config_dir = config_file.path.parent().unwrap_or(&root);
+                    let project_root =
+                        Project::root_for_config_dir(config_dir, &root).to_path_buf();
+                    match Project::from_config_file(config_file.path.into(), Some(project_root)) {
                         Ok(mut project) => {
                             let relative_path = project
-                                .config_file()
-                                .parent()
-                                .and_then(|p| p.strip_prefix(&root).ok())
+                                .path()
+                                .strip_prefix(&root)
                                 .expect("Entry path should be relative to the root")
                                 .to_path_buf();
                             project.with_relative_path(relative_path);
@@ -724,8 +738,8 @@ impl Workspace {
                             debug!("Failed to load cached project config: {}", e);
                             Err(e)
                         }
-                    },
-                )
+                    }
+                })
                 .collect();
 
             match projects {
@@ -793,6 +807,11 @@ impl Workspace {
         });
 
         prek_ignore::walk(root, ".prekignore", |path, entries| {
+            // Ignore rules can expose config directories already checked by their owner.
+            if Project::root_for_config_dir(path, root) != path {
+                return WalkState::Skip;
+            }
+
             // Skip cookiecutter template directories
             if path
                 .file_name()
