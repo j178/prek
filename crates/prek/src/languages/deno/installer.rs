@@ -16,7 +16,7 @@ use tracing::{debug, trace, warn};
 use crate::archive;
 use crate::checksum::{Sha256Digest, digest_from_sha256sums, fetch_checksum};
 use crate::fs::LockedFile;
-use crate::http::{REQWEST_CLIENT, download_artifact};
+use crate::http::{download_artifact, reqwest_client};
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::version::DenoVersion;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
@@ -187,7 +187,7 @@ impl DenoInstaller {
         }
 
         let url = "https://deno.com/versions.json";
-        let response: VersionsResponse = REQWEST_CLIENT.get(url).send().await?.json().await?;
+        let response: VersionsResponse = reqwest_client()?.get(url).send().await?.json().await?;
 
         // Versions are already sorted in descending order (newest first)
         let versions: Vec<DenoVersion> = response

@@ -114,7 +114,7 @@ async fn download_to_temp_file(
 
     debug!(%url, "Downloading");
 
-    let response = customize_request(REQWEST_CLIENT.get(url))
+    let response = customize_request(reqwest_client()?.get(url))
         .send()
         .await
         .and_then(reqwest::Response::error_for_status)
@@ -145,16 +145,37 @@ async fn download_to_temp_file(
     ))
 }
 
-pub(crate) static REQWEST_CLIENT: LazyLock<reqwest::Client> =
-    LazyLock::new(|| reqwest_client_from_env(&EnvVars));
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ClientError {
+    #[error("Failed to initialize HTTP client")]
+    Build(#[source] reqwest::Error),
 
-fn reqwest_client_from_env(env_vars: &impl EnvVarsRead) -> reqwest::Client {
-    let native_tls = env_vars
-        .var_as_bool(EnvVars::PREK_NATIVE_TLS)
+    #[error(
+        "Failed to initialize HTTP client with system certificates. Ensure system CA certificates are installed, or set `PREK_SYSTEM_CERTS=false` to use bundled certificates"
+    )]
+    SystemCertificates(#[source] reqwest::Error),
+}
+
+pub(crate) fn reqwest_client() -> Result<&'static reqwest::Client, &'static ClientError> {
+    static CLIENT: LazyLock<Result<reqwest::Client, ClientError>> =
+        LazyLock::new(reqwest_client_from_env);
+
+    CLIENT.as_ref()
+}
+
+fn reqwest_client_from_env() -> Result<reqwest::Client, ClientError> {
+    // TODO: Remove PREK_NATIVE_TLS compatibility in the next breaking release.
+    let system_certs_var = if EnvVars.is_set(EnvVars::PREK_SYSTEM_CERTS) {
+        EnvVars::PREK_SYSTEM_CERTS
+    } else {
+        EnvVars::PREK_NATIVE_TLS
+    };
+    let system_certs = EnvVars
+        .var_as_bool(system_certs_var)
         .unwrap_or_else(|value| {
             warn_user!(
                 "Invalid value for {}: {:?}. Expected a boolean value; using default ({:?})",
-                EnvVars::PREK_NATIVE_TLS,
+                system_certs_var,
                 value,
                 "false",
             );
@@ -162,16 +183,18 @@ fn reqwest_client_from_env(env_vars: &impl EnvVarsRead) -> reqwest::Client {
         })
         .unwrap_or(false);
 
-    let certs = ssl_certs::load_certs_from_env();
-    for error in certs.errors {
-        warn_user!("Failed to load certificates: {error}");
-    }
-    let certs = certs
-        .certs
-        .iter()
-        .filter_map(|cert| Certificate::from_der(cert).ok())
-        .collect();
-    create_reqwest_client(native_tls, certs)
+    // An explicitly configured source replaces default roots even when empty.
+    let certs = ssl_certs::load_certs_from_env().map(|certs| {
+        for error in certs.errors {
+            warn_user!("Failed to load certificates: {error}");
+        }
+        certs
+            .certs
+            .iter()
+            .filter_map(|cert| Certificate::from_der(cert).ok())
+            .collect()
+    });
+    create_reqwest_client(system_certs, certs)
 }
 
 // Bound the connect phase, and fail a download that stalls (no bytes received for this long)
@@ -180,29 +203,40 @@ fn reqwest_client_from_env(env_vars: &impl EnvVarsRead) -> reqwest::Client {
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
-fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> reqwest::Client {
+fn create_reqwest_client(
+    system_certs: bool,
+    custom_certs: Option<Vec<Certificate>>,
+) -> Result<reqwest::Client, ClientError> {
+    let system_certs = system_certs && custom_certs.is_none();
     let builder = reqwest::ClientBuilder::new()
+        .tls_backend_rustls()
         .user_agent(format!("prek/{}", crate::version::version()))
         .connect_timeout(CONNECT_TIMEOUT)
         .read_timeout(READ_TIMEOUT);
 
-    let builder = if native_tls {
-        debug!("Using native TLS for reqwest client");
-        // Use rustls with rustls-platform-verifier which uses the platform's native certificate facilities.
-        builder.tls_backend_rustls().tls_certs_merge(custom_certs)
+    let builder = if let Some(custom_certs) = custom_certs {
+        debug!("Using custom certificates for reqwest client");
+        builder.tls_certs_only(custom_certs)
+    } else if system_certs {
+        debug!("Using system certificates for reqwest client");
+        // With no explicit roots, reqwest uses rustls-platform-verifier.
+        builder
     } else {
+        debug!("Using bundled certificates for reqwest client");
         let root_certs = webpki_root_certs::TLS_SERVER_ROOT_CERTS
             .iter()
             .filter_map(|cert_der| Certificate::from_der(cert_der).ok());
 
-        // Merge custom certificates on top of webpki-root-certs
-        builder
-            .tls_backend_rustls()
-            .tls_certs_only(custom_certs)
-            .tls_certs_merge(root_certs)
+        builder.tls_certs_only(root_certs)
     };
 
-    builder.build().expect("Failed to build reqwest client")
+    builder.build().map_err(|error| {
+        if system_certs {
+            ClientError::SystemCertificates(error)
+        } else {
+            ClientError::Build(error)
+        }
+    })
 }
 
 #[cfg(test)]
@@ -305,11 +339,39 @@ mod tests {
         );
     }
 
+    /// Default roots trust public HTTPS. Unrelated or empty custom roots replace
+    /// them and fail during certificate verification.
     #[tokio::test]
-    async fn test_native_tls() {
-        let client = super::create_reqwest_client(true, vec![]);
-        let resp = client.get("https://github.com").send().await;
-        assert!(resp.is_ok(), "Failed to send request with native TLS");
+    async fn test_tls_certificates() -> Result<()> {
+        let custom_cert = reqwest::Certificate::from_pem(indoc::indoc! {b"
+            -----BEGIN CERTIFICATE-----
+            MIIBdDCCARqgAwIBAgIUZ1kmigC8aj49VPno0N1d7vKCDbswCgYIKoZIzj0EAwIw
+            FzEVMBMGA1UEAwwMcHJlayB0ZXN0IENBMCAXDTI2MTAyNjExNTM1OFoYDzIxMjYx
+            MDAyMTE1MzU4WjAXMRUwEwYDVQQDDAxwcmVrIHRlc3QgQ0EwWTATBgcqhkjOPQIB
+            BggqhkjOPQMBBwNCAATnHgUgx6Q0+Oeri/poUmyQLJiXk09eceAySysTGV+SI5wc
+            dxLzmCZvsolKlQ4A66QRleU3emn0GBKgnz2uqxFYo0IwQDAdBgNVHQ4EFgQU53Go
+            +jl4xGYHpgHFQpoYrttAbsQwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC
+            AQYwCgYIKoZIzj0EAwIDSAAwRQIhALvrJ3U2Yk1k+iLH+rjj9jSnpt3bv5bhhKxK
+            WMKctiPPAiAcPHp1Si2wO726t4qJK5lX9cnTC3Azy/ZASjAzf8Dx1g==
+            -----END CERTIFICATE-----
+        "})?;
+
+        for system_certs in [false, true] {
+            let client = super::create_reqwest_client(system_certs, None)?;
+            client.get("https://example.com").send().await?;
+
+            for certs in [vec![], vec![custom_cert.clone()]] {
+                let client = super::create_reqwest_client(system_certs, Some(certs))?;
+                let Err(error) = client.get("https://example.com").send().await else {
+                    anyhow::bail!("Custom certificates must replace default roots");
+                };
+                assert!(
+                    format!("{error:?}").contains("UnknownIssuer"),
+                    "Expected an untrusted issuer with system_certs={system_certs}: {error:?}"
+                );
+            }
+        }
+        Ok(())
     }
 
     #[tokio::test]

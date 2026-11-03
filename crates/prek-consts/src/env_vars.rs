@@ -97,6 +97,7 @@ impl EnvVars {
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
     pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
     pub const PREK_UV_VERSION: &'static str = "PREK_UV_VERSION";
+    pub const PREK_SYSTEM_CERTS: &'static str = "PREK_SYSTEM_CERTS";
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
     pub const PREK_DOWNLOAD_CHECKSUM_POLICY: &'static str = "PREK_DOWNLOAD_CHECKSUM_POLICY";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
@@ -307,7 +308,7 @@ mod tests {
 
         let env_vars = EnvVars::from_map(&[
             (EnvVars::PREK_DOCKER_NO_INIT, "yes"),
-            (EnvVars::PREK_NATIVE_TLS, "0"),
+            (EnvVars::PREK_SYSTEM_CERTS, "0"),
             (EnvVars::PREK_ALLOW_NO_CONFIG, "maybe"),
         ]);
         assert_eq!(
@@ -315,7 +316,7 @@ mod tests {
             Ok(Some(true))
         );
         assert_eq!(
-            env_vars.var_as_bool(EnvVars::PREK_NATIVE_TLS),
+            env_vars.var_as_bool(EnvVars::PREK_SYSTEM_CERTS),
             Ok(Some(false))
         );
         assert_eq!(

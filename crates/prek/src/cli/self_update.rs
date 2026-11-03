@@ -28,7 +28,7 @@ use prek_update::{UpdateRequest, Updater};
 use tracing::{debug, enabled};
 
 use crate::cli::ExitStatus;
-use crate::http::REQWEST_CLIENT;
+use crate::http::reqwest_client;
 use crate::install_source::InstallSource;
 use crate::printer::Printer;
 
@@ -106,7 +106,7 @@ pub(crate) async fn self_update(
     // available version of prek.
     match updater
         .run(
-            &REQWEST_CLIENT,
+            reqwest_client()?,
             update_request,
             token.as_deref(),
             enabled!(tracing::Level::DEBUG),

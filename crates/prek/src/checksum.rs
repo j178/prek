@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use aws_lc_rs::digest::{Context as Sha256Context, SHA256};
 use tokio::io::{AsyncRead, ReadBuf};
 
-use crate::http::REQWEST_CLIENT;
+use crate::http::reqwest_client;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) struct Sha256Digest([u8; 32]);
@@ -98,7 +98,7 @@ pub(crate) async fn fetch_checksum_with(
     checksum_url: &str,
     customize_request: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
 ) -> Result<Option<String>> {
-    let response = customize_request(REQWEST_CLIENT.get(checksum_url))
+    let response = customize_request(reqwest_client()?.get(checksum_url))
         .send()
         .await
         .with_context(|| format!("Failed to fetch checksum from {checksum_url}"))?;

@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use crate::archive;
 use crate::checksum::{digest_from_sha256sums, fetch_checksum};
 use crate::fs::{LockedFile, is_executable};
-use crate::http::{REQWEST_CLIENT, download_artifact};
+use crate::http::{download_artifact, reqwest_client};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
@@ -254,7 +254,7 @@ impl NodeInstaller {
     /// List all versions of Node.js available on the Node.js website.
     async fn list_remote_versions(&self) -> Result<Vec<NodeRelease>> {
         let url = "https://nodejs.org/dist/index.json";
-        let versions = REQWEST_CLIENT.get(url).send().await?.json().await?;
+        let versions = reqwest_client()?.get(url).send().await?.json().await?;
         Ok(versions)
     }
 
