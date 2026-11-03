@@ -9,7 +9,7 @@ use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxBuildHasher;
-use target_lexicon::{Architecture, HOST, OperatingSystem};
+use target_lexicon::{Architecture, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
 use crate::archive;
@@ -20,6 +20,7 @@ use crate::http::download_artifact;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
 use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::libc::Libc;
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -198,19 +199,7 @@ impl BunInstaller {
 
     /// Install a specific version of Bun.
     async fn download(&self, store: &Store, version: &BunVersion) -> Result<BunResult> {
-        let arch = match HOST.architecture {
-            Architecture::X86_64 => "x64",
-            Architecture::Aarch64(_) => "aarch64",
-            _ => anyhow::bail!("Unsupported architecture"),
-        };
-        let os = match HOST.operating_system {
-            OperatingSystem::Darwin(_) => "darwin",
-            OperatingSystem::Linux => "linux",
-            OperatingSystem::Windows => "windows",
-            _ => anyhow::bail!("Unsupported OS"),
-        };
-
-        let filename = format!("bun-{os}-{arch}.zip");
+        let filename = release_filename(&HOST, Libc::detect().await?)?;
         let url =
             format!("https://github.com/oven-sh/bun/releases/download/bun-v{version}/{filename}");
         let checksum_url = format!(
@@ -234,8 +223,7 @@ impl BunInstaller {
             fs_err::tokio::remove_dir_all(&target).await?;
         }
 
-        // The ZIP extracts to bun-{os}-{arch}/bun, we need to move the contents
-        // to {version}/bin/bun
+        // Move the binary from the archive's top-level directory to {version}/bin/bun.
         let extracted_binary = extracted.join("bun").with_extension(EXE_EXTENSION);
         let target_bin_dir = bin_dir(&target);
         fs_err::tokio::create_dir_all(&target_bin_dir).await?;
@@ -285,6 +273,28 @@ impl BunInstaller {
     }
 }
 
+fn release_filename(host: &Triple, libc: Option<Libc>) -> Result<String> {
+    let arch = match host.architecture {
+        Architecture::X86_64 => "x64",
+        Architecture::Aarch64(_) => "aarch64",
+        _ => anyhow::bail!("Unsupported architecture"),
+    };
+    let os = match host.operating_system {
+        OperatingSystem::Darwin(_) => "darwin",
+        OperatingSystem::Linux => "linux",
+        OperatingSystem::Windows => "windows",
+        _ => anyhow::bail!("Unsupported OS"),
+    };
+
+    let suffix = if host.operating_system == OperatingSystem::Linux && libc == Some(Libc::Musl) {
+        "-musl"
+    } else {
+        ""
+    };
+
+    Ok(format!("bun-{os}-{arch}{suffix}.zip"))
+}
+
 pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
     // Bun installs global packages to $BUN_INSTALL/bin/ on all platforms
     prefix.join("bin")
@@ -295,5 +305,66 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
         prefix.join("node_modules")
     } else {
         prefix.join("lib").join("node_modules")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Both Linux architectures need musl archives when musl is detected,
+    // regardless of the libc prek was compiled against.
+    #[test]
+    fn linux_with_musl() -> Result<()> {
+        for (triple, expected) in [
+            ("x86_64-unknown-linux-musl", "bun-linux-x64-musl.zip"),
+            ("aarch64-unknown-linux-musl", "bun-linux-aarch64-musl.zip"),
+            ("x86_64-unknown-linux-gnu", "bun-linux-x64-musl.zip"),
+            ("aarch64-unknown-linux-gnu", "bun-linux-aarch64-musl.zip"),
+        ] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert_eq!(release_filename(&host, Some(Libc::Musl))?, expected);
+        }
+        Ok(())
+    }
+
+    // A musl-built prek running on glibc Linux must keep using the glibc archive.
+    #[test]
+    fn linux_with_glibc() -> Result<()> {
+        for (triple, expected) in [
+            ("x86_64-unknown-linux-gnu", "bun-linux-x64.zip"),
+            ("aarch64-unknown-linux-gnu", "bun-linux-aarch64.zip"),
+            ("x86_64-unknown-linux-musl", "bun-linux-x64.zip"),
+            ("aarch64-unknown-linux-musl", "bun-linux-aarch64.zip"),
+        ] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert_eq!(release_filename(&host, Some(Libc::Glibc))?, expected);
+        }
+        Ok(())
+    }
+
+    // The libc probe must not change macOS or Windows archive names.
+    #[test]
+    fn non_linux_platforms() -> Result<()> {
+        for (triple, expected) in [
+            ("x86_64-apple-darwin", "bun-darwin-x64.zip"),
+            ("aarch64-apple-darwin", "bun-darwin-aarch64.zip"),
+            ("x86_64-pc-windows-msvc", "bun-windows-x64.zip"),
+            ("aarch64-pc-windows-msvc", "bun-windows-aarch64.zip"),
+        ] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert_eq!(release_filename(&host, None)?, expected);
+        }
+        Ok(())
+    }
+
+    // Unsupported CPUs and operating systems must still fail before downloading.
+    #[test]
+    fn unsupported_platforms() -> Result<()> {
+        for triple in ["riscv64gc-unknown-linux-gnu", "x86_64-unknown-freebsd"] {
+            let host = triple.parse().map_err(anyhow::Error::msg)?;
+            assert!(release_filename(&host, None).is_err());
+        }
+        Ok(())
     }
 }

@@ -9,7 +9,6 @@ notes. For setup examples and how to choose between the automatic fast path and
 For `repo: builtin`, the following hooks are supported:
 
 - [`trailing-whitespace`](#trailing-whitespace) (Trims trailing whitespace.)
-- [`expand-tabs`](#expand-tabs) (Replaces tabs with spaces at tab stops.)
 - [`check-added-large-files`](#check-added-large-files) (Prevents giant files from being committed.)
 - [`check-case-conflict`](#check-case-conflict) (Checks for files that would conflict in case-insensitive filesystems.)
 - [`check-illegal-windows-names`](#check-illegal-windows-names) (Checks for filenames which cannot be created on Windows.)
@@ -28,9 +27,11 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-xml`](#check-xml) (Checks XML files for parseable syntax.)
 - [`deny-filename-pattern`](#deny-filename-pattern) (Fails if any selected filename matches a regular expression.)
 - [`deny-pattern`](#deny-pattern) (Fails if any file contains a matching regular expression.)
+- [`replace-pattern`](#replace-pattern) (Replaces regular expression matches in text files.)
 - [`require-filename-pattern`](#require-filename-pattern) (Fails if any selected filename does not match a regular expression.)
 - [`require-pattern`](#require-pattern) (Fails if any file does not contain a matching regular expression.)
 - [`mixed-line-ending`](#mixed-line-ending) (Replaces or checks mixed line endings.)
+- [`normalize-indentation`](#normalize-indentation) (Converts leading indentation to spaces or tabs.)
 - [`check-symlinks`](#check-symlinks) (Checks for symlinks which do not point to anything.)
 - [`destroyed-symlinks`](#destroyed-symlinks) (Detects symlinks that were replaced with regular files whose contents are the original symlink target path.)
 - [`check-merge-conflict`](#check-merge-conflict) (Checks for files that contain merge conflict strings.)
@@ -83,15 +84,28 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 Example:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: trailing-whitespace
-        args: [--markdown-linebreak-ext=md]
-      - id: check-added-large-files
-        args: [--maxkb=1024]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"] },
+      { id = "check-added-large-files", args = ["--maxkb=1024"] }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: trailing-whitespace
+            args: [--markdown-linebreak-ext=md]
+          - id: check-added-large-files
+            args: [--maxkb=1024]
+    ```
 
 ---
 
@@ -113,33 +127,6 @@ Trims trailing whitespace from each line.
 **Caveats**
 
 - `--markdown-linebreak-ext` values must be extensions only (no path separators).
-
----
-
-### `expand-tabs`
-
-Expands tabs to the next tab stop, matching
-[`Lucas-C/pre-commit-hooks`'s `remove-tabs`](https://github.com/Lucas-C/pre-commit-hooks/blob/master/pre_commit_hooks/remove_tabs.py).
-The default width is 4. Columns count bytes, and both CR and LF reset the column.
-Other bytes and line endings are preserved. A zero or negative width deletes tabs.
-
-By default, this hook selects text files and excludes paths matching
-`(Makefile|debian/rules|.gitmodules)(\.in)?$`, including their `.in` templates.
-Override `exclude` to change this selection.
-
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: expand-tabs
-        args: [--tab-width=4]
-```
-
-- `--tab-width <N>`: Tab stop width (default: `4`).
-- `--check`: Report files containing tabs without modifying them.
-
-Returns a nonzero exit status when tabs are found. Files without tabs are not rewritten.
-This hook is available through `repo: builtin`.
 
 ---
 
@@ -232,13 +219,25 @@ Sorts the non-empty lines in each matched file and rewrites the file when the no
 
 Example:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: file-contents-sorter
-        files: ^requirements(-dev)?\.txt$
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "file-contents-sorter", files = '^requirements(-dev)?\.txt$' }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: file-contents-sorter
+            files: ^requirements(-dev)?\.txt$
+    ```
 
 ---
 
@@ -327,15 +326,32 @@ Checks `.jsonc` files for parseable syntax.
 To check JSONC stored in `.json` files, such as `tsconfig.json`, override the default
 file-type filter:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: check-jsonc
-        types: [json]
-        files: '(^|/)tsconfig\.json$'
-        args: [--allow-trailing-commas]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "check-jsonc",
+        types = ["json"],
+        files = '(^|/)tsconfig\.json$',
+        args = ["--allow-trailing-commas"]
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: check-jsonc
+            types: [json]
+            files: '(^|/)tsconfig\.json$'
+            args: [--allow-trailing-commas]
+    ```
 
 **Supported arguments**
 
@@ -459,14 +475,26 @@ The standard `files`, `exclude`, and type filters select which project-relative 
 
 Each matching file is reported once as `path: filename matches a denied pattern`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: deny-filename-pattern
-        name: disallow spaces in filenames
-        args: ['\s']
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "deny-filename-pattern", name = "disallow spaces in filenames", args = ['\s'] }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: deny-filename-pattern
+            name: disallow spaces in filenames
+            args: ['\s']
+    ```
 
 ---
 
@@ -488,15 +516,98 @@ When multiple patterns are provided, matching any one of them is sufficient.
 
 By default, each matching line is reported as `path:line:contents`. A line matching more than one pattern is reported only once. With `--multiline`, the earliest match in each file is reported as `path:start-line:matched-block`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: deny-pattern
-        name: disallow wildcard imports
-        args: ['^\s*#import\s+.+:\s*\*']
-        files: \.typ$
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "deny-pattern",
+        name = "disallow wildcard imports",
+        args = ['^\s*#import\s+.+:\s*\*'],
+        files = '\.typ$'
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: deny-pattern
+            name: disallow wildcard imports
+            args: ['^\s*#import\s+.+:\s*\*']
+            files: \.typ$
+    ```
+
+---
+
+### `replace-pattern`
+
+Replaces all non-overlapping matches of one regular expression in each selected text file.
+Use one hook entry per replacement rule, with the standard `files`, `exclude`, and type filters to select files.
+
+**Supported arguments**
+
+- `PATTERN REPLACEMENT` (both required)
+    - A single regular expression and its replacement template.
+    - An empty replacement deletes matches. Use `--` before values beginning with `-`.
+- `-i`, `--ignore-case`
+    - Match case-insensitively.
+- `-m`, `--multiline`
+    - Search each file as a whole, with `^` and `$` matching line boundaries and `.` matching newlines, as in [`deny-pattern`](#deny-pattern).
+- `--check`
+    - Report files whose contents would change without modifying them.
+    - Report each affected line as `path:line: matching text would be replaced`. With `--multiline`, report the start line of the first match that would change in each file.
+
+Replacement templates support `$0` for the entire match, `$1` or `${1}` for numbered capture groups, and `$name` or `${name}` for named groups. Use braces to separate a reference from adjacent text, such as `${1}_suffix`, and `$$` for a literal `$`. Unknown capture groups are errors; optional groups that did not match expand to empty strings. Backslashes are literal: use your YAML or TOML string syntax to insert a newline, rather than passing a literal `\n`.
+
+By default, matching is performed on each line without its line ending. Existing line endings and untouched bytes are preserved.
+
+The hook fails only when the replacement changes file contents, including in `--check` mode.
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+
+    [[repos.hooks]]
+    id = "replace-pattern"
+    name = "normalize product name"
+    args = ["--ignore-case", '\bfoobar\b', "FOOBAR"]
+    files = '\.md$'
+
+    [[repos.hooks]]
+    id = "replace-pattern"
+    name = "migrate environment variable"
+    args = ['\bOLD_([A-Z_]+)\b', 'NEW_${1}']
+    files = '\.(sh|yaml)$'
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: replace-pattern
+            name: normalize product name
+            args: [--ignore-case, '\bfoobar\b', FOOBAR]
+            files: '\.md$'
+          - id: replace-pattern
+            name: migrate environment variable
+            args: ['\bOLD_([A-Z_]+)\b', 'NEW_${1}']
+            files: '\.(sh|yaml)$'
+    ```
+
+!!! warning "Caveats"
+
+    - Inserted text is not searched again during the same run, but rules need not be idempotent: replacing `foo` with `foobar` changes the file again on the next run.
+    - Rules run in configuration order by default, so later rules see earlier changes. Rules that modify the same files should not share a concurrent [`priority`](configuration.md#priority).
 
 ---
 
@@ -506,18 +617,35 @@ Fails when the final path component (the basename) of any selected file does not
 
 `require-filename-pattern` supports the same positional `PATTERN...` and `-i` / `--ignore-case` arguments as [`deny-filename-pattern`](#deny-filename-pattern). Matching uses search semantics; use `^` and `$` when the pattern must match the entire basename. Files without a match are reported as `path: filename does not match any required pattern`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: require-filename-pattern
-        name: python tests naming
-        args:
-          - '^test_.*\.py$'
-          - '^__init__\.py$'
-          - '^conftest\.py$'
-        files: '(^|/)tests/.+\.py$'
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "require-filename-pattern",
+        name = "python tests naming",
+        args = ['^test_.*\.py$', '^__init__\.py$', '^conftest\.py$'],
+        files = '(^|/)tests/.+\.py$'
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: require-filename-pattern
+            name: python tests naming
+            args:
+              - '^test_.*\.py$'
+              - '^__init__\.py$'
+              - '^conftest\.py$'
+            files: '(^|/)tests/.+\.py$'
+    ```
 
 ---
 
@@ -527,15 +655,32 @@ Fails when any selected text file does not match at least one configured regular
 
 `require-pattern` supports the same positional `PATTERN...`, `-i` / `--ignore-case`, and `--multiline` arguments as [`deny-pattern`](#deny-pattern). Files without a match are reported as `path: file does not match any required pattern`.
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: require-pattern
-        name: require a copyright notice
-        args: [--ignore-case, copyright]
-        files: '\.(rs|py)$'
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "require-pattern",
+        name = "require a copyright notice",
+        args = ["--ignore-case", "copyright"],
+        files = '\.(rs|py)$'
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: require-pattern
+            name: require a copyright notice
+            args: [--ignore-case, copyright]
+            files: '\.(rs|py)$'
+    ```
 
 ---
 
@@ -556,6 +701,30 @@ Replaces or checks mixed line endings.
 
 - Empty and binary files (containing NUL) are skipped.
 - Upstream note: forcing `lf` / `crlf` may not behave as expected with git CRLF conversion settings (for example `core.autocrlf`).
+
+---
+
+### `normalize-indentation`
+
+Converts leading indentation to spaces or tabs.
+
+**Supported arguments** (`prek`-specific, not available in `pre-commit-hooks`):
+
+- `--indent=<style>` (default: `spaces`)
+    - `spaces`: indent with spaces only.
+    - `tabs`: indent with as many tabs as fit, followed by spaces for any partial tab stop.
+- `--tab-size=<N>` (default: `4`)
+    - Number of columns between tab stops, from 1 to 255.
+- `--check`
+    - Report files that need changes without modifying them. The scan stops at the first line that needs changes.
+
+**Caveats**
+
+- Only the leading spaces and tabs of each line are rewritten. A tab advances to the next multiple of `--tab-size`, so with the default size two spaces followed by a tab are four columns wide. The column width, measured using `--tab-size`, is preserved.
+- Empty and whitespace-only lines are left untouched. Use `trailing-whitespace` to clean them up.
+- Line endings, a missing final newline, and a UTF-8 byte order marker are preserved. Binary files (containing NUL) are skipped.
+- The hook is not language-aware. Leading whitespace can be significant inside multiline strings and in formats such as Makefiles, so use `files` or `exclude` to skip those files.
+- Both modes exit non-zero when a file needs changes. Without `--check` the file is rewritten first.
 
 ---
 
@@ -686,16 +855,33 @@ the whole value.
 
 For example, require a sign-off and reject co-authors named Claude:
 
-```yaml
-default_install_hook_types: [commit-msg, pre-push]
-repos:
-  - repo: builtin
-    hooks:
-      - id: check-commit-trailers
-        args:
-          - --require=Signed-off-by
-          - '--deny=Co-authored-by=(?i)^claude\b'
-```
+=== "prek.toml"
+
+    ```toml
+    default_install_hook_types = ["commit-msg", "pre-push"]
+
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      {
+        id = "check-commit-trailers",
+        args = ["--require=Signed-off-by", '--deny=Co-authored-by=(?i)^claude\b']
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    default_install_hook_types: [commit-msg, pre-push]
+    repos:
+      - repo: builtin
+        hooks:
+          - id: check-commit-trailers
+            args:
+              - --require=Signed-off-by
+              - '--deny=Co-authored-by=(?i)^claude\b'
+    ```
 
 This configuration allows commits without a co-author. If co-authors are listed,
 none may match the denied pattern: a commit listing both Alice and Claude still

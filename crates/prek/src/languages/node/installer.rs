@@ -10,7 +10,8 @@ use asyncband::once::OnceMap;
 use itertools::Itertools;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::FxBuildHasher;
-use target_lexicon::{Architecture, HOST, OperatingSystem};
+use serde::Deserialize;
+use target_lexicon::{Architecture, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
 use crate::archive;
@@ -105,6 +106,54 @@ pub(crate) struct NodeInstaller {
     root: PathBuf,
 }
 
+#[derive(Deserialize)]
+struct NodeRelease {
+    #[serde(flatten)]
+    version: NodeVersion,
+    files: Vec<String>,
+}
+
+impl NodeRelease {
+    fn archive_filename(&self, host: &Triple) -> Result<Option<String>> {
+        let mut arch = match host.architecture {
+            Architecture::X86_32(_) => "x86",
+            Architecture::X86_64 => "x64",
+            Architecture::Aarch64(_) => "arm64",
+            Architecture::Arm(_) => "armv7l",
+            Architecture::S390x => "s390x",
+            Architecture::Powerpc => "ppc64",
+            Architecture::Powerpc64le => "ppc64le",
+            _ => anyhow::bail!("Unsupported architecture"),
+        };
+        let os = match host.operating_system {
+            OperatingSystem::Darwin(_) => "darwin",
+            OperatingSystem::Linux => "linux",
+            OperatingSystem::Windows => "win",
+            OperatingSystem::Aix => "aix",
+            _ => anyhow::bail!("Unsupported OS"),
+        };
+        if os == "darwin" && arch == "arm64" && self.version.major() < 16 {
+            // Node.js 16 and later are required for arm64 on macOS.
+            arch = "x64";
+        }
+
+        let file = match os {
+            "darwin" => format!("osx-{arch}-tar"),
+            "win" => format!("win-{arch}-zip"),
+            _ => format!("{os}-{arch}"),
+        };
+        if !self.files.contains(&file) {
+            return Ok(None);
+        }
+        let ext = if os == "win" { "zip" } else { "tar.gz" };
+
+        Ok(Some(format!(
+            "node-v{}-{os}-{arch}.{ext}",
+            self.version.version()
+        )))
+    }
+}
+
 impl NodeInstaller {
     pub(crate) fn new(root: PathBuf) -> Self {
         Self { root }
@@ -136,10 +185,14 @@ impl NodeInstaller {
             anyhow::bail!("No suitable Node version found for toolchain policy: {policy}");
         }
 
-        let resolved_version = self.resolve_version(request).await?;
+        let releases = self
+            .list_remote_versions()
+            .await
+            .context("Failed to list remote versions")?;
+        let (resolved_version, filename) = Self::resolve_version(request, releases, &HOST)?;
         trace!(version = %resolved_version, "Downloading node");
 
-        self.download(store, &resolved_version).await
+        self.download(store, &resolved_version, &filename).await
     }
 
     /// Get the installed version of Node.js.
@@ -175,53 +228,44 @@ impl NodeInstaller {
             .context("No installed node version matches the request")
     }
 
-    async fn resolve_version(&self, req: &NodeRequest) -> Result<NodeVersion> {
+    fn resolve_version(
+        req: &NodeRequest,
+        releases: Vec<NodeRelease>,
+        host: &Triple,
+    ) -> Result<(NodeVersion, String)> {
         // Latest versions come first, so we can find the latest matching version.
-        let versions = self
-            .list_remote_versions()
-            .await
-            .context("Failed to list remote versions")?;
-        let version = versions
-            .into_iter()
-            .find(|version| req.matches(version))
-            .context("Version not found on remote")?;
-        Ok(version)
+        for release in releases {
+            let version = &release.version;
+            // Only Range requests can name a prerelease, e.g. `=27.0.0-alpha.0.0.0`.
+            // Let `req.matches` check those; reject prereleases for other requests.
+            if !version.version.pre.is_empty() && !matches!(req, NodeRequest::Range(_)) {
+                continue;
+            }
+            if !req.matches(version) {
+                continue;
+            }
+            if let Some(filename) = release.archive_filename(host)? {
+                return Ok((release.version, filename));
+            }
+        }
+        anyhow::bail!("No matching Node.js version with an archive for {host}")
     }
 
     /// List all versions of Node.js available on the Node.js website.
-    async fn list_remote_versions(&self) -> Result<Vec<NodeVersion>> {
+    async fn list_remote_versions(&self) -> Result<Vec<NodeRelease>> {
         let url = "https://nodejs.org/dist/index.json";
-        let versions: Vec<NodeVersion> = reqwest_client()?.get(url).send().await?.json().await?;
+        let versions = reqwest_client()?.get(url).send().await?.json().await?;
         Ok(versions)
     }
 
     // TODO: support mirror?
     /// Install a specific version of Node.js.
-    async fn download(&self, store: &Store, version: &NodeVersion) -> Result<NodeResult> {
-        let mut arch = match HOST.architecture {
-            Architecture::X86_32(_) => "x86",
-            Architecture::X86_64 => "x64",
-            Architecture::Aarch64(_) => "arm64",
-            Architecture::Arm(_) => "armv7l",
-            Architecture::S390x => "s390x",
-            Architecture::Powerpc => "ppc64",
-            Architecture::Powerpc64le => "ppc64le",
-            _ => anyhow::bail!("Unsupported architecture"),
-        };
-        let os = match HOST.operating_system {
-            OperatingSystem::Darwin(_) => "darwin",
-            OperatingSystem::Linux => "linux",
-            OperatingSystem::Windows => "win",
-            OperatingSystem::Aix => "aix",
-            _ => anyhow::bail!("Unsupported OS"),
-        };
-        if os == "darwin" && arch == "arm64" && version.major() < 16 {
-            // Node.js 16 and later are required for arm64 on macOS.
-            arch = "x64";
-        }
-        let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
-
-        let filename = format!("node-v{}-{os}-{arch}.{ext}", version.version());
+    async fn download(
+        &self,
+        store: &Store,
+        version: &NodeVersion,
+        filename: &str,
+    ) -> Result<NodeResult> {
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());
         let checksum_url = format!(
             "https://nodejs.org/dist/v{}/SHASUMS256.txt",
@@ -229,11 +273,11 @@ impl NodeInstaller {
         );
         let target = self.root.join(version.to_string());
 
-        let download = download_artifact(&url, &filename, store, async || {
+        let download = download_artifact(&url, filename, store, async || {
             let Some(checksums) = fetch_checksum(&checksum_url).await? else {
                 return Ok(None);
             };
-            digest_from_sha256sums(&checksums, &filename)
+            digest_from_sha256sums(&checksums, filename)
         })
         .await
         .context("Failed to download node")?;
@@ -336,5 +380,126 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
         prefix.join("node_modules")
     } else {
         prefix.join("lib").join("node_modules")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An alpha at the head of the remote index must not become the default
+    /// download, but an explicit prerelease request must still select it.
+    #[test]
+    fn resolve_version_requires_explicit_prerelease() -> Result<()> {
+        let index = r#"[
+            {"version":"v27.0.0-alpha.0.0.0","lts":false,"files":["linux-x64"]},
+            {"version":"v26.13.0","lts":"Lithium","files":["linux-x64"]}
+        ]"#;
+        let host = "x86_64-unknown-linux-gnu"
+            .parse()
+            .map_err(anyhow::Error::msg)?;
+
+        for (request, expected) in [
+            ("", Some("26.13.0")),
+            ("27", None),
+            ("27.0", None),
+            ("27.0.0", None),
+            (">=26", Some("26.13.0")),
+            ("=27.0.0-alpha.0.0.0", Some("27.0.0-alpha.0.0.0")),
+        ] {
+            let result = NodeInstaller::resolve_version(
+                &request.parse()?,
+                serde_json::from_str(index)?,
+                &host,
+            );
+            if let Some(expected) = expected {
+                assert_eq!(result?.0.version().to_string(), expected, "{request:?}");
+            } else {
+                assert!(result.is_err(), "{request:?}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Select the newest matching release with a usable archive. A pkg or msi
+    /// must not count as a tar or zip, and fallback must respect the request.
+    #[test]
+    fn resolve_version_skips_unavailable_archives() -> Result<()> {
+        let index = r#"[
+            {
+                "version": "v27.0.0",
+                "lts": false,
+                "files": ["osx-arm64-tar", "osx-x64-pkg", "win-x64-msi", "linux-x64"]
+            },
+            {
+                "version": "v26.13.0",
+                "lts": "Lithium",
+                "files": ["osx-x64-tar", "win-x64-zip"]
+            }
+        ]"#;
+
+        for (host, request, expected) in [
+            (
+                "x86_64-apple-darwin",
+                "",
+                Some("node-v26.13.0-darwin-x64.tar.gz"),
+            ),
+            (
+                "x86_64-apple-darwin",
+                ">=26",
+                Some("node-v26.13.0-darwin-x64.tar.gz"),
+            ),
+            (
+                "x86_64-apple-darwin",
+                "lts",
+                Some("node-v26.13.0-darwin-x64.tar.gz"),
+            ),
+            ("x86_64-apple-darwin", "27", None),
+            ("x86_64-apple-darwin", "27.0.0", None),
+            (
+                "x86_64-pc-windows-msvc",
+                "",
+                Some("node-v26.13.0-win-x64.zip"),
+            ),
+            (
+                "aarch64-apple-darwin",
+                "",
+                Some("node-v27.0.0-darwin-arm64.tar.gz"),
+            ),
+            (
+                "x86_64-unknown-linux-gnu",
+                "",
+                Some("node-v27.0.0-linux-x64.tar.gz"),
+            ),
+        ] {
+            let host = host.parse().map_err(anyhow::Error::msg)?;
+            let result = NodeInstaller::resolve_version(
+                &request.parse()?,
+                serde_json::from_str(index)?,
+                &host,
+            );
+            if let Some(expected) = expected {
+                assert_eq!(result?.1, expected, "{host}: {request:?}");
+            } else {
+                assert!(result.is_err(), "{host}: {request:?}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Apple Silicon must still be able to download an old Node version using
+    /// its x64 archive, even when no native arm64 archive is listed.
+    #[test]
+    fn resolve_old_node_on_macos_arm64() -> Result<()> {
+        let index = r#"[
+            {"version":"v14.21.3","lts":"Fermium","files":["osx-x64-tar"]}
+        ]"#;
+        let host = "aarch64-apple-darwin".parse().map_err(anyhow::Error::msg)?;
+        let (_, filename) =
+            NodeInstaller::resolve_version(&"14".parse()?, serde_json::from_str(index)?, &host)?;
+        assert_eq!(filename, "node-v14.21.3-darwin-x64.tar.gz");
+        Ok(())
     }
 }

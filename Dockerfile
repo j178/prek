@@ -52,6 +52,9 @@ COPY rust-toolchain.toml rust-toolchain.toml
 RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
+COPY scripts/install-cargo-tools.sh scripts/install-cargo-tools.sh
+RUN scripts/install-cargo-tools.sh cargo-auditable rust-audit-info
+
 # Build
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
@@ -59,8 +62,9 @@ COPY crates crates
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
-  cargo zigbuild --bin prek --release --target $(cat rust_target.txt)
-RUN cp target/$(cat rust_target.txt)/release/prek /prek
+  cargo auditable zigbuild --locked --bin prek --release --target $(cat rust_target.txt)
+RUN cp target/$(cat rust_target.txt)/release/prek /prek \
+  && rust-audit-info /prek > /dev/null
 # TODO: Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /prek
 

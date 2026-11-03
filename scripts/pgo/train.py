@@ -196,9 +196,10 @@ def build_profile(target: str | None) -> None:
     print(f"Building instrumented prek for {target}", flush=True)
     print(f"CARGO_TARGET_DIR={instrumented}", flush=True)
     print(f"RUSTFLAGS={env['RUSTFLAGS']}", flush=True)
+    # Cargo wrappers can change crate identities, which must match the final build.
     run_command(
         [
-            "cargo",
+            os.environ.get("CARGO", "cargo"),
             "build",
             "--package",
             "prek",

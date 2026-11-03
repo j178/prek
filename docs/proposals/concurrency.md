@@ -12,10 +12,20 @@ By default, `prek` executes hooks sequentially. While safe, this is inefficient 
 
 A new optional field `priority` is added to the hook configuration.
 
-```yaml
-- id: cargo-fmt
-  priority: 10
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos.hooks]]
+    id = "cargo-fmt"
+    priority = 10
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    - id: cargo-fmt
+      priority: 10
+    ```
 
 - **Type**: `u32`
 - **Default**: `None` (auto-populated by hook index)
@@ -28,9 +38,9 @@ Execution is driven purely by priority numbers:
 
 ### Scope
 
-`priority` is **global within a single configuration file**. That is, priorities are compared across **all hooks in the same `.pre-commit-config.yaml`**, even if the hooks live under different `repos:` entries.
+`priority` is **global within a single configuration file**. That is, priorities are compared across **all hooks in the same `prek.toml` or `.pre-commit-config.yaml`**, even if the hooks live under different `repos:` entries.
 
-`priority` does **not** apply across *different* `.pre-commit-config.yaml` files (or separate `prek` runs with different configs). Each config file is scheduled independently.
+`priority` does **not** apply across *different* configuration files (or separate `prek` runs with different configs). Each config file is scheduled independently.
 
 1. **Ordering**: Hooks run from the lowest priority value to the highest.
 2. **Concurrency**: Hooks that share the same priority execute concurrently, subject to `PREK_CONCURRENT_HOOKS` (default: number of CPUs).
@@ -52,7 +62,7 @@ The existing `require_serial` configuration key often causes confusion. In this 
 
 Implicit priorities are always derived from the hook's position in the configuration (0-based), regardless of any explicitly configured priorities on other hooks.
 
-Positions are taken from the **fully flattened hook list for the current `.pre-commit-config.yaml`**, in the order hooks appear as `repos:` and `hooks:` are read. In other words, implicit priorities are assigned across the whole file, not per-repo.
+Positions are taken from the **fully flattened hook list for the current configuration file**, in the order hooks appear as `repos:` and `hooks:` are read. In other words, implicit priorities are assigned across the whole file, not per-repo.
 
 Example:
 
@@ -86,39 +96,95 @@ If `fail_fast` is enabled:
 
 ### Example Configuration
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: cargo-fmt
-        name: Format Rust
-        entry: cargo fmt
-        language: system
-        priority: 0  # Runs first
+=== "prek.toml"
 
-  # These hooks are in different repos, but share the same priority,
-  # so they can run concurrently.
-  - repo: local
-    hooks:
-      - id: ruff
-        name: Lint Python
-        entry: ruff check
-        language: system
-        priority: 10
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "cargo-fmt",
+        name = "Format Rust",
+        entry = "cargo fmt",
+        language = "system",
+        priority = 0  # Runs first
+      }
+    ]
 
-  - repo: local
-    hooks:
-      - id: shellcheck
-        name: Lint Shell
-        entry: shellcheck
-        language: system
-        priority: 10
+    # These hooks are in different repos, but share the same priority,
+    # so they can run concurrently.
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "ruff",
+        name = "Lint Python",
+        entry = "ruff check",
+        language = "system",
+        priority = 10
+      }
+    ]
 
-  - repo: local
-    hooks:
-      - id: integration-tests
-        name: Integration Tests
-        entry: just test
-        language: system
-        priority: 20 # Starts after priority=10 group completes
-```
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "shellcheck",
+        name = "Lint Shell",
+        entry = "shellcheck",
+        language = "system",
+        priority = 10
+      }
+    ]
+
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "integration-tests",
+        name = "Integration Tests",
+        entry = "just test",
+        language = "system",
+        priority = 20  # Starts after priority=10 group completes
+      }
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: cargo-fmt
+            name: Format Rust
+            entry: cargo fmt
+            language: system
+            priority: 0  # Runs first
+
+      # These hooks are in different repos, but share the same priority,
+      # so they can run concurrently.
+      - repo: local
+        hooks:
+          - id: ruff
+            name: Lint Python
+            entry: ruff check
+            language: system
+            priority: 10
+
+      - repo: local
+        hooks:
+          - id: shellcheck
+            name: Lint Shell
+            entry: shellcheck
+            language: system
+            priority: 10
+
+      - repo: local
+        hooks:
+          - id: integration-tests
+            name: Integration Tests
+            entry: just test
+            language: system
+            priority: 20 # Starts after priority=10 group completes
+    ```

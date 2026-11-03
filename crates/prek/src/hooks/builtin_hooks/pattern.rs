@@ -70,18 +70,23 @@ impl Matcher {
 }
 
 fn compile_patterns(patterns: &[String], ignore_case: bool, multiline: bool) -> Result<RegexSet> {
-    let mut options = RegexOptionsBuilder::new();
-    options
-        .case_insensitive(ignore_case)
-        .multi_line(multiline)
-        .dot_matches_new_line(multiline)
-        .bytes_mode(BytesMode::UnicodeBytes);
+    let options = regex_options(ignore_case, multiline);
     RegexSet::new_with_options(patterns, &options).with_context(|| {
         format!(
             "Failed to compile regex patterns `{}`",
             patterns.join("`, `")
         )
     })
+}
+
+pub(super) fn regex_options(ignore_case: bool, multiline: bool) -> RegexOptionsBuilder {
+    let mut options = RegexOptionsBuilder::new();
+    options
+        .case_insensitive(ignore_case)
+        .multi_line(multiline)
+        .dot_matches_new_line(multiline)
+        .bytes_mode(BytesMode::UnicodeBytes);
+    options
 }
 
 fn find_first_match(patterns: &RegexSet, contents: &[u8]) -> Result<Option<Range<usize>>> {
@@ -261,7 +266,7 @@ fn missing_match(filename: &Path) -> (i32, Vec<u8>) {
     )
 }
 
-fn trim_line_ending(line: &[u8]) -> &[u8] {
+pub(super) fn trim_line_ending(line: &[u8]) -> &[u8] {
     let line = line.strip_suffix(b"\n").unwrap_or(line);
     line.strip_suffix(b"\r").unwrap_or(line)
 }

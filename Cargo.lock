@@ -50,9 +50,9 @@ dependencies = [
 
 [[package]]
 name = "annotate-snippets"
-version = "0.12.16"
+version = "0.12.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f211a51805bc641f3ad5b7664c77d2547af685cc33b4cd8d31964027a46f13f1"
+checksum = "b2a5b0a5ab8561c603f16c3b78c24a386b1f70e7fc1b1b1e8c15738828e4a176"
 dependencies = [
  "anstyle",
  "memchr",
@@ -731,9 +731,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.19.2"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+checksum = "20ed7f62ce0ae0da1a8b93c3c7104ab7e0760a74491e097c701fff966e945390"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -1403,9 +1403,9 @@ dependencies = [
 
 [[package]]
 name = "json5"
-version = "1.3.2"
+version = "1.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c77a3f1d413a994290ebe4f96047763a84d04a1f31492c51328402986d7fe5fa"
+checksum = "1628f14e201e5d6683248a22736547a083c2c176652d65b1068be73dab213a28"
 dependencies = [
  "serde",
  "ucd-trie",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.5.7"
+version = "0.5.9"
 dependencies = [
  "aho-corasick",
  "annotate-snippets",
@@ -1873,14 +1873,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.5.7"
+version = "0.5.9"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-identify"
-version = "0.5.7"
+version = "0.5.9"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "prek-ignore"
-version = "0.5.7"
+version = "0.5.9"
 dependencies = [
  "globset",
  "memchr",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "prek-pty"
-version = "0.5.7"
+version = "0.5.9"
 dependencies = [
  "rustix",
  "tokio",
@@ -1917,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "prek-update"
-version = "0.5.7"
+version = "0.5.9"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -2241,9 +2241,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "aws-lc-rs",
  "once_cell",
@@ -3327,9 +3327,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.10"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58ec80e73fd8baf57bf0d9615554c75348bda990d6d5bbeab964dd068319fecb"
+checksum = "e49d0e65abc00c142e8f9428da991da9f1a250c39be97459901eb12b9b49f62a"
 dependencies = [
  "rustls-pki-types",
 ]
