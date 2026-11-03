@@ -6,6 +6,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 
 use crate::common::{TestEnv, cmd_snapshot, make_executable};
 
+/// Reuses the downloaded mise release when system discovery and downloads are unavailable.
 #[test]
 fn reuses_managed_mise() {
     let context = TestEnv::new()
@@ -30,7 +31,9 @@ fn reuses_managed_mise() {
         "2026.10.17 [PLATFORM] ([DATE])",
     );
 
+    // mise suppresses update notices in CI; keep local snapshots independent of newer releases.
     cmd_snapshot!(context, context.run()
+        .env(EnvVars::CI, "1")
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @"
     success: true
     exit_code: 0
@@ -62,6 +65,7 @@ fn reuses_managed_mise() {
     context.git().add(".");
 
     cmd_snapshot!(context, context.run()
+        .env(EnvVars::CI, "1")
         .env(EnvVars::PREK_INTERNAL__MISE_BINARY_NAME, "mise-never-exists"), @"
     success: true
     exit_code: 0

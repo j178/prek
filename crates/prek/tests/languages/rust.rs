@@ -356,9 +356,11 @@ fn language_version() -> Result<()> {
     Ok(())
 }
 
-/// Test `rustup` installer.
+/// Installs a toolchain from an existing cache directory, replacing obsolete rustup on Unix.
 #[test]
 fn rustup_installer() -> anyhow::Result<()> {
+    use assert_fs::fixture::PathChild;
+
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
@@ -375,12 +377,11 @@ fn rustup_installer() -> anyhow::Result<()> {
 
     let context = context.with_filter(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X");
 
+    let rustup_home = context.home_dir().child("tools/rustup");
+    fs_err::create_dir_all(&rustup_home)?;
+
     #[cfg(unix)]
     {
-        use assert_fs::fixture::PathChild;
-
-        let rustup_home = context.home_dir().child("tools/rustup");
-        fs_err::create_dir_all(&rustup_home)?;
         let rustup = rustup_home.child("rustup");
         fs_err::write(
             &rustup,
