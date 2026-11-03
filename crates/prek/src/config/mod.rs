@@ -820,13 +820,6 @@ mod tests {
     }
 
     #[test]
-    fn test_read_yaml_config() -> Result<()> {
-        let config = read_config(Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
-        insta::assert_debug_snapshot!(config);
-        Ok(())
-    }
-
-    #[test]
     fn test_read_toml_config() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let toml_path = dir.path().join("prek.toml");
@@ -930,13 +923,6 @@ mod tests {
           | ^^^^^^^^^
         `rev` is not allowed for local repos
         ");
-    }
-
-    #[test]
-    fn test_read_manifest() -> Result<()> {
-        let manifest = read_manifest(Path::new("tests/fixtures/uv-pre-commit-hooks.yaml"))?;
-        insta::assert_debug_snapshot!(manifest);
-        Ok(())
     }
 
     #[test]

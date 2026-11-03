@@ -8,6 +8,7 @@ use anyhow::{Context, bail};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::prepend_paths;
+use serde::Deserialize;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -183,6 +184,27 @@ async fn find_package_dir(
     cargo_home: Option<&Path>,
     new_path: Option<&OsStr>,
 ) -> anyhow::Result<Option<(PathBuf, String, bool)>> {
+    #[derive(Deserialize)]
+    struct Metadata {
+        packages: Vec<Package>,
+        workspace_members: Vec<String>,
+        workspace_root: PathBuf,
+    }
+
+    #[derive(Deserialize)]
+    struct Package {
+        id: String,
+        name: String,
+        manifest_path: PathBuf,
+        targets: Vec<Target>,
+    }
+
+    #[derive(Deserialize)]
+    struct Target {
+        name: String,
+        kind: Vec<String>,
+    }
+
     let mut cmd = match toolchain {
         Some(toolchain) => toolchain.cargo_command(),
         None => Cmd::new("cargo"),
@@ -208,8 +230,8 @@ async fn find_package_dir(
     let stdout = str::from_utf8(&output.stdout)?
         .lines()
         .find(|line| line.starts_with('{'))
-        .ok_or(cargo_metadata::Error::NoJson)?;
-    let metadata: cargo_metadata::Metadata =
+        .context("could not find any json in the output of `cargo metadata`")?;
+    let metadata: Metadata =
         serde_json::from_str(stdout).context("Failed to parse cargo metadata output")?;
 
     // Search all workspace packages for one that produces this binary
@@ -220,21 +242,27 @@ async fn find_package_dir(
             .find(|p| &p.id == package_id)
             .with_context(|| format!("Package not found in metadata for id: {package_id}"))?;
 
-        if package_produces_binary(package, binary_name) {
+        if package.targets.iter().any(|target| {
+            target.kind.iter().any(|kind| kind == "bin") && names_match(&target.name, binary_name)
+        }) {
             let package_dir = package
                 .manifest_path
                 .parent()
-                .expect("manifest should have parent")
-                .as_std_path()
+                .with_context(|| {
+                    format!(
+                        "Manifest path has no parent: {}",
+                        package.manifest_path.display()
+                    )
+                })?
                 .to_path_buf();
 
             // It's a workspace if either:
             // - there are multiple members, OR
             // - the package is not at the workspace root
-            let is_workspace = metadata.workspace_members.len() > 1
-                || package_dir != metadata.workspace_root.as_std_path();
+            let is_workspace =
+                metadata.workspace_members.len() > 1 || package_dir != metadata.workspace_root;
 
-            return Ok(Some((package_dir, package.name.to_string(), is_workspace)));
+            return Ok(Some((package_dir, package.name.clone(), is_workspace)));
         }
     }
 
@@ -244,15 +272,6 @@ async fn find_package_dir(
 /// Check if two names match, accounting for hyphen/underscore normalization.
 fn names_match(name: &str, binary_name: &str) -> bool {
     name == binary_name || name.replace('-', "_") == binary_name.replace('-', "_")
-}
-
-/// Check if a package produces a binary with the given name.
-fn package_produces_binary(package: &cargo_metadata::Package, binary_name: &str) -> bool {
-    package
-        .targets
-        .iter()
-        .filter(|t| t.is_bin())
-        .any(|t| names_match(&t.name, binary_name))
 }
 
 /// Copy executable binaries from a release directory to a destination bin directory.

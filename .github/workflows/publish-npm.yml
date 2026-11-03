@@ -9,7 +9,7 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  UV_VERSION: "0.13.4"
+  UV_VERSION: "0.13.5"
 
 jobs:
   publish:
@@ -36,10 +36,10 @@ jobs:
         with:
           cache: ""
           package-manager-cache: false
-          node-version: "24.x"
+          node-version: "26.x"
           registry-url: "https://registry.npmjs.org"
       - name: "Install uv"
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
           version: ${{ env.UV_VERSION }}
@@ -50,10 +50,8 @@ jobs:
       - name: Publish npm packages
         run: |
           prerelease=$(echo "$PLAN" | jq --raw-output '.announcement_is_prerelease')
-          jq --raw-output '.publishOrder[]' ./npm/.output/manifest.json | while IFS= read -r pkg; do
-            if [ "$prerelease" = "true" ]; then
-              npm publish --tag beta --provenance --access public "$pkg"
-            else
-              npm publish --provenance --access public "$pkg"
-            fi
-          done
+          tag=latest
+          if [ "$prerelease" = "true" ]; then
+            tag=beta
+          fi
+          python3 scripts/publish-packages.py npm --manifest ./npm/.output/manifest.json --tag "$tag"

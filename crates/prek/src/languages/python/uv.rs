@@ -21,7 +21,7 @@ use crate::store::{CacheBucket, Store};
 use crate::warn_user;
 
 // The default version of `uv` to install. Should update periodically.
-const DEFAULT_UV_VERSION: &str = "0.13.4";
+const DEFAULT_UV_VERSION: &str = "0.13.5";
 static UV_INSTALL_VERSION: LazyLock<String> = LazyLock::new(|| {
     EnvVars
         .var(EnvVars::PREK_UV_VERSION)

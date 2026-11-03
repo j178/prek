@@ -44,6 +44,7 @@ mod hooks;
 mod http;
 mod install_source;
 mod languages;
+mod libc;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
@@ -464,9 +465,7 @@ fn exit_interrupted() -> ! {
 
     // Hold the lock through process::exit so concurrent exits on macOS cannot
     // terminate another thread's exit handlers while they flush coverage data.
-    let _exit = EXIT_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _exit = EXIT_LOCK.lock().unwrap();
     cleanup();
 
     #[expect(

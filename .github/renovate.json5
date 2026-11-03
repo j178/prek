@@ -7,8 +7,9 @@
     // https://docs.renovatebot.com/presets-customManagers/#custommanagersgithubactionsversions
     // Update _VERSION environment variables in GitHub Action files.
     'customManagers:githubActionsVersions',
+    'customManagers:dockerfileVersions',
   ],
-  schedule: ["* 0-3 * * 1"],
+  schedule: ["* * 1,15 * *"],
   prHourlyLimit: 10,
   labels: [
     'internal'
@@ -34,6 +35,15 @@
     'rust-toolchain',
   ],
   customManagers: [
+    // Release tool versions are shared by CI and Docker builds.
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^scripts/install-cargo-tools\\.sh$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[A-Z_]+_VERSION=(?<currentValue>\\S+)',
+      ],
+      versioningTemplate: 'semver',
+    },
     // Update komac and its release archive checksum together.
     {
       customType: 'regex',
@@ -72,11 +82,34 @@
     }
   ],
   packageRules: [
+    {
+      groupName: 'Rust dependencies',
+      matchManagers: ['cargo'],
+      matchIsBreaking: false,
+    },
     // Bump Python dependencies without raising the minimum supported Python version.
     {
+      groupName: 'Python dependencies',
       matchManagers: ['pep621'],
       matchDepTypes: ['!requires-python'],
       rangeStrategy: 'bump',
+      separateMajorMinor: false,
+    },
+    {
+      groupName: 'CI tools',
+      matchManagers: ['custom.regex'],
+      matchFileNames: [
+        '.github/workflows/**',
+        'scripts/install-cargo-tools.sh',
+        'crates/prek/src/languages/python/uv.rs',
+      ],
+      separateMajorMinor: false,
+    },
+    {
+      groupName: 'CI tools',
+      matchManagers: ['github-actions'],
+      matchDepTypes: ['uses-with'],
+      separateMajorMinor: false,
     },
     // Group all GitHub Actions updates together
     {
@@ -89,19 +122,13 @@
     {
       groupName: 'Docker images',
       matchManagers: ['dockerfile'],
+      minimumGroupSize: 2,
       separateMajorMinor: false,
     },
     // Disable updates for GitHub runners: we'd only pin them to a specific version
     // if there was a deliberate reason to do so
     {
-      groupName: 'GitHub runners',
-      matchManagers: [
-        'github-actions'
-      ],
-      matchDatasources: [
-        'github-runners'
-      ],
-      description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
+      matchDatasources: ['github-runners'],
       enabled: false
     },
     {

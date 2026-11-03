@@ -271,13 +271,17 @@ Hide hook reports with the specified final statuses, including their output.
 - Type: list of `"passed"`, `"failed"`, or `"skipped"`
 - Default: the [user-level setting](#global-hide_status), or an empty list
 
-```toml
-hide_status = ["passed", "skipped"]
-```
+=== "prek.toml"
 
-```yaml
-hide_status: [passed, skipped]
-```
+    ```toml
+    hide_status = ["passed", "skipped"]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    hide_status: [passed, skipped]
+    ```
 
 `--hide-status` replaces the configured list. Use `hide_status = []` or
 `--no-hide-status` to show all reports.

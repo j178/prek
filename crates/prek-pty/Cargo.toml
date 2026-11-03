@@ -1,6 +1,7 @@
 [package]
 name = "prek-pty"
 description = "pty utilities for prek"
+readme = "README.md"
 version = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -9,7 +10,6 @@ license = { workspace = true }
 
 [dependencies]
 rustix = { workspace = true }
-fs-err = { workspace = true }
 tokio = { workspace = true }
 
 [lints]

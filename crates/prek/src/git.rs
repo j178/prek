@@ -415,21 +415,28 @@ pub(crate) struct WorktreeStatus {
 
 /// Check conflicts and unstaged changes together. Paths are relative to the repository root.
 pub(crate) async fn worktree_status(cwd: &Path) -> Result<WorktreeStatus, Error> {
-    let output = git_cmd()?
-        .current_dir(cwd)
-        .args([
-            "diff",
-            "--name-status",
-            "-z",
-            "--no-renames",
-            "--no-relative",
-            "--no-ext-diff",
-            "--ignore-submodules",
-        ])
-        .check(true)
-        .output()
-        .await?;
+    let output = worktree_status_cmd(cwd)?.output().await?;
     parse_worktree_status(&output.stdout)
+}
+
+pub(crate) fn worktree_status_sync(cwd: &Path) -> Result<WorktreeStatus, Error> {
+    let output = worktree_status_cmd(cwd)?.output_sync()?;
+    parse_worktree_status(&output.stdout)
+}
+
+fn worktree_status_cmd(cwd: &Path) -> Result<Cmd, Error> {
+    let mut cmd = git_cmd()?;
+    cmd.current_dir(cwd).args([
+        "diff",
+        "--name-status",
+        "-z",
+        "--no-renames",
+        "--no-relative",
+        "--no-ext-diff",
+        "--ignore-submodules",
+    ]);
+
+    Ok(cmd)
 }
 
 fn parse_worktree_status(output: &[u8]) -> Result<WorktreeStatus, Error> {
@@ -455,6 +462,46 @@ fn parse_worktree_status(output: &[u8]) -> Result<WorktreeStatus, Error> {
         status.unstaged.push(path);
     }
     Ok(status)
+}
+
+/// Restore exactly these indexed files. Relative paths are interpreted from `cwd`.
+pub(crate) fn checkout_files(cwd: &Path, paths: &[PathBuf]) -> Result<(), Error> {
+    use std::io::{BufWriter, Seek, Write};
+
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    // NUL-delimited stdin avoids pathspec expansion and command-line limits.
+    // A file avoids needing a writer thread during synchronous cleanup.
+    let mut input = tempfile::tempfile()?;
+    {
+        let mut writer = BufWriter::new(&mut input);
+        for path in paths {
+            writer.write_all(path_to_git_bytes(path)?)?;
+            writer.write_all(b"\0")?;
+        }
+
+        writer.flush()?;
+    }
+
+    input.rewind()?;
+
+    git_cmd()?
+        .current_dir(cwd)
+        .args([
+            "-c",
+            "submodule.recurse=0",
+            "checkout-index",
+            "--force",
+            "--index",
+            "-z",
+            "--stdin",
+        ])
+        .stdin(input)
+        .output_sync()?;
+
+    Ok(())
 }
 
 /// Check for changes against `rev` anywhere in the repository containing `path`.

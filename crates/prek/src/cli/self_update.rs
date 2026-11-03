@@ -20,15 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::env;
 use std::fmt::Write;
 
 use anyhow::Result;
-use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
+use prek_update::{UpdateRequest, Updater};
 use tracing::{debug, enabled};
 
 use crate::cli::ExitStatus;
+use crate::http::REQWEST_CLIENT;
 use crate::install_source::InstallSource;
 use crate::printer::Printer;
 
@@ -55,21 +55,9 @@ pub(crate) async fn self_update(
     token: Option<String>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let mut updater = AxoUpdater::new_for("prek");
-    if enabled!(tracing::Level::DEBUG) {
-        unsafe { env::set_var("INSTALLER_PRINT_VERBOSE", "1") };
-        updater.enable_installer_output();
-    } else {
-        updater.disable_installer_output();
-    }
-
-    if let Some(ref token) = token {
-        updater.set_github_token(token);
-    }
-
     // Load the "install receipt" for the current binary. If the receipt is not found, then
     // prek was likely installed via a package manager.
-    let Ok(updater) = updater.load_receipt() else {
+    let Ok(updater) = Updater::load_receipt() else {
         debug!("no receipt found; assuming prek was installed via a package manager");
         writeln!(
             printer.stderr(),
@@ -108,27 +96,29 @@ pub(crate) async fn self_update(
         )
     )?;
 
-    let update_request = if let Some(version) = version {
+    let update_request = if let Some(version) = version.as_deref() {
         UpdateRequest::SpecificTag(version)
     } else {
         UpdateRequest::Latest
     };
 
-    updater.configure_version_specifier(update_request);
-
     // Run the updater. This involves a network request, since we need to determine the latest
     // available version of prek.
-    match updater.run().await {
+    match updater
+        .run(
+            &REQWEST_CLIENT,
+            update_request,
+            token.as_deref(),
+            enabled!(tracing::Level::DEBUG),
+        )
+        .await
+    {
         Ok(Some(result)) => {
-            let version_information = if let Some(old_version) = result.old_version {
-                format!(
-                    "from {} to {}",
-                    format!("v{old_version}").bold().white(),
-                    format!("v{}", result.new_version).bold().white(),
-                )
-            } else {
-                format!("to {}", format!("v{}", result.new_version).bold().white())
-            };
+            let version_information = format!(
+                "from {} to {}",
+                format!("v{}", result.old_version).bold().white(),
+                format!("v{}", result.new_version).bold().white(),
+            );
 
             writeln!(
                 printer.stderr(),
@@ -159,8 +149,8 @@ pub(crate) async fn self_update(
             )?;
         }
         Err(err) => {
-            return if let AxoupdateError::Reqwest(err) = err {
-                if err.status() == Some(http::StatusCode::FORBIDDEN) && token.is_none() {
+            return if let Some(request_error) = err.downcast_ref::<reqwest::Error>() {
+                if request_error.status() == Some(http::StatusCode::FORBIDDEN) && token.is_none() {
                     writeln!(
                         printer.stderr(),
                         "{}",
@@ -173,10 +163,10 @@ pub(crate) async fn self_update(
                     )?;
                     Ok(ExitStatus::Error)
                 } else {
-                    Err(err.into())
+                    Err(err)
                 }
             } else {
-                Err(err.into())
+                Err(err)
             };
         }
     }

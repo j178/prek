@@ -48,8 +48,8 @@ jobs:
 
       - name: Install komac
         env:
-          KOMAC_VERSION: "v2.16.0"
-          KOMAC_SHA256: "7d2707fa6210f2789a3702de49fbd150b736dbf426ee0b9bc8e098736f9fd82d"
+          KOMAC_VERSION: "v2.17.1"
+          KOMAC_SHA256: "e694e79cd451afabf47bead66ed34586fef4814f7b94e4b61a098f419978d5d7"
         shell: bash
         run: |
           archive="$RUNNER_TEMP/komac.tar.gz"

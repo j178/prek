@@ -39,6 +39,11 @@
 - Check existing coverage and nearby style before adding a test. Prefer focused
   tests; do not run the full integration suite by default.
 
+- Clearly document each test's purpose and expected outcome.
+
+- Use the `profiling` Cargo profile (`--profile profiling`) for performance
+  measurements and benchmarks, not `release`.
+
 - In integration tests, prefer `cmd_snapshot!` snapshot coverage over
   string assertions such as `contains`.
 

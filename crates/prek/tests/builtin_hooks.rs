@@ -356,6 +356,179 @@ fn require_filename_pattern_hook_accepts_any_pattern_for_basename() {
     ");
 }
 
+/// Check mode reports only changed lines without writing; normalized matches pass.
+#[test]
+fn replace_pattern_hook_check_and_fix() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--check, --ignore-case, '\bfoobar\b', FOOBAR]
+                files: '\.txt$'
+    "})
+        .with_files([
+            ("mixed.txt", "foobar FooBar\r\nFOOBAR\nfoobar"),
+            ("normalized.txt", "FOOBAR\n"),
+        ])
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    replace patterns.........................................................Failed
+    - hook id: replace-pattern
+    - description: Replaces regular expression matches in text files
+    - exit code: 1
+
+      mixed.txt:1: matching text would be replaced
+      mixed.txt:3: matching text would be replaced
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("mixed.txt"), "foobar FooBar\r\nFOOBAR\nfoobar");
+
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--ignore-case, '\bfoobar\b', FOOBAR]
+                files: '\.txt$'
+    "});
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    replace patterns.........................................................Failed
+    - hook id: replace-pattern
+    - description: Replaces regular expression matches in text files
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing mixed.txt
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("mixed.txt"), "FOOBAR FOOBAR\r\nFOOBAR\nFOOBAR");
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    replace patterns.........................................................Passed
+
+    ----- stderr -----
+    ");
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--check, --ignore-case, '\bfoobar\b', FOOBAR]
+                files: '\.txt$'
+    "});
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    replace patterns.........................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Multiline diagnostics locate the first changed block, skipping already normalized matches.
+#[test]
+fn replace_pattern_hook_check_reports_multiline_match() {
+    let contents = "BEGIN\nEND\n\nbegin\nend\nbegin\nend\n";
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: [--check, --ignore-case, --multiline, '^begin.*?end$', "BEGIN\nEND"]
+                files: '\.txt$'
+    "#})
+        .with_file("file.txt", contents)
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    replace patterns.........................................................Failed
+    - hook id: replace-pattern
+    - description: Replaces regular expression matches in text files
+    - exit code: 1
+
+      file.txt:4: matching text would be replaced
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("file.txt"), contents);
+}
+
+/// Invalid references must fail before writing, even when a pattern never matches.
+#[test]
+fn replace_pattern_hook_rejects_unknown_capture() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: ['(?P<name>foo)', '${typo}']
+                files: '\.txt$'
+    "})
+        .with_file("file.txt", "no match\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `replace-pattern`
+      caused by: Invalid replacement template `${typo}`
+      caused by: Unknown capture group `typo`
+    ");
+    assert_eq!(context.read("file.txt"), "no match\n");
+}
+
+/// A backtracking error after an earlier replacement must leave the whole file intact.
+#[test]
+fn replace_pattern_hook_runtime_error_does_not_write() {
+    let contents = format!("foo\n{}", "a".repeat(40));
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: replace-pattern
+                args: ['foo|^(a|aa)+(?=b)$', bar]
+                files: '\.txt$'
+    "})
+        .with_file("file.txt", &contents)
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `replace-pattern`
+      caused by: Failed to replace pattern in `file.txt:2`
+      caused by: Error executing regex: Max limit for backtracking count exceeded
+    ");
+    assert_eq!(context.read("file.txt"), contents);
+}
+
 #[test]
 fn require_pattern_hook_reports_files_without_any_match() {
     let context = TestEnv::new()
@@ -594,164 +767,6 @@ fn end_of_file_fixer_check() -> Result<()> {
         assert_eq!(fs_err::metadata(context.child(name))?.modified()?, modified);
     }
     Ok(())
-}
-
-#[test]
-fn expand_tabs_hook() -> Result<()> {
-    let excluded = [
-        ("Makefile", "\tbuild\n"),
-        ("nested/Makefile.in", "\tbuild\n"),
-        ("debian/rules", "\trules\n"),
-        (".gitmodules", "#\tcomment\n"),
-        ("binary.bin", "\0\tbinary\n"),
-    ];
-    let context = TestEnv::new()
-        .with_config(indoc::indoc! {r"
-        repos:
-          - repo: builtin
-            hooks:
-              - id: expand-tabs
-    "})
-        .with_file("tabs.txt", "\tindent\nab\tvalue\tend\r\n")
-        .with_file("clean.txt", "already clean\n")
-        .with_file("empty.txt", "")
-        .with_files(excluded)
-        .init_git();
-    let clean = context.child("clean.txt");
-    #[cfg(unix)]
-    fs_err::set_permissions(&clean, std::fs::Permissions::from_mode(0o444))?;
-    let modified = fs_err::metadata(&clean)?.modified()?;
-
-    cmd_snapshot!(context, context.run(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    expand tabs..............................................................Failed
-    - hook id: expand-tabs
-    - description: Replaces tabs with spaces at tab stops
-    - exit code: 1
-    - files were modified by this hook
-
-      Fixing tabs.txt
-
-    ----- stderr -----
-    ");
-    assert_eq!(context.read("tabs.txt"), "    indent\nab  value   end\r\n");
-    for (name, contents) in excluded {
-        assert_eq!(context.read(name), contents);
-    }
-    cmd_snapshot!(context, context.run().arg("--all-files"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    expand tabs..............................................................Passed
-
-    ----- stderr -----
-    ");
-    assert_eq!(context.read("clean.txt"), "already clean\n");
-    assert_eq!(fs_err::metadata(&clean)?.modified()?, modified);
-    Ok(())
-}
-
-#[test]
-fn expand_tabs_check_and_custom_width() -> Result<()> {
-    let context = TestEnv::new()
-        .with_config(indoc::indoc! {r"
-        repos:
-          - repo: builtin
-            hooks:
-              - id: expand-tabs
-                alias: check-tabs
-                args: [--check, --tab-width=8, extra.txt]
-              - id: expand-tabs
-                alias: fix-tabs
-                args: [--tab-width=8, extra.txt]
-    "})
-        .with_file("extra.txt", "a\tb\t")
-        .with_file("selected.txt", "\tend\n")
-        .init_git();
-    let extra = context.child("extra.txt");
-    let permissions = fs_err::metadata(&extra)?.permissions();
-    #[cfg(unix)]
-    fs_err::set_permissions(&extra, std::fs::Permissions::from_mode(0o444))?;
-    let modified = fs_err::metadata(&extra)?.modified()?;
-
-    cmd_snapshot!(context, context.run().arg("check-tabs").arg("--files").arg("selected.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    expand tabs..............................................................Failed
-    - hook id: expand-tabs
-    - hook alias: check-tabs
-    - description: Replaces tabs with spaces at tab stops
-    - exit code: 1
-
-      Would fix extra.txt
-      Would fix selected.txt
-
-    ----- stderr -----
-    ");
-    assert_eq!(context.read("extra.txt"), "a\tb\t");
-    assert_eq!(context.read("selected.txt"), "\tend\n");
-    assert_eq!(
-        fs_err::metadata(context.child("extra.txt"))?.modified()?,
-        modified
-    );
-
-    fs_err::set_permissions(&extra, permissions)?;
-    cmd_snapshot!(context, context.run().arg("fix-tabs").arg("--files").arg("selected.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    expand tabs..............................................................Failed
-    - hook id: expand-tabs
-    - hook alias: fix-tabs
-    - description: Replaces tabs with spaces at tab stops
-    - exit code: 1
-    - files were modified by this hook
-
-      Fixing extra.txt
-      Fixing selected.txt
-
-    ----- stderr -----
-    ");
-    assert_eq!(context.read("extra.txt"), "a       b       ");
-    assert_eq!(context.read("selected.txt"), "        end\n");
-    Ok(())
-}
-
-#[test]
-fn expand_tabs_nonpositive_width() {
-    for width in [0, -4] {
-        let context = TestEnv::new()
-            .with_config(indoc::formatdoc! {r"
-            repos:
-              - repo: builtin
-                hooks:
-                  - id: expand-tabs
-                    args: [--tab-width, '{width}']
-        "})
-            .with_file("tabs.txt", "\ta\t\tb\r\n\t")
-            .init_git();
-
-        insta::allow_duplicates! {
-            cmd_snapshot!(context, context.run(), @"
-            success: false
-            exit_code: 1
-            ----- stdout -----
-            expand tabs..............................................................Failed
-            - hook id: expand-tabs
-            - description: Replaces tabs with spaces at tab stops
-            - exit code: 1
-            - files were modified by this hook
-
-              Fixing tabs.txt
-
-            ----- stderr -----
-            ");
-        }
-        assert_eq!(context.read("tabs.txt"), "ab\r\n");
-    }
 }
 
 #[test]
@@ -1452,6 +1467,136 @@ fn mixed_line_ending_hook() {
     error: Failed to run hook `mixed-line-ending`
       caused by: error: a value is required for '--fix <FIX>' but none was supplied
       [possible values: auto, no, lf, crlf, cr]
+    ");
+}
+
+#[test]
+fn normalize_indentation_hook() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+    "})
+        .with_file("mixed.txt", "\tone\n  \ttwo\n\n\t\n  three\tx\n")
+        .with_file("spaces.txt", "    one\n      two\n")
+        .with_file("empty.txt", "")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    normalize indentation....................................................Failed
+    - hook id: normalize-indentation
+    - description: Converts leading indentation to spaces or tabs
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing mixed.txt
+
+    ----- stderr -----
+    ");
+    assert_eq!(
+        context.read("mixed.txt"),
+        "    one\n    two\n\n\t\n  three\tx\n"
+    );
+
+    context.git().add(".");
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    normalize indentation....................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Tabs with a custom tab size, where partial tab stops keep their spaces.
+    context.write_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+                args: ['--indent=tabs', '--tab-size=2']
+    "});
+    context.git().add(".");
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    normalize indentation....................................................Failed
+    - hook id: normalize-indentation
+    - description: Converts leading indentation to spaces or tabs
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing mixed.txt
+      Fixing spaces.txt
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("spaces.txt"), "\t\tone\n\t\t\ttwo\n");
+}
+
+#[test]
+fn normalize_indentation_check_does_not_modify_files() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+                args: ['--check']
+    "})
+        .with_file("tabs.txt", "\tone\n")
+        .with_file("spaces.txt", "    one\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    normalize indentation....................................................Failed
+    - hook id: normalize-indentation
+    - description: Converts leading indentation to spaces or tabs
+    - exit code: 1
+
+      tabs.txt: indentation needs normalization
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("tabs.txt"), "\tone\n");
+}
+
+#[test]
+fn normalize_indentation_rejects_zero_tab_size() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: normalize-indentation
+                files: '\.txt$'
+                args: ['--tab-size=0']
+    "})
+        .with_file("file.txt", "\tone\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to run hook `normalize-indentation`
+      caused by: error: invalid value '0' for '--tab-size <TAB_SIZE>': 0 is not in 1..=255
+
+      caused by: 0 is not in 1..=255
     ");
 }
 

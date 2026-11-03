@@ -100,6 +100,112 @@ fn staged_files_only() {
     assert_snapshot!(content, @"Hello world again!");
 }
 
+/// Regression for <https://github.com/j178/prek/issues/2912>.
+///
+/// A clean filter hides machine-local settings from the saved patch. An unstaged
+/// edit in another file triggers stashing, which must leave those settings intact.
+#[test]
+fn stash_preserves_changes_hidden_by_clean_filter() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: check
+                    name: check
+                    language: system
+                    entry: python3 -c 'pass'
+        "})
+        .with_file(".gitattributes", "settings.txt filter=strip\n")
+        .with_file("settings.txt", "shared\n")
+        .with_file("file.txt", "staged\n")
+        .init_git();
+
+    context.git().run([
+        "config",
+        "filter.strip.clean",
+        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
+    ]);
+
+    context.write_file("settings.txt", "shared\nLOCAL=keep\n");
+    context.write_file("file.txt", "unstaged\n");
+
+    cmd_snapshot!(context, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check....................................................................Passed
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    assert_eq!(context.read("file.txt"), "unstaged\n");
+    assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
+}
+
+/// Regression for <https://github.com/j178/prek/issues/2912>.
+///
+/// The hook adds filter-hidden settings and makes the saved patch conflict.
+/// Rollback must restore the visible edit without overwriting those settings.
+///
+/// Adding them inside the hook isolates rollback from the initial stash checkout.
+#[test]
+fn conflicted_stash_preserves_changes_hidden_by_clean_filter() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: conflict
+                    name: conflict
+                    language: system
+                    entry: python3 .git/conflict.py
+                    files: ^file\.txt$
+                    pass_filenames: false
+        "})
+        .with_file(".gitattributes", "settings.txt filter=strip\n")
+        .with_file("settings.txt", "shared\n")
+        .with_file("file.txt", "staged\n")
+        .init_git();
+
+    context.git().run([
+        "config",
+        "filter.strip.clean",
+        r#"python3 -c "import sys; sys.stdout.buffer.writelines(line for line in sys.stdin.buffer if not line.startswith(b'LOCAL='))""#,
+    ]);
+
+    context.write_file(
+        ".git/conflict.py",
+        indoc::indoc! {r"
+            from pathlib import Path
+
+            Path('settings.txt').write_bytes(b'shared\nLOCAL=keep\n')
+            Path('file.txt').write_bytes(b'hook\n')
+        "},
+    );
+
+    context.write_file("file.txt", "unstaged\n");
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    conflict.................................................................Failed
+    - hook id: conflict
+    - files were modified by this hook
+
+    ----- stderr -----
+    Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
+    Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    assert_eq!(context.read("file.txt"), "unstaged\n");
+    assert_eq!(context.read("settings.txt"), "shared\nLOCAL=keep\n");
+}
+
 #[test]
 fn intent_to_add_file_survives_conflicted_stash_restore() -> Result<()> {
     let context = TestEnv::new()
@@ -432,6 +538,9 @@ fn restore_intent_and_unstaged_changes_from_subdirectory() {
     "#);
 }
 
+/// Preserve #2801 recovery coverage: a failed stash checkout must still restore
+/// unstaged contents and intent-to-add markers. Since #2912 uses checkout-index,
+/// which does not run post-checkout hooks, fail a required smudge filter once instead.
 #[test]
 fn restore_after_checkout_failure() {
     let context = TestEnv::new()
@@ -446,38 +555,65 @@ fn restore_after_checkout_failure() {
                     entry: python3 -c 'pass'
         "})
         .with_file("file.txt", "original\n")
+        .with_file(".gitattributes", "file.txt filter=fail\n")
         .init_git();
     context.git().commit("Initial commit");
+
     context.write_file("file.txt", "staged\n");
     context.git().add("file.txt");
     context.write_file("file.txt", "unstaged\n");
     context.write_file("intent.txt", "intent\n");
     context.git().run(["add", "--intent-to-add", "intent.txt"]);
-    context.write_executable_file(
-        ".git/hooks/post-checkout",
-        "#!/bin/sh\necho 'checkout hook failed' >&2\nexit 1\n",
+
+    context.write_file(
+        ".git/smudge.py",
+        indoc::indoc! {r"
+            from pathlib import Path
+            import sys
+
+            marker = Path('.git/smudge-failed')
+            if not marker.exists():
+                marker.touch()
+                sys.exit(1)
+            sys.stdout.buffer.write(sys.stdin.buffer.read())
+        "},
     );
 
-    cmd_snapshot!(context, context.run(), @r#"
+    context
+        .git()
+        .run([
+            "config",
+            "filter.fail.clean",
+            r#"python3 -c "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())""#,
+        ])
+        .run(["config", "filter.fail.smudge", "python3 .git/smudge.py"])
+        .run(["config", "filter.fail.required", "true"]);
+
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
+    Hook changes conflicted with the saved unstaged changes. Reverting the hook changes
     Restored unstaged changes from `[HOME]/patches/[TIME]-[PID].patch`
     error: Failed to clean work tree
       caused by: Failed to checkout working tree
-      caused by: Command `[GIT] -c submodule.recurse=0 checkout -- [TEMP_DIR]/` exited with an error:
+      caused by: Command `[GIT] -c submodule.recurse=0 checkout-index --force --index -z --stdin` exited with an error:
 
     [status]
-    exit status: 1
+    exit status: 128
 
     [stderr]
-    checkout hook failed
-    "#);
+    error: external filter 'python3 .git/smudge.py' failed 1
+    error: external filter 'python3 .git/smudge.py' failed
+    fatal: file.txt: smudge filter fail failed
+    ");
+
     assert_eq!(context.read("file.txt"), "unstaged\n");
     assert_eq!(context.read("intent.txt"), "intent\n");
+
     cmd_snapshot!(context, context.git().command().args(["status", "--porcelain"]), @r#"
     success: true
     exit_code: 0
@@ -489,6 +625,8 @@ fn restore_after_checkout_failure() {
     "#);
 }
 
+// Preserve #2801 coverage for interruption during each Git mutation. The checkout
+// barrier targets checkout-index after #2912; the recovery expectations are unchanged.
 #[cfg(unix)]
 #[test]
 fn restore_when_interrupted_during_git_operations() -> Result<()> {
@@ -499,7 +637,7 @@ fn restore_when_interrupted_during_git_operations() -> Result<()> {
 
     use prek_consts::env_vars::EnvVarsRead;
 
-    for operation in ["rm", "write-tree", "checkout", "apply", "add"] {
+    for operation in ["rm", "write-tree", "checkout-index", "apply", "add"] {
         let context = TestEnv::new()
             .with_config(indoc::indoc! {r"
                 repos:

@@ -1,10 +1,11 @@
 FROM --platform=$BUILDPLATFORM docker.io/astral/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b AS uv
 
-FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS build
+FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 AS build
 
 # Keep the snapshot at least as recent as the Ubuntu base image.
 ARG UBUNTU_SNAPSHOT=20260928T000000Z
-ARG RUSTUP_VERSION=1.28.2
+# renovate: datasource=github-tags depName=rust-lang/rustup
+ARG RUSTUP_VERSION=1.29.2
 
 ENV HOME="/root"
 WORKDIR $HOME
@@ -51,6 +52,9 @@ COPY rust-toolchain.toml rust-toolchain.toml
 RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
+COPY scripts/install-cargo-tools.sh scripts/install-cargo-tools.sh
+RUN scripts/install-cargo-tools.sh cargo-auditable rust-audit-info
+
 # Build
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
@@ -58,8 +62,9 @@ COPY crates crates
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
-  cargo zigbuild --bin prek --release --target $(cat rust_target.txt)
-RUN cp target/$(cat rust_target.txt)/release/prek /prek
+  cargo auditable zigbuild --locked --bin prek --release --target $(cat rust_target.txt)
+RUN cp target/$(cat rust_target.txt)/release/prek /prek \
+  && rust-audit-info /prek > /dev/null
 # TODO: Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /prek
 

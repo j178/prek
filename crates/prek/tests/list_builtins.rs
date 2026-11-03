@@ -99,12 +99,6 @@ fn list_builtins_defaults_to_verbose_output() {
       flags:
             --check  Report files that would change without modifying them
 
-    expand-tabs
-      Replaces tabs with spaces at tab stops.
-      flags:
-            --tab-width <N>  Tab stop width in bytes; zero or negative values delete tabs [default: 4]
-            --check          Report files that would change without modifying them
-
     file-contents-sorter
       Sorts the lines in specified files (defaults to alphabetical).
       flags:
@@ -132,6 +126,14 @@ fn list_builtins_defaults_to_verbose_output() {
         -b, --branch <BRANCH>  Branch to protect (repeatable) [default: main master]
         -p, --pattern <REGEX>  Regular expression matching branches to protect (repeatable)
 
+    normalize-indentation
+      Converts leading indentation to spaces or tabs.
+      flags:
+            --indent <INDENT>      Indentation style to enforce [default: spaces] [possible values:
+                                   spaces, tabs]
+            --tab-size <TAB_SIZE>  Number of columns between tab stops (1-255) [default: 4]
+            --check                Report files that need changes without modifying them
+
     pretty-format-json
       Checks that JSON files are pretty-formatted.
       flags:
@@ -140,6 +142,13 @@ fn list_builtins_defaults_to_verbose_output() {
             --no-ensure-ascii  Keep non-ASCII characters as UTF-8
             --no-sort-keys     Preserve object key order
             --top-keys <KEYS>  Object keys to move to the front, comma-separated
+
+    replace-pattern
+      Replaces regular expression matches in text files.
+      flags:
+        -i, --ignore-case  Match the pattern case-insensitively
+        -m, --multiline    Search each file as a whole
+            --check        Report files that need changes without modifying them
 
     require-filename-pattern
       Fails if any selected filename does not match a regular expression.
@@ -284,11 +293,6 @@ fn list_builtins_json() {
         "description": "Ensures that a file is either empty, or ends with one newline."
       },
       {
-        "id": "expand-tabs",
-        "name": "expand tabs",
-        "description": "Replaces tabs with spaces at tab stops."
-      },
-      {
         "id": "file-contents-sorter",
         "name": "file contents sorter",
         "description": "Sorts the lines in specified files (defaults to alphabetical)."
@@ -314,9 +318,19 @@ fn list_builtins_json() {
         "description": "Protects specific branches from direct commits."
       },
       {
+        "id": "normalize-indentation",
+        "name": "normalize indentation",
+        "description": "Converts leading indentation to spaces or tabs."
+      },
+      {
         "id": "pretty-format-json",
         "name": "pretty format json",
         "description": "Checks that JSON files are pretty-formatted."
+      },
+      {
+        "id": "replace-pattern",
+        "name": "replace patterns",
+        "description": "Replaces regular expression matches in text files."
       },
       {
         "id": "require-filename-pattern",

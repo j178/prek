@@ -23,8 +23,9 @@ mod check_commit_trailers;
 mod check_json5;
 mod check_jsonc;
 mod check_signed_commit;
-mod expand_tabs;
+mod normalize_indentation;
 mod pattern;
+mod replace_pattern;
 
 #[derive(
     Debug,
@@ -62,13 +63,14 @@ pub(crate) enum BuiltinHooks {
     DestroyedSymlinks,
     DetectPrivateKey,
     EndOfFileFixer,
-    ExpandTabs,
     FileContentsSorter,
     FixByteOrderMarker,
     ForbidNewSubmodules,
     MixedLineEnding,
     NoCommitToBranch,
+    NormalizeIndentation,
     PrettyFormatJson,
+    ReplacePattern,
     RequireFilenamePattern,
     RequirePattern,
     RequirementsTxtFixer,
@@ -91,11 +93,12 @@ impl BuiltinHooks {
             Self::EndOfFileFixer | Self::FixByteOrderMarker | Self::RequirementsTxtFixer => {
                 FixArgs::command()
             }
-            Self::ExpandTabs => expand_tabs::Args::command(),
             Self::FileContentsSorter => file_contents_sorter::Args::command(),
             Self::MixedLineEnding => mixed_line_ending::Args::command(),
             Self::NoCommitToBranch => no_commit_to_branch::Args::command(),
+            Self::NormalizeIndentation => normalize_indentation::Args::command(),
             Self::PrettyFormatJson => pretty_format_json::Args::command(),
+            Self::ReplacePattern => replace_pattern::Args::command(),
             Self::TrailingWhitespace => fix_trailing_whitespace::Args::command(),
             _ => return None,
         })
@@ -145,13 +148,14 @@ impl BuiltinHooks {
             Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
             Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
             Self::EndOfFileFixer => Box::pin(fix_end_of_file::run(hook, filenames)),
-            Self::ExpandTabs => Box::pin(expand_tabs::run(hook, filenames)),
             Self::FileContentsSorter => Box::pin(file_contents_sorter::run(hook, filenames)),
             Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker::run(hook, filenames)),
             Self::ForbidNewSubmodules => Box::pin(forbid_new_submodules::run(hook, filenames)),
             Self::MixedLineEnding => Box::pin(mixed_line_ending::run(hook, filenames)),
             Self::NoCommitToBranch => Box::pin(no_commit_to_branch::run(hook)),
+            Self::NormalizeIndentation => Box::pin(normalize_indentation::run(hook, filenames)),
             Self::PrettyFormatJson => Box::pin(pretty_format_json::run(hook, filenames)),
+            Self::ReplacePattern => Box::pin(replace_pattern::run(hook, filenames)),
             Self::RequireFilenamePattern => Box::pin(std::future::ready(
                 pattern::require_filename_pattern(hook, filenames),
             )),
@@ -463,26 +467,6 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::ExpandTabs => BuiltinHook {
-                id: "expand-tabs".to_string(),
-                name: "expand tabs".to_string(),
-                entry: "expand-tabs".to_string(),
-                priority: None,
-                groups: None,
-                options: HookOptions {
-                    description: Some("Replaces tabs with spaces at tab stops.".to_string()),
-                    types: Some(tags::TAG_SET_TEXT),
-                    exclude: Some(
-                        FilePattern::regex(r"(Makefile|debian/rules|.gitmodules)(\.in)?$")
-                            .map_err(|_| ())?,
-                    ),
-                    stages: Some(
-                        [Stage::PreCommit, Stage::PreMergeCommit, Stage::PrePush, Stage::Manual]
-                            .into(),
-                    ),
-                    ..Default::default()
-                },
-            },
             BuiltinHooks::FileContentsSorter => BuiltinHook {
                 id: "file-contents-sorter".to_string(),
                 name: "file contents sorter".to_string(),
@@ -549,6 +533,21 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
+            BuiltinHooks::NormalizeIndentation => BuiltinHook {
+                id: "normalize-indentation".to_string(),
+                name: "normalize indentation".to_string(),
+                entry: "normalize-indentation".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Converts leading indentation to spaces or tabs.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
             BuiltinHooks::PrettyFormatJson => BuiltinHook {
                 id: "pretty-format-json".to_string(),
                 name: "pretty format json".to_string(),
@@ -558,6 +557,21 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("Checks that JSON files are pretty-formatted.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::ReplacePattern => BuiltinHook {
+                id: "replace-pattern".to_string(),
+                name: "replace patterns".to_string(),
+                entry: "replace-pattern".to_string(),
+                priority: None,
+                groups: None,
+                options: HookOptions {
+                    description: Some(
+                        "Replaces regular expression matches in text files.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },

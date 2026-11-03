@@ -62,13 +62,24 @@ can stay compatible with upstream pre-commit.
 The `rev` field does not affect fast-path detection. It still selects the
 manifest that prek reads and the repository implementation used for fallback.
 
-```yaml
-repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks  # Enables fast path
-    rev: v6.0.0  # Used for the manifest and fallback, not fast-path detection
-    hooks:
-      - id: trailing-whitespace
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/pre-commit/pre-commit-hooks"  # Enables fast path
+    rev = "v6.0.0"  # Used for the manifest and fallback, not fast-path detection
+    hooks = [{ id = "trailing-whitespace" }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks  # Enables fast path
+        rev: v6.0.0  # Used for the manifest and fallback, not fast-path detection
+        hooks:
+          - id: trailing-whitespace
+    ```
 
 !!! note
 
@@ -83,14 +94,27 @@ the standard method.
 To use the pinned repository implementation for a single hook, explicitly set the language
 declared by that hook:
 
-```yaml
-repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: check-yaml
-        language: python  # Use the pinned repository implementation
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/pre-commit/pre-commit-hooks"
+    rev = "v6.0.0"
+    hooks = [
+      { id = "check-yaml", language = "python" },  # Use the pinned repository implementation
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v6.0.0
+        hooks:
+          - id: check-yaml
+            language: python  # Use the pinned repository implementation
+    ```
 
 To disable the fast path for every hook in a prek invocation:
 

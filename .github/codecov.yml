@@ -15,5 +15,7 @@ ignore:
   - "tests/**/*"
   - "examples/**/*"
   - "target/**/*"
+  - "crates/prek-ignore/**/*"
   - "crates/prek-pty/**/*"
+  - "crates/prek-update/**/*"
   - "crates/prek-yaml/**/*"

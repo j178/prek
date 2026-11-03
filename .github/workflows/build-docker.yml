@@ -61,8 +61,9 @@ jobs:
     name: ${{ needs.plan.outputs.action }} Docker image
     needs: plan
     runs-on: ubuntu-latest
+    # Dry runs must not enter the protected release environment.
     environment:
-      name: release
+      name: ${{ needs.plan.outputs.push == 'true' && 'release' || '' }}
     permissions:
       contents: read
       packages: write
@@ -77,7 +78,7 @@ jobs:
         with:
           cache-binary: false
 
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ needs.plan.outputs.push == 'true' }}
         with:
           registry: ghcr.io
@@ -137,7 +138,7 @@ jobs:
     name: ${{ needs.plan.outputs.action }} Alpine Docker image
     runs-on: ubuntu-latest
     environment:
-      name: release
+      name: ${{ needs.plan.outputs.push == 'true' && 'release' || '' }}
     needs:
       - plan
       - docker-publish-base
@@ -162,7 +163,7 @@ jobs:
         with:
           cache-binary: false
 
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ needs.plan.outputs.push == 'true' }}
         with:
           registry: ghcr.io
