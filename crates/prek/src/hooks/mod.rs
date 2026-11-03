@@ -165,7 +165,7 @@ where
         // Collect results in input order so diagnostics and the first I/O error are deterministic.
         let outputs: Vec<_> = selected
             .par_iter()
-            .map(|filename| check(&file_base.join(filename), filename))
+            .map(|filename| run_file_check(&check, &file_base, filename))
             .collect();
         for output in outputs {
             result.merge_known(output?);
@@ -173,6 +173,18 @@ where
         Ok(result)
     })
     .await?
+}
+
+/// Runs one file check in a frame of its own, outside rayon's recursive split.
+///
+/// A check may keep a buffer on the stack. Inlined into the split, that buffer would sit in every
+/// frame of the recursion, and a rayon worker can hold several hooks' splits on one stack.
+#[inline(never)]
+fn run_file_check<F>(check: &F, file_base: &Path, filename: &Path) -> anyhow::Result<HookOutput>
+where
+    F: Fn(&Path, &Path) -> anyhow::Result<HookOutput>,
+{
+    check(&file_base.join(filename), filename)
 }
 
 /// Runs per-file checks concurrently and merges their results in input order.
