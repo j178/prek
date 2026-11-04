@@ -2023,6 +2023,12 @@ When this flag is used, `prek install` bypasses the safety check that normally r
 
 Display the concise help for this command
 
+**[`--hook-command`](<#prek-install--hook-command>) *command***
+
+Command used by the installed Git shims to launch prek.
+
+For example, `--hook-command 'mise exec -- prek'` or `--hook-command 'uv tool run prek'`.
+
 **[`--hook-type`](<#prek-install--hook-type>), `-t` *hook-type***
 
 Which Git shim(s) to install.
@@ -3771,6 +3777,12 @@ Path to alternate config file
 **[`--help`](<#prek-util-init-template-dir--help>), `-h`**
 
 Display the concise help for this command
+
+**[`--hook-command`](<#prek-util-init-template-dir--hook-command>) *command***
+
+Command used by the installed Git shims to launch prek.
+
+For example, `--hook-command 'mise exec -- prek'` or `--hook-command 'uv tool run prek'`.
 
 **[`--hook-type`](<#prek-util-init-template-dir--hook-type>), `-t` *hook-type***
 
