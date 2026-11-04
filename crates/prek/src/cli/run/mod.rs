@@ -12,6 +12,7 @@ pub(crate) use selector::{ConfiguredHook, GroupFilters, SelectorSource, Selector
 mod diff;
 mod filter;
 mod install;
+mod output;
 mod reporter;
 #[allow(clippy::module_inception)]
 mod run;
