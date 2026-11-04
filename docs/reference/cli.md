@@ -134,6 +134,8 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-install--git-dir"><a href="#prek-install--git-dir"><code>--git-dir</code></a> <i>git-dir</i></dt><dd><p>Install Git shims into the <code>hooks</code> subdirectory of the given git directory (<code>&lt;GIT_DIR&gt;/hooks/</code>).</p>
 <p>When this flag is used, <code>prek install</code> bypasses the safety check that normally refuses to install shims while <code>core.hooksPath</code> is configured outside the repo. It only writes shims to <code>&lt;GIT_DIR&gt;/hooks</code>; Git will keep using <code>core.hooksPath</code> until that config changes.</p>
 </dd><dt id="prek-install--help"><a href="#prek-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-install--hook-command"><a href="#prek-install--hook-command"><code>--hook-command</code></a> <i>command</i></dt><dd><p>Command used by the installed Git shims to launch prek.</p>
+<p>For example, <code>--hook-command 'mise exec -- prek'</code> or <code>--hook-command 'uv tool run prek'</code>.</p>
 </dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to install.</p>
 <p>Specifies which Git hook type(s) you want to install shims for. Can be specified multiple times to install shims for multiple hook types.</p>
 <p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
@@ -1052,6 +1054,8 @@ prek util init-template-dir [OPTIONS] <DIRECTORY>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-util-init-template-dir--config"><a href="#prek-util-init-template-dir--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-util-init-template-dir--help"><a href="#prek-util-init-template-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-util-init-template-dir--hook-command"><a href="#prek-util-init-template-dir--hook-command"><code>--hook-command</code></a> <i>command</i></dt><dd><p>Command used by the installed Git shims to launch prek.</p>
+<p>For example, <code>--hook-command 'mise exec -- prek'</code> or <code>--hook-command 'uv tool run prek'</code>.</p>
 </dd><dt id="prek-util-init-template-dir--hook-type"><a href="#prek-util-init-template-dir--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to install.</p>
 <p>Specifies which Git hook type(s) you want to install shims for. Can be specified multiple times to install shims for multiple hook types.</p>
 <p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
