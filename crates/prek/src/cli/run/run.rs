@@ -99,6 +99,7 @@ pub(crate) async fn run(
         no_hide_status,
         extra: extra_args,
     } = options;
+
     let selection: FileSelection = file_selection.into();
     let fail_fast = flag(fail_fast, no_fail_fast);
     let hide_status = if no_hide_status {
@@ -131,14 +132,17 @@ pub(crate) async fn run(
                 "Found unresolved merge conflicts. Resolve the conflicts, stage the files with `git add`, and try again"
             );
         }
+
         for path in status.unstaged.iter_mut().chain(&mut status.intent_to_add) {
             *path = root.join(&*path);
         }
+
         Some(status)
     } else {
         git::root()?;
         None
     };
+
     let filesystem = FilesystemOptions::user()?;
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
@@ -165,6 +169,7 @@ pub(crate) async fn run(
             .await
             .context("Failed to init hooks")?
     };
+
     let mut selected_hooks = Vec::new();
     for hook in hooks {
         let hook = match selectors.select_hook(&hook) {
@@ -172,6 +177,7 @@ pub(crate) async fn run(
             HookSelection::Skipped => HookPlan::Skip(Arc::new(hook)),
             HookSelection::NotSelected => continue,
         };
+
         if group_filters.matches_hook(&hook) {
             selected_hooks.push(hook);
         }
@@ -186,6 +192,7 @@ pub(crate) async fn run(
             "{}: No hooks found after filtering with the given selectors",
             "error".red().bold(),
         )?;
+
         if selectors.has_project_selectors() {
             writeln!(
                 printer.stderr(),
@@ -196,6 +203,7 @@ pub(crate) async fn run(
                 "--refresh".cyan(),
             )?;
         }
+
         return Ok(ExitStatus::Failure);
     }
 
@@ -218,6 +226,7 @@ pub(crate) async fn run(
             );
             return Ok(ExitStatus::Failure);
         }
+
         return Ok(ExitStatus::Success);
     }
 
@@ -319,6 +328,7 @@ pub(crate) async fn run(
     let Some(stash) = stash else {
         return result;
     };
+
     match (result, stash.restore()) {
         (result, Ok(RestoreOutcome::Restored)) => result,
         (result, Ok(RestoreOutcome::HookChangesReverted)) => result.map(|_| ExitStatus::Failure),
@@ -354,6 +364,7 @@ fn infer_stage_and_input_mode(
     } else {
         Stage::PreCommit
     };
+
     (Some(stage), RunInputMode::from(stage))
 }
 
@@ -382,6 +393,7 @@ fn set_env_vars(
         if let Some(object) = &args.commit_object_name {
             std::env::set_var("PRE_COMMIT_COMMIT_OBJECT_NAME", object);
         }
+
         if let Some(from_ref) = from_ref {
             std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
             std::env::set_var(EnvVars::PRE_COMMIT_FROM_REF, from_ref);
@@ -394,12 +406,14 @@ fn set_env_vars(
             std::env::set_var("PRE_COMMIT_SOURCE", to_ref);
             std::env::set_var(EnvVars::PRE_COMMIT_TO_REF, to_ref);
         }
+
         if let Some(upstream) = &args.pre_rebase_upstream {
             std::env::set_var("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream);
         }
         if let Some(branch) = &args.pre_rebase_branch {
             std::env::set_var("PRE_COMMIT_PRE_REBASE_BRANCH", branch);
         }
+
         if let Some(branch) = &args.local_branch {
             std::env::set_var("PRE_COMMIT_LOCAL_BRANCH", branch);
         }
@@ -412,12 +426,15 @@ fn set_env_vars(
         if let Some(url) = &args.remote_url {
             std::env::set_var("PRE_COMMIT_REMOTE_URL", url);
         }
+
         if let Some(checkout) = &args.checkout_type {
             std::env::set_var("PRE_COMMIT_CHECKOUT_TYPE", checkout);
         }
+
         if args.is_squash_merge {
             std::env::set_var("PRE_COMMIT_SQUASH_MERGE", "1");
         }
+
         if let Some(command) = &args.rewrite_command {
             std::env::set_var("PRE_COMMIT_REWRITE_COMMAND", command);
         }
@@ -446,6 +463,7 @@ async fn ensure_hooks_installed<'paths>(
         let (installed_hooks, missing_env_hooks) = install_cache
             .partition_installed_hooks(store, runnable_env_hooks)
             .await;
+
         for installed_hook in installed_hooks {
             installed_by_hook.insert(installed_hook.key(), installed_hook);
         }
@@ -492,6 +510,7 @@ fn select_runnable_env_hooks<'paths>(
         if !hook.needs_install_env() {
             continue;
         }
+
         project_to_hooks
             .entry(hook.project())
             .or_default()
@@ -569,20 +588,20 @@ async fn run_hooks<'paths>(
         report: &report,
         dry_run,
     };
+
     let mut summary = RunSummary::default();
 
-    for projects in ProjectDepthGroups::new(workspace.all_projects()) {
+    for level_projects in workspace
+        .all_projects()
+        .chunk_by(|a, b| a.depth() == b.depth())
+    {
         let clean_baseline = worktree_cleaned && !summary.modified_files;
         let mut project_runs = Vec::new();
 
-        for project in projects {
-            let Some(mut hooks) = project_to_hooks.remove(project.as_ref()) else {
+        for project in level_projects {
+            let Some(hooks) = project_to_hooks.remove(project.as_ref()) else {
                 continue;
             };
-
-            // Sort hooks by priority (lower number means higher priority).
-            // If two hooks have the same priority, preserve their original order from the config.
-            hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
             project_runs.push(ProjectRun {
                 project,
@@ -595,7 +614,7 @@ async fn run_hooks<'paths>(
                 project_fail_fast: fail_fast
                     .or_else(|| project.config().fail_fast)
                     .unwrap_or(false),
-                groups: PriorityGroups::new(hooks).collect(),
+                groups: group_hooks_by_priority(hooks),
             });
         }
 
@@ -606,8 +625,8 @@ async fn run_hooks<'paths>(
         let project_results = runner
             .run_project_level(project_runs, input, file_index, clean_baseline)
             .await?;
-        let mut stop_after_level = false;
 
+        let mut stop_after_level = false;
         for project_result in project_results {
             stop_after_level |= project_result.stop_after_level;
             summary.include(&project_result);
@@ -622,37 +641,6 @@ async fn run_hooks<'paths>(
     report
         .finish(summary, workspace, show_diff_on_failure)
         .await
-}
-
-struct ProjectDepthGroups<'a> {
-    projects: &'a [Arc<Project>],
-    idx: usize,
-}
-
-impl<'a> ProjectDepthGroups<'a> {
-    fn new(projects: &'a [Arc<Project>]) -> Self {
-        Self { projects, idx: 0 }
-    }
-}
-
-impl<'a> Iterator for ProjectDepthGroups<'a> {
-    type Item = &'a [Arc<Project>];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let first = self.projects.get(self.idx)?;
-        let depth = first.depth();
-        let start = self.idx;
-
-        while self
-            .projects
-            .get(self.idx)
-            .is_some_and(|project| project.depth() == depth)
-        {
-            self.idx += 1;
-        }
-
-        Some(&self.projects[start..self.idx])
-    }
 }
 
 struct ProjectRun<'project> {
@@ -682,6 +670,11 @@ pub(super) enum ModificationScope {
 }
 
 impl ModificationScope {
+    /// Choose where to report file changes detected after a group finishes.
+    ///
+    /// If no files changed, return `None`. If exactly one hook ran, mark that hook
+    /// as failed and report the changes on it. Otherwise, report a group failure
+    /// because we cannot tell which hook changed the files.
     fn from_results(results: &mut [HookRunResult], modified_files: bool) -> Option<Self> {
         if !modified_files {
             return None;
@@ -693,6 +686,7 @@ impl ModificationScope {
         let Some(result) = executed_results.next() else {
             return Some(Self::PriorityGroup);
         };
+
         if executed_results.next().is_some() {
             return Some(Self::PriorityGroup);
         }
@@ -710,8 +704,10 @@ pub(super) struct PriorityGroupResult {
 impl PriorityGroupResult {
     fn new(mut results: Vec<HookRunResult>, modified_files: bool) -> Self {
         let modification = ModificationScope::from_results(&mut results, modified_files);
+
         // Completion order is nondeterministic; reports and logs use config order.
         results.sort_unstable_by_key(|result| result.hook.idx);
+
         Self {
             results,
             modification,
@@ -773,15 +769,18 @@ impl HookRunner<'_> {
                 let result = self
                     .run_project(project_run, input, file_index, clean_baseline, semaphore)
                     .await;
+
                 if let Ok(result) = &result {
                     self.report.on_project_complete(result);
                 }
+
                 result.map(|result| (idx, result))
             });
         }
 
         let mut results: Vec<_> = runs.try_collect().await?;
         results.sort_unstable_by_key(|(idx, _)| *idx);
+
         Ok(results.into_iter().map(|(_, result)| result).collect())
     }
 
@@ -838,6 +837,7 @@ impl HookRunner<'_> {
                 && group_results
                     .iter()
                     .any(|result| result.file_changes == hooks::FileChanges::Unknown);
+
             let diff_detected_modifications = diff_tracker.changed_after_group(needs_diff).await?;
             if known_modified_files {
                 // The group is already known to have modified files, so a Git
@@ -845,8 +845,8 @@ impl HookRunner<'_> {
                 // will capture the current worktree before it runs.
                 diff_tracker.invalidate();
             }
-            let group_modified_files = known_modified_files || diff_detected_modifications;
 
+            let group_modified_files = known_modified_files || diff_detected_modifications;
             let group = PriorityGroupResult::new(group_results, group_modified_files);
             self.report
                 .on_group_complete(&group, project_run.report_filter)?;
@@ -896,30 +896,25 @@ impl HookRunner<'_> {
     }
 }
 
-struct PriorityGroups {
-    hooks: Vec<ScheduledHook>,
-}
+/// Group hooks by ascending priority, preserving config order within each group.
+fn group_hooks_by_priority(mut hooks: Vec<ScheduledHook>) -> Vec<Vec<ScheduledHook>> {
+    hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
-impl PriorityGroups {
-    fn new(hooks: Vec<ScheduledHook>) -> Self {
-        Self { hooks }
+    let mut groups = Vec::new();
+    let mut hooks = hooks.into_iter().peekable();
+
+    while let Some(hook) = hooks.next() {
+        let priority = hook.priority;
+        let mut group = vec![hook];
+
+        while let Some(hook) = hooks.next_if(|hook| hook.priority == priority) {
+            group.push(hook);
+        }
+
+        groups.push(group);
     }
-}
 
-impl Iterator for PriorityGroups {
-    type Item = Vec<ScheduledHook>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let first = self.hooks.first()?;
-        let priority = first.priority;
-        let next_priority = self
-            .hooks
-            .iter()
-            .position(|hook| hook.priority != priority)
-            .unwrap_or(self.hooks.len());
-
-        Some(self.hooks.drain(..next_priority).collect())
-    }
+    groups
 }
 
 enum ProjectHookInput<'index, 'paths> {
@@ -946,6 +941,7 @@ impl<'index, 'paths> ProjectHookInput<'index, 'paths> {
                         None
                     }
                 };
+
                 Ok(Self::MessageFile {
                     hook_arg: fs::normalize_path(fs::relative_to(path, project.path())?),
                     tags,
@@ -1142,12 +1138,13 @@ async fn run_hook(
     if !matched && !installed_hook.always_run {
         return Ok(HookRunResult::no_files(hook));
     }
-    let start = std::time::Instant::now();
 
+    let start = std::time::Instant::now();
     let hook_output = if dry_run {
         hooks::HookOutput::unchanged(0, dry_run_hook(installed_hook, &input)?)
     } else {
         input.shuffle();
+
         match &input {
             HookRunInput::Filenames(filenames) => {
                 installed_hook
@@ -1170,6 +1167,7 @@ async fn run_hook(
         }
         .with_context(|| format!("Failed to run hook `{installed_hook}`"))?
     };
+
     let hooks::HookOutput {
         exit_status,
         output,

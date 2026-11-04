@@ -155,31 +155,8 @@ trait LanguageBackend: Sync {
 #[derive(Debug, Default)]
 pub(crate) struct ExecutionEnvironment {
     path: Option<OsString>,
-    patch: EnvironmentPatch,
-}
-
-#[derive(Debug, Default)]
-struct EnvironmentPatch {
     set: Vec<(OsString, OsString)>,
     remove: Vec<OsString>,
-}
-
-impl EnvironmentPatch {
-    fn set(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
-        self.set
-            .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
-    }
-
-    fn remove(&mut self, key: impl AsRef<OsStr>) {
-        self.remove.push(key.as_ref().to_os_string());
-    }
-
-    fn apply(&self, cmd: &mut Cmd) {
-        for key in &self.remove {
-            cmd.env_remove(key);
-        }
-        cmd.envs(self.set.iter().map(|(key, value)| (key, value)));
-    }
 }
 
 impl ExecutionEnvironment {
@@ -189,13 +166,14 @@ impl ExecutionEnvironment {
 
     pub(crate) fn set_path(&mut self, path: impl AsRef<OsStr>) -> &mut Self {
         let path = path.as_ref().to_os_string();
-        self.patch.set(EnvVars::PATH, &path);
+        self.env(EnvVars::PATH, &path);
         self.path = Some(path);
         self
     }
 
     pub(crate) fn env(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> &mut Self {
-        self.patch.set(key, value);
+        self.set
+            .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
         self
     }
 
@@ -212,7 +190,7 @@ impl ExecutionEnvironment {
     }
 
     pub(crate) fn env_remove(&mut self, key: impl AsRef<OsStr>) -> &mut Self {
-        self.patch.remove(key);
+        self.remove.push(key.as_ref().to_os_string());
         self
     }
 
@@ -229,7 +207,11 @@ impl ExecutionEnvironment {
             .preserve_current_worktree(cwd)
             .args(args)
             .check(false);
-        self.patch.apply(&mut cmd);
+
+        for key in &self.remove {
+            cmd.env_remove(key);
+        }
+        cmd.envs(self.set.iter().map(|(key, value)| (key, value)));
         cmd.envs(&hook.env);
         Ok(cmd)
     }
