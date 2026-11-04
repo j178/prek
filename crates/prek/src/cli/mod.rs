@@ -43,7 +43,7 @@ pub(crate) use exec::exec;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
 pub(crate) use init::init;
-pub(crate) use install::{init_template_dir, install, prepare_hooks, uninstall};
+pub(crate) use install::{HookCommand, init_template_dir, install, prepare_hooks, uninstall};
 pub(crate) use list::list;
 pub(crate) use list_builtins::list_builtins;
 pub(crate) use run::run;
@@ -415,6 +415,13 @@ pub(crate) struct InstallArgs {
     /// which declares which stages a hook *can* run in.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
+
+    /// Command used by the installed Git shims to launch prek.
+    ///
+    /// For example, `--hook-command 'mise exec -- prek'` or
+    /// `--hook-command 'uv tool run prek'`.
+    #[arg(long, value_name = "COMMAND", value_hint = ValueHint::CommandString)]
+    pub(crate) hook_command: Option<HookCommand>,
 
     /// Allow a missing configuration file.
     #[arg(long)]
@@ -1258,6 +1265,13 @@ pub(crate) struct InitTemplateDirArgs {
     /// or defaults to `pre-commit` if that is also not set.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
+
+    /// Command used by the installed Git shims to launch prek.
+    ///
+    /// For example, `--hook-command 'mise exec -- prek'` or
+    /// `--hook-command 'uv tool run prek'`.
+    #[arg(long, value_name = "COMMAND", value_hint = ValueHint::CommandString)]
+    pub(crate) hook_command: Option<HookCommand>,
 }
 
 #[cfg(test)]
