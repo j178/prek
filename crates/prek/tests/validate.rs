@@ -59,7 +59,6 @@ fn validate_config() {
     1 | repos:
     2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
       |     ^ missing field `rev`
-      caused by: missing field `rev` at line 2, column 5
     "#);
 }
 
@@ -134,7 +133,6 @@ fn invalid_config_error() {
     8 |     hooks:
     9 |       - name: check-json
       |         ^ missing field `id`
-      caused by: missing field `id` at line 9, column 9
     "#);
 }
 
@@ -186,7 +184,6 @@ fn priority_aliases_cannot_contain_whitespace() {
       |   ^ priority alias `static checks` cannot contain whitespace
     3 | repos: []
       |
-      caused by: priority alias `static checks` cannot contain whitespace at line 2, column 3
     "#);
 }
 
@@ -286,7 +283,6 @@ fn validate_manifest() {
     2 |     name: check for added large files
     3 |     description: prevents giant files from being committed.
       |
-      caused by: missing field `entry` at line 1, column 5
     "#);
 }
 

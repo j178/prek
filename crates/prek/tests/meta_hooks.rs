@@ -151,7 +151,6 @@ fn meta_hooks_unknown_hook() {
     3 |     hooks:
     4 |       - id: this-hook-does-not-exist
       |         ^ unknown meta hook id `this-hook-does-not-exist`
-      caused by: unknown meta hook id `this-hook-does-not-exist` at line 4, column 9
     "#);
 }
 

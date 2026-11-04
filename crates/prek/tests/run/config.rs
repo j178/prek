@@ -101,7 +101,6 @@ fn invalid_config() {
       |
     1 | invalid: config
       | ^ missing field `repos`
-      caused by: missing field `repos` at line 1, column 1
     "#);
 
     context.write_config(indoc::indoc! {r"
@@ -124,7 +123,6 @@ fn invalid_config() {
       | ^ invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings
     2 | repos: []
       |
-      caused by: invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings at line 1, column 1
     "#);
 
     context.write_config(indoc::indoc! {r#"
@@ -149,7 +147,6 @@ fn invalid_config() {
       |   ^ unknown field `glog`, expected one of glob
     3 | repos: []
       |
-      caused by: unknown field `glog`, expected one of glob at line 2, column 3
     "#);
 
     context.write_config(indoc::indoc! {r#"
@@ -336,7 +333,6 @@ fn minimum_prek_version() {
     2 | repos:
     3 |   - repo: local
       |
-      caused by: `prek` version `10.0.0` or newer is required, but version `[CURRENT_VERSION]` is installed. Upgrade `prek` and try again. at line 1, column 23
     "#);
 }
 

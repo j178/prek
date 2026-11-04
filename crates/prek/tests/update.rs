@@ -2430,7 +2430,6 @@ fn update_with_invalid_config_file() {
       |
     1 | invalid_yaml: [unclosed_list
       |               ^ unclosed bracket '['
-      caused by: unclosed bracket '[' at line 1, column 15
     "#);
 }
 

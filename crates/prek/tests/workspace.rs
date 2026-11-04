@@ -978,7 +978,6 @@ fn skips() {
       |
     1 | invalid_yaml: [
       |               ^ unclosed bracket '['
-      caused by: unclosed bracket '[' at line 1, column 15
     "#);
 
     // Should skip the invalid config
