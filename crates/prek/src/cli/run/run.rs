@@ -10,13 +10,12 @@ use anyhow::{Context, Result};
 use asyncband::semaphore::Semaphore;
 use futures_util::TryStreamExt;
 use futures_util::stream::FuturesUnordered;
-use owo_colors::{OwoColorize, Styled};
+use owo_colors::OwoColorize;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use prek_identify::{TagSet, tags_from_path};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, error, trace};
-use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::diff::DiffTracker;
@@ -25,7 +24,7 @@ use crate::cli::run::install::{InstallCache, install_hooks};
 use crate::cli::run::stash::{RestoreOutcome, WorktreeStash};
 use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
-    ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input, project_status_marker,
+    ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input,
 };
 use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
 use crate::concurrency::HOOK_CONCURRENCY;
@@ -35,15 +34,14 @@ use crate::hook::{Hook, InstalledHook};
 use crate::printer::Printer;
 use crate::settings::FilesystemOptions;
 use crate::store::Store;
-use crate::terminal::{USE_COLOR, sanitize_output};
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 
+use super::output::{ReportFilter, RunReport};
 use super::selector::HookSelection;
-use super::{DRY_RUN, FAILED, PASSED, SKIPPED};
 
 #[derive(Clone)]
-enum HookPlan<T> {
+pub(super) enum HookPlan<T> {
     Run(T),
     Skip(Arc<Hook>),
 }
@@ -72,7 +70,7 @@ where
 }
 
 type SelectedHook = HookPlan<Arc<Hook>>;
-type ScheduledHook = HookPlan<InstalledHook>;
+pub(super) type ScheduledHook = HookPlan<InstalledHook>;
 
 pub(crate) async fn run(
     store: &Store,
@@ -565,17 +563,16 @@ async fn run_hooks<'paths>(
 
     let show_project_headers =
         project_to_hooks.len() > 1 || project_to_hooks.keys().any(|project| !project.is_root());
-    let mut session = HookRunSession::new(
-        hooks,
+    let report = RunReport::new(hooks, verbose, show_project_headers, printer);
+    let runner = HookRunner {
         store,
+        report: &report,
         dry_run,
-        verbose,
-        show_project_headers,
-        printer,
-    );
+    };
+    let mut summary = RunSummary::default();
 
     for projects in ProjectDepthGroups::new(workspace.all_projects()) {
-        let clean_baseline = worktree_cleaned && !session.modified_files;
+        let clean_baseline = worktree_cleaned && !summary.modified_files;
         let mut project_runs = Vec::new();
 
         for project in projects {
@@ -606,13 +603,15 @@ async fn run_hooks<'paths>(
             continue;
         }
 
-        let project_results = session
+        let project_results = runner
             .run_project_level(project_runs, input, file_index, clean_baseline)
             .await?;
         let mut stop_after_level = false;
 
         for project_result in project_results {
-            stop_after_level |= session.finish_project_run(project_result, show_project_headers)?;
+            stop_after_level |= project_result.stop_after_level;
+            summary.include(&project_result);
+            report.write_project(project_result)?;
         }
 
         if stop_after_level {
@@ -620,7 +619,9 @@ async fn run_hooks<'paths>(
         }
     }
 
-    session.finish(workspace, show_diff_on_failure).await
+    report
+        .finish(summary, workspace, show_diff_on_failure)
+        .await
 }
 
 struct ProjectDepthGroups<'a> {
@@ -661,27 +662,21 @@ struct ProjectRun<'project> {
     groups: Vec<Vec<ScheduledHook>>,
 }
 
-struct ProjectRunResult<'project> {
-    project: &'project Project,
-    report_filter: ReportFilter<'project>,
-    groups: Vec<PriorityGroupResult>,
+pub(super) struct ProjectRunResult<'project> {
+    pub(super) project: &'project Project,
+    pub(super) report_filter: ReportFilter<'project>,
+    pub(super) groups: Vec<PriorityGroupResult>,
     stop_after_level: bool,
 }
 
 impl ProjectRunResult<'_> {
-    fn failed(&self) -> bool {
+    pub(super) fn failed(&self) -> bool {
         self.groups.iter().any(PriorityGroupResult::failed)
-    }
-
-    fn has_visible_report(&self) -> bool {
-        self.groups
-            .iter()
-            .any(|group| group.has_visible_report(self.report_filter))
     }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum ModificationScope {
+pub(super) enum ModificationScope {
     SingleHook,
     PriorityGroup,
 }
@@ -707,31 +702,20 @@ impl ModificationScope {
     }
 }
 
-struct PriorityGroupResult {
-    results: Vec<HookRunResult>,
-    modification: Option<ModificationScope>,
+pub(super) struct PriorityGroupResult {
+    pub(super) results: Vec<HookRunResult>,
+    pub(super) modification: Option<ModificationScope>,
 }
 
 impl PriorityGroupResult {
     fn new(mut results: Vec<HookRunResult>, modified_files: bool) -> Self {
         let modification = ModificationScope::from_results(&mut results, modified_files);
+        // Completion order is nondeterministic; reports and logs use config order.
+        results.sort_unstable_by_key(|result| result.hook.idx);
         Self {
             results,
             modification,
         }
-    }
-
-    fn shows_group_failure(&self, filter: ReportFilter<'_>) -> bool {
-        self.modification == Some(ModificationScope::PriorityGroup)
-            && filter.shows(RunStatus::Failed)
-    }
-
-    fn has_visible_report(&self, filter: ReportFilter<'_>) -> bool {
-        self.shows_group_failure(filter)
-            || self
-                .results
-                .iter()
-                .any(|result| filter.shows(result.status))
     }
 
     fn hook_fail_fast(&self) -> bool {
@@ -751,83 +735,29 @@ impl PriorityGroupResult {
     }
 }
 
-#[derive(Clone, Copy)]
-struct ReportFilter<'a> {
-    hidden_statuses: &'a [HideStatus],
+#[derive(Default)]
+pub(super) struct RunSummary {
+    pub(super) failed: bool,
+    pub(super) modified_files: bool,
 }
 
-impl<'a> ReportFilter<'a> {
-    fn new(hidden_statuses: &'a [HideStatus]) -> Self {
-        Self { hidden_statuses }
-    }
-
-    fn shows(self, status: RunStatus) -> bool {
-        let Some(hide_status) = status.hide_status() else {
-            return true;
-        };
-        !self.hidden_statuses.contains(&hide_status)
+impl RunSummary {
+    fn include(&mut self, result: &ProjectRunResult<'_>) {
+        self.failed |= result.failed();
+        self.modified_files |= result
+            .groups
+            .iter()
+            .any(|group| group.modification.is_some());
     }
 }
 
-#[expect(clippy::struct_excessive_bools)]
-struct HookRunSession<'a> {
+struct HookRunner<'a> {
     store: &'a Store,
-    reporter: HookRunReporter,
-    status_printer: StatusPrinter,
-    printer: Printer,
+    report: &'a RunReport,
     dry_run: bool,
-    verbose: bool,
-    failed: bool,
-    modified_files: bool,
 }
 
-impl<'a> HookRunSession<'a> {
-    fn new(
-        hooks: &[ScheduledHook],
-        store: &'a Store,
-        dry_run: bool,
-        verbose: bool,
-        show_project_headers: bool,
-        printer: Printer,
-    ) -> Self {
-        let status_printer = StatusPrinter::for_hooks(hooks, printer);
-        let reporter =
-            HookRunReporter::new(printer, status_printer.bar_len(), show_project_headers);
-
-        Self {
-            store,
-            reporter,
-            status_printer,
-            printer,
-            dry_run,
-            verbose,
-            failed: false,
-            modified_files: false,
-        }
-    }
-
-    fn render_project_header(
-        &mut self,
-        project: &Project,
-        failed: bool,
-        show_project_headers: bool,
-    ) -> Result<()> {
-        if !show_project_headers {
-            return Ok(());
-        }
-
-        self.reporter.suspend(|| {
-            writeln!(
-                self.status_printer.printer().stdout(),
-                "{} {}",
-                project_status_marker(failed),
-                project.display_name().cyan().bold()
-            )
-        })?;
-
-        Ok(())
-    }
-
+impl HookRunner<'_> {
     async fn run_project_level<'project, 'paths>(
         &self,
         project_runs: Vec<ProjectRun<'project>>,
@@ -840,16 +770,11 @@ impl<'a> HookRunSession<'a> {
         for (idx, project_run) in project_runs.into_iter().enumerate() {
             let semaphore = Rc::clone(&semaphore);
             runs.push(async move {
-                let project = project_run.project;
                 let result = self
                     .run_project(project_run, input, file_index, clean_baseline, semaphore)
                     .await;
                 if let Ok(result) = &result {
-                    if result.has_visible_report() {
-                        self.reporter.on_project_complete(project, result.failed());
-                    } else {
-                        self.reporter.hide_project(project);
-                    }
+                    self.report.on_project_complete(result);
                 }
                 result.map(|result| (idx, result))
             });
@@ -923,7 +848,8 @@ impl<'a> HookRunSession<'a> {
             let group_modified_files = known_modified_files || diff_detected_modifications;
 
             let group = PriorityGroupResult::new(group_results, group_modified_files);
-            self.update_live_priority_group(&group, project_run.report_filter);
+            self.report
+                .on_group_complete(&group, project_run.report_filter);
             stop_after_level = group.should_stop_project(project_run.project_fail_fast);
             groups.push(group);
 
@@ -961,285 +887,12 @@ impl<'a> HookRunSession<'a> {
                 tag_cache,
                 self.store,
                 self.dry_run,
-                &self.reporter,
+                &self.report.progress,
                 Rc::clone(&semaphore),
             ));
         }
 
         runs.try_collect().await
-    }
-
-    fn update_live_priority_group(&self, group: &PriorityGroupResult, filter: ReportFilter<'_>) {
-        for result in &group.results {
-            let status = result.status;
-            match status {
-                RunStatus::Passed | RunStatus::Failed if filter.shows(status) => {
-                    self.reporter
-                        .on_run_result(&result.hook, status == RunStatus::Passed);
-                }
-                RunStatus::Passed | RunStatus::Failed => {
-                    self.reporter.hide_run_result(&result.hook);
-                }
-                RunStatus::DryRun | RunStatus::Skipped(_) => {}
-            }
-        }
-    }
-
-    fn finish_project_run(
-        &mut self,
-        project_result: ProjectRunResult<'_>,
-        show_project_headers: bool,
-    ) -> Result<bool> {
-        let show_project_header = show_project_headers && project_result.has_visible_report();
-        self.render_project_header(
-            project_result.project,
-            project_result.failed(),
-            show_project_header,
-        )?;
-        let hook_prefix = if show_project_header { "  " } else { "" };
-
-        for group in project_result.groups {
-            self.finish_priority_group(group, hook_prefix, project_result.report_filter)?;
-        }
-
-        Ok(project_result.stop_after_level)
-    }
-
-    fn finish_priority_group(
-        &mut self,
-        mut group: PriorityGroupResult,
-        hook_prefix: &str,
-        filter: ReportFilter<'_>,
-    ) -> Result<()> {
-        // Print results in a stable order (same order as config within the project).
-        group.results.sort_unstable_by_key(|result| result.hook.idx);
-
-        self.failed |= group.failed();
-        self.modified_files |= group.modification.is_some();
-
-        self.reporter.clear_completed();
-        for result in &group.results {
-            if result.shows_details(self.verbose) {
-                result.write_log_file()?;
-            }
-        }
-        self.reporter
-            .suspend(|| self.render_priority_group(&group, hook_prefix, filter))?;
-
-        Ok(())
-    }
-
-    fn render_priority_group(
-        &self,
-        group: &PriorityGroupResult,
-        hook_prefix: &str,
-        filter: ReportFilter<'_>,
-    ) -> Result<()> {
-        let group_results = &group.results;
-        let modifications_belong_to_single_hook =
-            group.modification == Some(ModificationScope::SingleHook);
-        let show_group_failure = group.shows_group_failure(filter);
-
-        // Hooks that did not run cannot have modified files, so report them outside
-        // the modification group.
-        let mut visible_results = group_results
-            .iter()
-            .filter(|result| filter.shows(result.status))
-            .filter(|result| !show_group_failure || result.status.was_executed())
-            .peekable();
-        let mut first_result = true;
-        let group_output_prefix = if show_group_failure {
-            Some(format!("{hook_prefix}{}", "  │ ".dimmed()))
-        } else {
-            None
-        };
-        if show_group_failure {
-            self.status_printer.write(
-                "Files were modified by following hooks",
-                hook_prefix,
-                RunStatus::Failed,
-            )?;
-        }
-
-        while let Some(result) = visible_results.next() {
-            let status = result.status;
-
-            let connector = if show_group_failure {
-                if visible_results.peek().is_none() {
-                    "  └ "
-                } else if first_result {
-                    "  ┌ "
-                } else {
-                    "  │ "
-                }
-            } else {
-                ""
-            };
-            first_result = false;
-            let prefix = format!("{hook_prefix}{connector}");
-            self.status_printer
-                .write(&result.hook.name, &prefix, status)?;
-
-            if !status.is_skipped() && result.shows_details(self.verbose) {
-                self.render_hook_details(
-                    result,
-                    hook_prefix,
-                    group_output_prefix.as_deref(),
-                    modifications_belong_to_single_hook,
-                )?;
-            }
-        }
-
-        if show_group_failure {
-            for result in group_results {
-                if !result.status.was_executed() && filter.shows(result.status) {
-                    self.status_printer
-                        .write(&result.hook.name, hook_prefix, result.status)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn render_hook_details(
-        &self,
-        result: &HookRunResult,
-        hook_prefix: &str,
-        group_output_prefix: Option<&str>,
-        modified_files: bool,
-    ) -> Result<()> {
-        let detail_prefix = group_output_prefix.unwrap_or(hook_prefix);
-        let mut stdout = if result.status.is_failure() {
-            self.printer.stdout_important()
-        } else {
-            self.printer.stdout()
-        };
-
-        writeln!(
-            stdout,
-            "{detail_prefix}{}",
-            format!("- hook id: {}", result.hook.id).dimmed()
-        )?;
-        if !result.hook.alias.is_empty() && result.hook.alias != result.hook.id {
-            writeln!(
-                stdout,
-                "{detail_prefix}{}",
-                format!("- hook alias: {}", result.hook.alias).dimmed()
-            )?;
-        }
-        if let Some(description) = result.hook.description.as_deref()
-            && let Some(description) = description.trim().lines().next()
-        {
-            let description = description.trim_end().trim_end_matches('.');
-            writeln!(
-                stdout,
-                "{detail_prefix}{}",
-                format!("- description: {description}").dimmed()
-            )?;
-        }
-        if self.verbose || result.hook.verbose {
-            writeln!(
-                stdout,
-                "{detail_prefix}{}",
-                format!("- duration: {:.2?}s", result.duration.as_secs_f64()).dimmed()
-            )?;
-        }
-        if result.exit_status != 0 {
-            writeln!(
-                stdout,
-                "{detail_prefix}{}",
-                format!("- exit code: {}", result.exit_status).dimmed()
-            )?;
-        }
-        if modified_files {
-            writeln!(
-                stdout,
-                "{detail_prefix}{}",
-                "- files were modified by this hook".dimmed()
-            )?;
-        }
-
-        let output = result.output.trim_ascii();
-        if output.is_empty() || result.hook.log_file.is_some() {
-            return Ok(());
-        }
-        let text = sanitize_output(output);
-        if text.is_empty() {
-            return Ok(());
-        }
-
-        let separator = if group_output_prefix.is_some() {
-            format!("{hook_prefix}{}", "  │".dimmed())
-        } else {
-            String::new()
-        };
-        writeln!(stdout, "{separator}")?;
-        for line in text.lines() {
-            if line.is_empty() {
-                writeln!(stdout, "{separator}")?;
-            } else if let Some(group_output_prefix) = group_output_prefix {
-                writeln!(stdout, "{group_output_prefix}{line}")?;
-            } else {
-                writeln!(stdout, "{hook_prefix}  {line}")?;
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn finish(
-        &self,
-        workspace: &Workspace,
-        show_diff_on_failure: bool,
-    ) -> Result<ExitStatus> {
-        self.reporter.on_complete();
-
-        if self.failed && show_diff_on_failure && self.modified_files {
-            if EnvVars::is_under_ci() {
-                writeln!(
-                    self.printer.stdout(),
-                    "{}",
-                    indoc::formatdoc! {
-                        "\n{}: Some hooks made changes to the files.
-                        If you are seeing this message in CI, reproduce locally with: `{}`
-                        To run prek as part of Git workflow, use `{}` to set up Git shims.\n",
-                        "hint".yellow().bold(),
-                        "prek run --all-files".cyan(),
-                        "prek install".cyan()
-                    }
-                )?;
-            }
-
-            writeln!(
-                self.printer.stdout_important(),
-                "All changes made by hooks:"
-            )?;
-
-            let color = if *USE_COLOR {
-                "--color=always"
-            } else {
-                "--color=never"
-            };
-            git::git_cmd()?
-                .current_dir(workspace.root())
-                .arg("--no-pager")
-                .arg("diff")
-                .hidden_args(["--no-ext-diff"])
-                .arg(color)
-                .arg("--")
-                .arg(workspace.root())
-                .check(true)
-                .spawn()?
-                .wait()
-                .await?;
-        }
-
-        if self.failed {
-            Ok(ExitStatus::Failure)
-        } else {
-            Ok(ExitStatus::Success)
-        }
     }
 }
 
@@ -1399,7 +1052,7 @@ impl<'a> HookRunInput<'a> {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum RunStatus {
+pub(super) enum RunStatus {
     Passed,
     Failed,
     DryRun,
@@ -1407,115 +1060,31 @@ enum RunStatus {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum SkipReason {
+pub(super) enum SkipReason {
     Explicit,
     NoFiles,
 }
 
 impl RunStatus {
-    fn hide_status(self) -> Option<HideStatus> {
-        match self {
-            Self::Passed => Some(HideStatus::Passed),
-            Self::Failed => Some(HideStatus::Failed),
-            Self::Skipped(_) => Some(HideStatus::Skipped),
-            Self::DryRun => None,
-        }
-    }
-
-    fn is_failure(self) -> bool {
+    pub(super) fn is_failure(self) -> bool {
         self == Self::Failed
     }
 
-    fn was_executed(self) -> bool {
+    pub(super) fn was_executed(self) -> bool {
         matches!(self, Self::Passed | Self::Failed)
     }
 
-    fn is_skipped(self) -> bool {
+    pub(super) fn is_skipped(self) -> bool {
         matches!(self, Self::Skipped(_))
     }
-
-    fn label(self) -> Styled<&'static str> {
-        match self {
-            Self::Passed => PASSED,
-            Self::Failed => FAILED,
-            Self::DryRun => DRY_RUN,
-            Self::Skipped(_) => SKIPPED,
-        }
-    }
-
-    fn suffix(self) -> &'static str {
-        match self {
-            Self::Skipped(SkipReason::NoFiles) => "(no files to check)",
-            Self::Passed | Self::Failed | Self::DryRun | Self::Skipped(SkipReason::Explicit) => "",
-        }
-    }
 }
 
-struct StatusPrinter {
-    printer: Printer,
-    columns: usize,
-}
-
-impl StatusPrinter {
-    fn for_hooks<T>(hooks: &[T], printer: Printer) -> Self
-    where
-        T: Deref<Target = Hook>,
-    {
-        let name_len = hooks
-            .iter()
-            .map(|hook| hook.name.width())
-            .max()
-            .unwrap_or(0);
-        let widest_status = RunStatus::Skipped(SkipReason::NoFiles);
-        let status_width = widest_status.suffix().width() + widest_status.label().inner().width();
-        let columns = std::cmp::max(
-            79,
-            // Hook name...(no files to check)Skipped
-            name_len + 3 + status_width,
-        );
-        Self { printer, columns }
-    }
-
-    fn printer(&self) -> Printer {
-        self.printer
-    }
-
-    fn bar_len(&self) -> usize {
-        self.columns - RunStatus::Passed.label().inner().width()
-    }
-
-    fn write(
-        &self,
-        hook_name: &str,
-        prefix: &str,
-        status: RunStatus,
-    ) -> Result<(), std::fmt::Error> {
-        let suffix = status.suffix();
-        let status_line = status.label();
-        let (prefix, prefix_width) = if prefix.is_empty() {
-            (String::new(), 0)
-        } else {
-            (prefix.dimmed().to_string(), prefix.width())
-        };
-        let used_width =
-            prefix_width + hook_name.width() + suffix.width() + status_line.inner().width();
-        let dots = self.columns.saturating_sub(used_width);
-        let dots = ".".repeat(dots).green().to_string();
-        let line = format!("{prefix}{hook_name}{dots}{suffix}{status_line}");
-        if status.is_failure() {
-            writeln!(self.printer.stdout_important(), "{line}")
-        } else {
-            writeln!(self.printer.stdout(), "{line}")
-        }
-    }
-}
-
-struct HookRunResult {
-    hook: ScheduledHook,
-    status: RunStatus,
-    duration: std::time::Duration,
-    exit_status: i32,
-    output: Vec<u8>,
+pub(super) struct HookRunResult {
+    pub(super) hook: ScheduledHook,
+    pub(super) status: RunStatus,
+    pub(super) duration: std::time::Duration,
+    pub(super) exit_status: i32,
+    pub(super) output: Vec<u8>,
     file_changes: hooks::FileChanges,
 }
 
@@ -1537,39 +1106,6 @@ impl HookRunResult {
             output: Vec::new(),
             file_changes: hooks::FileChanges::Unchanged,
         }
-    }
-
-    fn shows_details(&self, verbose: bool) -> bool {
-        verbose || self.hook.verbose || self.status.is_failure()
-    }
-
-    fn write_log_file(&self) -> Result<()> {
-        let Some(file) = self.hook.log_file.as_deref() else {
-            return Ok(());
-        };
-        let output = self.output.trim_ascii();
-        if output.is_empty() {
-            return Ok(());
-        }
-
-        let file = Path::new(file);
-        let config_file = self.hook.project().config_file();
-        let file = if file.is_relative() {
-            let config_dir = config_file
-                .parent()
-                .context("Configuration file must have a parent directory")?;
-            config_dir.join(file)
-        } else {
-            file.to_path_buf()
-        };
-        let mut file = fs_err::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(file)?;
-        file.write_all(output)?;
-        file.flush()?;
-
-        Ok(())
     }
 }
 
@@ -1680,23 +1216,4 @@ fn dry_run_hook(hook: &InstalledHook, input: &HookRunInput<'_>) -> Result<Vec<u8
     }
 
     Ok(output)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn status_printer_write_dots_saturates_instead_of_underflow() {
-        let status_printer = StatusPrinter {
-            printer: Printer::Silent,
-            columns: 10,
-        };
-
-        // This would underflow if computed with plain `-` on `usize`.
-        let long_name = "this hook name is definitely longer than ten columns";
-        status_printer
-            .write(long_name, "", RunStatus::Failed)
-            .expect("write should not fail");
-    }
 }
