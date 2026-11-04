@@ -637,10 +637,25 @@ jobs:
 
       - name: "Install Swift"
         if: ${{ runner.os == 'Linux' && contains(format(' {0} ', matrix.languages), ' swift ') }}
+        shell: bash
         # Some Ubuntu runner images do not include Swift.
-        uses: tryswift/setup-swift@ce5fe39afee72fd792fabab6db8ec3005962daf7 # v1.2.0
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
+        run: |
+          platform="ubuntu$(lsb_release -rs)"
+          release="swift-${SWIFT_VERSION}-RELEASE"
+          url="https://download.swift.org/swift-${SWIFT_VERSION}-release/${platform//./}/${release}/${release}-${platform}.tar.gz"
+          archive="$RUNNER_TEMP/swift.tar.gz"
+
+          curl -fsSL --retry 3 "$url" -o "$archive"
+          curl -fsSL --retry 3 "$url.sig" -o "$archive.sig"
+          curl -fsSL --retry 3 --compressed https://www.swift.org/keys/all-keys.asc -o "$RUNNER_TEMP/swift-keys.asc"
+          gpg --batch --import "$RUNNER_TEMP/swift-keys.asc"
+          gpg --batch --verify "$archive.sig" "$archive"
+
+          mkdir -p "$RUNNER_TEMP/swift"
+          tar xzf "$archive" -C "$RUNNER_TEMP/swift" --strip-components=1
+          echo "$RUNNER_TEMP/swift/usr/bin" >> "$GITHUB_PATH"
+
+          "$RUNNER_TEMP/swift/usr/bin/swift" --version
 
       - name: "Install PHP and Composer"
         if: ${{ contains(format(' {0} ', matrix.languages), ' php ') }}
