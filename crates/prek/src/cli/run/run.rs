@@ -849,7 +849,7 @@ impl HookRunner<'_> {
 
             let group = PriorityGroupResult::new(group_results, group_modified_files);
             self.report
-                .on_group_complete(&group, project_run.report_filter);
+                .on_group_complete(&group, project_run.report_filter)?;
             stop_after_level = group.should_stop_project(project_run.project_fail_fast);
             groups.push(group);
 

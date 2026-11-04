@@ -1,11 +1,111 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use predicates::prelude::predicate;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestEnv, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot, snapshot};
+
+/// A completed group's final status and details must reach a pipe before the next
+/// hook can finish. Hook log files must still be written after execution ends.
+#[test]
+fn non_tty_reports_completed_priority_groups() -> Result<()> {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_file(
+            "wait.py",
+            indoc::indoc! {r"
+                from pathlib import Path
+                import time
+
+                deadline = time.monotonic() + 60
+                while not Path('.git/release').exists():
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('test did not release the hook')
+                    time.sleep(0.01)
+                assert not Path('.git/hook.log').exists()
+            "},
+        )
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: modify
+                    name: Modifies File
+                    language: system
+                    entry: python3 -c "from pathlib import Path; Path('file.txt').write_text('changed\n'); print('logged output')"
+                    always_run: true
+                    pass_filenames: false
+                    log_file: .git/hook.log
+                  - id: wait
+                    name: Waits For Reader
+                    language: system
+                    entry: python3 wait.py
+                    always_run: true
+                    pass_filenames: false
+        "#})
+        .init_git();
+
+    let mut child = context
+        .run()
+        .args(["--all-files", "--color=never"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let stdout = child.stdout.take().context("missing piped stdout")?;
+    let (sender, receiver) = mpsc::channel();
+    let reader = std::thread::spawn(move || -> std::io::Result<String> {
+        let mut output = String::new();
+        for line in BufReader::new(stdout).lines() {
+            let line = line?;
+            output.push_str(&line);
+            output.push('\n');
+            let _ = sender.send(line);
+        }
+        Ok(output)
+    });
+
+    let early_output = (|| -> Result<String> {
+        let mut output = String::new();
+        for _ in 0..3 {
+            let line = receiver
+                .recv_timeout(Duration::from_secs(30))
+                .context("group report was withheld while the next hook was blocked")?;
+            output.push_str(&line);
+            output.push('\n');
+        }
+        Ok(output)
+    })();
+
+    // Release the hook even on failure, so a regression does not leave it running.
+    context.write_file(".git/release", "");
+    let output = child.wait_with_output()?;
+    let stdout = reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("stdout reader panicked"))??;
+    output.assert().code(1).stderr("");
+    let early_output = early_output?;
+
+    snapshot!(context, early_output, @"
+    Modifies File............................................................Failed
+    - hook id: modify
+    - files were modified by this hook
+    ");
+    snapshot!(context, stdout, @"
+    Modifies File............................................................Failed
+    - hook id: modify
+    - files were modified by this hook
+    Waits For Reader.........................................................Passed
+    ");
+    assert_eq!(context.read(".git/hook.log"), "logged output");
+    Ok(())
+}
 
 #[test]
 fn run_preserves_stdout_stderr_order() {
