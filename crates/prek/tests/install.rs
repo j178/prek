@@ -1300,7 +1300,7 @@ fn init_template_dir_non_git_repo() {
           - pre-commit
           - commit-msg
           - pre-push
-        repos:
+        repos: []
     ",
     );
     cmd_snapshot!(context, context.command().arg("util").arg("init-template-dir").arg("-c").arg(context.work_dir().join(PRE_COMMIT_CONFIG_YAML)).arg(".git"), @r#"

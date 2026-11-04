@@ -1608,7 +1608,7 @@ fn builtin_hooks_workspace_mode() {
       - description: Checks YAML files for parseable syntax
       - exit code: 1
 
-        duplicate.yaml: Failed to yaml decode (duplicate mapping key: a not allowed here at line 2, column 1)
+        duplicate.yaml: Failed to yaml decode (duplicate mapping key `a` is not allowed here at line 2, column 1)
         invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1, column 5)
       check json.............................................................Failed
       - hook id: check-json
