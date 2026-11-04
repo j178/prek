@@ -22,12 +22,19 @@ use super::run::{
 };
 use super::{DRY_RUN, FAILED, HookRunReporter, PASSED, SKIPPED, project_status_marker};
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ReportTiming {
+    AfterGroup,
+    AfterLevel,
+}
+
 pub(super) struct RunReport {
     pub(super) progress: HookRunReporter,
     status_printer: StatusPrinter,
     printer: Printer,
     verbose: bool,
     show_project_headers: bool,
+    timing: ReportTiming,
 }
 
 impl RunReport {
@@ -40,12 +47,20 @@ impl RunReport {
         let status_printer = StatusPrinter::for_hooks(hooks, printer);
         let progress =
             HookRunReporter::new(printer, status_printer.bar_len(), show_project_headers);
+        // Only a lone root project has no header. Headers include the final
+        // project status, so they cannot be printed after an intermediate group.
+        let timing = if !show_project_headers && progress.is_hidden() {
+            ReportTiming::AfterGroup
+        } else {
+            ReportTiming::AfterLevel
+        };
         Self {
             progress,
             status_printer,
             printer,
             verbose,
             show_project_headers,
+            timing,
         }
     }
 
@@ -71,7 +86,18 @@ impl RunReport {
         Ok(())
     }
 
-    pub(super) fn on_group_complete(&self, group: &PriorityGroupResult, filter: ReportFilter<'_>) {
+    pub(super) fn on_group_complete(
+        &self,
+        group: &PriorityGroupResult,
+        filter: ReportFilter<'_>,
+    ) -> Result<()> {
+        if self.timing == ReportTiming::AfterGroup {
+            self.progress.clear_completed();
+            self.render_priority_group(group, "", filter)?;
+            anstream::stdout().flush()?;
+            return Ok(());
+        }
+
         for result in &group.results {
             let status = result.status;
             match status {
@@ -85,9 +111,19 @@ impl RunReport {
                 RunStatus::DryRun | RunStatus::Skipped(_) => {}
             }
         }
+        Ok(())
     }
 
     pub(super) fn write_project(&self, project_result: ProjectRunResult<'_>) -> Result<()> {
+        if self.timing == ReportTiming::AfterGroup {
+            // Writing hook log files between groups could affect later hooks
+            // and their file modification checks.
+            for group in &project_result.groups {
+                self.write_group_logs(group)?;
+            }
+            return Ok(());
+        }
+
         let show_project_header = self.show_project_headers && project_result.has_visible_report();
         if show_project_header {
             self.render_project_header(project_result.project, project_result.failed())?;

@@ -5,7 +5,61 @@ use predicates::prelude::predicate;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestEnv, cmd_snapshot};
+use crate::common::{TestEnv, cmd_snapshot, snapshot};
+
+/// The next hook must see the previous group's final report, while hook log
+/// files remain deferred until execution ends.
+#[test]
+fn non_tty_reports_completed_priority_groups() -> Result<()> {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_file(
+            "check_output.py",
+            indoc::indoc! {r"
+                from pathlib import Path
+
+                output = Path('.git/stdout').read_text()
+                assert output.endswith('- files were modified by this hook\n'), output
+                assert not Path('.git/hook.log').exists()
+            "},
+        )
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: modify
+                    name: Modifies File
+                    language: system
+                    entry: python3 -c "from pathlib import Path; Path('file.txt').write_text('changed\n'); print('logged output')"
+                    always_run: true
+                    pass_filenames: false
+                    log_file: .git/hook.log
+                  - id: check-output
+                    name: Checks Previous Report
+                    language: system
+                    entry: python3 check_output.py
+                    always_run: true
+                    pass_filenames: false
+        "#})
+        .init_git();
+
+    context
+        .run()
+        .args(["--all-files", "--color=never"])
+        .stdout(std::fs::File::create(context.child(".git/stdout"))?)
+        .assert()
+        .code(1)
+        .stderr("");
+
+    snapshot!(context, context.read(".git/stdout"), @"
+    Modifies File............................................................Failed
+    - hook id: modify
+    - files were modified by this hook
+    Checks Previous Report...................................................Passed
+    ");
+    assert_eq!(context.read(".git/hook.log"), "logged output");
+    Ok(())
+}
 
 #[test]
 fn run_preserves_stdout_stderr_order() {

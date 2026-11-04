@@ -781,10 +781,13 @@ fn restore_reports_hook_and_recovery_errors() {
     context.write_file("intent.txt", "intent\n");
     context.git().run(["add", "--intent-to-add", "intent.txt"]);
 
-    cmd_snapshot!(context, context.run(), @r#"
+    cmd_snapshot!(context, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
+    modify...................................................................Failed
+    - hook id: modify
+    - files were modified by this hook
 
     ----- stderr -----
     Unstaged changes detected. Temporarily saving them to `[HOME]/patches/[TIME]-[PID].patch`
@@ -813,7 +816,7 @@ fn restore_reports_hook_and_recovery_errors() {
     [stderr]
     fatal: Unable to create '[TEMP_DIR]/.git/index.lock': File exists.
     [GIT_LOCK_HINT]
-    "#);
+    ");
 }
 
 #[cfg(unix)]

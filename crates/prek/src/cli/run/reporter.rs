@@ -492,6 +492,10 @@ pub(crate) struct HookRunReporter {
 }
 
 impl HookRunReporter {
+    pub(super) fn is_hidden(&self) -> bool {
+        self.reporter.children.is_hidden()
+    }
+
     pub fn new(printer: Printer, dots: usize, show_project_headers: bool) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         reporter.set_root_prefix("Running hooks...");
