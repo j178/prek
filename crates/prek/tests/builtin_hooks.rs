@@ -56,7 +56,7 @@ fn builtin_hooks_unknown_hook() {
     "})
         .init_git();
 
-    cmd_snapshot!(context, context.run(), @"
+    cmd_snapshot!(context, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -70,7 +70,7 @@ fn builtin_hooks_unknown_hook() {
     3 |     hooks:
     4 |       - id: this-hook-does-not-exist
       |         ^ unknown builtin hook id `this-hook-does-not-exist`
-    ");
+    "#);
 }
 
 #[test]
@@ -1153,7 +1153,7 @@ fn check_yaml_hook() {
     - description: Checks YAML files for parseable syntax
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (duplicate mapping key: a not allowed here at line 2, column 1)
+      duplicate.yaml: Failed to yaml decode (duplicate mapping key `a` is not allowed here at line 2, column 1)
       invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1, column 5)
 
     ----- stderr -----
@@ -1911,7 +1911,7 @@ fn builtin_hooks_workspace_mode() {
       - description: Checks YAML files for parseable syntax
       - exit code: 1
 
-        duplicate.yaml: Failed to yaml decode (duplicate mapping key: a not allowed here at line 2, column 1)
+        duplicate.yaml: Failed to yaml decode (duplicate mapping key `a` is not allowed here at line 2, column 1)
         invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1, column 5)
       check json.............................................................Failed
       - hook id: check-json
