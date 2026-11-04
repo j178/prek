@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.10
+
+Released on 2026-11-04.
+
+### Enhancements
+
+- Add a builtin `replace-pattern` hook ([\#2981](<https://github.com/j178/prek/pull/2981>))
+
+### Bug fixes
+
+- Avoid downloading Node prereleases by default ([\#2995](<https://github.com/j178/prek/pull/2995>))
+- Keep file checks out of rayon's recursive frames ([\#2999](<https://github.com/j178/prek/pull/2999>))
+- Skip Node releases without a compatible archive ([\#2996](<https://github.com/j178/prek/pull/2996>))
+
+### Documentation
+
+- Add equivalent prek.toml examples throughout the documentation ([\#2979](<https://github.com/j178/prek/pull/2979>))
+
+### Contributors
+
+- @connorbrinton
+- @j178
+
 ## 0.5.9
 
 Released on 2026-10-30.
