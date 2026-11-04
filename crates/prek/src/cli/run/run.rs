@@ -595,7 +595,7 @@ async fn run_hooks<'paths>(
                 project_fail_fast: fail_fast
                     .or_else(|| project.config().fail_fast)
                     .unwrap_or(false),
-                groups: PriorityGroups::new(hooks).collect(),
+                groups: group_hooks_by_priority(hooks),
             });
         }
 
@@ -896,30 +896,21 @@ impl HookRunner<'_> {
     }
 }
 
-struct PriorityGroups {
-    hooks: Vec<ScheduledHook>,
-}
+/// Group hooks that are already sorted by priority.
+fn group_hooks_by_priority(hooks: Vec<ScheduledHook>) -> Vec<Vec<ScheduledHook>> {
+    let mut groups = Vec::new();
+    let mut hooks = hooks.into_iter().peekable();
 
-impl PriorityGroups {
-    fn new(hooks: Vec<ScheduledHook>) -> Self {
-        Self { hooks }
+    while let Some(hook) = hooks.next() {
+        let priority = hook.priority;
+        let mut group = vec![hook];
+        while let Some(hook) = hooks.next_if(|hook| hook.priority == priority) {
+            group.push(hook);
+        }
+        groups.push(group);
     }
-}
 
-impl Iterator for PriorityGroups {
-    type Item = Vec<ScheduledHook>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let first = self.hooks.first()?;
-        let priority = first.priority;
-        let next_priority = self
-            .hooks
-            .iter()
-            .position(|hook| hook.priority != priority)
-            .unwrap_or(self.hooks.len());
-
-        Some(self.hooks.drain(..next_priority).collect())
-    }
+    groups
 }
 
 enum ProjectHookInput<'index, 'paths> {
