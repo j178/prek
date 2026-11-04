@@ -692,7 +692,7 @@ wheels = [
 
 [[package]]
 name = "prek"
-version = "0.5.9"
+version = "0.5.10"
 source = { virtual = "." }
 
 [package.dev-dependencies]
