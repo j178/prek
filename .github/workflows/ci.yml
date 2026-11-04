@@ -33,6 +33,7 @@ env:
   DENO_VERSION: "2"
   DART_VERSION: "3.10.4"
   R_VERSION: "4.6.0"
+  SWIFT_VERSION: "6.4.2"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -633,6 +634,13 @@ jobs:
         uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install Swift"
+        if: ${{ runner.os == 'Linux' && contains(format(' {0} ', matrix.languages), ' swift ') }}
+        # Some Ubuntu runner images do not include Swift.
+        uses: tryswift/setup-swift@ce5fe39afee72fd792fabab6db8ec3005962daf7 # v1.2.0
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
 
       - name: "Install PHP and Composer"
         if: ${{ contains(format(' {0} ', matrix.languages), ' php ') }}
