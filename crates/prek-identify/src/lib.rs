@@ -447,15 +447,14 @@ pub fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     let file = fs_err::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
-    // Read one extra byte to reject an overlong line instead of parsing a truncated command.
     let len = reader
         .by_ref()
-        .take((MAX_SHEBANG_LINE_LEN + 1) as u64)
+        .take(MAX_SHEBANG_LINE_LEN as u64)
         .read_line(&mut line)?;
     if !line.starts_with("#!") {
         return Err(ShebangError::NoShebang);
     }
-    if len > MAX_SHEBANG_LINE_LEN {
+    if len == MAX_SHEBANG_LINE_LEN {
         return Err(ShebangError::TooLong);
     }
 
