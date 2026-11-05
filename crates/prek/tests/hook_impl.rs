@@ -198,6 +198,76 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hook_impl_pre_push_checks_pushed_ref() -> anyhow::Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc! {r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: check-content
+             name: check-content
+             language: system
+             entry: python3 check_content.py
+             files: ^content\.txt$
+             stages: [pre-push]
+        "#})
+        .with_file(
+            "check_content.py",
+            indoc! {r#"
+            from pathlib import Path
+            import sys
+
+            if Path(sys.argv[1]).read_text() != "good\n":
+                raise SystemExit(1)
+            "#},
+        )
+        .with_file("content.txt", "good\n")
+        .init_git();
+    context.git().add(".").commit("Initial commit");
+
+    let remote_repo_path = context.home_dir().join("remote.git");
+    fs_err::create_dir_all(&remote_repo_path)?;
+    context
+        .git_at(&remote_repo_path)
+        .run(["-c", "init.defaultBranch=master", "init", "--bare"]);
+    let mut add_remote = context.git().command();
+    add_remote
+        .arg("remote")
+        .arg("add")
+        .arg("origin")
+        .arg(&remote_repo_path);
+    add_remote.assert().success();
+    context.git().run(["push", "origin", "master"]);
+
+    context.git().run(["checkout", "-b", "topic"]);
+    context.write_file("content.txt", "bad\n");
+    context.git().add("content.txt").commit("Add invalid content");
+    context.git().checkout("master");
+
+    context
+        .install()
+        .arg("--hook-type")
+        .arg("pre-push")
+        .output()?
+        .assert()
+        .success();
+
+    let mut push_cmd = context.git().command();
+    push_cmd.args(["push", "origin", "topic"]);
+    let output = push_cmd.output()?;
+    assert!(!output.status.success());
+
+    let remote_ref = context
+        .git_at(&remote_repo_path)
+        .command()
+        .args(["show-ref", "--verify", "--quiet", "refs/heads/topic"])
+        .output()?;
+    assert!(!remote_ref.status.success());
+
+    Ok(())
+}
+
+#[test]
 fn hook_impl_pre_push_uses_first_ref_with_commits() -> anyhow::Result<()> {
     let context = TestEnv::new()
         .with_config(indoc! {r"
