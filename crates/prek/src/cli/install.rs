@@ -10,9 +10,8 @@ use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
 use same_file::is_same_file;
 
-use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
+use crate::cli::reporter::HookInitReporter;
 use crate::cli::run;
-use crate::cli::run::InstallCache;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;
@@ -189,10 +188,7 @@ pub(crate) async fn prepare_hooks(
         .map(Arc::new)
         .collect();
 
-    let reporter = HookInstallReporter::new(printer);
-    let mut install_cache = InstallCache::new();
-    run::install_hooks(filtered_hooks, store, &reporter, &mut install_cache).await?;
-    reporter.on_complete();
+    run::install_hooks(filtered_hooks, store, printer).await?;
 
     Ok(ExitStatus::Success)
 }

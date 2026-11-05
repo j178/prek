@@ -11,33 +11,42 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::config::Language;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
+use crate::printer::Printer;
 use crate::store::Store;
 
 /// Resolve already-installed hook environments and install the missing ones.
 ///
 /// The cache is only used for environments already present in the store. Environments created
 /// by this call are returned directly and reused within each install partition.
+/// The caller must hold the store lock.
 pub(crate) async fn install_hooks(
     hooks: Vec<Arc<Hook>>,
     store: &Store,
-    reporter: &HookInstallReporter,
-    cache: &mut InstallCache,
+    printer: Printer,
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
+    let cache = InstallCache::new();
     let (mut installed_hooks, hooks_to_install) =
         cache.partition_installed_hooks(store, hooks).await;
 
+    if hooks_to_install.is_empty() {
+        return Ok(installed_hooks);
+    }
+
+    let reporter = HookInstallReporter::new(printer);
     let semaphore = Rc::new(Semaphore::new(*INTERNAL_CONCURRENCY));
     let mut futures = FuturesUnordered::new();
 
     for partition in partition_hooks(hooks_to_install) {
         let semaphore = Rc::clone(&semaphore);
+        let reporter = &reporter;
         futures.push(async move { install_partition(partition, store, reporter, semaphore).await });
     }
 
     while let Some(partition_hooks) = futures.next().await {
         installed_hooks.extend(partition_hooks?);
     }
+    reporter.on_complete();
 
     debug_assert_eq!(
         num_hooks,
@@ -236,7 +245,7 @@ impl InstallCache {
     }
 
     /// Resolve cached environments concurrently, preserving hook order in each output.
-    pub(crate) async fn partition_installed_hooks(
+    async fn partition_installed_hooks(
         &self,
         store: &Store,
         hooks: Vec<Arc<Hook>>,

@@ -17,10 +17,10 @@ use prek_identify::{TagSet, tags_from_path};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, error, trace};
 
-use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
+use crate::cli::reporter::HookInitReporter;
 use crate::cli::run::diff::DiffTracker;
 use crate::cli::run::filter::{RunInputMode, stage_uses_message_file_input};
-use crate::cli::run::install::{InstallCache, install_hooks};
+use crate::cli::run::install::install_hooks;
 use crate::cli::run::stash::{RestoreOutcome, WorktreeStash};
 use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
@@ -441,24 +441,10 @@ async fn ensure_hooks_installed<'paths>(
 
     if !runnable_env_hooks.is_empty() {
         let _lock = store.lock_async().await?;
-        let mut install_cache = InstallCache::new();
-        let (installed_hooks, missing_env_hooks) = install_cache
-            .partition_installed_hooks(store, runnable_env_hooks)
-            .await;
+        let installed_hooks = install_hooks(runnable_env_hooks, store, printer).await?;
 
         for installed_hook in installed_hooks {
             installed_by_hook.insert(installed_hook.key(), installed_hook);
-        }
-
-        if !missing_env_hooks.is_empty() {
-            let reporter = HookInstallReporter::new(printer);
-            let installed_hooks =
-                install_hooks(missing_env_hooks, store, &reporter, &mut install_cache).await?;
-            reporter.on_complete();
-
-            for installed_hook in installed_hooks {
-                installed_by_hook.insert(installed_hook.key(), installed_hook);
-            }
         }
     }
 
