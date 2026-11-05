@@ -5,8 +5,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 
 use crate::cli::ExitStatus;
-use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
-use crate::cli::run::{InstallCache, Selectors, install_hooks};
+use crate::cli::reporter::HookInitReporter;
+use crate::cli::run::{Selectors, install_hooks};
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::store::Store;
@@ -57,11 +57,7 @@ pub(crate) async fn exec(
     };
     hook.language.ensure_exec_supported(&hook)?;
 
-    let install_reporter = HookInstallReporter::new(printer);
-    let mut install_cache = InstallCache::new();
-    let installed_hooks =
-        install_hooks(vec![hook], store, &install_reporter, &mut install_cache).await?;
-    install_reporter.on_complete();
+    let installed_hooks = install_hooks(vec![hook], store, printer).await?;
     let installed_hook = installed_hooks
         .into_iter()
         .next()
