@@ -372,6 +372,8 @@ fn tags_from_interpreter(interpreter: &str) -> TagSet {
 pub enum ShebangError {
     #[error("No shebang found")]
     NoShebang,
+    #[error("Shebang line is too long")]
+    TooLong,
     #[error("Shebang contains non-printable characters")]
     NonPrintableChars,
     #[error("Failed to parse shebang")]
@@ -439,13 +441,21 @@ fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<St
     cmd
 }
 
+const MAX_SHEBANG_LINE_LEN: usize = 1024;
+
 pub fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     let file = fs_err::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
-    reader.read_line(&mut line)?;
+    let len = reader
+        .by_ref()
+        .take(MAX_SHEBANG_LINE_LEN as u64)
+        .read_line(&mut line)?;
     if !line.starts_with("#!") {
         return Err(ShebangError::NoShebang);
+    }
+    if len == MAX_SHEBANG_LINE_LEN {
+        return Err(ShebangError::TooLong);
     }
 
     // Require only printable ASCII
