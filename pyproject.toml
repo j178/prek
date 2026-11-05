@@ -49,6 +49,7 @@ bindings = "bin"
 manifest-path = "crates/prek/Cargo.toml"
 strip = true
 python-source = "python"
+include = ["prek/py.typed"]
 
 [tool.rooster]
 version-format = "cargo"
