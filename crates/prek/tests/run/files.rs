@@ -348,6 +348,231 @@ fn run_multiple_files() {
     "#);
 }
 
+/// A list file and its entries use `--cd`, and all explicit selectors share deduplication.
+#[test]
+fn run_files0_from() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: filenames
+                name: filenames
+                language: system
+                entry: python3 -c 'import json, sys; print(json.dumps(sorted(sys.argv[1:])))'
+                verbose: true
+    "})
+        .with_files([
+            ("root.txt", "root\n"),
+            ("src/tracked.txt", "tracked\n"),
+            ("docs/readme.txt", "docs\n"),
+        ])
+        .init_git()
+        .with_file("src/untracked.txt", "untracked\n")
+        .with_file("lists/files0", b"untracked.txt\0missing.txt\0../root.txt");
+
+    cmd_snapshot!(context, context.run()
+        .args(["--cd", "src", "--files0-from", "../lists/files0"])
+        .args(["--files", "untracked.txt", "--glob", "*.txt", "--directory", "../docs"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    filenames................................................................Passed
+    - hook id: filenames
+    - duration: [TIME]
+
+      ["docs/readme.txt", "root.txt", "src/tracked.txt", "src/untracked.txt"]
+
+    ----- stderr -----
+    warning: This file does not exist and will be ignored: `missing.txt`
+    "#);
+}
+
+/// Piped paths are literal, and EOF can terminate the last path.
+#[test]
+fn run_files0_from_stdin() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: filenames
+                name: filenames
+                language: system
+                entry: python3 -c 'import json, sys; print(json.dumps(sorted(sys.argv[1:])))'
+                verbose: true
+    "})
+        .with_files([("hello world.txt", "hello\n"), ("quote's.txt", "quote\n")])
+        .init_git();
+
+    cmd_snapshot!(context, context.run()
+        .args(["--files0-from", "-"])
+        .pass_stdin("hello world.txt\0quote's.txt"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    filenames................................................................Passed
+    - hook id: filenames
+    - duration: [TIME]
+
+      ["hello world.txt", "quote's.txt"]
+
+    ----- stderr -----
+    "#);
+}
+
+/// An empty list must not select staged files or stash edits; `always_run` still applies.
+#[test]
+fn run_files0_from_empty() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: filenames
+                name: filenames
+                language: system
+                entry: echo
+                files: \.txt$
+              - id: always
+                name: always
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:])'
+                always_run: true
+                verbose: true
+    "})
+        .with_file("staged.txt", "staged\n")
+        .init_git()
+        .with_file("staged.txt", "unstaged\n")
+        .with_file("files0", b"");
+
+    cmd_snapshot!(context, context.run().args(["--files0-from", "files0"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    filenames............................................(no files to check)Skipped
+    always...................................................................Passed
+    - hook id: always
+    - duration: [TIME]
+
+      []
+
+    ----- stderr -----
+    ");
+}
+
+/// Unreadable or malformed lists fail before any hook runs, even after valid entries.
+#[test]
+fn run_files0_from_errors() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: must-not-run
+                name: must-not-run
+                language: system
+                entry: echo
+                always_run: true
+    "})
+        .with_file("exists.txt", "exists\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run().args(["--files0-from", "missing"]), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to collect files
+      caused by: failed to read from file `missing`: No such file or directory (os error 2)
+    ");
+
+    context.write_file("files0", b"\0");
+    cmd_snapshot!(context, context.run().args(["--files0-from", "files0"]), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to collect files
+      caused by: File list `files0` contains an empty path at entry 1
+    ");
+
+    context.write_file("files0", b"exists.txt\0\0");
+    cmd_snapshot!(context, context.run().args(["--files0-from", "files0"]), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to collect files
+      caused by: File list `files0` contains an empty path at entry 2
+    ");
+}
+
+/// Unix paths retain whitespace and shell metacharacters through hook execution.
+#[cfg(unix)]
+#[test]
+fn run_files0_from_preserves_unix_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    // Hex output prevents the snapshot path filters from rewriting literal backslashes.
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: filenames
+                name: filenames
+                language: system
+                entry: python3 -c 'import os, sys; print("\n".join(path.hex() for path in sorted(os.fsencode(arg) for arg in sys.argv[1:])))'
+                verbose: true
+    "#})
+        .init_git();
+
+    let names: &[&[u8]] = &[
+        b" leading.txt",
+        b"trailing.txt ",
+        b"line\nbreak.txt",
+        b"tab\tname.txt",
+        b"single'quote.txt",
+        b"double\"quote.txt",
+        b"back\\slash.txt",
+        b"$(literal)*.txt",
+        b"-leading-dash.txt",
+    ];
+    let mut files0 = Vec::new();
+    for name in names {
+        context.write_file(OsStr::from_bytes(name), "content\n");
+        files0.extend_from_slice(name);
+        files0.push(b'\0');
+    }
+    context.write_file("files0", files0);
+
+    cmd_snapshot!(context, context.run().args(["--files0-from", "files0"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    filenames................................................................Passed
+    - hook id: filenames
+    - duration: [TIME]
+
+      206c656164696e672e747874
+      24286c69746572616c292a2e747874
+      2d6c656164696e672d646173682e747874
+      6261636b5c736c6173682e747874
+      646f75626c652271756f74652e747874
+      6c696e650a627265616b2e747874
+      73696e676c652771756f74652e747874
+      746162096e616d652e747874
+      747261696c696e672e74787420
+
+    ----- stderr -----
+    ");
+}
+
 /// Test `prek run --glob` and its interaction with other explicit file selectors.
 #[test]
 fn run_glob() {

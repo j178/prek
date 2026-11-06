@@ -551,7 +551,7 @@ pub(crate) struct FileSelectionArgs {
     ///
     /// Paths are resolved relative to the current working directory after applying `--cd`. They may
     /// be tracked or untracked. This option accepts multiple paths and can be combined with
-    /// `--glob` and `--directory`.
+    /// `--files0-from`, `--glob`, and `--directory`.
     #[arg(
         long,
         conflicts_with_all = ["all_files", "from_ref", "to_ref"],
@@ -560,11 +560,30 @@ pub(crate) struct FileSelectionArgs {
     ]
     pub(crate) files: Vec<String>,
 
+    /// Run hooks on file paths read from a NUL-separated list.
+    ///
+    /// Use `-` to read the list from standard input. Paths are taken literally, including whitespace,
+    /// quotes, and backslashes. The final NUL is optional. Empty entries are rejected; an empty list
+    /// selects no files, though `always_run` hooks still run.
+    ///
+    /// The list file and the paths it contains are resolved relative to the current working
+    /// directory after applying `--cd`. Listed paths may be tracked or untracked. This option can
+    /// be combined with `--files`, `--glob`, and `--directory`.
+    ///
+    /// Paths are read as raw bytes on Unix and must be UTF-8 on other platforms.
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["all_files", "from_ref", "to_ref", "last_commit"],
+        value_hint = ValueHint::FilePath
+    )]
+    pub(crate) files0_from: Option<PathBuf>,
+
     /// Run hooks on tracked files matching the specified glob pattern.
     ///
     /// Patterns are matched against paths relative to the current working directory after applying
     /// `--cd`. Quote patterns to prevent shell expansion. This option can be repeated and combined
-    /// with `--files` and `--directory`.
+    /// with `--files`, `--files0-from`, and `--directory`.
     #[arg(
         long,
         value_name = "PATTERN",
@@ -575,7 +594,7 @@ pub(crate) struct FileSelectionArgs {
     /// Run hooks on tracked files under the specified directory.
     ///
     /// Paths are resolved relative to the current working directory after applying `--cd`. This
-    /// option can be repeated and combined with `--files` and `--glob`.
+    /// option can be repeated and combined with `--files`, `--files0-from`, and `--glob`.
     #[arg(
         short,
         long,
@@ -612,6 +631,7 @@ impl From<FileSelectionArgs> for run::FileSelection {
         let FileSelectionArgs {
             all_files,
             files,
+            files0_from,
             glob,
             directory,
             from_ref,
@@ -631,9 +651,10 @@ impl From<FileSelectionArgs> for run::FileSelection {
             refs => refs,
         };
 
-        if !files.is_empty() || !glob.is_empty() || !directory.is_empty() {
+        if !files.is_empty() || files0_from.is_some() || !glob.is_empty() || !directory.is_empty() {
             return Self::Explicit {
-                files,
+                files: files.into_iter().map(PathBuf::from).collect(),
+                files0_from,
                 globs: glob,
                 directories: directory,
             };
