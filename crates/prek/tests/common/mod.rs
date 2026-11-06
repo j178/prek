@@ -570,10 +570,10 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"/\d+-\d+\.patch", "/[TIME]-[PID].patch"),
     // Non-deterministic Git commit summaries
     (r"\[master [0-9a-f]{7}\]", "[master COMMIT]"),
-    // The exact message is host language dependent
+    // OS error messages vary by platform and locale; keep the preceding path and context.
     (
-        r"Caused by: .* \(os error 2\)",
-        "Caused by: No such file or directory (os error 2)",
+        r": [^:\r\n]+ \(os error 2\)",
+        ": No such file or directory (os error 2)",
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
