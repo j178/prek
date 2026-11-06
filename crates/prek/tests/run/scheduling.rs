@@ -184,6 +184,7 @@ fn explicitly_skipped_hook_does_not_affect_priority_group_outcome() {
 
 #[test]
 fn priority_group_modified_files_is_group_failure_and_output_is_indented() {
+    // Read-only peers must not suppress the shared diff or the group's failure.
     let context = TestEnv::new().with_file("file.txt", "hello\n").init_git();
 
     context.write_config(indoc::indoc! {r#"
@@ -207,6 +208,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() {
                 name: Prints Output
                 language: system
                 entry: python3 -c "print('hello from loud')"
+                read_only: true
                 always_run: true
                 verbose: true
                 priority: 0
@@ -214,6 +216,7 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() {
                 name: No Output
                 language: system
                 entry: python3 -c "import time; time.sleep(0.1)"
+                read_only: true
                 always_run: true
                 priority: 0
               - id: later

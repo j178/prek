@@ -384,6 +384,10 @@
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
         },
+        "read_only": {
+          "description": "Declare that this hook does not modify tracked files, allowing optimizations\nsuch as skipping Git diff checks. Built-in hooks are unaffected.\nDefaults to false, except for known read-only third-party hooks.",
+          "type": "boolean"
+        },
         "shell": {
           "description": "Run the hook entry through a predefined shell adapter.",
           "$ref": "#/definitions/Shell"
@@ -698,6 +702,10 @@
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
         },
+        "read_only": {
+          "description": "Declare that this hook does not modify tracked files, allowing optimizations\nsuch as skipping Git diff checks. Built-in hooks are unaffected.\nDefaults to false, except for known read-only third-party hooks.",
+          "type": "boolean"
+        },
         "shell": {
           "description": "Run the hook entry through a predefined shell adapter.",
           "$ref": "#/definitions/Shell"
@@ -870,6 +878,10 @@
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
+        },
+        "read_only": {
+          "description": "Declare that this hook does not modify tracked files, allowing optimizations\nsuch as skipping Git diff checks. Built-in hooks are unaffected.\nDefaults to false, except for known read-only third-party hooks.",
+          "type": "boolean"
         },
         "shell": {
           "description": "Run the hook entry through a predefined shell adapter.",
@@ -1048,6 +1060,10 @@
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
+        },
+        "read_only": {
+          "description": "Declare that this hook does not modify tracked files, allowing optimizations\nsuch as skipping Git diff checks. Built-in hooks are unaffected.\nDefaults to false, except for known read-only third-party hooks.",
+          "type": "boolean"
         },
         "shell": {
           "description": "Run the hook entry through a predefined shell adapter.",

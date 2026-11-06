@@ -1828,6 +1828,7 @@ dependencies = [
  "markdown",
  "memchr",
  "owo-colors",
+ "phf",
  "pprof",
  "predicates",
  "prek-consts",

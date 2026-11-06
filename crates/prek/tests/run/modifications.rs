@@ -316,6 +316,233 @@ fn later_project_snapshots_diff_left_by_previous_project() {
 }
 
 #[test]
+fn read_only_local_hooks_skip_diff_detection() {
+    // Both config formats must skip before/after diffs, including a dirty baseline,
+    // while preserving the exit status and diagnostics of a failing read-only hook.
+    for (filename, config) in [
+        (
+            ".pre-commit-config.yaml",
+            indoc::indoc! {r#"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: pass
+                        name: pass
+                        language: system
+                        entry: python3 -c 'pass'
+                        read_only: true
+                      - id: fail
+                        name: fail
+                        language: system
+                        entry: python3 -c 'import sys; print("check failed"); sys.exit(3)'
+                        read_only: true
+            "#},
+        ),
+        (
+            "prek.toml",
+            indoc::indoc! {r#"
+                [[repos]]
+                repo = "local"
+                [[repos.hooks]]
+                id = "pass"
+                name = "pass"
+                language = "system"
+                entry = "python3 -c 'pass'"
+                read_only = true
+                [[repos.hooks]]
+                id = "fail"
+                name = "fail"
+                language = "system"
+                entry = "python3 -c 'import sys; print(\"check failed\"); sys.exit(3)'"
+                read_only = true
+            "#},
+        ),
+    ] {
+        let context = TestEnv::new()
+            .with_file(filename, config)
+            .with_file("file.txt", "original\n")
+            .with_filter(r"(?m)^.*TRACE[^\n]*diff_worktree[^\n]*\n", "git diff\n")
+            .with_filter(r"(?m)^.*(?:TRACE|DEBUG) [^\n]*\n", "")
+            .init_git();
+        context.write_file("file.txt", "unstaged\n");
+
+        insta::allow_duplicates! {
+            cmd_snapshot!(context, context.run().arg("--all-files").env("RUST_LOG", "prek::git=trace"), @"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+            pass.....................................................................Passed
+            fail.....................................................................Failed
+            - hook id: fail
+            - exit code: 3
+
+              check failed
+
+            ----- stderr -----
+            ");
+        }
+    }
+}
+
+#[test]
+fn read_only_remote_hooks_respect_overrides() {
+    // Exercise real manifest loading and scheduling with an offline hook repo.
+    // Automatic defaults must not leak to fixers, other repos, or replacement commands;
+    // explicit project values override both manifest values and bundled defaults.
+    // URL aliases work across hosts, while host, path case, and port remain distinct.
+    let known = "https://github.com/pre-commit/pre-commit-hooks";
+    let unknown = "https://example.com/hooks";
+    for (url, id, manifest_options, config_options, diff_calls) in [
+        (known, "check-ast", "", "", 0),
+        (
+            "http://GITHUB.COM/pre-commit/pre-commit-hooks.git/",
+            "check-ast",
+            "",
+            "",
+            0,
+        ),
+        (
+            "git@github.com:pre-commit/pre-commit-hooks.git",
+            "check-ast",
+            "",
+            "",
+            0,
+        ),
+        (
+            "ssh://git@gitlab.com/bmares/check-json5.git",
+            "check-json5",
+            "",
+            "",
+            0,
+        ),
+        (
+            "https://gitlab.com/pre-commit/pre-commit-hooks",
+            "check-ast",
+            "",
+            "",
+            2,
+        ),
+        (
+            "https://gitlab.com/bmares/Check-json5",
+            "check-json5",
+            "",
+            "",
+            2,
+        ),
+        (
+            "ssh://git@github.com:2222/pre-commit/pre-commit-hooks",
+            "check-ast",
+            "",
+            "",
+            2,
+        ),
+        (known, "end-of-file-fixer", "", "", 2),
+        (unknown, "check-ast", "", "", 2),
+        (known, "check-ast", "", "read_only: false", 2),
+        (known, "check-ast", "read_only: false", "", 2),
+        (known, "check-ast", "", "entry: python3 -c 'pass'", 2),
+        (known, "check-ast", "", "language: system", 2),
+        (unknown, "check-ast", "read_only: true", "", 0),
+        (
+            "https://github.com/PyCQA/pydocstyle.git",
+            "pydocstyle",
+            "",
+            "",
+            0,
+        ),
+        (known, "pydocstyle", "", "", 2),
+        (
+            "https://github.com/Lucas-C/pre-commit-hooks",
+            "forbid-tabs",
+            "",
+            "",
+            0,
+        ),
+        (
+            "https://github.com/Lucas-C/pre-commit-hooks",
+            "remove-tabs",
+            "",
+            "",
+            2,
+        ),
+        (
+            unknown,
+            "check-ast",
+            "read_only: true",
+            "read_only: false",
+            2,
+        ),
+        (
+            unknown,
+            "check-ast",
+            "read_only: false",
+            "read_only: true",
+            0,
+        ),
+    ] {
+        let context = TestEnv::new()
+            .with_file("file.txt", "original\n")
+            .with_filter(r"(?m)^.*TRACE[^\n]*diff_worktree[^\n]*\n", "git diff\n")
+            .with_filter(r"(?m)^.*(?:TRACE|DEBUG) [^\n]*\n", "")
+            .init_git();
+        let hook_repo = context
+            .create_hook_repo(
+                "hooks",
+                indoc::formatdoc! {r"
+                - id: {id}
+                  name: check
+                  language: system
+                  entry: python3 -c 'pass'
+                  {manifest_options}
+            "},
+            )
+            .build();
+        context.write_config(indoc::formatdoc! {r"
+            repos:
+              - repo: '{url}'
+                rev: v1.0.0
+                hooks:
+                  - id: {id}
+                    {config_options}
+        "});
+        context.git().add(".");
+        context.write_file("file.txt", "unstaged\n");
+
+        let mut command = context.run();
+        command
+            .arg("--all-files")
+            .env("PREK_NO_FAST_PATH", "1")
+            .env("GIT_CONFIG_COUNT", "2")
+            .env("GIT_CONFIG_KEY_1", format!("url.{hook_repo}.insteadOf"))
+            .env("GIT_CONFIG_VALUE_1", url)
+            .env("RUST_LOG", "prek::git=trace");
+        insta::allow_duplicates! {
+            if diff_calls == 0 {
+                cmd_snapshot!(context, command, @"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+                check....................................................................Passed
+
+                ----- stderr -----
+                ");
+            } else {
+                cmd_snapshot!(context, command, @"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+                check....................................................................Passed
+
+                ----- stderr -----
+                git diff
+                git diff
+                ");
+            }
+        }
+    }
+}
+
+#[test]
 fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
@@ -493,6 +720,8 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
 
 #[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
+    // A read-only hook between a fixer and an external hook must leave the
+    // baseline invalidated so the external hook is not blamed for the fixer's edit.
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
@@ -502,12 +731,18 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
                 priority: 0
           - repo: local
             hooks:
+              - id: read-only
+                name: read-only
+                language: system
+                entry: python3 -c "pass"
+                read_only: true
+                priority: 1
               - id: noop
                 name: noop
                 language: system
                 entry: python3 -c "pass"
                 pass_filenames: false
-                priority: 1
+                priority: 2
     "#})
         .with_file("file.txt", "missing newline")
         .init_git();

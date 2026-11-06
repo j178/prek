@@ -63,8 +63,19 @@ pub(crate) struct HookSpec {
 }
 
 impl HookSpec {
-    pub(crate) fn from_remote(manifest: ManifestHook, config: &RemoteHook) -> Self {
+    pub(crate) fn from_remote(url: &str, manifest: ManifestHook, config: &RemoteHook) -> Self {
         let mut spec = Self::from(manifest);
+
+        // A replacement command need not share the original hook's read-only behavior.
+        if spec.options.read_only.is_none()
+            && config.entry.is_none()
+            && config.language.is_none()
+            && config.options.shell.is_none()
+            && spec.options.shell.is_none()
+            && crate::hooks::is_known_read_only(url, &spec.id)
+        {
+            spec.options.read_only = Some(true);
+        }
 
         if let Some(name) = &config.name {
             spec.name.clone_from(name);
@@ -384,6 +395,7 @@ pub(crate) struct Hook {
     pub description: Option<String>,
     pub language_request: LanguageRequest,
     pub log_file: Option<String>,
+    pub read_only: bool,
     pub require_serial: bool,
     pub stages: Stages,
     pub verbose: bool,
@@ -452,6 +464,7 @@ impl Hook {
             description,
             language_version,
             log_file,
+            read_only,
             shell,
             require_serial,
             stages,
@@ -489,6 +502,7 @@ impl Hook {
             description,
             language_request,
             log_file,
+            read_only: read_only.unwrap_or(false),
             require_serial: require_serial.unwrap_or(false),
             stages: stages.unwrap_or(Stages::ALL),
             verbose: verbose.unwrap_or(false),
@@ -909,7 +923,8 @@ mod tests {
             },
         };
 
-        let hook_spec = HookSpec::from_remote(manifest_hook, &hook_override);
+        let hook_spec =
+            HookSpec::from_remote("https://example.com/hooks", manifest_hook, &hook_override);
         let hook = Hook::from_spec(project.clone(), repo, hook_spec, 7).await?;
 
         insta::assert_debug_snapshot!(hook, @r#"
@@ -1001,6 +1016,7 @@ mod tests {
                 allows_download: true,
             },
             log_file: None,
+            read_only: false,
             require_serial: false,
             stages: Stages(manual),
             verbose: true,
@@ -1042,7 +1058,11 @@ mod tests {
             options: HookOptions::default(),
         };
 
-        let hook_spec = HookSpec::from_remote(manifest_hook, &hook_override);
+        let hook_spec = HookSpec::from_remote(
+            "https://github.com/pre-commit/pre-commit-hooks",
+            manifest_hook,
+            &hook_override,
+        );
         let hook = Hook::from_spec(project, repo, hook_spec, 0).await?;
 
         assert!(!check_fast_path(&hook));

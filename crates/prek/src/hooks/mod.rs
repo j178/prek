@@ -13,11 +13,13 @@ use crate::hook::{Hook, Repo};
 pub(crate) use crate::hooks::builtin_hooks::BuiltinHooks;
 pub(crate) use crate::hooks::meta_hooks::MetaHooks;
 use crate::hooks::pre_commit_hooks::{PreCommitHooks, is_pre_commit_hooks};
+pub(crate) use crate::hooks::read_only::is_known_read_only;
 use crate::store::Store;
 
 mod builtin_hooks;
 mod meta_hooks;
 mod pre_commit_hooks;
+mod read_only;
 
 // Erase hook implementation futures before awaiting them so dispatchers have one suspension point.
 type HookFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<HookOutput>> + 'a>>;
@@ -98,6 +100,10 @@ fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
 
 /// Returns whether a hook requires a Git diff to determine file changes.
 pub(crate) fn requires_diff_tracking(hook: &Hook) -> bool {
+    if hook.read_only {
+        return false;
+    }
+
     match hook.repo() {
         Repo::Meta | Repo::Builtin => false,
         Repo::Remote { .. } => fast_path_hook(hook).is_none() && hook.language.can_modify_files(),

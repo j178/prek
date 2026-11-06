@@ -390,7 +390,11 @@ fn hook_env_requirements_from_config(
                         continue;
                     };
 
-                    let hook_spec = HookSpec::from_remote(manifest_hook.clone(), hook_config);
+                    let hook_spec = HookSpec::from_remote(
+                        repo_config.source(),
+                        manifest_hook.clone(),
+                        hook_config,
+                    );
 
                     match HookEnvRequirement::from_hook_spec(config, hook_spec, Some(remote_repo)) {
                         Ok(Some(requirement)) => requirements.push(requirement),

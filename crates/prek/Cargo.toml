@@ -63,6 +63,7 @@ granit-parser = { workspace = true }
 asyncband = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
+phf = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rayon = { workspace = true }

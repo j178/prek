@@ -509,6 +509,10 @@ pub(crate) struct HookOptions {
     pub language_version: Option<LanguageVersion>,
     /// Write the output of the hook to a file when the hook fails or verbose is enabled.
     pub log_file: Option<String>,
+    /// Declare that this hook does not modify tracked files, allowing optimizations
+    /// such as skipping Git diff checks. Built-in hooks are unaffected.
+    /// Defaults to false, except for known read-only third-party hooks.
+    pub read_only: Option<bool>,
     /// Run the hook entry through a predefined shell adapter.
     pub shell: Option<Shell>,
     /// This hook will execute using a single process instead of in parallel.
@@ -555,6 +559,7 @@ impl HookOptions {
             pass_filenames,
             description,
             log_file,
+            read_only,
             shell,
             require_serial,
             stages,
@@ -610,6 +615,7 @@ struct HookWire {
     description: Option<String>,
     language_version: Option<LanguageVersion>,
     log_file: Option<String>,
+    read_only: Option<bool>,
     shell: Option<Shell>,
     require_serial: Option<bool>,
     stages: Option<Stages>,
@@ -639,6 +645,7 @@ impl HookWire {
             description: self.description.take(),
             language_version: self.language_version.take(),
             log_file: self.log_file.take(),
+            read_only: self.read_only.take(),
             shell: self.shell.take(),
             require_serial: self.require_serial.take(),
             stages: self.stages.take(),

@@ -1392,6 +1392,50 @@ only for `commit-msg` and/or `prepare-commit-msg` require Git's message file
 argument, so they are ignored unless run in the corresponding hook stage. If
 every matching hook is ignored this way, `prek run` warns and fails.
 
+### `read_only`
+
+!!! note "prek-only"
+
+    `read_only` is a `prek` extension.
+
+Declare that a hook does not modify tracked files, allowing `prek` to apply
+optimizations such as skipping `git diff` checks.
+
+- Type: boolean
+- Default: the hook manifest's value, then `true` for known read-only hooks, otherwise `false`
+
+`prek` includes read-only defaults for selected third-party hooks. Set
+`read_only: true` to mark a custom hook as read-only, or `read_only: false` to
+opt out. An explicit value in the project config overrides the default.
+
+This setting does not prevent file modifications. If a hook marked read-only
+writes files, `prek` may not detect or report those changes.
+
+Built-in hooks are unaffected by this option.
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      { id = "lint", name = "lint", language = "system", entry = "my-linter", read_only = true },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: lint
+            name: lint
+            language: system
+            entry: my-linter
+            read_only: true
+    ```
+
 ### `require_serial`
 
 Force a hook to run without parallel batches (one in-flight process for that hook at a time).

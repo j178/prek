@@ -54,6 +54,7 @@ each manifest hook:
 | `description` | No | No | string | Free-form metadata shown in listings; its first line is also shown with run details. |
 | `language_version` | No | No | string or map | Language/toolchain version request and source preference. |
 | `log_file` | No | No | string path | Write hook output to a file when the hook fails or is verbose. |
+| `read_only` | No | Yes | boolean | Declare that the hook does not modify tracked files, so `prek` can skip Git diff checks. See [`read_only`](reference/configuration.md#read_only). |
 | `require_serial` | No | No | boolean | Avoid concurrent invocations of this hook. |
 | `stages` | No | No | list of stage names | Git hook stages where this hook is eligible to run. |
 | `verbose` | No | No | boolean | Print output even when the hook succeeds. |
