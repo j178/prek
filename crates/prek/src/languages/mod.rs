@@ -590,7 +590,7 @@ impl Language {
             Repo::Remote { .. } | Repo::Local => {
                 let (exit_status, output) =
                     self.backend().run(store, hook, filenames, reporter).await?;
-                if self.can_modify_files() {
+                if self.can_modify_files() && !hook.read_only {
                     Ok(HookOutput::unknown(exit_status, output))
                 } else {
                     Ok(HookOutput::unchanged(exit_status, output))

@@ -316,6 +316,75 @@ fn later_project_snapshots_diff_left_by_previous_project() {
 }
 
 #[test]
+fn read_only_local_hooks_skip_diff_detection() {
+    // Both config formats must skip before/after diffs, including a dirty baseline,
+    // while preserving the exit status and diagnostics of a failing read-only hook.
+    for (filename, config) in [
+        (
+            ".pre-commit-config.yaml",
+            indoc::indoc! {r#"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: pass
+                        name: pass
+                        language: system
+                        entry: python3 -c 'pass'
+                        read_only: true
+                      - id: fail
+                        name: fail
+                        language: system
+                        entry: python3 -c 'import sys; print("check failed"); sys.exit(3)'
+                        read_only: true
+            "#},
+        ),
+        (
+            "prek.toml",
+            indoc::indoc! {r#"
+                [[repos]]
+                repo = "local"
+                [[repos.hooks]]
+                id = "pass"
+                name = "pass"
+                language = "system"
+                entry = "python3 -c 'pass'"
+                read_only = true
+                [[repos.hooks]]
+                id = "fail"
+                name = "fail"
+                language = "system"
+                entry = "python3 -c 'import sys; print(\"check failed\"); sys.exit(3)'"
+                read_only = true
+            "#},
+        ),
+    ] {
+        let context = TestEnv::new()
+            .with_file(filename, config)
+            .with_file("file.txt", "original\n")
+            .with_filter(r"(?m)^.*TRACE[^\n]*diff_worktree[^\n]*\n", "git diff\n")
+            .with_filter(r"(?m)^.*(?:TRACE|DEBUG) [^\n]*\n", "")
+            .init_git();
+        context.write_file("file.txt", "unstaged\n");
+
+        insta::allow_duplicates! {
+            cmd_snapshot!(context, context.run().arg("--all-files").env("RUST_LOG", "prek::git=trace"), @"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+            pass.....................................................................Passed
+            fail.....................................................................Failed
+            - hook id: fail
+            - exit code: 3
+
+              check failed
+
+            ----- stderr -----
+            ");
+        }
+    }
+}
+
+#[test]
 fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
@@ -493,6 +562,8 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
 
 #[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
+    // A read-only hook between a fixer and an external hook must leave the
+    // baseline invalidated so the external hook is not blamed for the fixer's edit.
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
@@ -502,12 +573,18 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
                 priority: 0
           - repo: local
             hooks:
+              - id: read-only
+                name: read-only
+                language: system
+                entry: python3 -c "pass"
+                read_only: true
+                priority: 1
               - id: noop
                 name: noop
                 language: system
                 entry: python3 -c "pass"
                 pass_filenames: false
-                priority: 1
+                priority: 2
     "#})
         .with_file("file.txt", "missing newline")
         .init_git();

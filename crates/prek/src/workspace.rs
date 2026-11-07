@@ -453,7 +453,11 @@ impl Project {
                             });
                         };
 
-                        let hook_spec = HookSpec::from_remote(manifest_hook.clone(), hook_config);
+                        let hook_spec = HookSpec::from_remote(
+                            repo_config.source(),
+                            manifest_hook.clone(),
+                            hook_config,
+                        );
 
                         push_hook(&repo, hook_spec).await?;
                     }
