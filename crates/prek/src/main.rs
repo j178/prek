@@ -50,6 +50,8 @@ mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
 #[cfg(unix)]
+mod pty;
+#[cfg(unix)]
 mod resource_limit;
 #[cfg(feature = "schemars")]
 mod schema;

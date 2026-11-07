@@ -15,7 +15,6 @@ license = "MIT"
 prek-consts = { path = "crates/prek-consts", version = "0.5.10" }
 prek-identify = { path = "crates/prek-identify", version = "0.5.10" }
 prek-ignore = { path = "crates/prek-ignore", version = "0.5.10" }
-prek-pty = { path = "crates/prek-pty", version = "0.5.10" }
 prek-update = { path = "crates/prek-update", version = "0.5.10" }
 
 aho-corasick = { version = "1.1.4" }

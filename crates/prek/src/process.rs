@@ -342,7 +342,7 @@ impl Cmd {
 
     #[cfg(not(windows))]
     async fn run_on_pty<S: OutputSink>(&mut self, mut sink: S) -> Result<MergedOutput, Error> {
-        let (mut pty, pts) = prek_pty::open().map_err(Error::Pty)?;
+        let (mut pty, pts) = crate::pty::open().map_err(Error::Pty)?;
         let (stdout, stderr) = pts.into_stdio()?;
 
         self.inner.stdin(Stdio::null());

@@ -98,8 +98,6 @@ which = { workspace = true }
 xml = { workspace = true }
 
 [target."cfg(unix)".dependencies]
-prek-pty = { workspace = true }
-
 libc = { workspace = true }
 pprof = { workspace = true, optional = true }
 rustix = { workspace = true }
