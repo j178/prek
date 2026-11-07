@@ -1833,7 +1833,6 @@ dependencies = [
  "prek-consts",
  "prek-identify",
  "prek-ignore",
- "prek-pty",
  "prek-update",
  "pretty_assertions",
  "rayon",
@@ -1905,14 +1904,6 @@ dependencies = [
  "tempfile",
  "tracing",
  "winapi-util",
-]
-
-[[package]]
-name = "prek-pty"
-version = "0.5.10"
-dependencies = [
- "rustix",
- "tokio",
 ]
 
 [[package]]
