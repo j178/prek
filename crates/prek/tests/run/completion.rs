@@ -64,7 +64,7 @@ fn selectors_completion() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
+    cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -95,6 +95,7 @@ fn selectors_completion() -> Result<()> {
     --no-group	Do not run hooks belonging to the specified group
     --all-files	Run hooks on all tracked files in the repository
     --files	Run hooks on the specified file paths
+    --files0-from	Run hooks on file paths read from a NUL-separated list
     --glob	Run hooks on tracked files matching the specified glob pattern
     --directory	Run hooks on tracked files under the specified directory
     --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
@@ -117,7 +118,7 @@ fn selectors_completion() -> Result<()> {
     --version	Display the prek version
 
     ----- stderr -----
-    "#);
+    ");
 
     cmd_snapshot!(context, context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("."), @r"
     success: true

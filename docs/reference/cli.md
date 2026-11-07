@@ -282,14 +282,18 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-run--config"><a href="#prek-run--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-run--directory"><a href="#prek-run--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on tracked files under the specified directory.</p>
-<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. This option can be repeated and combined with <code>--files</code> and <code>--glob</code>.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. This option can be repeated and combined with <code>--files</code>, <code>--files0-from</code>, and <code>--glob</code>.</p>
 </dd><dt id="prek-run--dry-run"><a href="#prek-run--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not run the hooks, but print the hooks that would have been run</p>
 </dd><dt id="prek-run--fail-fast"><a href="#prek-run--fail-fast"><code>--fail-fast</code></a></dt><dd><p>Stop running hooks after the first failure</p>
 </dd><dt id="prek-run--files"><a href="#prek-run--files"><code>--files</code></a> <i>files</i></dt><dd><p>Run hooks on the specified file paths.</p>
-<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. They may be tracked or untracked. This option accepts multiple paths and can be combined with <code>--glob</code> and <code>--directory</code>.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. They may be tracked or untracked. This option accepts multiple paths and can be combined with <code>--files0-from</code>, <code>--glob</code>, and <code>--directory</code>.</p>
+</dd><dt id="prek-run--files0-from"><a href="#prek-run--files0-from"><code>--files0-from</code></a> <i>file</i></dt><dd><p>Run hooks on file paths read from a NUL-separated list.</p>
+<p>Use <code>-</code> to read the list from standard input. Paths are taken literally, including whitespace, quotes, and backslashes. The final NUL is optional. Empty entries are rejected; an empty list selects no files, though <code>always_run</code> hooks still run.</p>
+<p>The list file and the paths it contains are resolved relative to the current working directory after applying <code>--cd</code>. Listed paths may be tracked or untracked. This option can be combined with <code>--files</code>, <code>--glob</code>, and <code>--directory</code>.</p>
+<p>Paths are read as raw bytes on Unix and must be UTF-8 on other platforms.</p>
 </dd><dt id="prek-run--from-ref"><a href="#prek-run--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-run--glob"><a href="#prek-run--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
-<p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
+<p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code>, <code>--files0-from</code>, and <code>--directory</code>.</p>
 </dd><dt id="prek-run--group"><a href="#prek-run--group"><code>--group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to the specified group.</p>
 <p>Can be specified multiple times; a hook may match any specified group. When combined with <code>--require-group</code>, both filters must match. <code>@ungrouped</code> matches hooks without groups.</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -872,14 +876,18 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-try-repo--config"><a href="#prek-try-repo--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-try-repo--directory"><a href="#prek-try-repo--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on tracked files under the specified directory.</p>
-<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. This option can be repeated and combined with <code>--files</code> and <code>--glob</code>.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. This option can be repeated and combined with <code>--files</code>, <code>--files0-from</code>, and <code>--glob</code>.</p>
 </dd><dt id="prek-try-repo--dry-run"><a href="#prek-try-repo--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not run the hooks, but print the hooks that would have been run</p>
 </dd><dt id="prek-try-repo--fail-fast"><a href="#prek-try-repo--fail-fast"><code>--fail-fast</code></a></dt><dd><p>Stop running hooks after the first failure</p>
 </dd><dt id="prek-try-repo--files"><a href="#prek-try-repo--files"><code>--files</code></a> <i>files</i></dt><dd><p>Run hooks on the specified file paths.</p>
-<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. They may be tracked or untracked. This option accepts multiple paths and can be combined with <code>--glob</code> and <code>--directory</code>.</p>
+<p>Paths are resolved relative to the current working directory after applying <code>--cd</code>. They may be tracked or untracked. This option accepts multiple paths and can be combined with <code>--files0-from</code>, <code>--glob</code>, and <code>--directory</code>.</p>
+</dd><dt id="prek-try-repo--files0-from"><a href="#prek-try-repo--files0-from"><code>--files0-from</code></a> <i>file</i></dt><dd><p>Run hooks on file paths read from a NUL-separated list.</p>
+<p>Use <code>-</code> to read the list from standard input. Paths are taken literally, including whitespace, quotes, and backslashes. The final NUL is optional. Empty entries are rejected; an empty list selects no files, though <code>always_run</code> hooks still run.</p>
+<p>The list file and the paths it contains are resolved relative to the current working directory after applying <code>--cd</code>. Listed paths may be tracked or untracked. This option can be combined with <code>--files</code>, <code>--glob</code>, and <code>--directory</code>.</p>
+<p>Paths are read as raw bytes on Unix and must be UTF-8 on other platforms.</p>
 </dd><dt id="prek-try-repo--from-ref"><a href="#prek-try-repo--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-try-repo--glob"><a href="#prek-try-repo--glob"><code>--glob</code></a> <i>pattern</i></dt><dd><p>Run hooks on tracked files matching the specified glob pattern.</p>
-<p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code> and <code>--directory</code>.</p>
+<p>Patterns are matched against paths relative to the current working directory after applying <code>--cd</code>. Quote patterns to prevent shell expansion. This option can be repeated and combined with <code>--files</code>, <code>--files0-from</code>, and <code>--directory</code>.</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-try-repo--hide-status"><a href="#prek-try-repo--hide-status"><code>--hide-status</code></a> <i>status</i></dt><dd><p>Hide hook reports with the specified final status.</p>
 <p>Can be specified multiple times or as a comma-separated list. This does not change hook execution or exit codes. Overrides <code>hide_status</code> in project and user configuration.</p>

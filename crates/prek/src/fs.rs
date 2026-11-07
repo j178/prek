@@ -51,6 +51,22 @@ static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(D
 static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
     LazyLock::new(Default::default);
 
+/// Decode a path from raw bytes on Unix or UTF-8 on other platforms.
+#[cfg(unix)]
+#[expect(clippy::unnecessary_wraps, reason = "Match the fallible non-Unix API")]
+pub(crate) fn path_from_bytes(bytes: &[u8]) -> Result<PathBuf, std::str::Utf8Error> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    Ok(PathBuf::from(OsStr::from_bytes(bytes)))
+}
+
+/// Decode a path from raw bytes on Unix or UTF-8 on other platforms.
+#[cfg(not(unix))]
+pub(crate) fn path_from_bytes(bytes: &[u8]) -> Result<PathBuf, std::str::Utf8Error> {
+    str::from_utf8(bytes).map(PathBuf::from)
+}
+
 /// Rename a file or directory, retrying permission and sharing errors on Windows.
 pub(crate) async fn rename_with_retry(
     from: impl AsRef<Path>,

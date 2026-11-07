@@ -10,6 +10,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags, tags_from_filename, tags_from_path};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
+use tokio::io::AsyncReadExt;
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, GlobPatterns, Stage};
@@ -457,7 +458,8 @@ pub(crate) enum FileSelection {
         to_ref: String,
     },
     Explicit {
-        files: Vec<String>,
+        files: Vec<PathBuf>,
+        files0_from: Option<PathBuf>,
         globs: Vec<Glob>,
         directories: Vec<String>,
     },
@@ -611,7 +613,7 @@ fn strip_prefix_in_place(path: &mut PathBuf, prefix: &Path) -> bool {
     true
 }
 
-fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
+fn adjust_relative_path(path: impl AsRef<Path>, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
     // Match the canonical Git root even when Windows gives the cwd an 8.3 name.
     let absolute = std::path::absolute(fs::CWD.join(path))?.clean();
     fs::relative_to(absolute, new_cwd)
@@ -632,7 +634,7 @@ fn warn_missing_files(files: &[String]) {
     }
 }
 
-fn collect_file_arguments(files: Vec<String>, git_root: &Path) -> Result<FxHashSet<PathBuf>> {
+fn collect_file_arguments(files: Vec<PathBuf>, git_root: &Path) -> Result<FxHashSet<PathBuf>> {
     let mut selected = FxHashSet::default();
     let mut missing = Vec::new();
 
@@ -640,12 +642,46 @@ fn collect_file_arguments(files: Vec<String>, git_root: &Path) -> Result<FxHashS
         if fs_err::exists(&file)? {
             selected.insert(fs::normalize_path(adjust_relative_path(&file, git_root)?));
         } else {
-            missing.push(file);
+            missing.push(file.display().to_string());
         }
     }
 
     warn_missing_files(&missing);
     Ok(selected)
+}
+
+async fn read_files0_from(path: &Path) -> Result<Vec<PathBuf>> {
+    let bytes = if path.as_os_str() == "-" {
+        let mut bytes = Vec::new();
+        tokio::io::stdin()
+            .read_to_end(&mut bytes)
+            .await
+            .context("Failed to read file paths from standard input")?;
+        bytes
+    } else {
+        fs_err::tokio::read(path).await?
+    };
+
+    bytes
+        .split_inclusive(|&byte| byte == b'\0')
+        .enumerate()
+        .map(|(index, bytes)| {
+            let bytes = bytes.strip_suffix(b"\0").unwrap_or(bytes);
+            anyhow::ensure!(
+                !bytes.is_empty(),
+                "File list `{}` contains an empty path at entry {}",
+                path.display(),
+                index + 1
+            );
+            fs::path_from_bytes(bytes).with_context(|| {
+                format!(
+                    "File list `{}` contains an invalid path at entry {}",
+                    path.display(),
+                    index + 1
+                )
+            })
+        })
+        .collect()
 }
 
 fn git_pathspec(path: &Path) -> &Path {
@@ -658,10 +694,14 @@ fn git_pathspec(path: &Path) -> &Path {
 
 async fn collect_explicit_files(
     git_root: &Path,
-    files: Vec<String>,
+    mut files: Vec<PathBuf>,
+    files0_from: Option<PathBuf>,
     globs: Vec<Glob>,
     directories: Vec<String>,
 ) -> Result<Vec<PathBuf>> {
+    if let Some(path) = files0_from {
+        files.extend(read_files0_from(&path).await?);
+    }
     let mut selected = collect_file_arguments(files, git_root)?;
     let patterns = GlobPatterns::from_globs(globs)?;
     let cwd_relative = if patterns.is_empty() {
@@ -726,13 +766,16 @@ async fn collect_files_for_selection(
         }
         FileSelection::Explicit {
             files,
+            files0_from,
             globs,
             directories,
-        } => Ok(collect_explicit_files(git_root, files, globs, directories)
-            .await?
-            .into_iter()
-            .map(FileEntry::from)
-            .collect()),
+        } => Ok(
+            collect_explicit_files(git_root, files, files0_from, globs, directories)
+                .await?
+                .into_iter()
+                .map(FileEntry::from)
+                .collect(),
+        ),
         FileSelection::All { .. } => {
             let files = git::ls_files(git_root, [workspace_root]).await?;
             debug!("All files in the workspace: {}", files.len());
@@ -763,6 +806,21 @@ mod tests {
     use super::*;
     use crate::cli::FileSelectionArgs;
     use crate::config::GlobPatterns;
+
+    /// List files preserve non-UTF-8 paths even on filesystems that cannot create those names.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn files0_from_preserves_non_utf8_paths() -> anyhow::Result<()> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let file = tempfile::NamedTempFile::new()?;
+        fs_err::write(file.path(), b"bad-\xff.txt\0")?;
+
+        let paths = super::read_files0_from(file.path()).await?;
+        assert_eq!(paths, [PathBuf::from(OsStr::from_bytes(b"bad-\xff.txt"))]);
+        Ok(())
+    }
 
     #[test]
     fn all_file_selection_preserves_partial_refs() {

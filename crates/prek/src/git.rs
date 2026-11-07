@@ -12,7 +12,7 @@ use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
 
-use crate::fs::PathClean;
+use crate::fs::{PathClean, path_from_bytes};
 use crate::process;
 use crate::process::{Cmd, StatusError};
 
@@ -194,24 +194,8 @@ pub(crate) fn git_cmd() -> Result<Cmd, Error> {
 fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
-        .map(path_from_git_bytes)
+        .map(path_from_bytes)
         .collect()
-}
-
-/// Decode a Git path without resolving it against a directory.
-#[cfg(unix)]
-#[expect(clippy::unnecessary_wraps)]
-fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt as _;
-
-    Ok(PathBuf::from(OsStr::from_bytes(bytes)))
-}
-
-/// Decode a Git path without resolving it against a directory.
-#[cfg(not(unix))]
-fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
-    str::from_utf8(bytes).map(PathBuf::from)
 }
 
 /// Encode a path for Git without changing its spelling or base directory.
@@ -341,7 +325,7 @@ fn parse_diff_files(output: &[u8]) -> Result<Vec<FileEntry>, Error> {
             .filter(|path| !path.is_empty())
             .ok_or(Error::InvalidDiffFile)?;
         files.push(FileEntry {
-            path: path_from_git_bytes(path)?,
+            path: path_from_bytes(path)?,
             deleted_mode,
         });
     }
@@ -452,7 +436,7 @@ fn parse_worktree_status(output: &[u8]) -> Result<WorktreeStatus, Error> {
             .next()
             .filter(|path| !path.is_empty())
             .ok_or(Error::InvalidDiffFile)?;
-        let path = path_from_git_bytes(path)?;
+        let path = path_from_bytes(path)?;
         match change {
             b"U" => status.unmerged = true,
             // Unstaged additions are intent-to-add entries; untracked files are omitted.
@@ -669,10 +653,10 @@ impl Repo {
                 stdout.split(|&b| b == b'\n').collect_tuple()
         {
             (
-                path_from_git_bytes(git_dir)?,
-                path_from_git_bytes(common_dir)?,
-                path_from_git_bytes(hooks_dir)?,
-                Ok(path_from_git_bytes(root)?),
+                path_from_bytes(git_dir)?,
+                path_from_bytes(common_dir)?,
+                path_from_bytes(hooks_dir)?,
+                Ok(path_from_bytes(root)?),
             )
         } else {
             // rev-parse cannot NUL-delimit these paths. Query them separately
@@ -681,7 +665,7 @@ impl Repo {
                 let (cmd, output) = rev_parse(args)?;
                 let output = cmd.check_output(output)?;
                 let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
-                path_from_git_bytes(stdout).map_err(Error::from)
+                path_from_bytes(stdout).map_err(Error::from)
             };
             (
                 path(&["--absolute-git-dir"])?,
@@ -1079,7 +1063,7 @@ pub(crate) async fn lfs_files(
     let mut it = read_result.split(|&byte| byte == b'\0');
     while let (Some(file), Some(_attr), Some(value)) = (it.next(), it.next(), it.next()) {
         if value == b"lfs" {
-            lfs_files.insert(path_from_git_bytes(file)?);
+            lfs_files.insert(path_from_bytes(file)?);
         }
     }
 
@@ -1207,7 +1191,7 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
         if path.is_empty() {
             continue;
         }
-        submodules.push(git_root.join(path_from_git_bytes(path)?));
+        submodules.push(git_root.join(path_from_bytes(path)?));
     }
     Ok(submodules)
 }
