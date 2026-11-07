@@ -473,7 +473,7 @@ Path to alternate config file
 
 Run hooks on tracked files under the specified directory.
 
-Paths are resolved relative to the current working directory after applying `--cd`. This option can be repeated and combined with `--files` and `--glob`.
+Paths are resolved relative to the current working directory after applying `--cd`. This option can be repeated and combined with `--files`, `--files0-from`, and `--glob`.
 
 **[`--dry-run`](<#prek-run--dry-run>)**
 
@@ -487,7 +487,17 @@ Stop running hooks after the first failure
 
 Run hooks on the specified file paths.
 
-Paths are resolved relative to the current working directory after applying `--cd`. They may be tracked or untracked. This option accepts multiple paths and can be combined with `--glob` and `--directory`.
+Paths are resolved relative to the current working directory after applying `--cd`. They may be tracked or untracked. This option accepts multiple paths and can be combined with `--files0-from`, `--glob`, and `--directory`.
+
+**[`--files0-from`](<#prek-run--files0-from>) *file***
+
+Run hooks on file paths read from a NUL-separated list.
+
+Use `-` to read the list from standard input. Paths are taken literally, including whitespace, quotes, and backslashes. The final NUL is optional. Empty entries are rejected; an empty list selects no files, though `always_run` hooks still run.
+
+The list file and the paths it contains are resolved relative to the current working directory after applying `--cd`. Listed paths may be tracked or untracked. This option can be combined with `--files`, `--glob`, and `--directory`.
+
+Paths are read as raw bytes on Unix and must be UTF-8 on other platforms.
 
 **[`--from-ref`](<#prek-run--from-ref>), `--source`, `-s` *from-ref***
 
@@ -497,7 +507,7 @@ The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in 
 
 Run hooks on tracked files matching the specified glob pattern.
 
-Patterns are matched against paths relative to the current working directory after applying `--cd`. Quote patterns to prevent shell expansion. This option can be repeated and combined with `--files` and `--directory`.
+Patterns are matched against paths relative to the current working directory after applying `--cd`. Quote patterns to prevent shell expansion. This option can be repeated and combined with `--files`, `--files0-from`, and `--directory`.
 
 **[`--group`](<#prek-run--group>) *group***
 
@@ -1637,7 +1647,7 @@ Path to alternate config file
 
 Run hooks on tracked files under the specified directory.
 
-Paths are resolved relative to the current working directory after applying `--cd`. This option can be repeated and combined with `--files` and `--glob`.
+Paths are resolved relative to the current working directory after applying `--cd`. This option can be repeated and combined with `--files`, `--files0-from`, and `--glob`.
 
 **[`--dry-run`](<#prek-try-repo--dry-run>)**
 
@@ -1651,7 +1661,17 @@ Stop running hooks after the first failure
 
 Run hooks on the specified file paths.
 
-Paths are resolved relative to the current working directory after applying `--cd`. They may be tracked or untracked. This option accepts multiple paths and can be combined with `--glob` and `--directory`.
+Paths are resolved relative to the current working directory after applying `--cd`. They may be tracked or untracked. This option accepts multiple paths and can be combined with `--files0-from`, `--glob`, and `--directory`.
+
+**[`--files0-from`](<#prek-try-repo--files0-from>) *file***
+
+Run hooks on file paths read from a NUL-separated list.
+
+Use `-` to read the list from standard input. Paths are taken literally, including whitespace, quotes, and backslashes. The final NUL is optional. Empty entries are rejected; an empty list selects no files, though `always_run` hooks still run.
+
+The list file and the paths it contains are resolved relative to the current working directory after applying `--cd`. Listed paths may be tracked or untracked. This option can be combined with `--files`, `--glob`, and `--directory`.
+
+Paths are read as raw bytes on Unix and must be UTF-8 on other platforms.
 
 **[`--from-ref`](<#prek-try-repo--from-ref>), `--source`, `-s` *from-ref***
 
@@ -1661,7 +1681,7 @@ The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in 
 
 Run hooks on tracked files matching the specified glob pattern.
 
-Patterns are matched against paths relative to the current working directory after applying `--cd`. Quote patterns to prevent shell expansion. This option can be repeated and combined with `--files` and `--directory`.
+Patterns are matched against paths relative to the current working directory after applying `--cd`. Quote patterns to prevent shell expansion. This option can be repeated and combined with `--files`, `--files0-from`, and `--directory`.
 
 **[`--help`](<#prek-try-repo--help>), `-h`**
 
