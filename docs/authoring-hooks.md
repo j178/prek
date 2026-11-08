@@ -223,6 +223,10 @@ prek try-repo ../path/to/hook-repo my-hook-id --verbose
 Notes:
 
 - `prek try-repo` accepts any path or git URL `git clone` understands.
+- Hook environments are cached in the prek store, so repeated runs reuse them as
+  long as the hook repository's contents stay the same, including uncommitted
+  changes. Editing the repository installs a fresh environment, and
+  [`prek cache gc`](reference/cli.md#prek-cache-gc) removes the ones no longer used.
 - For `prepare-commit-msg` or `commit-msg` hooks, pass the appropriate
   `--commit-msg-filename` argument when testing.
 
