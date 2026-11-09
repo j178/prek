@@ -47,7 +47,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/python-jsonschema/check-jsonschema"
-rev = "0494aa7fa1314e98913a41227d8f0a515b2c1049"  # frozen: 0.38.2
+rev = "a76b92851fc9eede9f9bc4073eb55202f34eb0df"  # frozen: 0.39.0
 hooks = [
   {
     id = "check-metaschema",
@@ -62,7 +62,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/tombi-toml/tombi-pre-commit"
-rev = "b92a6526b182617e157a91c82c378e24bd36c30d"  # frozen: v1.9.5
+rev = "10da57f75d36ba93b257a4e7f2c70796fa2da683"  # frozen: v1.9.8
 hooks = [
   { id = "tombi-format", args = ["--offline"], files = '\.toml$' },
 ]
