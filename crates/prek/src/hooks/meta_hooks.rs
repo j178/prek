@@ -128,10 +128,13 @@ pub(crate) async fn check_hooks_apply(
     let tag_cache = FileTagCache::from_paths(&input);
 
     for project in projects {
-        let project_hooks = project
-            .init_hooks(store, HookInitFilters::none(), None)
-            .await
-            .context("Failed to init hooks")?;
+        let project_hooks = {
+            let store = store.lock().await?;
+            project
+                .init_hooks(&store, HookInitFilters::none(), None)
+                .await
+                .context("Failed to init hooks")?
+        };
         let hooks = project_hooks
             .iter()
             .filter(|hook| {

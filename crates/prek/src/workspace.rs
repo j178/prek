@@ -20,7 +20,7 @@ use crate::config::{self, Config, read_config};
 use crate::fs::{PathClean, Simplified};
 use crate::hook::HookSpec;
 use crate::hook::{self, Hook, Repo};
-use crate::store::{CacheBucket, Store};
+use crate::store::{CacheBucket, Store, StoreGuard};
 use crate::{git, store, warn_user};
 
 #[derive(Error, Debug)]
@@ -150,7 +150,7 @@ fn remote_configs_to_clone<'a>(projects: &[ProjectInitPlan<'a>]) -> Vec<&'a conf
 }
 
 async fn init_remote_repos<'a>(
-    store: &Store,
+    store: &StoreGuard<'_>,
     remote_configs: Vec<&'a config::RemoteRepo>,
     reporter: Option<&dyn HookInitReporter>,
 ) -> Result<FxHashMap<config::RemoteRepoKey<'a>, Arc<Repo>>, Error> {
@@ -399,7 +399,7 @@ impl Project {
     /// Initialize the project, cloning the repository and preparing hooks.
     pub(crate) async fn init_hooks(
         self,
-        store: &Store,
+        store: &StoreGuard<'_>,
         filters: HookInitFilters<'_>,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<Vec<Hook>, Error> {
@@ -904,7 +904,7 @@ impl Workspace {
     /// Load and prepare hooks for all projects.
     pub(crate) async fn init_hooks(
         &self,
-        store: &Store,
+        store: &StoreGuard<'_>,
         filters: HookInitFilters<'_>,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<Vec<Hook>, Error> {

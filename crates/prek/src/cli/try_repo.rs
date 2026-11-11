@@ -241,7 +241,10 @@ pub(crate) async fn try_repo(
             prepared.rev.clone(),
             vec![],
         );
-        let repo_clone_path = store.clone_repo(&repo_config, None).await?;
+        let repo_clone_path = {
+            let store = store.lock().await?;
+            store.clone_repo(&repo_config, None).await?
+        };
         let manifest =
             config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
         let hooks = manifest

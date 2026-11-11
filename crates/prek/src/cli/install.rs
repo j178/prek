@@ -172,11 +172,11 @@ pub(crate) async fn prepare_hooks(
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     let reporter = HookInitReporter::new(printer);
-    let _lock = store.lock_async().await?;
+    let store = store.lock().await?;
 
     let hooks = workspace
         .init_hooks(
-            store,
+            &store,
             HookInitFilters::new(Some(&selectors), None),
             Some(&reporter),
         )
@@ -188,7 +188,7 @@ pub(crate) async fn prepare_hooks(
         .map(Arc::new)
         .collect();
 
-    run::install_hooks(filtered_hooks, store, printer).await?;
+    run::install_hooks(filtered_hooks, &store, printer).await?;
 
     Ok(ExitStatus::Success)
 }

@@ -1,5 +1,6 @@
 use std::hash::{Hash, Hasher};
 use std::io::Write;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -112,6 +113,88 @@ impl Store {
         Ok(self)
     }
 
+    /// Acquire the cross-process lock for repository, environment, and config tracking operations.
+    pub(crate) async fn lock(&self) -> Result<StoreGuard<'_>, std::io::Error> {
+        let lock = LockedFile::acquire(self.path.join(".lock"), "store").await?;
+        Ok(StoreGuard {
+            store: self,
+            _lock: lock,
+        })
+    }
+
+    /// Returns the path to where a remote repo would be stored.
+    pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+        self.repos_dir().join(Self::repo_key(repo))
+    }
+
+    /// Returns the store key (directory name) for a remote repo.
+    pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
+        let mut hasher = SeaHasher::new();
+        repo.source().hash(&mut hasher);
+        repo.rev.hash(&mut hasher);
+        to_hex(hasher.finish())
+    }
+
+    pub(crate) fn repos_dir(&self) -> PathBuf {
+        self.path.join("repos")
+    }
+
+    pub(crate) fn hooks_dir(&self) -> PathBuf {
+        self.path.join("hooks")
+    }
+
+    pub(crate) fn patches_dir(&self) -> PathBuf {
+        self.path.join("patches")
+    }
+
+    pub(crate) fn tools_dir(&self) -> PathBuf {
+        self.path.join("tools")
+    }
+
+    pub(crate) fn cache_dir(&self) -> PathBuf {
+        self.path.join("cache")
+    }
+
+    /// The path to the tool directory in the store.
+    pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
+        self.tools_dir().join(tool.as_ref())
+    }
+
+    pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
+        self.cache_dir().join(tool.as_ref())
+    }
+
+    /// Scratch path for temporary files.
+    pub(crate) fn scratch_path(&self) -> PathBuf {
+        self.path.join("scratch")
+    }
+
+    pub(crate) fn log_file(&self) -> PathBuf {
+        self.path.join("prek.log")
+    }
+
+    pub(crate) fn config_tracking_file(&self) -> PathBuf {
+        self.path.join("config-tracking.json")
+    }
+}
+
+/// Access to a store while its cross-process lock is held.
+#[derive(Debug)]
+#[must_use = "the store lock is released when the guard is dropped"]
+pub(crate) struct StoreGuard<'a> {
+    store: &'a Store,
+    _lock: LockedFile,
+}
+
+impl Deref for StoreGuard<'_> {
+    type Target = Store;
+
+    fn deref(&self) -> &Self::Target {
+        self.store
+    }
+}
+
+impl StoreGuard<'_> {
     async fn clone_repo_to_temp(
         &self,
         repo: &RemoteRepo,
@@ -284,65 +367,6 @@ impl Store {
                 repo: repo.repo().to_string(),
                 error: git::Error::Io(std::io::Error::other("repo was not cloned")),
             })
-    }
-
-    pub(crate) async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(self.path.join(".lock"), "store").await
-    }
-
-    /// Returns the path to where a remote repo would be stored.
-    pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
-        self.repos_dir().join(Self::repo_key(repo))
-    }
-
-    /// Returns the store key (directory name) for a remote repo.
-    pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
-        let mut hasher = SeaHasher::new();
-        repo.source().hash(&mut hasher);
-        repo.rev.hash(&mut hasher);
-        to_hex(hasher.finish())
-    }
-
-    pub(crate) fn repos_dir(&self) -> PathBuf {
-        self.path.join("repos")
-    }
-
-    pub(crate) fn hooks_dir(&self) -> PathBuf {
-        self.path.join("hooks")
-    }
-
-    pub(crate) fn patches_dir(&self) -> PathBuf {
-        self.path.join("patches")
-    }
-
-    pub(crate) fn tools_dir(&self) -> PathBuf {
-        self.path.join("tools")
-    }
-
-    pub(crate) fn cache_dir(&self) -> PathBuf {
-        self.path.join("cache")
-    }
-
-    /// The path to the tool directory in the store.
-    pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
-        self.tools_dir().join(tool.as_ref())
-    }
-
-    pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
-        self.cache_dir().join(tool.as_ref())
-    }
-
-    /// Scratch path for temporary files.
-    pub(crate) fn scratch_path(&self) -> PathBuf {
-        self.path.join("scratch")
-    }
-
-    pub(crate) fn log_file(&self) -> PathBuf {
-        self.path.join("prek.log")
-    }
-
-    pub(crate) fn config_tracking_file(&self) -> PathBuf {
-        self.path.join("config-tracking.json")
     }
 
     /// Get all tracked config files.
