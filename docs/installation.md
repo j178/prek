@@ -189,11 +189,11 @@ If you added prek as a project dependency, run it through that package manager:
 === "npm project dependency"
 
     ```bash
-    npm exec -- prek --version
+    npm exec -- @j178/prek --version
     ```
 
 The rest of this documentation uses the shorter `prek` form. For a project
-dependency, substitute `uv run prek` or `npm exec -- prek`.
+dependency, substitute `uv run prek` or `npm exec -- @j178/prek`.
 
 ## Run without installing
 
