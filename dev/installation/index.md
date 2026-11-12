@@ -221,10 +221,10 @@ uv run prek --version
 ```
 
 ```bash
-npm exec -- prek --version
+npm exec -- @j178/prek --version
 ```
 
-The rest of this documentation uses the shorter `prek` form. For a project dependency, substitute `uv run prek` or `npm exec -- prek`.
+The rest of this documentation uses the shorter `prek` form. For a project dependency, substitute `uv run prek` or `npm exec -- @j178/prek`.
 
 ## Run without installing
 
