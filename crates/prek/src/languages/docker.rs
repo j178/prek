@@ -40,10 +40,7 @@ enum Error {
 /// Check if the current process is running inside a Docker container.
 /// see <https://stackoverflow.com/questions/23513045/how-to-check-if-a-process-is-running-inside-docker-container>
 fn is_in_docker() -> bool {
-    if fs_err::metadata("/.dockerenv").is_ok() || fs_err::metadata("/run/.containerenv").is_ok() {
-        return true;
-    }
-    false
+    fs_err::metadata("/.dockerenv").is_ok() || fs_err::metadata("/run/.containerenv").is_ok()
 }
 
 /// Get container id the process is running in.
