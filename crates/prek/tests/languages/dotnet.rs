@@ -114,12 +114,18 @@ fn invalid_language_version() {
     ");
 }
 
-/// Different managed SDK versions must coexist regardless of the system SDK.
+/// A managed .NET 8 SDK must coexist with the system SDK without downloading it.
 #[cfg(feature = "ci")]
 #[test]
 fn multiple_sdk_versions() -> anyhow::Result<()> {
+    let output = std::process::Command::new("dotnet")
+        .arg("--version")
+        .output()?;
+    anyhow::ensure!(output.status.success(), "Failed to query the system SDK");
+    let system_version = str::from_utf8(&output.stdout)?.trim();
+
     let context = TestEnv::new()
-        .with_config(indoc::indoc! {r"
+        .with_config(indoc::formatdoc! {r"
         repos:
           - repo: local
             hooks:
@@ -133,20 +139,22 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 always_run: true
                 pass_filenames: false
                 verbose: true
-              - id: hook-10
-                name: hook-10
+              - id: hook-system
+                name: hook-system
                 language: dotnet
                 entry: dotnet --version
                 language_version:
-                  request: '10.0'
-                  preference: only-managed
+                  request: '{system_version}'
+                  preference: only-system
                 always_run: true
                 pass_filenames: false
                 verbose: true
     "})
         .init_git();
 
-    let context = context.with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
+    let context = context
+        .with_filter(&regex::escape(system_version), "[SYSTEM_VERSION]")
+        .with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
 
     cmd_snapshot!(context, context.run(), @"
     success: true
@@ -157,32 +165,28 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
     - duration: [TIME]
 
       8.0.X
-    hook-10..................................................................Passed
-    - hook id: hook-10
+    hook-system..............................................................Passed
+    - hook id: hook-system
     - duration: [TIME]
 
-      10.0.X
+      [SYSTEM_VERSION]
 
     ----- stderr -----
     ");
 
     let dotnet_tool_root = context.home_dir().child("tools").child("dotnet");
 
-    let mut found_8 = false;
-    let mut found_10 = false;
+    let mut managed_versions = Vec::new();
 
-    for entry in fs_err::read_dir(dotnet_tool_root.path())?.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('8') {
-            found_8 = true;
-        }
-        if name.starts_with("10") {
-            found_10 = true;
+    for entry in fs_err::read_dir(dotnet_tool_root.path())? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            let version = semver::Version::parse(&entry.file_name().to_string_lossy())?;
+            managed_versions.push(version.major);
         }
     }
 
-    assert!(found_8, "Managed dotnet 8.x should exist");
-    assert!(found_10, "Managed dotnet 10.x should exist");
+    assert_eq!(managed_versions, [8], "Only .NET 8 should be downloaded");
 
     Ok(())
 }
