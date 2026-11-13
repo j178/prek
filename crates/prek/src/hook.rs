@@ -2,25 +2,29 @@ use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::str::FromStr;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result, bail};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
+use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use prek_identify::{TagSet, tags};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
-use tracing::trace;
+use tracing::{instrument, trace};
 
+use crate::cli::run::HookRunReporter;
 use crate::config::{
     self, BuiltinHook, Config, FilePattern, HookOptions, Language, LocalHook, ManifestHook,
     MetaHook, PassFilenames, RemoteHook, Stages, read_manifest,
 };
 use crate::hook_entry::HookEntry;
+use crate::hooks::{BuiltinHooks, HookOutput, MetaHooks};
 use crate::languages::version::LanguageRequest;
 use crate::languages::{ShellSupport, extract_metadata};
-use crate::store::StoreGuard;
+use crate::store::{Store, StoreGuard};
 use crate::workspace::Project;
 
 #[derive(Error, Debug)]
@@ -355,6 +359,40 @@ pub(crate) struct HookKey {
     pub(crate) hook_idx: usize,
 }
 
+/// The selected implementation, shared by execution and scheduling decisions.
+#[derive(Debug, Clone, Copy)]
+enum HookImpl {
+    Builtin(BuiltinHooks),
+    Meta(MetaHooks),
+    Language(Language),
+}
+
+impl HookImpl {
+    fn resolve(repo: &Repo, spec: &HookSpec) -> Result<Self> {
+        static NO_FAST_PATH: LazyLock<bool> =
+            LazyLock::new(|| EnvVars.is_set(EnvVars::PREK_NO_FAST_PATH));
+
+        match repo {
+            Repo::Builtin => return Ok(Self::Builtin(BuiltinHooks::from_str(&spec.id)?)),
+            Repo::Meta => return Ok(Self::Meta(MetaHooks::from_str(&spec.id)?)),
+            // TODO: Decide whether fast-path hooks should honor or ignore a configured `shell`.
+            Repo::Remote { url, .. }
+                if !*NO_FAST_PATH
+                    && !spec.language_overridden
+                    && url == "https://github.com/pre-commit/pre-commit-hooks" =>
+            {
+                if let Ok(builtin) = BuiltinHooks::from_str(&spec.id)
+                    && builtin.supports_fast_path()
+                {
+                    return Ok(Self::Builtin(builtin));
+                }
+            }
+            Repo::Remote { .. } | Repo::Local => {}
+        }
+        Ok(Self::Language(spec.language))
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
@@ -367,7 +405,6 @@ pub(crate) struct Hook {
     pub name: String,
     pub entry: HookEntry,
     pub language: Language,
-    pub(crate) language_overridden: bool,
     pub alias: String,
     pub files: Option<FilePattern>,
     pub exclude: Option<FilePattern>,
@@ -384,6 +421,7 @@ pub(crate) struct Hook {
     pub description: Option<String>,
     pub language_request: LanguageRequest,
     pub log_file: Option<String>,
+    implementation: HookImpl,
     pub require_serial: bool,
     pub stages: Stages,
     pub verbose: bool,
@@ -414,13 +452,15 @@ impl Hook {
         hook_spec
             .validate(&repo)
             .map_err(|error| hook_error(&hook_spec.id, error))?;
+        let implementation = HookImpl::resolve(&repo, &hook_spec)
+            .map_err(|error| hook_error(&hook_spec.id, error))?;
 
         let HookSpec {
             id,
             name,
             entry: raw_entry,
             language,
-            language_overridden,
+            language_overridden: _,
             priority,
             groups,
             options,
@@ -472,7 +512,6 @@ impl Hook {
             name,
             entry,
             language,
-            language_overridden,
             alias: alias.unwrap_or_default(),
             files,
             exclude,
@@ -489,6 +528,7 @@ impl Hook {
             description,
             language_request,
             log_file,
+            implementation,
             require_serial: require_serial.unwrap_or(false),
             stages: stages.unwrap_or(Stages::ALL),
             verbose: verbose.unwrap_or(false),
@@ -510,6 +550,14 @@ impl Hook {
 
     pub(crate) fn project(&self) -> &Project {
         &self.project
+    }
+
+    /// Native implementations report file changes directly, including writes by fixers.
+    pub(crate) fn requires_diff_tracking(&self) -> bool {
+        match self.implementation {
+            HookImpl::Language(language) => language.can_modify_files(),
+            HookImpl::Builtin(_) | HookImpl::Meta(_) => false,
+        }
     }
 
     pub(crate) fn key(&self) -> HookKey {
@@ -664,6 +712,27 @@ pub(crate) const HOOK_MARKER: &str = ".prek-hook.json";
 pub(crate) const INSTALL_INFO_SCHEMA_VERSION: u8 = 1;
 
 impl InstalledHook {
+    #[instrument(skip_all, fields(hook_id=%self.id, language=%self.language))]
+    pub(crate) async fn run(
+        &self,
+        store: &Store,
+        filenames: &[&Path],
+        reporter: &HookRunReporter,
+    ) -> Result<HookOutput> {
+        match self.implementation {
+            HookImpl::Builtin(builtin) => builtin.run(store, self, filenames, reporter).await,
+            HookImpl::Meta(meta) => meta.run(store, self, filenames, reporter).await,
+            HookImpl::Language(language) => {
+                let (exit_status, output) = language.run(store, self, filenames, reporter).await?;
+                if language.can_modify_files() {
+                    Ok(HookOutput::unknown(exit_status, output))
+                } else {
+                    Ok(HookOutput::unchanged(exit_status, output))
+                }
+            }
+        }
+    }
+
     /// Get the path to the environment where the hook is installed.
     pub(crate) fn env_path(&self) -> Option<&Path> {
         match self {
@@ -832,7 +901,6 @@ mod tests {
         RemoteHook, Shell, Stage, Stages,
     };
     use crate::hook::HookSpec;
-    use crate::hooks::check_fast_path;
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
@@ -965,7 +1033,6 @@ mod tests {
                 },
             ),
             language: Python,
-            language_overridden: false,
             alias: "alias-1",
             files: None,
             exclude: None,
@@ -1001,6 +1068,9 @@ mod tests {
                 allows_download: true,
             },
             log_file: None,
+            implementation: Language(
+                Python,
+            ),
             require_serial: false,
             stages: Stages(manual),
             verbose: true,
@@ -1013,39 +1083,6 @@ mod tests {
         }
         "#);
 
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn explicit_language_override_uses_pinned_remote_hook() -> Result<()> {
-        let (temp, project) = setup_hook_test()?;
-        let repo = Arc::new(Repo::Remote {
-            path: temp.path().join("remote-repo"),
-            url: "https://github.com/pre-commit/pre-commit-hooks".to_string(),
-            rev: "v6.0.0".to_string(),
-            hooks: vec![],
-        });
-        let manifest_hook = ManifestHook {
-            id: "check-yaml".to_string(),
-            name: "check yaml".to_string(),
-            entry: "check-yaml".to_string(),
-            language: Language::Python,
-            options: HookOptions::default(),
-        };
-        let hook_override = RemoteHook {
-            id: "check-yaml".to_string(),
-            name: None,
-            entry: None,
-            language: Some(Language::Python),
-            priority: None,
-            groups: None,
-            options: HookOptions::default(),
-        };
-
-        let hook_spec = HookSpec::from_remote(manifest_hook, &hook_override);
-        let hook = Hook::from_spec(project, repo, hook_spec, 0).await?;
-
-        assert!(!check_fast_path(&hook));
         Ok(())
     }
 

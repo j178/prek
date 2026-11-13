@@ -1,23 +1,47 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::LazyLock;
 
 use clap::Parser;
-use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::cli::run::HookRunReporter;
-use crate::hook::{Hook, Repo};
-pub(crate) use crate::hooks::builtin_hooks::BuiltinHooks;
-pub(crate) use crate::hooks::meta_hooks::MetaHooks;
-use crate::hooks::pre_commit_hooks::{PreCommitHooks, is_pre_commit_hooks};
-use crate::store::Store;
+use crate::hook::Hook;
+pub(crate) use crate::hooks::builtin::BuiltinHooks;
+pub(crate) use crate::hooks::meta::MetaHooks;
 
-mod builtin_hooks;
-mod meta_hooks;
-mod pre_commit_hooks;
+mod builtin;
+mod check_added_large_files;
+mod check_case_conflict;
+mod check_commit_trailers;
+mod check_executables_have_shebangs;
+mod check_illegal_windows_names;
+mod check_json;
+mod check_json5;
+mod check_jsonc;
+mod check_merge_conflict;
+mod check_shebang_scripts_are_executable;
+mod check_signed_commit;
+mod check_symlinks;
+mod check_toml;
+mod check_vcs_permalinks;
+mod check_xml;
+mod check_yaml;
+mod destroyed_symlinks;
+mod detect_private_key;
+mod file_contents_sorter;
+mod fix_byte_order_marker;
+mod fix_end_of_file;
+mod fix_trailing_whitespace;
+mod forbid_new_submodules;
+mod meta;
+mod mixed_line_ending;
+mod no_commit_to_branch;
+mod normalize_indentation;
+mod pattern;
+mod pretty_format_json;
+mod replace_pattern;
+mod requirements_txt_fixer;
+mod shebangs;
 
 // Erase hook implementation futures before awaiting them so dispatchers have one suspension point.
 type HookFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<HookOutput>> + 'a>>;
@@ -73,53 +97,38 @@ impl HookOutput {
     }
 }
 
-static NO_FAST_PATH: LazyLock<bool> = LazyLock::new(|| EnvVars.is_set(EnvVars::PREK_NO_FAST_PATH));
-
-/// Returns true if the hook has a builtin Rust implementation.
-pub fn check_fast_path(hook: &Hook) -> bool {
-    fast_path_hook(hook).is_some()
+#[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+pub(crate) struct FilenamesArgs {
+    #[arg(value_name = "FILENAMES")]
+    pub(crate) filenames: Vec<PathBuf>,
 }
 
-fn fast_path_hook(hook: &Hook) -> Option<PreCommitHooks> {
-    // TODO: Decide whether fast-path hooks should honor or ignore a configured `shell`.
-    if *NO_FAST_PATH || hook.language_overridden {
-        return None;
-    }
-
-    let Repo::Remote { url, .. } = hook.repo() else {
-        return None;
-    };
-    if !is_pre_commit_hooks(url) {
-        return None;
-    }
-
-    PreCommitHooks::from_str(hook.id.as_str()).ok()
+#[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+pub(crate) struct FixArgs {
+    /// Report files that would change without modifying them.
+    #[arg(long)]
+    pub(crate) check: bool,
+    #[arg(value_name = "FILENAMES")]
+    pub(crate) filenames: Vec<PathBuf>,
 }
 
-/// Returns whether a hook requires a Git diff to determine file changes.
-pub(crate) fn requires_diff_tracking(hook: &Hook) -> bool {
-    match hook.repo() {
-        Repo::Meta | Repo::Builtin => false,
-        Repo::Remote { .. } => fast_path_hook(hook).is_none() && hook.language.can_modify_files(),
-        Repo::Local => hook.language.can_modify_files(),
+pub(crate) fn contents_equal<'a>(
+    mut original: &[u8],
+    chunks: impl IntoIterator<Item = &'a [u8]>,
+) -> bool {
+    for chunk in chunks {
+        let Some(rest) = original.strip_prefix(chunk) else {
+            return false;
+        };
+        original = rest;
     }
-}
-
-pub(crate) async fn run_fast_path(
-    _store: &Store,
-    hook: &Hook,
-    filenames: &[&Path],
-    reporter: &HookRunReporter,
-) -> anyhow::Result<HookOutput> {
-    let progress = reporter.on_run_start(hook, filenames.len());
-
-    let implemented =
-        fast_path_hook(hook).expect("run_fast_path requires a supported pre-commit hook");
-    let result = implemented.run(hook, filenames).await;
-
-    reporter.on_run_complete(progress);
-
-    result
+    original.is_empty()
 }
 
 fn parse_hook_args<T: Parser>(hook: &Hook) -> anyhow::Result<T> {

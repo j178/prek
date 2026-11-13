@@ -6,8 +6,7 @@ use aho_corasick::AhoCorasick;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::FilenamesArgs;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks};
 
 const BLACKLIST: &[&[u8]] = &[
     b"BEGIN RSA PRIVATE KEY",

@@ -4,28 +4,22 @@ use std::str::FromStr;
 use anyhow::Result;
 use clap::{Command, CommandFactory};
 use prek_identify::tags;
+use tracing::debug;
 
 use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
-use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::{
-    FixArgs, check_added_large_files, check_case_conflict, check_executables_have_shebangs,
-    check_illegal_windows_names, check_json, check_merge_conflict,
-    check_shebang_scripts_are_executable, check_symlinks, check_toml, check_vcs_permalinks,
-    check_xml, check_yaml, destroyed_symlinks, detect_private_key, file_contents_sorter,
-    fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace, forbid_new_submodules,
-    mixed_line_ending, no_commit_to_branch, pretty_format_json, requirements_txt_fixer,
+use crate::hook::{Hook, Repo};
+use crate::hooks::{
+    FixArgs, HookFuture, HookOutput, check_added_large_files, check_case_conflict,
+    check_commit_trailers, check_executables_have_shebangs, check_illegal_windows_names,
+    check_json, check_json5, check_jsonc, check_merge_conflict,
+    check_shebang_scripts_are_executable, check_signed_commit, check_symlinks, check_toml,
+    check_vcs_permalinks, check_xml, check_yaml, destroyed_symlinks, detect_private_key,
+    file_contents_sorter, fix_byte_order_marker, fix_end_of_file, fix_trailing_whitespace,
+    forbid_new_submodules, mixed_line_ending, no_commit_to_branch, normalize_indentation, pattern,
+    pretty_format_json, replace_pattern, requirements_txt_fixer,
 };
-use crate::hooks::{HookFuture, HookOutput};
 use crate::store::Store;
-
-mod check_commit_trailers;
-mod check_json5;
-mod check_jsonc;
-mod check_signed_commit;
-mod normalize_indentation;
-mod pattern;
-mod replace_pattern;
 
 #[derive(
     Debug,
@@ -78,6 +72,46 @@ pub(crate) enum BuiltinHooks {
 }
 
 impl BuiltinHooks {
+    /// Whether this implementation can replace the corresponding pre-commit hook.
+    pub(crate) fn supports_fast_path(self) -> bool {
+        match self {
+            Self::CheckAddedLargeFiles
+            | Self::CheckCaseConflict
+            | Self::CheckExecutablesHaveShebangs
+            | Self::CheckIllegalWindowsNames
+            | Self::CheckJson
+            | Self::CheckMergeConflict
+            | Self::CheckShebangScriptsAreExecutable
+            | Self::CheckSymlinks
+            | Self::CheckToml
+            | Self::CheckVcsPermalinks
+            | Self::CheckXml
+            | Self::CheckYaml
+            | Self::DestroyedSymlinks
+            | Self::DetectPrivateKey
+            | Self::EndOfFileFixer
+            | Self::FileContentsSorter
+            | Self::FixByteOrderMarker
+            | Self::ForbidNewSubmodules
+            | Self::MixedLineEnding
+            | Self::NoCommitToBranch
+            | Self::RequirementsTxtFixer
+            | Self::TrailingWhitespace => true,
+            // pretty-format-json needs broader upstream parity coverage before automatic replacement.
+            Self::PrettyFormatJson
+            | Self::CheckCommitTrailers
+            | Self::CheckJson5
+            | Self::CheckJsonc
+            | Self::CheckSignedCommit
+            | Self::DenyFilenamePattern
+            | Self::DenyPattern
+            | Self::NormalizeIndentation
+            | Self::ReplacePattern
+            | Self::RequireFilenamePattern
+            | Self::RequirePattern => false,
+        }
+    }
+
     fn flags_command(self) -> Option<Command> {
         Some(match self {
             Self::CheckAddedLargeFiles => check_added_large_files::Args::command(),
@@ -118,6 +152,14 @@ impl BuiltinHooks {
         reporter: &HookRunReporter,
     ) -> Result<HookOutput> {
         let progress = reporter.on_run_start(hook, filenames.len());
+        if matches!(hook.repo(), Repo::Remote { .. }) {
+            debug!(
+                "Running hook `{}` with prek's bundled Rust implementation instead of `{}` (fast path); behavior and defaults may differ. Set `language: {}` for this hook or `PREK_NO_FAST_PATH=1` to run the pinned implementation",
+                hook.id,
+                hook.repo(),
+                hook.language,
+            );
+        }
         let future: HookFuture<'_> = match self {
             Self::CheckAddedLargeFiles => Box::pin(check_added_large_files::run(hook, filenames)),
             Self::CheckCaseConflict => Box::pin(check_case_conflict::run(hook, filenames)),

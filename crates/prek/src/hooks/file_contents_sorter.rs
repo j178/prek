@@ -5,8 +5,7 @@ use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::contents_equal;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, contents_equal, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]

@@ -4,8 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::FilenamesArgs;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks};
 
 /// Runs the `check-toml` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {

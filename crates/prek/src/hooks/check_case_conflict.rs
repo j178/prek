@@ -6,8 +6,7 @@ use rustc_hash::FxHashSet;
 
 use crate::git;
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::FilenamesArgs;
-use crate::hooks::{HookOutput, hook_filenames, parse_hook_args};
+use crate::hooks::{FilenamesArgs, HookOutput, hook_filenames, parse_hook_args};
 
 /// Runs the `check-case-conflict` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {

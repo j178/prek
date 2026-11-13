@@ -784,7 +784,7 @@ impl HookRunner<'_> {
                 && group_hooks
                     .iter()
                     .filter_map(HookPlan::as_run)
-                    .any(|hook| hooks::requires_diff_tracking(hook));
+                    .any(|hook| hook.requires_diff_tracking());
             diff_tracker
                 .prepare_for_group(group_requires_diff_tracking)
                 .await?;
@@ -1113,27 +1113,15 @@ async fn run_hook(
     } else {
         input.shuffle();
 
-        match &input {
-            HookRunInput::Filenames(filenames) => {
-                installed_hook
-                    .language
-                    .run(store, installed_hook, filenames, reporter)
-                    .await
-            }
-            HookRunInput::Filename(filename) => {
-                installed_hook
-                    .language
-                    .run(store, installed_hook, slice::from_ref(filename), reporter)
-                    .await
-            }
-            HookRunInput::WithoutFilenames { .. } => {
-                installed_hook
-                    .language
-                    .run(store, installed_hook, &[], reporter)
-                    .await
-            }
-        }
-        .with_context(|| format!("Failed to run hook `{installed_hook}`"))?
+        let filenames = match &input {
+            HookRunInput::Filenames(filenames) => filenames.as_slice(),
+            HookRunInput::Filename(filename) => slice::from_ref(filename),
+            HookRunInput::WithoutFilenames { .. } => &[],
+        };
+        installed_hook
+            .run(store, filenames, reporter)
+            .await
+            .with_context(|| format!("Failed to run hook `{installed_hook}`"))?
     };
 
     let hooks::HookOutput {
