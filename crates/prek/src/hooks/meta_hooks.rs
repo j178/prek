@@ -313,11 +313,7 @@ pub(crate) async fn check_useless_excludes(hook: &Hook, filenames: &[&Path]) -> 
         for ((hook_id, opts), exclude_matches) in hook_options.iter().zip(exclude_matches) {
             if !exclude_matches {
                 code = 1;
-                let display = opts
-                    .exclude
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_default();
+                let display = opts.exclude.as_ref().map_or_default(ToString::to_string);
                 writeln!(
                     &mut output,
                     "The exclude pattern `{display}` for `{hook_id}` does not match any files"

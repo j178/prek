@@ -105,10 +105,7 @@ async fn is_glibc(loader: &Path) -> Result<bool> {
 }
 
 fn is_versioned_glibc_loader(name: &str) -> bool {
-    let Some(version) = name
-        .strip_prefix("ld-")
-        .and_then(|name| name.strip_suffix(".so"))
-    else {
+    let Some(version) = name.strip_circumfix("ld-", ".so") else {
         return false;
     };
     let Some((major, minor)) = version.split_once('.') else {

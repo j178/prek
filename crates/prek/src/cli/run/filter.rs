@@ -573,7 +573,7 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
     })?;
 
     let mut files = collect_files_for_selection(git_root, root, selection, include_deleted).await?;
-    if !relative_root.as_os_str().is_empty() {
+    if !relative_root.is_empty() {
         files.retain_mut(|file| strip_prefix_in_place(&mut file.path, relative_root));
     }
 
@@ -685,7 +685,7 @@ async fn read_files0_from(path: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn git_pathspec(path: &Path) -> &Path {
-    if path.as_os_str().is_empty() {
+    if path.is_empty() {
         Path::new(".")
     } else {
         path
@@ -727,7 +727,7 @@ async fn collect_explicit_files(
             let file = fs::normalize_path(file);
             let matches_directory = directories
                 .iter()
-                .any(|directory| directory.as_os_str().is_empty() || file.starts_with(directory));
+                .any(|directory| directory.is_empty() || file.starts_with(directory));
             let matches_glob = !matches_directory
                 && !patterns.is_empty()
                 && file

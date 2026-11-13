@@ -377,7 +377,7 @@ impl Project {
     }
 
     pub(crate) fn is_root(&self) -> bool {
-        self.relative_path.as_os_str().is_empty()
+        self.relative_path.is_empty()
     }
 
     pub(crate) fn display_name(&self) -> String {

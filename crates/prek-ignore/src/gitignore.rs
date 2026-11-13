@@ -297,7 +297,7 @@ pub fn gitconfig_excludes_path() -> Option<PathBuf> {
 )]
 fn gitconfig_global_env_contents() -> Option<Vec<u8>> {
     let path = std::env::var_os("GIT_CONFIG_GLOBAL").map(PathBuf::from)?;
-    if path.as_os_str().is_empty() {
+    if path.is_empty() {
         return None;
     }
     let mut file = BufReader::new(File::open(path).ok()?);
@@ -315,7 +315,7 @@ fn gitconfig_global_env_contents() -> Option<Vec<u8>> {
 fn gitconfig_system_contents() -> Option<Vec<u8>> {
     let path = std::env::var_os("GIT_CONFIG_SYSTEM")
         .map(PathBuf::from)
-        .filter(|x| !x.as_os_str().is_empty())
+        .filter(|x| !x.is_empty())
         .unwrap_or_else(|| PathBuf::from("/etc/gitconfig"));
     let mut file = BufReader::new(File::open(path).ok()?);
     let mut contents = vec![];
@@ -340,7 +340,7 @@ fn gitconfig_home_contents() -> Option<Vec<u8>> {
 fn gitconfig_xdg_contents() -> Option<Vec<u8>> {
     let path = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .filter(|x| !x.as_os_str().is_empty())
+        .filter(|x| !x.is_empty())
         .or_else(|| home_dir().map(|p| p.join(".config")))
         .map(|x| x.join("git/config"))?;
     let mut file = BufReader::new(File::open(path).ok()?);
@@ -358,7 +358,7 @@ fn gitconfig_xdg_contents() -> Option<Vec<u8>> {
 fn excludes_file_default() -> Option<PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .filter(|x| !x.as_os_str().is_empty())
+        .filter(|x| !x.is_empty())
         .or_else(|| home_dir().map(|p| p.join(".config")))
         .map(|x| x.join("git/ignore"))
 }

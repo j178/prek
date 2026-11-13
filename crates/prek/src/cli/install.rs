@@ -329,7 +329,7 @@ async fn install_hook_script(
         let git_root = git::root()?;
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
-        if !relative_path.as_os_str().is_empty() {
+        if !relative_path.is_empty() {
             args.push(format!(r#"--cd="{}""#, relative_path.display()));
         }
 

@@ -57,10 +57,7 @@ pub(crate) fn is_file_name<P: AsRef<Path>>(path: P) -> bool {
     }
     #[cfg(not(unix))]
     {
-        path.as_ref()
-            .parent()
-            .map(|p| p.as_os_str().is_empty())
-            .unwrap_or(false)
+        path.as_ref().parent().is_some_and(Path::is_empty)
     }
 }
 

@@ -78,7 +78,7 @@ fn insert_path_and_parents<'p>(set: &mut FxHashSet<&'p Path>, file: &'p Path) {
 
     let mut current = file;
     while let Some(parent) = current.parent() {
-        if parent.as_os_str().is_empty() {
+        if parent.is_empty() {
             break;
         }
         set.insert(parent);

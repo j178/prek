@@ -43,10 +43,7 @@ fn github_api(app_name: &str) -> Result<String> {
             let domain = url.domain().with_context(|| {
                 format!("{github_variable} must contain a domain; use {enterprise_variable} for GitHub Enterprise")
             })?;
-            let port = url
-                .port()
-                .map(|port| format!(":{port}"))
-                .unwrap_or_default();
+            let port = url.port().map_or_default(|port| format!(":{port}"));
             Ok(format!("{}://api.{domain}{port}", url.scheme()))
         }
         (Err(_), Err(_)) => Ok("https://api.github.com".to_owned()),
@@ -134,7 +131,7 @@ fn next_page(header: &str) -> Option<&str> {
             .split(';')
             .any(|parameter| parameter.trim() == "rel=\"next\"")
         {
-            url.trim().strip_prefix('<')?.strip_suffix('>')
+            url.trim().strip_circumfix('<', '>')
         } else {
             None
         }

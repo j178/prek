@@ -29,7 +29,7 @@
 //!   it; progress displays commonly use it to overwrite a previous frame. **LF**
 //!   advances to the next line.
 
-use std::fmt::Write as _;
+use core::fmt::NumBuffer;
 use std::io;
 use std::sync::LazyLock;
 
@@ -260,6 +260,7 @@ impl Perform for TerminalOutput {
 /// Encodes parsed SGR parameters as a canonical CSI `m` sequence.
 fn sgr_sequence<'a>(params: impl Iterator<Item = &'a [u16]>) -> Option<String> {
     let mut sequence = String::from("\x1b[");
+    let mut buffer = NumBuffer::new();
     let mut has_params = false;
     for (param_index, param) in params.enumerate() {
         if param_index != 0 {
@@ -270,7 +271,7 @@ fn sgr_sequence<'a>(params: impl Iterator<Item = &'a [u16]>) -> Option<String> {
             if subparam_index != 0 {
                 sequence.push(':');
             }
-            write!(sequence, "{subparam}").ok()?;
+            sequence.push_str(subparam.format_into(&mut buffer));
         }
     }
     if !has_params {

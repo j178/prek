@@ -492,8 +492,7 @@ async fn search_ruby_installations(dir: &Path, request: &RubyRequest) -> Option<
 /// returns `Some(Version(3.4.8))`. Returns `None` for non-matching platforms,
 /// non-semver versions (e.g. `0.49`), and pre-release versions.
 fn parse_version_from_asset(name: &str, platform_suffix: &str) -> Option<semver::Version> {
-    let name = name.strip_prefix("ruby-")?;
-    let version_str = name.strip_suffix(platform_suffix)?;
+    let version_str = name.strip_circumfix("ruby-", platform_suffix)?;
     let version = semver::Version::parse(version_str).ok()?;
     // Skip pre-release versions (e.g. 3.5.0-preview1) unless explicitly requested
     if !version.pre.is_empty() {
