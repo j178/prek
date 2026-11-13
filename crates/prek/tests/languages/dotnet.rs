@@ -153,7 +153,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
         .init_git();
 
     let context = context
-        .with_filter(&regex::escape(system_version), "[SYSTEM_VERSION]")
+        .with_filter(regex::escape(system_version), "[SYSTEM_VERSION]")
         .with_filter(r"\b(\d+\.\d+)\.\d+\b", "$1.X");
 
     cmd_snapshot!(context, context.run(), @"
