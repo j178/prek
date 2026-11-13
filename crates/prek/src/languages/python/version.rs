@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use crate::hook::InstallInfo;
-use crate::languages::version::{Error, try_into_u64_slice};
+use crate::languages::version::{Error, parse_prerelease_version, try_into_u64_slice};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PythonRequest {
@@ -11,6 +11,7 @@ pub(crate) enum PythonRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
+    Prerelease(semver::Version, String),
     Range(semver::VersionReq, String),
 }
 
@@ -26,7 +27,8 @@ pub(crate) enum PythonRequest {
 /// - `3.12.3`
 /// - `>=3.12`
 /// - `>=3.8, <3.12`
-// TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`, `pypy3.8`.
+/// - `3.13.0rc1`, `3.14.0a1`
+// TODO: support `python3.8t` (free-threaded), `python3.8-64`, `pypy3.8`.
 impl FromStr for PythonRequest {
     type Err = Error;
 
@@ -35,21 +37,33 @@ impl FromStr for PythonRequest {
             return Ok(Self::Any);
         }
 
-        // Check if it starts with "python" - parse as specific version
-        if let Some(version_part) = request.strip_prefix("python") {
-            if version_part.is_empty() {
-                return Ok(Self::Any);
-            }
-
-            Self::parse_version_numbers(version_part, request)
-        } else {
-            Self::parse_version_numbers(request, request).or_else(|_| {
-                // Try to parse as a VersionReq (like ">= 3.12" or ">=3.8, <3.12")
-                semver::VersionReq::parse(request)
-                    .map(|version_req| PythonRequest::Range(version_req, request.into()))
-                    .map_err(|_| Error::InvalidVersion(request.to_string()))
-            })
+        let (version_part, has_python_prefix) = match request.strip_prefix("python") {
+            Some(rest) => (rest, true),
+            None => (request, false),
+        };
+        if has_python_prefix && version_part.is_empty() {
+            return Ok(Self::Any);
         }
+
+        if let Ok(req) = Self::parse_version_numbers(version_part, request) {
+            return Ok(req);
+        }
+
+        if let Some(version) = parse_prerelease_version(&compact_pep440_version(version_part)) {
+            if !version.pre.is_empty() {
+                let version = normalize_prerelease_label(version);
+                return Ok(PythonRequest::Prerelease(version, version_part.to_string()));
+            }
+        }
+
+        // A range like `>=3.8, <3.12`, but not `python`-prefixed.
+        if !has_python_prefix {
+            if let Ok(version_req) = semver::VersionReq::parse(request) {
+                return Ok(PythonRequest::Range(version_req, request.into()));
+            }
+        }
+
+        Err(Error::InvalidVersion(request.to_string()))
     }
 }
 
@@ -78,14 +92,22 @@ impl PythonRequest {
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         let version = &install_info.language_version;
         match self {
+            // `Any` accepts any interpreter; whether a prerelease counts as satisfying an
+            // unqualified request is decided by `LanguageRequest`, which knows the toolchain policy.
             PythonRequest::Any => true,
-            PythonRequest::Major(major) => version.major == *major,
+            PythonRequest::Major(major) => version.pre.is_empty() && version.major == *major,
             PythonRequest::MajorMinor(major, minor) => {
-                version.major == *major && version.minor == *minor
+                version.pre.is_empty() && version.major == *major && version.minor == *minor
             }
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                version.major == *major && version.minor == *minor && version.patch == *patch
+                version.pre.is_empty()
+                    && version.major == *major
+                    && version.minor == *minor
+                    && version.patch == *patch
             }
+            // Match the exact prerelease (`query_python_info` records level+serial), so an
+            // rc1 request is not satisfied by a final release or a different prerelease.
+            PythonRequest::Prerelease(req, _) => version == req,
             PythonRequest::Range(req, _) => req.matches(version),
         }
     }
@@ -114,6 +136,60 @@ fn split_wheel_tag_version(mut version: Vec<u64>) -> Vec<u64> {
 
     version[0] = u64::from(major);
     version.push(u64::from(minor));
+    version
+}
+
+/// Compact a PEP 440 prerelease spelling into the form `parse_prerelease_version` reads.
+///
+/// PEP 440 puts a `-`, `_`, or `.` on either side of the pre-release label and treats the label
+/// case-insensitively, so `3.13.0-rc1`, `3.13.0rc.1` and `3.13.0RC01` all mean `3.13.0rc1`.
+/// Without this they fall through to `semver::VersionReq`, which reads the hyphenated form as a
+/// range instead of the exact prerelease the user asked for. Anything that is not a prerelease
+/// is returned unchanged, leaving the rejections in `parse_prerelease_version` in place.
+fn compact_pep440_version(request: &str) -> String {
+    let split = request
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(request.len());
+    // A trailing `.` belongs to the release numbers (`3.13.0.rc1`).
+    let release = request[..split].trim_end_matches('.');
+    let rest = request[split..].trim_start_matches(['-', '_', '.']);
+    let digit_at = rest
+        .find(|c: char| c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let label = rest[..digit_at].trim_end_matches(['-', '_', '.']);
+    let serial = &rest[digit_at..];
+
+    if release.is_empty() || label.is_empty() || serial.is_empty() {
+        return request.to_owned();
+    }
+    // PEP 440 drops leading zeros from the serial, which semver's numeric identifiers reject.
+    let serial = serial.trim_start_matches('0');
+
+    format!(
+        "{release}{}{}",
+        label.to_ascii_lowercase(),
+        if serial.is_empty() { "0" } else { serial }
+    )
+}
+
+/// Normalize a PEP 440 prerelease alias to the label `query_python_info` records from
+/// `sys.version_info.releaselevel` (`alpha`/`a` -> `a`, `beta`/`b` -> `b`, everything else
+/// meaning "release candidate" -> `rc`), so `PythonRequest::Prerelease`'s exact-equality
+/// check actually matches an installed interpreter instead of comparing distinct spellings.
+fn normalize_prerelease_label(mut version: semver::Version) -> semver::Version {
+    let pre = version.pre.as_str();
+    let (label, number) = pre.split_once('.').unwrap_or((pre, ""));
+    let canonical = match label {
+        "a" | "alpha" => "a",
+        "b" | "beta" => "b",
+        _ => "rc", // c, rc, pre, preview
+    };
+    let identifier = if number.is_empty() {
+        canonical.to_string()
+    } else {
+        format!("{canonical}.{number}")
+    };
+    version.pre = semver::Prerelease::new(&identifier).expect("canonical label is valid");
     version
 }
 
@@ -185,18 +261,99 @@ mod tests {
         assert!(PythonRequest::from_str("invalid").is_err());
         assert!(PythonRequest::from_str("3.12.3.4").is_err());
         assert!(PythonRequest::from_str("3.12.a").is_err());
-        assert!(PythonRequest::from_str("3.b.1").is_err());
+        // PEP 440 needs a label *and* a serial: `3.b.1` is `3.0.0b1`, but `3.b` has no serial.
+        assert!(PythonRequest::from_str("3.b").is_err());
         assert!(PythonRequest::from_str("3..2").is_err());
         assert!(PythonRequest::from_str("a3.12").is_err());
 
-        // TODO: support
-        assert!(PythonRequest::from_str("3.12.3a1").is_err());
-        assert!(PythonRequest::from_str("3.12.3rc1").is_err());
-        assert!(PythonRequest::from_str("python3.13.2a1").is_err());
-        assert!(PythonRequest::from_str("python3.13.2rc1").is_err());
+        // PEP 440 prereleases parse to `Prerelease`, keeping the string for uv.
+        assert_eq!(
+            PythonRequest::from_str("3.13.0rc1").unwrap(),
+            PythonRequest::Prerelease(
+                semver::Version::parse("3.13.0-rc.1").unwrap(),
+                "3.13.0rc1".to_string()
+            )
+        );
+        assert!(matches!(
+            PythonRequest::from_str("3.14.0a1").unwrap(),
+            PythonRequest::Prerelease(..)
+        ));
+        assert!(matches!(
+            PythonRequest::from_str("python3.13.2b2").unwrap(),
+            PythonRequest::Prerelease(..)
+        ));
+
+        // Not prereleases: `t` (free-threaded) and `-64` (architecture) suffixes.
         assert!(PythonRequest::from_str("python3.13.2t1").is_err());
         assert!(PythonRequest::from_str("python3.13.2-64").is_err());
-        assert!(PythonRequest::from_str("python3.13.2-64").is_err());
+    }
+
+    #[test]
+    fn prerelease_casing_and_separators_stay_one_request() {
+        // PEP 440's separators and casing are spelling only. Missing them would send the
+        // hyphenated forms through `semver::VersionReq`, where they become a range that a
+        // later final release also satisfies.
+        for spelling in [
+            "3.13.0rc1",
+            "3.13.0RC1",
+            "3.13.0-rc1",
+            "3.13.0_rc1",
+            "3.13.0.rc1",
+            "3.13.0rc.1",
+            "3.13.0rc-1",
+            "3.13.0rc01",
+        ] {
+            let PythonRequest::Prerelease(version, _) = PythonRequest::from_str(spelling).unwrap()
+            else {
+                panic!("expected a prerelease request for {spelling}");
+            };
+            assert_eq!(
+                version,
+                semver::Version::parse("3.13.0-rc.1").unwrap(),
+                "{spelling}"
+            );
+        }
+
+        // PEP 440 accepts a separator on either side of the label, and a patchless release, so
+        // this is `3.0.0b1` rather than junk.
+        assert_eq!(
+            PythonRequest::from_str("3.b.1").unwrap(),
+            PythonRequest::Prerelease(
+                semver::Version::parse("3.0.0-b.1").unwrap(),
+                "3.b.1".to_string()
+            )
+        );
+
+        // Junk that is not a prerelease spelling still goes through the other parsers.
+        assert!(PythonRequest::from_str("python3.13.0-64").is_err());
+        assert!(PythonRequest::from_str("python3.13.0t1").is_err());
+    }
+
+    #[test]
+    fn prerelease_aliases_normalize_to_the_interpreter_label() {
+        // `c`, `alpha`, `beta` are PEP 440 aliases; `query_python_info` only ever emits
+        // `a`/`b`/`rc`, so the alias must normalize to match or the env is never reused.
+        assert_eq!(
+            PythonRequest::from_str("3.13.0c1").unwrap(),
+            PythonRequest::Prerelease(
+                semver::Version::parse("3.13.0-rc.1").unwrap(),
+                "3.13.0c1".to_string()
+            )
+        );
+        assert_eq!(
+            PythonRequest::from_str("3.14.0alpha2").unwrap(),
+            PythonRequest::Prerelease(
+                semver::Version::parse("3.14.0-a.2").unwrap(),
+                "3.14.0alpha2".to_string()
+            )
+        );
+        assert_eq!(
+            PythonRequest::from_str("3.12.0beta3").unwrap(),
+            PythonRequest::Prerelease(
+                semver::Version::parse("3.12.0-b.3").unwrap(),
+                "3.12.0beta3".to_string()
+            )
+        );
     }
 
     #[test]
@@ -219,6 +376,25 @@ mod tests {
 
         let range_req = semver::VersionReq::parse(">=4.0").unwrap();
         assert!(!PythonRequest::Range(range_req, ">=4.0".to_string()).satisfied_by(&install_info));
+
+        Ok(())
+    }
+
+    #[test]
+    fn prerelease_requests_match_exactly() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let mut install_info =
+            InstallInfo::create(Language::Python, None, Vec::new(), temp_dir.path())?;
+        install_info
+            .with_language_version(semver::Version::parse("3.13.0-rc.1")?)
+            .with_toolchain(PathBuf::from("/usr/bin/python3.13"));
+
+        let rc1 = PythonRequest::from_str("3.13.0rc1")?;
+        assert!(rc1.satisfied_by(&install_info));
+
+        // A different prerelease, or the final release, must not reuse an rc1 env.
+        assert!(!PythonRequest::from_str("3.13.0rc2")?.satisfied_by(&install_info));
+        assert!(!PythonRequest::MajorMinorPatch(3, 13, 0).satisfied_by(&install_info));
 
         Ok(())
     }
