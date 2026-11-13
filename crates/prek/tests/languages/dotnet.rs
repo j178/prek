@@ -114,8 +114,7 @@ fn invalid_language_version() {
     ");
 }
 
-/// Test that multiple different SDK versions can coexist in the tool store.
-/// `net10.0` is preinstalled in the CI, `net8.0` will be installed by the test.
+/// Different managed SDK versions must coexist regardless of the system SDK.
 #[cfg(feature = "ci")]
 #[test]
 fn multiple_sdk_versions() -> anyhow::Result<()> {
@@ -128,7 +127,9 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 name: hook-8
                 language: dotnet
                 entry: dotnet --version
-                language_version: '8.0'
+                language_version:
+                  request: '8.0'
+                  preference: only-managed
                 always_run: true
                 pass_filenames: false
                 verbose: true
@@ -136,7 +137,9 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 name: hook-10
                 language: dotnet
                 entry: dotnet --version
-                language_version: '10.0'
+                language_version:
+                  request: '10.0'
+                  preference: only-managed
                 always_run: true
                 pass_filenames: false
                 verbose: true
@@ -163,8 +166,6 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    // Verify only net8.0 SDK is installed in the tool store since net10.0 is preinstalled in the CI environment.
-    // Path structure: [HOME]/tools/dotnet/[VERSION]/...
     let dotnet_tool_root = context.home_dir().child("tools").child("dotnet");
 
     let mut found_8 = false;
@@ -181,10 +182,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
     }
 
     assert!(found_8, "Managed dotnet 8.x should exist");
-    assert!(
-        !found_10,
-        "dotnet 10.x should not be installed by the test since it's preinstalled in CI"
-    );
+    assert!(found_10, "Managed dotnet 10.x should exist");
 
     Ok(())
 }
