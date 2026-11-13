@@ -111,14 +111,13 @@ impl SelectorCompleter {
             SelectorQuery::Project { path } => self.project_candidates(path),
             SelectorQuery::ProjectHook { project, fragment } => self
                 .find_project(project)
-                .map(|matched_project| {
+                .map_or_default(|matched_project| {
                     hook_candidates(
                         std::iter::once(matched_project),
                         fragment,
                         HookTarget::Project(project),
                     )
-                })
-                .unwrap_or_default(),
+                }),
             SelectorQuery::HookOrProject { fragment } => {
                 let mut candidates = self.project_candidates(fragment);
                 candidates.extend(hook_candidates(

@@ -672,9 +672,7 @@ pub(crate) fn resolve_command(
 
     let resolved_binary = which::which_in(candidate, paths, cwd).unwrap_or_else(|_| {
         let candidate = Path::new(candidate);
-        let has_parent = candidate
-            .parent()
-            .is_some_and(|parent| !parent.as_os_str().is_empty());
+        let has_parent = candidate.parent().is_some_and(|parent| !parent.is_empty());
         // `which_in` only returns executable files. Resolve an explicit relative
         // path against `cwd` so its shebang can still be inspected.
         if candidate.is_absolute() || has_parent {

@@ -19,7 +19,7 @@ pub(super) async fn git_index_stage_output(file_base: &Path) -> Result<Vec<u8>, 
         .arg("--stage")
         .arg("-z")
         .arg("--")
-        .arg(if file_base.as_os_str().is_empty() {
+        .arg(if file_base.is_empty() {
             Path::new(".")
         } else {
             file_base

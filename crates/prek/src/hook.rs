@@ -530,7 +530,7 @@ impl Hook {
 
     pub(crate) fn full_id(&self) -> String {
         let path = self.project.relative_path();
-        if path.as_os_str().is_empty() {
+        if path.is_empty() {
             format!(".:{}", self.id)
         } else {
             format!("{}:{}", path.display(), self.id)

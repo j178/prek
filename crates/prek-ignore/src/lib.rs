@@ -42,7 +42,7 @@ impl Error {
             line,
             err: Box::new(self),
         };
-        if path.as_ref().as_os_str().is_empty() {
+        if path.as_ref().is_empty() {
             error
         } else {
             error.with_path(path)

@@ -196,8 +196,7 @@ impl TagFilterOptions {
         ) -> Vec<Glob> {
             repo.or(project)
                 .or(filesystem)
-                .map(StringOrList::as_slice)
-                .unwrap_or_default()
+                .map_or_default(StringOrList::as_slice)
                 .to_vec()
         }
 

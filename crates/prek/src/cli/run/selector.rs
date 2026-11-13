@@ -93,7 +93,7 @@ impl Display for Selector {
         match &self.expr {
             SelectorExpr::HookId(hook_id) => write!(f, "{hook_id}"),
             SelectorExpr::ProjectPrefix(project_path) => {
-                if project_path.as_os_str().is_empty() {
+                if project_path.is_empty() {
                     write!(f, "./")
                 } else {
                     write!(f, "{}/", project_path.display())
@@ -103,7 +103,7 @@ impl Display for Selector {
                 project_path,
                 hook_id,
             } => {
-                if project_path.as_os_str().is_empty() {
+                if project_path.is_empty() {
                     write!(f, ".:{hook_id}")
                 } else {
                     write!(f, "{}:{hook_id}", project_path.display())
