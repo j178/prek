@@ -118,11 +118,9 @@ time can be removed, not as a promise for every workload.
 
 ### 3. Priority
 
-These measurements predate automatic grouping of consecutive read-only hooks.
-At the time, the fast path was automatic, but parallel execution required explicit
-priorities. Current versions group these read-only checks automatically when
-their priorities are implicit. The timings below describe the original
-measured configurations.
+The fast path is automatic when a supported hook matches. Priority requires a
+little more information: you need to tell prek which hooks are independent and
+can safely run together.
 
 Hooks with the same [`priority`](reference/configuration.md#priority) may run at
 the same time. Only group hooks that are independent. In the benchmark, hooks
