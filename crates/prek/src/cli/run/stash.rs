@@ -42,11 +42,17 @@ fn git_command() -> Result<Cmd> {
 }
 
 impl SavedPatch {
-    fn save(root: &Path, patch_dir: &Path) -> Result<Option<Self>> {
+    fn save(root: &Path, patch_dir: &Path, unstaged: &[PathBuf]) -> Result<Option<Self>> {
         let tree = git::write_tree()?;
 
-        let output = git_command()?
-            .arg("diff-index")
+        // The status query already found the changed paths. Diffing only those skips
+        // a stat of every tracked file; a long list falls back to `root` to bound argv.
+        let narrow = !unstaged.is_empty() && unstaged.len() <= 100;
+        let mut cmd = git_command()?;
+        if narrow {
+            cmd.arg("--literal-pathspecs");
+        }
+        cmd.arg("diff-index")
             .arg("--binary")
             .arg("--exit-code")
             .hidden_args([
@@ -57,10 +63,13 @@ impl SavedPatch {
                 "--no-relative",
             ])
             .arg(&tree)
-            .arg("--")
-            .arg(root)
-            .check(false)
-            .output_sync()?;
+            .arg("--");
+        if narrow {
+            cmd.args(unstaged);
+        } else {
+            cmd.arg(root);
+        }
+        let output = cmd.check(false).output_sync()?;
 
         match output.status.code() {
             Some(0) => {
@@ -210,7 +219,7 @@ impl PendingChanges {
                 .context("Failed to clear intent-to-add changes")?;
         }
 
-        self.patch = SavedPatch::save(root, patch_dir)?;
+        self.patch = SavedPatch::save(root, patch_dir, unstaged)?;
         if self.patch.is_some() {
             debug!("Cleaning working tree");
             git::checkout_files(git::root()?, unstaged)
