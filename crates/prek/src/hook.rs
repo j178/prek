@@ -343,6 +343,52 @@ impl Display for Repo {
     }
 }
 
+/// A borrowed network address for recognizing known repositories.
+/// Local paths and other Git sources remain valid even when this view is unavailable.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RepoUrl<'a> {
+    host: &'a str,
+    path: &'a str,
+}
+
+impl<'a> RepoUrl<'a> {
+    pub(crate) fn parse(source: &'a str) -> Option<Self> {
+        let (authority, path) = if let Some((scheme, rest)) = source.split_once("://") {
+            match scheme {
+                "http" | "https" | "ssh" | "git" => rest.split_once('/')?,
+                _ => return None,
+            }
+        } else {
+            let (authority, path) = source.split_once(':')?;
+            // A slash before the colon denotes a local path. Single-letter prefixes
+            // may be Windows drives, so leave these ambiguous sources to Git too.
+            if authority.contains(['/', '\\']) || authority.len() == 1 {
+                return None;
+            }
+            (authority, path)
+        };
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+        let path = path.trim_end_matches('/');
+        let path = path.strip_suffix(".git").unwrap_or(path);
+        Some(Self { host, path })
+    }
+
+    pub(crate) fn matches(self, host: &str, path: &str) -> bool {
+        // Preserve path case and explicit ports to avoid trusting a different repository.
+        self.path_on(host) == Some(path)
+    }
+
+    pub(crate) fn path_on(self, host: &str) -> Option<&'a str> {
+        if self.host.eq_ignore_ascii_case(host) {
+            Some(self.path)
+        } else {
+            None
+        }
+    }
+}
+
 fn hook_error(hook: &str, error: impl Into<anyhow::Error>) -> Error {
     Error::Hook {
         hook: hook.to_string(),
@@ -376,12 +422,10 @@ impl HookImpl {
             Repo::Builtin => return Ok(Self::Builtin(BuiltinHooks::from_str(&spec.id)?)),
             Repo::Meta => return Ok(Self::Meta(MetaHooks::from_str(&spec.id)?)),
             // TODO: Decide whether fast-path hooks should honor or ignore a configured `shell`.
-            Repo::Remote { url, .. }
-                if !*NO_FAST_PATH
-                    && !spec.language_overridden
-                    && url == "https://github.com/pre-commit/pre-commit-hooks" =>
-            {
-                if let Ok(builtin) = BuiltinHooks::from_str(&spec.id)
+            Repo::Remote { url, .. } if !*NO_FAST_PATH && !spec.language_overridden => {
+                if let Some(repo) = RepoUrl::parse(url)
+                    && repo.matches("github.com", "pre-commit/pre-commit-hooks")
+                    && let Ok(builtin) = BuiltinHooks::from_str(&spec.id)
                     && builtin.supports_fast_path()
                 {
                     return Ok(Self::Builtin(builtin));
