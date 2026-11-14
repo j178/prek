@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use anyhow::Context;
 use rustc_hash::FxHashMap;
 
-const MAX_ENTRIES: usize = 4096;
+const MAX_ENTRIES: usize = 512;
 const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 
