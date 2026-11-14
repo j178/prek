@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -322,7 +323,7 @@ async fn install_hook_script(
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
     if let Some(config) = config {
-        args.push(format!(r#"--config="{}""#, config.display()));
+        args.push(format!("--config={}", config.display()));
 
         write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
@@ -330,7 +331,7 @@ async fn install_hook_script(
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.is_empty() {
-            args.push(format!(r#"--cd="{}""#, relative_path.display()));
+            args.push(format!("--cd={}", relative_path.display()));
         }
 
         // Show workspace path if it's not the root project.
@@ -374,7 +375,7 @@ async fn install_hook_script(
         exec {command} hook-impl --hook-dir "$HERE" --script-version {CUR_SCRIPT_VERSION} {args} -- "$@"
 
         "#,
-        args = args.join(" "),
+        args = args.iter().map(|arg| shell_quote(arg)).collect::<Result<Vec<_>, _>>()?.join(" "),
     };
 
     fs_err::OpenOptions::new()
@@ -400,6 +401,18 @@ async fn install_hook_script(
     writeln!(printer.stdout(), "{hint}")?;
 
     Ok(())
+}
+
+/// Quotes `arg` for the generated `sh` script, leaving plain flags and paths readable.
+fn shell_quote(arg: &str) -> Result<Cow<'_, str>, shlex::QuoteError> {
+    if !arg.is_empty()
+        && arg
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_./=:,+@%".contains(&b))
+    {
+        return Ok(Cow::Borrowed(arg));
+    }
+    shlex::try_quote(arg)
 }
 
 /// The version of the hook script. Increment this when the script changes in a way that

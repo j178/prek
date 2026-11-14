@@ -1310,3 +1310,52 @@ fn hook_stage_is_exposed_to_external_hooks() {
     ----- stderr -----
     "#);
 }
+
+/// Selectors saved by `prek install` must survive shell word splitting in the hook script.
+#[test]
+fn hook_impl_selector_with_space() {
+    let context = TestEnv::new()
+        .with_filter(r"\b[0-9a-f]{7}\b", "[SHA1]")
+        .with_workspace(
+            ["my project"],
+            indoc::indoc! {r"
+            repos:
+            - repo: local
+              hooks:
+               - id: echo
+                 name: echo
+                 language: system
+                 entry: echo
+                 always_run: true
+                 pass_filenames: false
+            "},
+        )
+        .init_git();
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.install().arg("my project/"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Installed Git hook at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = context.git().command();
+    commit.arg("commit").arg("-m").arg("Initial commit");
+
+    cmd_snapshot!(context, commit, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) [SHA1]] Initial commit
+     2 files changed, 18 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+     create mode 100644 my project/.pre-commit-config.yaml
+
+    ----- stderr -----
+    ✓ my project
+      echo...................................................................Passed
+    ");
+}

@@ -1301,7 +1301,7 @@ fn init_templatedir() -> anyhow::Result<()> {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --config="non-exist-config" --skip-on-missing-config -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --config=non-exist-config --skip-on-missing-config -- "$@"
             "#);
 
     Ok(())
@@ -1453,7 +1453,7 @@ fn workspace_install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --cd="project3" -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --cd=project3 -- "$@"
             "#);
 
     // Install with selectors
