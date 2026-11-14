@@ -647,7 +647,7 @@ pass_filenames = false
 stages = ["pre-push"]
 ```
 
-Hooks remain sequential when `priority` is omitted. Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) only after checking that they do not modify the same files or contend for shared state.
+Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) only after checking that they do not modify the same files or contend for shared state.
 
 ## Keep the existing hook during rollout
 
@@ -5399,7 +5399,9 @@ Scope:
 
 Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to `PREK_CONCURRENT_HOOKS`.
 
-When `priority` is omitted, `prek` assigns an implicit value based on hook order to preserve sequential behavior.
+When `priority` is omitted, `prek` assigns an implicit value based on hook order.
+
+As an internal optimization, prek may automatically run read-only hooks in parallel, but this behavior is not guaranteed and must not be relied on.
 
 Example:
 
@@ -5501,7 +5503,7 @@ Hook-level fail-fast behavior.
 - Type: boolean
 - Default: `false`
 
-If `true`, a failure in this hook stops the run immediately.
+If `true`, a failure in this hook stops the run.
 
 ### `verbose`
 

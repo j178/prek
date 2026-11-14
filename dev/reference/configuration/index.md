@@ -1284,7 +1284,9 @@ Scope:
 
 Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to `PREK_CONCURRENT_HOOKS`.
 
-When `priority` is omitted, `prek` assigns an implicit value based on hook order to preserve sequential behavior.
+When `priority` is omitted, `prek` assigns an implicit value based on hook order.
+
+As an internal optimization, prek may automatically run read-only hooks in parallel, but this behavior is not guaranteed and must not be relied on.
 
 Example:
 
@@ -1386,7 +1388,7 @@ Hook-level fail-fast behavior.
 - Type: boolean
 - Default: `false`
 
-If `true`, a failure in this hook stops the run immediately.
+If `true`, a failure in this hook stops the run.
 
 ### `verbose`
 

@@ -76,7 +76,7 @@ pass_filenames = false
 stages = ["pre-push"]
 ```
 
-Hooks remain sequential when `priority` is omitted. Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) only after checking that they do not modify the same files or contend for shared state.
+Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) only after checking that they do not modify the same files or contend for shared state.
 
 ## Keep the existing hook during rollout
 
