@@ -21,7 +21,7 @@ use crate::config::{
     MetaHook, PassFilenames, RemoteHook, Stages, read_manifest,
 };
 use crate::hook_entry::HookEntry;
-use crate::hooks::{self, BuiltinHooks, HookOutput, MetaHooks};
+use crate::hooks::{self, BuiltinHooks, FileReadCache, HookOutput, MetaHooks};
 use crate::languages::version::LanguageRequest;
 use crate::languages::{ShellSupport, extract_metadata};
 use crate::store::{Store, StoreGuard};
@@ -654,6 +654,10 @@ impl Hook {
         self.effect == HookEffect::ReadOnly
     }
 
+    pub(crate) fn uses_builtin(&self) -> bool {
+        matches!(self.implementation, HookImpl::Builtin(_))
+    }
+
     /// Native implementations report file changes directly, including writes by fixers.
     pub(crate) fn requires_diff_tracking(&self) -> bool {
         matches!(self.implementation, HookImpl::Language(_)) && !self.is_workspace_read_only()
@@ -817,9 +821,12 @@ impl InstalledHook {
         store: &Store,
         filenames: &[&Path],
         reporter: &HookRunReporter,
+        cache: &FileReadCache,
     ) -> Result<HookOutput> {
         match self.implementation {
-            HookImpl::Builtin(builtin) => builtin.run(store, self, filenames, reporter).await,
+            HookImpl::Builtin(builtin) => {
+                builtin.run(store, self, filenames, reporter, cache).await
+            }
             HookImpl::Meta(meta) => meta.run(store, self, filenames, reporter).await,
             HookImpl::Language(language) => {
                 let (exit_status, output) = language.run(store, self, filenames, reporter).await?;

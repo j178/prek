@@ -7,6 +7,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::hook::Hook;
 pub(crate) use crate::hooks::builtin::BuiltinHooks;
+pub(crate) use crate::hooks::file_cache::FileReadCache;
 pub(crate) use crate::hooks::meta::MetaHooks;
 pub(crate) use crate::hooks::remote::remote_hook_effect;
 
@@ -29,6 +30,7 @@ mod check_xml;
 mod check_yaml;
 mod destroyed_symlinks;
 mod detect_private_key;
+mod file_cache;
 mod file_contents_sorter;
 mod fix_byte_order_marker;
 mod fix_end_of_file;

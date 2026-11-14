@@ -10,7 +10,7 @@ use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::{Hook, HookEffect, Repo};
 use crate::hooks::{
-    FixArgs, HookFuture, HookOutput, check_added_large_files, check_case_conflict,
+    FileReadCache, FixArgs, HookFuture, HookOutput, check_added_large_files, check_case_conflict,
     check_commit_trailers, check_executables_have_shebangs, check_illegal_windows_names,
     check_json, check_json5, check_jsonc, check_merge_conflict,
     check_shebang_scripts_are_executable, check_signed_commit, check_symlinks, check_toml,
@@ -188,6 +188,7 @@ impl BuiltinHooks {
         hook: &Hook,
         filenames: &[&Path],
         reporter: &HookRunReporter,
+        cache: &FileReadCache,
     ) -> Result<HookOutput> {
         let progress = reporter.on_run_start(hook, filenames.len());
         if matches!(hook.repo(), Repo::Remote { .. }) {
@@ -203,30 +204,30 @@ impl BuiltinHooks {
             Self::CheckCaseConflict => Box::pin(check_case_conflict::run(hook, filenames)),
             Self::CheckCommitTrailers => Box::pin(check_commit_trailers::run(hook, filenames)),
             Self::CheckExecutablesHaveShebangs => {
-                Box::pin(check_executables_have_shebangs::run(hook, filenames))
+                Box::pin(check_executables_have_shebangs::run(hook, filenames, cache))
             }
             Self::CheckIllegalWindowsNames => {
                 Box::pin(check_illegal_windows_names::run(hook, filenames))
             }
-            Self::CheckJson => Box::pin(check_json::run(hook, filenames)),
-            Self::CheckJson5 => Box::pin(check_json5::check_json5(hook, filenames)),
-            Self::CheckJsonc => Box::pin(check_jsonc::check_jsonc(hook, filenames)),
-            Self::CheckMergeConflict => Box::pin(check_merge_conflict::run(hook, filenames)),
-            Self::CheckShebangScriptsAreExecutable => {
-                Box::pin(check_shebang_scripts_are_executable::run(hook, filenames))
-            }
+            Self::CheckJson => Box::pin(check_json::run(hook, filenames, cache)),
+            Self::CheckJson5 => Box::pin(check_json5::check_json5(hook, filenames, cache)),
+            Self::CheckJsonc => Box::pin(check_jsonc::check_jsonc(hook, filenames, cache)),
+            Self::CheckMergeConflict => Box::pin(check_merge_conflict::run(hook, filenames, cache)),
+            Self::CheckShebangScriptsAreExecutable => Box::pin(
+                check_shebang_scripts_are_executable::run(hook, filenames, cache),
+            ),
             Self::CheckSignedCommit => Box::pin(check_signed_commit::run(hook)),
             Self::CheckSymlinks => Box::pin(check_symlinks::run(hook, filenames)),
-            Self::CheckToml => Box::pin(check_toml::run(hook, filenames)),
-            Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks::run(hook, filenames)),
-            Self::CheckXml => Box::pin(check_xml::run(hook, filenames)),
-            Self::CheckYaml => Box::pin(check_yaml::run(hook, filenames)),
+            Self::CheckToml => Box::pin(check_toml::run(hook, filenames, cache)),
+            Self::CheckVcsPermalinks => Box::pin(check_vcs_permalinks::run(hook, filenames, cache)),
+            Self::CheckXml => Box::pin(check_xml::run(hook, filenames, cache)),
+            Self::CheckYaml => Box::pin(check_yaml::run(hook, filenames, cache)),
             Self::DenyFilenamePattern => Box::pin(std::future::ready(
                 pattern::deny_filename_pattern(hook, filenames),
             )),
-            Self::DenyPattern => Box::pin(pattern::deny_pattern(hook, filenames)),
+            Self::DenyPattern => Box::pin(pattern::deny_pattern(hook, filenames, cache)),
             Self::DestroyedSymlinks => Box::pin(destroyed_symlinks::run(hook, filenames)),
-            Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames)),
+            Self::DetectPrivateKey => Box::pin(detect_private_key::run(hook, filenames, cache)),
             Self::EndOfFileFixer => Box::pin(fix_end_of_file::run(hook, filenames)),
             Self::FileContentsSorter => Box::pin(file_contents_sorter::run(hook, filenames)),
             Self::FixByteOrderMarker => Box::pin(fix_byte_order_marker::run(hook, filenames)),
@@ -239,7 +240,7 @@ impl BuiltinHooks {
             Self::RequireFilenamePattern => Box::pin(std::future::ready(
                 pattern::require_filename_pattern(hook, filenames),
             )),
-            Self::RequirePattern => Box::pin(pattern::require_pattern(hook, filenames)),
+            Self::RequirePattern => Box::pin(pattern::require_pattern(hook, filenames, cache)),
             Self::RequirementsTxtFixer => Box::pin(requirements_txt_fixer::run(hook, filenames)),
             Self::TrailingWhitespace => Box::pin(fix_trailing_whitespace::run(hook, filenames)),
         };

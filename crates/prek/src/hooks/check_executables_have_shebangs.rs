@@ -9,11 +9,16 @@ use crate::hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
 use crate::hooks::{
-    FilenamesArgs, HookOutput, hook_filenames, parse_hook_args, run_blocking_file_checks,
+    FileReadCache, FilenamesArgs, HookOutput, hook_filenames, parse_hook_args,
+    run_blocking_file_checks,
 };
 
 /// Runs the `check-executables-have-shebangs` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     if filenames.is_empty() {
@@ -40,16 +45,21 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
     if tracks_executable_bit {
         // core.fileMode=true means the platform honors the executable bit, so trust the FS metadata.
         // The `executables-have-shebangs` hook already restricts inputs to executable text files (`types: [text, executable]`).
-        check_shebangs(file_base, &filenames).await
+        check_shebangs(file_base, &filenames, cache).await
     } else {
         // If on win32 use git to check executable bit
-        git_check_shebangs(file_base, &filenames).await
+        git_check_shebangs(file_base, &filenames, cache).await
     }
 }
 
-async fn check_shebangs(file_base: &Path, paths: &[&Path]) -> Result<HookOutput, anyhow::Error> {
-    run_blocking_file_checks(file_base, &[], paths, |file_path, file| {
-        if file_has_shebang(file_path)? {
+async fn check_shebangs(
+    file_base: &Path,
+    paths: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput, anyhow::Error> {
+    let cache = cache.clone();
+    run_blocking_file_checks(file_base, &[], paths, move |file_path, file| {
+        if file_has_shebang(file_path, &cache)? {
             Ok(HookOutput::unchanged(0, Vec::new()))
         } else {
             let msg = build_missing_shebang_warning(file)?;
@@ -92,11 +102,12 @@ fn build_missing_shebang_warning(path: &Path) -> Result<String, std::fmt::Error>
 async fn git_check_shebangs(
     file_base: &Path,
     filenames: &[&Path],
+    cache: &FileReadCache,
 ) -> Result<HookOutput, anyhow::Error> {
     let stdout = git_index_stage_output(file_base).await?;
     let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, filenames, true)
         .collect::<Vec<_>>();
-    check_shebangs(file_base, &entries).await
+    check_shebangs(file_base, &entries, cache).await
 }
 
 #[cfg(test)]
@@ -109,7 +120,7 @@ mod tests {
         let file = NamedTempFile::new()?;
         fs_err::tokio::write(file.path(), b"#!/bin/bash\necho ok\n").await?;
         let files = vec![file.path()];
-        let result = check_shebangs(Path::new(""), &files).await?;
+        let result = check_shebangs(Path::new(""), &files, &FileReadCache::default()).await?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -121,7 +132,7 @@ mod tests {
         let file = NamedTempFile::new()?;
         fs_err::tokio::write(file.path(), b"echo ok\n").await?;
         let files = vec![file.path()];
-        let result = check_shebangs(Path::new(""), &files).await?;
+        let result = check_shebangs(Path::new(""), &files, &FileReadCache::default()).await?;
         assert_eq!(result.exit_status, 1);
         assert!(
             String::from_utf8_lossy(&result.output)
@@ -132,7 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_shebangs_empty_input() -> Result<(), anyhow::Error> {
-        let result = check_shebangs(Path::new(""), &[]).await?;
+        let result = check_shebangs(Path::new(""), &[], &FileReadCache::default()).await?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())

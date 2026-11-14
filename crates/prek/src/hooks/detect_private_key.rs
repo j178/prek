@@ -6,7 +6,9 @@ use aho_corasick::AhoCorasick;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hooks::{FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{
+    FileReadCache, FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks,
+};
 
 const BLACKLIST: &[&[u8]] = &[
     b"BEGIN RSA PRIVATE KEY",
@@ -41,13 +43,18 @@ static PRIVATE_KEY_MATCHER: LazyLock<AhoCorasick> = LazyLock::new(|| {
 });
 
 /// Runs the `detect-private-key` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        check_file,
+        move |file_path, display_path| check_file(file_path, display_path, &cache),
     )
     .await
 }
@@ -57,8 +64,8 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 /// For example, if one read ends with `BEGIN RSA PRIV` and the next read starts
 /// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
 /// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
-fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
-    let found = check_file_sync(file_path)?;
+fn check_file(file_path: &Path, display_path: &Path, cache: &FileReadCache) -> Result<HookOutput> {
+    let found = check_file_sync(file_path, cache)?;
     if found {
         let error_message = format!("Private key found: {}\n", display_path.display());
         Ok(HookOutput::unchanged(1, error_message.into_bytes()))
@@ -67,8 +74,8 @@ fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
     }
 }
 
-fn check_file_sync(file_path: &Path) -> Result<bool> {
-    let mut file = fs_err::File::open(file_path)?;
+fn check_file_sync(file_path: &Path, cache: &FileReadCache) -> Result<bool> {
+    let mut file = cache.open(file_path)?;
     let mut buf = [0u8; BUFFER_SIZE + CARRY_CAPACITY];
     let mut carry_len = 0;
 
@@ -117,7 +124,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This is just a regular file\nwith some content\n";
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -128,7 +135,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n";
         let file_path = create_test_file(&dir, "id_rsa", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("Private key found"));
@@ -142,7 +149,7 @@ mod tests {
         let content =
             b"Some documentation\n\nHere is a key:\n-----BEGIN RSA PRIVATE KEY-----\ndata\n";
         let file_path = create_test_file(&dir, "doc.txt", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         Ok(())
     }
@@ -152,7 +159,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This file talks about BEGIN_RSA_PRIVATE_KEY but doesn't contain one\n";
         let file_path = create_test_file(&dir, "false_positive.txt", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -163,7 +170,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -175,7 +182,7 @@ mod tests {
         let mut content = vec![0xFF, 0xFE, 0x00];
         content.extend_from_slice(b"BEGIN RSA PRIVATE KEY");
         let file_path = create_test_file(&dir, "binary.dat", &content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         Ok(())
     }

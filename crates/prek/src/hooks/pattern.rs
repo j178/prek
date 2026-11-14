@@ -8,7 +8,7 @@ use fancy_regex::{BytesMode, RegexInput, RegexOptionsBuilder, RegexSet};
 use memchr::memchr_iter;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{FileReadCache, HookOutput, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -100,12 +100,20 @@ fn find_first_match(patterns: &RegexSet, contents: &[u8]) -> Result<Option<Range
         .map(|matched| matched.start()..matched.end()))
 }
 
-pub(crate) async fn deny_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    run_content_patterns(hook, filenames, MatchPolicy::Deny).await
+pub(crate) async fn deny_pattern(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
+    run_content_patterns(hook, filenames, MatchPolicy::Deny, cache).await
 }
 
-pub(crate) async fn require_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
-    run_content_patterns(hook, filenames, MatchPolicy::Require).await
+pub(crate) async fn require_pattern(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
+    run_content_patterns(hook, filenames, MatchPolicy::Require, cache).await
 }
 
 pub(crate) fn deny_filename_pattern(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
@@ -156,14 +164,18 @@ async fn run_content_patterns(
     hook: &Hook,
     filenames: &[&Path],
     policy: MatchPolicy,
+    cache: &FileReadCache,
 ) -> Result<HookOutput> {
     let args = parse_hook_args::<Args>(hook)?;
     let matcher = Matcher::new(&args)?;
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &[],
         filenames,
-        move |file_path, display_path| check_file(file_path, display_path, &matcher, policy),
+        move |file_path, display_path| {
+            check_file(file_path, display_path, &matcher, policy, &cache)
+        },
     )
     .await
 }
@@ -173,11 +185,12 @@ fn check_file(
     display_path: &Path,
     matcher: &Matcher,
     policy: MatchPolicy,
+    cache: &FileReadCache,
 ) -> Result<HookOutput> {
     let (exit_status, output) = match matcher.scan_mode {
-        ScanMode::Lines => check_file_lines(file_path, display_path, &matcher.regex, policy),
+        ScanMode::Lines => check_file_lines(file_path, display_path, &matcher.regex, policy, cache),
         ScanMode::Multiline => {
-            check_file_multiline(file_path, display_path, &matcher.regex, policy)
+            check_file_multiline(file_path, display_path, &matcher.regex, policy, cache)
         }
     }?;
     Ok(HookOutput::unchanged(exit_status, output))
@@ -188,8 +201,9 @@ fn check_file_lines(
     display_path: &Path,
     patterns: &RegexSet,
     policy: MatchPolicy,
+    cache: &FileReadCache,
 ) -> Result<(i32, Vec<u8>)> {
-    let file = fs_err::File::open(file_path)?;
+    let file = cache.open(file_path)?;
     let mut reader = BufReader::new(file);
     let mut matched = false;
     let mut output = Vec::new();
@@ -231,8 +245,9 @@ fn check_file_multiline(
     display_path: &Path,
     patterns: &RegexSet,
     policy: MatchPolicy,
+    cache: &FileReadCache,
 ) -> Result<(i32, Vec<u8>)> {
-    let contents = fs_err::read(file_path)?;
+    let contents = cache.read(file_path)?;
     let matched = find_first_match(patterns, &contents)
         .with_context(|| format!("Failed to match patterns in `{}`", display_path.display()))?;
     match policy {

@@ -6,22 +6,29 @@ use rustc_hash::FxHashSet;
 use serde::{Deserialize, Deserializer};
 
 use crate::hook::Hook;
-use crate::hooks::{FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{
+    FileReadCache, FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks,
+};
 
 /// Runs the `check-json` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        check_file,
+        move |file_path, display_path| check_file(file_path, display_path, &cache),
     )
     .await
 }
 
-fn check_file(file_path: &Path, display_path: &Path) -> Result<HookOutput> {
-    let content = fs_err::read(file_path)?;
+fn check_file(file_path: &Path, display_path: &Path, cache: &FileReadCache) -> Result<HookOutput> {
+    let content = cache.read(file_path)?;
     let content = match simdutf8::compat::from_utf8(&content) {
         Ok(content) => content,
         Err(error) => {
@@ -170,7 +177,11 @@ mod tests {
             (r#"{"key": {"\u006bey": 1}, "keys": 2}"#, 0),
         ] {
             fs_err::write(&path, content)?;
-            assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
+            assert_eq!(
+                check_file(&path, &path, &FileReadCache::default())?.exit_status,
+                status,
+                "{content}"
+            );
         }
         Ok(())
     }
@@ -187,7 +198,11 @@ mod tests {
             (r#"[{"key": 1}, {"key": 2, "\u006bey": 3}]"#, 1),
         ] {
             fs_err::write(&path, content)?;
-            assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
+            assert_eq!(
+                check_file(&path, &path, &FileReadCache::default())?.exit_status,
+                status,
+                "{content}"
+            );
         }
         Ok(())
     }
@@ -207,7 +222,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": "value2"}"#;
         let file_path = create_test_file(&dir, "valid.json", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -219,7 +234,10 @@ mod tests {
         let dir = tempdir()?;
         let path = dir.path().join("bom.json");
         fs_err::write(&path, "\u{feff}{\"key\": 1}")?;
-        assert_eq!(check_file(&path, &path)?.exit_status, 0);
+        assert_eq!(
+            check_file(&path, &path, &FileReadCache::default())?.exit_status,
+            0
+        );
         Ok(())
     }
 
@@ -234,7 +252,11 @@ mod tests {
             ("{} \t\r\n", 0),
         ] {
             fs_err::write(&path, content)?;
-            assert_eq!(check_file(&path, &path)?.exit_status, status, "{content}");
+            assert_eq!(
+                check_file(&path, &path, &FileReadCache::default())?.exit_status,
+                status,
+                "{content}"
+            );
         }
         Ok(())
     }
@@ -244,7 +266,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": "value2""#;
         let file_path = create_test_file(&dir, "invalid.json", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
 
@@ -256,7 +278,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key1": "value2"}"#;
         let file_path = create_test_file(&dir, "duplicate.json", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
 
@@ -268,7 +290,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.json", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
 
@@ -280,7 +302,7 @@ mod tests {
         let dir = tempdir()?;
         for content in [b"{\"key\":\"\xff\"}".as_slice(), b"{}\xff"] {
             let file_path = create_test_file(&dir, "invalid.json", content).await?;
-            let result = check_file(&file_path, &file_path)?;
+            let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
             assert_eq!(result.exit_status, 1);
         }
         Ok(())
@@ -291,7 +313,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"[{"key1": "value1"}, {"key2": "value2"}]"#;
         let file_path = create_test_file(&dir, "valid_array.json", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -303,7 +325,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": {"nested_key": 1, "nested_key": 2}}"#;
         let file_path = create_test_file(&dir, "nested_duplicate.json", content).await?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
 
@@ -317,7 +339,7 @@ mod tests {
         for (open, close) in [("[", "]"), (r#"{"key":"#, "}")] {
             let json = format!("{}null{}", open.repeat(10000), close.repeat(10000));
             let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await?;
-            let result = check_file(&file_path, &file_path)?;
+            let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
             assert_eq!(result.exit_status, 0);
             assert_eq!(result.output, b"");
         }

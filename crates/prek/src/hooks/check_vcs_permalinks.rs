@@ -8,7 +8,7 @@ use memchr::memmem;
 use regex::bytes::{Match, Regex};
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{FileReadCache, HookOutput, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -80,15 +80,20 @@ fn is_probable_commit_hash(reference: &[u8]) -> bool {
 }
 
 /// Runs the `check-vcs-permalinks` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let matcher = GithubNonPermalinkMatcher::new(args.additional_github_domains);
 
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, display_path| check_file(file_path, display_path, &matcher),
+        move |file_path, display_path| check_file(file_path, display_path, &matcher, &cache),
     )
     .await
 }
@@ -97,8 +102,9 @@ fn check_file(
     file_path: &Path,
     display_path: &Path,
     matcher: &GithubNonPermalinkMatcher,
+    cache: &FileReadCache,
 ) -> Result<HookOutput> {
-    let file = fs_err::File::open(file_path)?;
+    let file = cache.open(file_path)?;
     let mut reader = BufReader::new(file);
 
     let mut retval = 0;
@@ -225,7 +231,7 @@ mod tests {
 
         let matcher = matcher(&["github.example.com"]);
         let relative = PathBuf::from("links.md");
-        let result = check_file(&file_path, &relative, &matcher)?;
+        let result = check_file(&file_path, &relative, &matcher, &FileReadCache::default())?;
 
         assert_eq!(result.exit_status, 1);
         assert_eq!(

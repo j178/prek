@@ -8,11 +8,16 @@ use crate::hooks::shebangs::{
     file_has_shebang, git_index_stage_output, matching_git_index_paths_by_executable_bit,
 };
 use crate::hooks::{
-    FilenamesArgs, HookOutput, hook_filenames, parse_hook_args, run_blocking_file_checks,
+    FileReadCache, FilenamesArgs, HookOutput, hook_filenames, parse_hook_args,
+    run_blocking_file_checks,
 };
 
 /// Runs the `check-shebang-scripts-are-executable` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, anyhow::Error> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput, anyhow::Error> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
     let filenames = hook_filenames(&args.filenames, filenames).collect::<Vec<_>>();
     if filenames.is_empty() {
@@ -24,8 +29,9 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput, 
     let entries = matching_git_index_paths_by_executable_bit(&stdout, file_base, &filenames, false)
         .collect::<Vec<_>>();
 
-    run_blocking_file_checks(file_base, &[], &entries, |file_path, file| {
-        if file_has_shebang(file_path)? {
+    let cache = cache.clone();
+    run_blocking_file_checks(file_base, &[], &entries, move |file_path, file| {
+        if file_has_shebang(file_path, &cache)? {
             Ok(HookOutput::unchanged(
                 1,
                 build_non_executable_shebang_warning(file)?.into_bytes(),

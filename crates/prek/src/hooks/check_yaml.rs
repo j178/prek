@@ -5,7 +5,7 @@ use clap::Parser;
 use serde::de::IgnoredAny;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{FileReadCache, HookOutput, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -35,7 +35,11 @@ enum CheckMode {
 }
 
 /// Runs the `check-yaml` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
     let args: Args = parse_hook_args(hook)?;
     let mode = if args.r#unsafe {
         CheckMode::SyntaxOnly
@@ -46,17 +50,23 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
         }
     };
 
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        move |file_path, display_path| check_file(file_path, display_path, mode),
+        move |file_path, display_path| check_file(file_path, display_path, mode, &cache),
     )
     .await
 }
 
-fn check_file(file_path: &Path, display_path: &Path, mode: CheckMode) -> Result<HookOutput> {
-    let content = fs_err::read(file_path)?;
+fn check_file(
+    file_path: &Path,
+    display_path: &Path,
+    mode: CheckMode,
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
+    let content = cache.read(file_path)?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
@@ -190,7 +200,12 @@ mod tests {
 key2: value2
 ";
         let file_path = create_test_file(&dir, "valid.yaml", content).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -204,7 +219,12 @@ positive_infinity: .inf
 negative_infinity: -.inf
 ";
         let file_path = create_test_file(&dir, "non-finite.yaml", content).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(
             result.exit_status,
             0,
@@ -235,7 +255,12 @@ negative_infinity: -.inf
 key2: value2: another_value
 ";
         let file_path = create_test_file(&dir, "invalid.yaml", content).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -248,7 +273,12 @@ key2: value2: another_value
 key1: value2
 ";
         let file_path = create_test_file(&dir, "duplicate.yaml", content).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -259,7 +289,12 @@ key1: value2
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.yaml", content).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -276,11 +311,21 @@ key2: value2
 ";
         let file_path = create_test_file(&dir, "multi.yaml", content).await?;
 
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
 
-        let result = check_file(&file_path, &file_path, LOAD_MULTIPLE_DOCUMENTS)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_MULTIPLE_DOCUMENTS,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -292,7 +337,12 @@ key2: value2
         let content = b"---\nkey1: value1\n---\nkey2: value2\n";
         let file_path = create_test_file(&dir, "multi.yaml", content).await?;
 
-        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            CheckMode::SyntaxOnly,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(
             result.exit_status,
             0,
@@ -308,7 +358,12 @@ key2: value2
         let content = b"---\nkey: value\n---\n[";
         let file_path = create_test_file(&dir, "invalid-multi.yaml", content).await?;
 
-        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            CheckMode::SyntaxOnly,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -320,7 +375,12 @@ key2: value2
         let content = b"duplicate: first\nduplicate: second\ntarget:\n  <<: not-a-map\n";
         let file_path = create_test_file(&dir, "unsafe.yaml", content).await?;
 
-        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            CheckMode::SyntaxOnly,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(
             result.exit_status,
             0,
@@ -335,7 +395,12 @@ key2: value2
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "invalid.yaml", b"[").await?;
 
-        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            CheckMode::SyntaxOnly,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -346,7 +411,12 @@ key2: value2
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "invalid.yaml", b"key: \xff").await?;
 
-        let result = check_file(&file_path, &file_path, CheckMode::SyntaxOnly)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            CheckMode::SyntaxOnly,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 1);
         assert!(String::from_utf8_lossy(&result.output).contains("Failed to decode UTF-8"));
         Ok(())
@@ -398,7 +468,12 @@ response:
       BKa2qJVpyDuvhldbu0LOFtnicypnC0z2yV8AAAD//wMALvIkjL4DAAA=
 ";
         let file_path = create_test_file(&dir, "binary.yaml", content).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -417,7 +492,12 @@ response:
         }
 
         let file_path = create_test_file(&dir, "many-aliases.yaml", content.as_bytes()).await?;
-        let result = check_file(&file_path, &file_path, LOAD_SINGLE_DOCUMENT)?;
+        let result = check_file(
+            &file_path,
+            &file_path,
+            LOAD_SINGLE_DOCUMENT,
+            &FileReadCache::default(),
+        )?;
         assert_eq!(
             result.exit_status,
             0,
@@ -439,7 +519,7 @@ response:
 
         let file_path = create_test_file(&dir, "many-comments.yaml", content.as_bytes()).await?;
         for mode in [LOAD_SINGLE_DOCUMENT, CheckMode::SyntaxOnly] {
-            let result = check_file(&file_path, &file_path, mode)?;
+            let result = check_file(&file_path, &file_path, mode, &FileReadCache::default())?;
             assert_eq!(
                 result.exit_status,
                 0,
