@@ -343,15 +343,9 @@ async fn pre_push_run_options(
         let Some(first_ancestor) = ancestors.first() else {
             return Ok(None);
         };
-        let roots = git::root_commits(local_sha).await?;
-        if roots.contains(first_ancestor) {
-            // A root push has no diff base and checks the full tracked tree.
-            None
-        } else if let Some(parent) = git::parent_commit(first_ancestor).await? {
-            Some(parent)
-        } else {
-            return Ok(None);
-        }
+        // A root commit has no parent, so the push has no diff base and checks the
+        // full tracked tree. Asking for the parent avoids walking the whole history.
+        git::parent_commit(first_ancestor).await?
     };
 
     let mut run_args = RunOptions::default();

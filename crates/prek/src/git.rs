@@ -1128,22 +1128,6 @@ pub(crate) async fn ancestors_not_in_remote(
         .collect())
 }
 
-/// Return root commits (commits with no parents) for the given commit.
-pub(crate) async fn root_commits(local_sha: &str) -> Result<FxHashSet<String>, Error> {
-    let output = git_cmd()?
-        .arg("rev-list")
-        .arg("--max-parents=0")
-        .arg(local_sha)
-        .check(true)
-        .output()
-        .await?;
-    Ok(str::from_utf8(&output.stdout)?
-        .trim_ascii()
-        .lines()
-        .map(ToString::to_string)
-        .collect())
-}
-
 /// Return the parent commit of the given commit.
 pub(crate) async fn parent_commit(commit: &str) -> Result<Option<String>, Error> {
     let output = git_cmd()?
