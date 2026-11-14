@@ -12,7 +12,7 @@ use crate::cli::run::{
     CollectOptions, FileTagCache, FileTagFilter, HookFileFilter, ProjectFiles, collect_run_input,
 };
 use crate::config::{FilePattern, HookOptions, Language, MetaHook};
-use crate::hook::{Hook, Repo};
+use crate::hook::{Hook, HookEffect, Repo};
 use crate::hooks::{BuiltinHooks, HookOutput};
 use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project};
@@ -45,6 +45,14 @@ pub(crate) enum MetaHooks {
 }
 
 impl MetaHooks {
+    pub(crate) fn effect(self) -> HookEffect {
+        match self {
+            // Loading hook manifests can populate the shared repository cache.
+            Self::CheckHooksApply => HookEffect::WorkspaceReadOnly,
+            Self::CheckUselessExcludes | Self::Identity => HookEffect::ReadOnly,
+        }
+    }
+
     pub(crate) async fn run(
         self,
         store: &Store,

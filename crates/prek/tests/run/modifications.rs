@@ -103,6 +103,144 @@ fn modifying_hook_is_reported() {
     "#);
 }
 
+/// Output files, executable reporters, and command overrides must retain
+/// modification detection, even when a known remote checker exits successfully.
+#[test]
+fn remote_report_writer_is_reported() {
+    let shell = if cfg!(windows) { "cmd" } else { "sh" };
+    let shell_option = format!("shell: {shell}");
+    for (url, id, args, overrides, manifest_options) in [
+        (
+            "https://github.com/hadolint/hadolint",
+            "hadolint",
+            "--output, report.json",
+            "",
+            "",
+        ),
+        (
+            "https://github.com/pre-commit/mirrors-jshint",
+            "jshint",
+            "--reporter, reporter.py",
+            "",
+            "",
+        ),
+        (
+            "https://github.com/pre-commit/pre-commit-hooks",
+            "check-ast",
+            "--output, report.json",
+            "entry: python3 check.py",
+            "",
+        ),
+        (
+            "https://github.com/pre-commit/pre-commit-hooks",
+            "check-ast",
+            "--output, report.json",
+            "language: system",
+            "",
+        ),
+        (
+            "https://github.com/pre-commit/pre-commit-hooks",
+            "check-ast",
+            "--output, report.json",
+            shell_option.as_str(),
+            "",
+        ),
+        (
+            "https://github.com/pre-commit/pre-commit-hooks",
+            "check-ast",
+            "--output, report.json",
+            "",
+            shell_option.as_str(),
+        ),
+    ] {
+        let entry = if overrides == shell_option || manifest_options == shell_option {
+            if cfg!(windows) {
+                "@python3 check.py %*"
+            } else {
+                "python3 check.py \"$@\""
+            }
+        } else {
+            "python3 check.py"
+        };
+        let context = TestEnv::new()
+            .with_config(format!(
+                indoc::indoc! {r"
+                repos:
+                  - repo: {url}
+                    rev: v1.0.0
+                    hooks:
+                      - id: {id}
+                        args: [{args}]
+                        {overrides}
+            "},
+                url = url,
+                id = id,
+                args = args,
+                overrides = overrides,
+            ))
+            .with_filter(format!("hook id: {id}"), "hook id: [HOOK_ID]")
+            .with_file("report.json", "old report\n")
+            .with_file(
+                "reporter.py",
+                "from pathlib import Path\nPath('report.json').write_text('new report\\n')\n",
+            )
+            .with_file(
+                "check.py",
+                indoc::indoc! {r#"
+                import argparse
+                import runpy
+                from pathlib import Path
+
+                parser = argparse.ArgumentParser()
+                output = parser.add_mutually_exclusive_group(required=True)
+                output.add_argument("--output")
+                output.add_argument("--reporter")
+                args = parser.parse_args()
+                if args.reporter:
+                    runpy.run_path(args.reporter)
+                else:
+                    Path(args.output).write_text("new report\n")
+            "#},
+            )
+            .init_git();
+        let repo = context
+            .create_hook_repo(
+                "report-writer",
+                format!(
+                    indoc::indoc! {r"
+                    - id: {id}
+                      name: Write report
+                      language: system
+                      entry: '{entry}'
+                      always_run: true
+                      pass_filenames: false
+                      {manifest_options}
+                "},
+                    id = id,
+                    entry = entry,
+                    manifest_options = manifest_options,
+                ),
+            )
+            .build();
+
+        insta::allow_duplicates! {
+            cmd_snapshot!(context, context.run()
+                .env("GIT_CONFIG_COUNT", "2")
+                .env("GIT_CONFIG_KEY_1", format!("url.{repo}.insteadOf"))
+                .env("GIT_CONFIG_VALUE_1", url), @"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+            Write report.............................................................Failed
+            - hook id: [HOOK_ID]
+            - files were modified by this hook
+
+            ----- stderr -----
+            ");
+        }
+    }
+}
+
 #[test]
 fn binary_diff_snapshots_use_full_object_ids() -> Result<()> {
     let context = TestEnv::new();
@@ -315,6 +453,67 @@ fn later_project_snapshots_diff_left_by_previous_project() {
     "#);
 }
 
+/// An unsupported `read_only` option must not hide a local hook's file changes,
+/// in either config format or when the worktree is already dirty.
+#[test]
+fn read_only_option_does_not_disable_diff_detection() {
+    for (filename, config) in [
+        (
+            ".pre-commit-config.yaml",
+            indoc::indoc! {r"
+                repos:
+                  - repo: local
+                    hooks:
+                      - id: modify
+                        name: modify
+                        language: system
+                        entry: python3 modify.py
+                        pass_filenames: false
+                        read_only: true
+            "},
+        ),
+        (
+            "prek.toml",
+            indoc::indoc! {r#"
+                [[repos]]
+                repo = "local"
+                [[repos.hooks]]
+                id = "modify"
+                name = "modify"
+                language = "system"
+                entry = "python3 modify.py"
+                pass_filenames = false
+                read_only = true
+            "#},
+        ),
+    ] {
+        let context = TestEnv::new()
+            .with_file(filename, config)
+            .with_file("file.txt", "original\n")
+            .with_file(
+                "modify.py",
+                "from pathlib import Path\nPath('file.txt').write_text('modified\\n')\n",
+            )
+            .with_filter(r"\.pre-commit-config\.yaml|prek\.toml", "[CONFIG]")
+            .init_git();
+        context.write_file("file.txt", "unstaged\n");
+
+        insta::allow_duplicates! {
+            cmd_snapshot!(context, context.run().arg("--all-files"), @"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+            modify...................................................................Failed
+            - hook id: modify
+            - files were modified by this hook
+
+            ----- stderr -----
+            warning: Ignored unexpected keys in `[CONFIG]`: `repos[0].hooks[0].read_only`
+            ");
+        }
+    }
+}
+
 #[test]
 fn read_only_builtin_hook_does_not_run_diff_detection() -> Result<()> {
     let context = TestEnv::new()
@@ -493,6 +692,8 @@ fn same_group_known_modification_rebaselines_later_external_hook() -> Result<()>
 
 #[test]
 fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()> {
+    // A read-only hook between a fixer and an external hook must leave the
+    // baseline invalidated so the external hook is not blamed for the fixer's edit.
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
         repos:
@@ -502,12 +703,18 @@ fn modifying_builtin_invalidates_baseline_for_later_external_hook() -> Result<()
                 priority: 0
           - repo: local
             hooks:
+              - id: read-only
+                name: read-only
+                language: pygrep
+                entry: not-present
+                files: \.txt$
+                priority: 1
               - id: noop
                 name: noop
                 language: system
                 entry: python3 -c "pass"
                 pass_filenames: false
-                priority: 1
+                priority: 2
     "#})
         .with_file("file.txt", "missing newline")
         .init_git();

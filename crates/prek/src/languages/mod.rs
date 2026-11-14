@@ -15,7 +15,7 @@ use crate::concurrency::run_by_batch;
 use crate::config::Language;
 use crate::fs::PathClean;
 use crate::git::GitCommandExt;
-use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
+use crate::hook::{Hook, HookEffect, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
 use crate::process::{Cmd, with_command_env};
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -308,8 +308,11 @@ impl Language {
         }
     }
 
-    pub(crate) fn can_modify_files(self) -> bool {
-        !matches!(self, Self::Fail | Self::Pygrep)
+    pub(crate) fn effect(self) -> HookEffect {
+        match self {
+            Self::Fail | Self::Pygrep => HookEffect::ReadOnly,
+            _ => HookEffect::Unknown,
+        }
     }
 
     pub(crate) fn supports_install_env(self) -> bool {
