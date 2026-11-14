@@ -90,9 +90,11 @@ pass_filenames = false
 stages = ["pre-push"]
 ```
 
-Hooks remain sequential when `priority` is omitted. Give independent hooks the
+Consecutive hooks that prek knows are read-only and safe to run concurrently may
+run together when `priority` is omitted. Other hooks remain sequential. Give independent external hooks the
 same explicit [`priority`](reference/configuration.md#priority) only after
 checking that they do not modify the same files or contend for shared state.
+Use distinct explicit priorities when you need to keep checks ordered.
 
 ## Keep the existing hook during rollout
 

@@ -571,6 +571,10 @@ async fn run_hooks<'paths>(
                 continue;
             };
 
+            let project_fail_fast = fail_fast
+                .or_else(|| project.config().fail_fast)
+                .unwrap_or(false);
+
             project_runs.push(ProjectRun {
                 project,
                 report_filter: ReportFilter::new(
@@ -579,10 +583,8 @@ async fn run_hooks<'paths>(
                         .or_else(|| filesystem.and_then(|fs| fs.hide_status.as_deref()))
                         .unwrap_or_default(),
                 ),
-                project_fail_fast: fail_fast
-                    .or_else(|| project.config().fail_fast)
-                    .unwrap_or(false),
-                groups: group_hooks_by_priority(hooks),
+                project_fail_fast,
+                groups: group_hooks(hooks),
             });
         }
 
@@ -842,8 +844,7 @@ impl HookRunner<'_> {
         semaphore: Rc<Semaphore>,
     ) -> Result<Vec<HookRunResult>> {
         debug!(
-            "Running priority group with priority {}: {:?}",
-            group_hooks[0].priority,
+            "Running hook group: {:?}",
             group_hooks.iter().map(|hook| &hook.id).collect::<Vec<_>>()
         );
 
@@ -864,22 +865,38 @@ impl HookRunner<'_> {
     }
 }
 
-/// Group hooks by ascending priority, preserving config order within each group.
-fn group_hooks_by_priority(mut hooks: Vec<ScheduledHook>) -> Vec<Vec<ScheduledHook>> {
-    hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
+/// Group hooks by priority, merging adjacent implicit groups that are safe to run concurrently.
+fn group_hooks(mut hooks: Vec<ScheduledHook>) -> Vec<Vec<ScheduledHook>> {
+    hooks.sort_by_key(|hook| (hook.priority(), hook.idx));
 
-    let mut groups = Vec::new();
+    let mut groups: Vec<Vec<ScheduledHook>> = Vec::new();
     let mut hooks = hooks.into_iter().peekable();
+    let mut merge_next = false;
 
     while let Some(hook) = hooks.next() {
-        let priority = hook.priority;
+        let priority = hook.priority();
         let mut group = vec![hook];
 
-        while let Some(hook) = hooks.next_if(|hook| hook.priority == priority) {
+        while let Some(hook) = hooks.next_if(|hook| hook.priority() == priority) {
             group.push(hook);
         }
 
-        groups.push(group);
+        // Check the entire priority group before merging: an explicit priority
+        // can coincide with an implicit one, including a hook that writes files.
+        let can_merge = group.iter().all(|hook| {
+            hook.priority.is_none() && hook.as_run().is_none_or(|hook| hook.is_read_only())
+        });
+
+        if can_merge
+            && merge_next
+            && let Some(previous) = groups.last_mut()
+        {
+            previous.extend(group);
+        } else {
+            groups.push(group);
+        }
+
+        merge_next = can_merge;
     }
 
     groups

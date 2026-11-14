@@ -508,7 +508,8 @@ pub(crate) struct Hook {
     pub stages: Stages,
     pub verbose: bool,
     pub minimum_prek_version: Option<String>,
-    pub priority: u32,
+    /// An explicit priority, or `None` to schedule by configuration order.
+    pub priority: Option<u32>,
     pub groups: BTreeSet<String>,
 }
 
@@ -550,8 +551,8 @@ impl Hook {
         } = hook_spec;
 
         let priority = match priority {
-            Some(priority) => priority.resolve(&project.config().priorities, &id)?,
-            None => u32::try_from(idx).expect("hook index should fit in u32"),
+            Some(priority) => Some(priority.resolve(&project.config().priorities, &id)?),
+            None => None,
         };
         let groups = groups
             .unwrap_or_default()
@@ -636,9 +637,21 @@ impl Hook {
         &self.project
     }
 
+    pub(crate) fn priority(&self) -> usize {
+        match self.priority {
+            Some(priority) => priority as usize,
+            None => self.idx,
+        }
+    }
+
     /// Whether the selected implementation preserves workspace files.
     pub(crate) fn is_workspace_read_only(&self) -> bool {
         self.effect != HookEffect::Unknown
+    }
+
+    /// Whether the implementation also preserves shared state used by other hooks.
+    pub(crate) fn is_read_only(&self) -> bool {
+        self.effect == HookEffect::ReadOnly
     }
 
     /// Native implementations report file changes directly, including writes by fixers.
@@ -1162,7 +1175,9 @@ mod tests {
             stages: Stages(manual),
             verbose: true,
             minimum_prek_version: None,
-            priority: 42,
+            priority: Some(
+                42,
+            ),
             groups: {
                 "ci",
                 "format",

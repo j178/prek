@@ -253,7 +253,8 @@ Verbose regex example (useful for long allow/deny lists):
 
 ### `fail_fast`
 
-Stop the run after the first failing hook.
+Stop after the first failing [execution group](#priority). All hooks in that
+group finish before the run stops.
 
 - Type: boolean
 - Default: `false`
@@ -1421,7 +1422,27 @@ Scope:
 
 Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to `PREK_CONCURRENT_HOOKS`.
 
-When `priority` is omitted, `prek` assigns an implicit value based on hook order to preserve sequential behavior.
+When `priority` is omitted, `prek` assigns an implicit value based on hook order.
+Consecutive hooks with implicit priorities can run together when prek knows they
+are both read-only and safe to run concurrently. This includes read-only built-in
+and fast-path hooks, individually audited remote hooks, the `identity` and
+`check-useless-excludes` meta hooks, and the `fail` and `pygrep` languages.
+Other hooks keep their execution barriers, including built-in fixers running in
+check-only modes. Hooks known to preserve workspace files can skip Git diff
+checks, but that alone does not enable automatic grouping. `check-hooks-apply`
+can populate the shared repository cache; `destroyed-symlinks` and
+`check-signed-commit` invoke Git operations that may update shared index or
+verification state. These hooks keep their execution barriers.
+
+Automatic grouping never crosses a group containing an explicit priority. Set
+distinct explicit priorities when checks must run in order. Explicitly skipped
+hooks do not prevent automatic grouping unless they have an explicit priority.
+
+[`fail_fast`](#fail_fast), whether set on a project or hook or through the CLI,
+is checked after the entire execution group finishes. This applies to both
+explicit priority groups and automatically grouped read-only hooks. A failure
+that triggers fail-fast prevents later groups from running, but all hooks in the
+current group still run, including those waiting for a concurrency slot.
 
 Example:
 
@@ -1524,7 +1545,8 @@ Hook-level fail-fast behavior.
 - Type: boolean
 - Default: `false`
 
-If `true`, a failure in this hook stops the run immediately.
+If `true`, a failure in this hook stops the run after all hooks in its
+[execution group](#priority) finish.
 
 ### `verbose`
 
