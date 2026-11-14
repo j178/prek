@@ -8,6 +8,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use crate::hook::Hook;
 pub(crate) use crate::hooks::builtin::BuiltinHooks;
 pub(crate) use crate::hooks::meta::MetaHooks;
+pub(crate) use crate::hooks::remote::remote_hook_effect;
 
 mod builtin;
 mod check_added_large_files;
@@ -39,6 +40,7 @@ mod no_commit_to_branch;
 mod normalize_indentation;
 mod pattern;
 mod pretty_format_json;
+mod remote;
 mod replace_pattern;
 mod requirements_txt_fixer;
 mod shebangs;

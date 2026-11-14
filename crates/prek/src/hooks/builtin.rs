@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::cli::run::HookRunReporter;
 use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
-use crate::hook::{Hook, Repo};
+use crate::hook::{Hook, HookEffect, Repo};
 use crate::hooks::{
     FixArgs, HookFuture, HookOutput, check_added_large_files, check_case_conflict,
     check_commit_trailers, check_executables_have_shebangs, check_illegal_windows_names,
@@ -109,6 +109,44 @@ impl BuiltinHooks {
             | Self::ReplacePattern
             | Self::RequireFilenamePattern
             | Self::RequirePattern => false,
+        }
+    }
+
+    pub(crate) fn effect(self) -> HookEffect {
+        match self {
+            Self::CheckAddedLargeFiles
+            | Self::CheckCaseConflict
+            | Self::CheckCommitTrailers
+            | Self::CheckExecutablesHaveShebangs
+            | Self::CheckIllegalWindowsNames
+            | Self::CheckJson
+            | Self::CheckJson5
+            | Self::CheckJsonc
+            | Self::CheckMergeConflict
+            | Self::CheckShebangScriptsAreExecutable
+            | Self::CheckSymlinks
+            | Self::CheckToml
+            | Self::CheckVcsPermalinks
+            | Self::CheckXml
+            | Self::CheckYaml
+            | Self::DenyFilenamePattern
+            | Self::DenyPattern
+            | Self::DetectPrivateKey
+            | Self::ForbidNewSubmodules
+            | Self::NoCommitToBranch
+            | Self::RequireFilenamePattern
+            | Self::RequirePattern => HookEffect::ReadOnly,
+            // Git may refresh its index or update verification state outside workspace files.
+            Self::CheckSignedCommit | Self::DestroyedSymlinks => HookEffect::WorkspaceReadOnly,
+            Self::EndOfFileFixer
+            | Self::FileContentsSorter
+            | Self::FixByteOrderMarker
+            | Self::MixedLineEnding
+            | Self::NormalizeIndentation
+            | Self::PrettyFormatJson
+            | Self::ReplacePattern
+            | Self::RequirementsTxtFixer
+            | Self::TrailingWhitespace => HookEffect::Unknown,
         }
     }
 
