@@ -306,10 +306,11 @@ impl Formatter for JsonFormatter<'_> {
         W: ?Sized + io::Write,
     {
         if value.contains(['.', 'e', 'E']) {
-            let Ok(float) = value.parse::<f64>() else {
-                return writer.write_all(value.as_bytes());
+            return match value.parse::<f64>() {
+                Ok(float) if float.is_finite() => self.pretty.write_f64(writer, float),
+                // Out of f64 range (`1e400`): keep the text, the `f64` path only knows finite values.
+                _ => writer.write_all(value.as_bytes()),
             };
-            return self.pretty.write_f64(writer, float);
         }
         if value == "-0" {
             return writer.write_all(b"0");
@@ -674,11 +675,12 @@ mod tests {
             ordered_top_keys: vec![],
             sort_keys: true,
         };
-        let json = r#"{"big": 123456789012345678901234567890, "neg": -18446744073709551617, "zero": -0, "f": 1.50}"#;
+        let json = r#"{"big": 123456789012345678901234567890, "neg": -18446744073709551617, "zero": -0, "f": 1.50, "huge": 1e400}"#;
         let expected = indoc::indoc! {r#"
         {
           "big": 123456789012345678901234567890,
           "f": 1.5,
+          "huge": 1e+400,
           "neg": -18446744073709551617,
           "zero": 0
         }
