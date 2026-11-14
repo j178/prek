@@ -81,7 +81,7 @@ fn hook_impl_allows_missing_hook_dir() {
         .arg("--hook-type")
         .arg("pre-commit")
         .arg("--script-version")
-        .arg("4");
+        .arg("5");
 
     cmd_snapshot!(context, hook_impl, @r"
     success: true

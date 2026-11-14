@@ -36,7 +36,7 @@ fn install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
 
     // Install `pre-commit` and `post-commit` hook.
@@ -66,7 +66,7 @@ fn install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
 
     assert_snapshot!(context.read(".git/hooks/pre-commit.legacy"), @r##"
@@ -87,7 +87,7 @@ fn install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=post-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=post-commit -- "$@"
             "#);
 
     // Overwrite existing hooks.
@@ -116,7 +116,7 @@ fn install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
     snapshot!(context, context.read(".git/hooks/post-commit"), @r#"
             #!/bin/sh
@@ -131,7 +131,7 @@ fn install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=post-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=post-commit -- "$@"
             "#);
 }
 
@@ -152,7 +152,7 @@ fn install_with_hook_command() {
 
     HERE="$(cd "$(dirname "$0")" && pwd)"
 
-    exec mise exec -- prek hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+    exec mise exec -- prek hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
     "#);
 }
 
@@ -258,7 +258,7 @@ fn install_with_git_dir() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
 }
 
@@ -299,7 +299,7 @@ fn install_with_local_hooks_path_installs_to_configured_directory() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
 }
 
@@ -652,7 +652,7 @@ fn install_with_hooks() -> anyhow::Result<()> {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
 
     Ok(())
@@ -1246,7 +1246,7 @@ fn init_templatedir() -> anyhow::Result<()> {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --skip-on-missing-config -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit --skip-on-missing-config -- "$@"
             "#);
 
     // Run from a subdirectory.
@@ -1275,7 +1275,7 @@ fn init_templatedir() -> anyhow::Result<()> {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --skip-on-missing-config -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit --skip-on-missing-config -- "$@"
             "#);
 
     // `--config` points to non-existing file.
@@ -1301,7 +1301,7 @@ fn init_templatedir() -> anyhow::Result<()> {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --config=non-exist-config --skip-on-missing-config -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit --config=non-exist-config --skip-on-missing-config -- "$@"
             "#);
 
     Ok(())
@@ -1335,7 +1335,7 @@ fn util_init_template_dir() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --skip-on-missing-config -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit --skip-on-missing-config -- "$@"
             "#);
 }
 
@@ -1425,7 +1425,7 @@ fn workspace_install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit -- "$@"
             "#);
 
     // Install from a subdirectory.
@@ -1453,7 +1453,7 @@ fn workspace_install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --cd=project3 -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit --cd=project3 -- "$@"
             "#);
 
     // Install with selectors
@@ -1479,7 +1479,7 @@ fn workspace_install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 project3/ --skip=project2/ --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 project3/ --skip=project2/ --hook-type=pre-commit -- "$@"
             "#);
 
     // Invalid selectors
@@ -1517,7 +1517,7 @@ fn workspace_install() {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 project3/ --hook-type=pre-commit -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 project3/ --hook-type=pre-commit -- "$@"
             "#);
 }
 
@@ -1716,7 +1716,7 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
                 PREK="prek"
             fi
 
-            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=pre-commit --skip-on-missing-config -- "$@"
+            exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 5 --hook-type=pre-commit --skip-on-missing-config -- "$@"
             "#);
 
     Ok(())

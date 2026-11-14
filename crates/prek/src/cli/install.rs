@@ -417,7 +417,7 @@ fn shell_quote(arg: &str) -> Result<Cow<'_, str>, shlex::QuoteError> {
 
 /// The version of the hook script. Increment this when the script changes in a way that
 /// requires re-installation.
-pub(crate) static CUR_SCRIPT_VERSION: usize = 4;
+pub(crate) static CUR_SCRIPT_VERSION: usize = 5;
 
 const SCRIPT_ID: &str = "182c10f181da4464a3eec51b83331688";
 
