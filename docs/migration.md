@@ -90,7 +90,7 @@ pass_filenames = false
 stages = ["pre-push"]
 ```
 
-Hooks remain sequential when `priority` is omitted. Give independent hooks the
+Give independent hooks the
 same explicit [`priority`](reference/configuration.md#priority) only after
 checking that they do not modify the same files or contend for shared state.
 
