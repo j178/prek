@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::hook::Hook;
-use crate::hooks::pre_commit_hooks::check_json::JsonDuplicateKeyChecker;
+use crate::hooks::check_json::JsonDuplicateKeyChecker;
 use crate::hooks::{HookOutput, run_blocking_file_checks};
 
 pub(crate) async fn check_json5(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<HookOutput> {

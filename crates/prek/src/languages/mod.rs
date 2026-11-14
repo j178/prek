@@ -2,7 +2,6 @@ use std::ffi::{OsStr, OsString};
 use std::future::Future;
 use std::path::Path;
 use std::process::Stdio;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -18,7 +17,6 @@ use crate::fs::PathClean;
 use crate::git::GitCommandExt;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::hook_entry::PreparedHookEntry;
-use crate::hooks::{self, HookOutput};
 use crate::process::{Cmd, with_command_env};
 use crate::store::{CacheBucket, Store, ToolBucket};
 
@@ -559,44 +557,14 @@ impl Language {
         self.backend().check_health(info)
     }
 
-    #[instrument(skip_all, fields(hook_id=%hook.id, language=%hook.language))]
-    pub(crate) async fn run<'a, 'p>(
-        &'a self,
-        store: &'a Store,
-        hook: &'a InstalledHook,
-        filenames: &'a [&'p Path],
-        reporter: &'a HookRunReporter,
-    ) -> Result<HookOutput>
-    where
-        'p: 'a,
-    {
-        match hook.repo() {
-            Repo::Meta => {
-                hooks::MetaHooks::from_str(&hook.id)
-                    .unwrap()
-                    .run(store, hook, filenames, reporter)
-                    .await
-            }
-            Repo::Builtin => {
-                hooks::BuiltinHooks::from_str(&hook.id)
-                    .unwrap()
-                    .run(store, hook, filenames, reporter)
-                    .await
-            }
-            // Fast path for hooks implemented in Rust
-            Repo::Remote { .. } if hooks::check_fast_path(hook) => {
-                hooks::run_fast_path(store, hook, filenames, reporter).await
-            }
-            Repo::Remote { .. } | Repo::Local => {
-                let (exit_status, output) =
-                    self.backend().run(store, hook, filenames, reporter).await?;
-                if self.can_modify_files() {
-                    Ok(HookOutput::unknown(exit_status, output))
-                } else {
-                    Ok(HookOutput::unchanged(exit_status, output))
-                }
-            }
-        }
+    pub(crate) async fn run(
+        &self,
+        store: &Store,
+        hook: &InstalledHook,
+        filenames: &[&Path],
+        reporter: &HookRunReporter,
+    ) -> Result<(i32, Vec<u8>)> {
+        self.backend().run(store, hook, filenames, reporter).await
     }
 
     #[instrument(skip_all, fields(hook_id=%hook.id, language=%hook.language))]

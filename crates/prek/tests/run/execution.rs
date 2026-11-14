@@ -104,6 +104,78 @@ fn fast_path_checks_filenames_from_entry_and_args() {
     ");
 }
 
+/// Explicit language overrides, the opt-out flag, and hooks without an approved
+/// fast path must execute the pinned command rather than a native replacement.
+#[test]
+fn remote_hooks_keep_pinned_implementation() {
+    for (id, language, no_fast_path) in [
+        ("check-json", "language: system", false),
+        ("check-json", "", true),
+        ("pretty-format-json", "", false),
+    ] {
+        let context = TestEnv::new()
+            .with_config(format!(
+                indoc::indoc! {r"
+                repos:
+                  - repo: https://github.com/pre-commit/pre-commit-hooks
+                    rev: v1.0.0
+                    hooks:
+                      - id: {id}
+                        {language}
+                "},
+                id = id,
+                language = language
+            ))
+            .with_filter(format!("hook id: {id}"), "hook id: [HOOK_ID]")
+            .init_git();
+        let repo = context
+            .create_hook_repo(
+                "pinned-hook",
+                format!(
+                    indoc::indoc! {r#"
+                    - id: {id}
+                      name: Pinned hook
+                      language: system
+                      entry: python3 -c "print('pinned command'); raise SystemExit(1)"
+                      always_run: true
+                      pass_filenames: false
+                    "#},
+                    id = id
+                ),
+            )
+            .build();
+
+        let mut command = context.run();
+        command
+            .env("GIT_CONFIG_COUNT", "2")
+            .env("GIT_CONFIG_KEY_1", format!("url.{repo}.insteadOf"))
+            .env(
+                "GIT_CONFIG_VALUE_1",
+                "https://github.com/pre-commit/pre-commit-hooks",
+            );
+        if no_fast_path {
+            command.env("PREK_NO_FAST_PATH", "1");
+        } else {
+            command.env_remove("PREK_NO_FAST_PATH");
+        }
+
+        insta::allow_duplicates! {
+            cmd_snapshot!(context, command, @"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+            Pinned hook..............................................................Failed
+            - hook id: [HOOK_ID]
+            - exit code: 1
+
+              pinned command
+
+            ----- stderr -----
+            ");
+        }
+    }
+}
+
 #[test]
 fn local() {
     let context = TestEnv::new()
