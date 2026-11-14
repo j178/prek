@@ -4,22 +4,29 @@ use anyhow::Result;
 use xml::reader::ParserConfig;
 
 use crate::hook::Hook;
-use crate::hooks::{FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{
+    FileReadCache, FilenamesArgs, HookOutput, parse_hook_args, run_blocking_file_checks,
+};
 
 /// Runs the `check-xml` hook.
-pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
+pub(crate) async fn run(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> Result<HookOutput> {
     let args: FilenamesArgs = parse_hook_args(hook)?;
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &args.filenames,
         filenames,
-        check_file,
+        move |file_path, display_path| check_file(file_path, display_path, &cache),
     )
     .await
 }
 
-fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
-    let content = fs_err::read(file_path)?;
+fn check_file(file_path: &Path, filename: &Path, cache: &FileReadCache) -> Result<HookOutput> {
+    let content = cache.read(file_path)?;
 
     // Parse the whole document once with xml-rs. This is stricter than the upstream Python
     // check-xml (xml.sax/Expat) in two cases:
@@ -30,7 +37,7 @@ fn check_file(file_path: &Path, filename: &Path) -> Result<HookOutput> {
     // Keeping these differences avoids rewriting or repeatedly parsing the input.
     let parser = ParserConfig::new()
         .allow_multiple_root_elements(false)
-        .create_reader(content.as_slice());
+        .create_reader(&*content);
 
     for event in parser {
         if let Err(error) = event {
@@ -62,7 +69,7 @@ mod tests {
     <element>value</element>
 </root>"#;
         let file_path = create_test_file(&dir, "valid.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -73,7 +80,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"<?xml-stylesheet href="style.xsl"?><root/>"#;
         let file_path = create_test_file(&dir, "processing_instruction.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -87,7 +94,7 @@ mod tests {
     <element>value
 </root>"#;
         let file_path = create_test_file(&dir, "invalid.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
@@ -103,7 +110,7 @@ mod tests {
     <element>value</different>
 </root>"#;
         let file_path = create_test_file(&dir, "mismatched.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -117,7 +124,7 @@ mod tests {
     <element attribute="unclosed value>text</element>
 </root>"#;
         let file_path = create_test_file(&dir, "syntax_error.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -127,7 +134,7 @@ mod tests {
     fn test_invalid_xml_trailing_text() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "trailing.xml", b"<root/>junk")?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -138,7 +145,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         let output_str = String::from_utf8_lossy(&result.output);
@@ -150,7 +157,7 @@ mod tests {
     fn test_whitespace_only_xml() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "whitespace.xml", b" \n\t")?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -165,7 +172,7 @@ mod tests {
     <element id="2">another value</element>
 </root>"#;
         let file_path = create_test_file(&dir, "attributes.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -179,7 +186,7 @@ mod tests {
             "duplicate_attribute.xml",
             br#"<root key="1" key="2"/>"#,
         )?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -189,7 +196,7 @@ mod tests {
     fn test_invalid_xml_element_name() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "invalid_name.xml", b"<1root/>")?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -203,7 +210,7 @@ mod tests {
     <element><![CDATA[Some <special> characters & symbols]]></element>
 </root>"#;
         let file_path = create_test_file(&dir, "cdata.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -219,7 +226,7 @@ mod tests {
     <!-- Another comment -->
 </root>"#;
         let file_path = create_test_file(&dir, "comments.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -234,7 +241,7 @@ mod tests {
     <element>value</element>
 </root>"#;
         let file_path = create_test_file(&dir, "doctype.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -245,7 +252,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"<!DOCTYPE html SYSTEM "xhtml.dtd"><html>&nbsp;</html>"#;
         let file_path = create_test_file(&dir, "external_entity.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -255,7 +262,7 @@ mod tests {
     fn test_invalid_xml_unknown_entity_without_external_dtd() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "unknown_entity.xml", b"<root>&unknown;</root>")?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())
@@ -267,7 +274,7 @@ mod tests {
         let content = br#"<!DOCTYPE root [<!ENTITY value "ok">]>
 <root>&value;</root>"#;
         let file_path = create_test_file(&dir, "internal_entity.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -281,7 +288,7 @@ mod tests {
             content.extend_from_slice(&code_unit.to_le_bytes());
         }
         let file_path = create_test_file(&dir, "utf16.xml", &content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
         Ok(())
@@ -294,7 +301,7 @@ mod tests {
 <element>value</element>
 <another>value</another>"#;
         let file_path = create_test_file(&dir, "no_root.xml", content)?;
-        let result = check_file(&file_path, &file_path)?;
+        let result = check_file(&file_path, &file_path, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 1);
         assert_ne!(result.output, b"");
         Ok(())

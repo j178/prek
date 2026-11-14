@@ -4,7 +4,7 @@ use clap::Parser;
 
 use crate::hook::Hook;
 use crate::hooks::check_json::JsonDuplicateKeyChecker;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{FileReadCache, HookOutput, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -16,14 +16,19 @@ pub(crate) struct Args {
     allow_trailing_commas: bool,
 }
 
-pub(crate) async fn check_jsonc(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<HookOutput> {
+pub(crate) async fn check_jsonc(
+    hook: &Hook,
+    filenames: &[&Path],
+    cache: &FileReadCache,
+) -> anyhow::Result<HookOutput> {
     let args = parse_hook_args::<Args>(hook)?;
+    let cache = cache.clone();
     run_blocking_file_checks(
         hook.project().relative_path(),
         &[],
         filenames,
         move |file_path, display_path| {
-            check_file(file_path, display_path, args.allow_trailing_commas)
+            check_file(file_path, display_path, args.allow_trailing_commas, &cache)
         },
     )
     .await
@@ -33,8 +38,10 @@ fn check_file(
     file_path: &Path,
     display_path: &Path,
     allow_trailing_commas: bool,
+    cache: &FileReadCache,
 ) -> anyhow::Result<HookOutput> {
-    let content = fs_err::read_to_string(file_path)?;
+    let content = cache.read(file_path)?;
+    let content = content.as_str(file_path)?;
     if content.is_empty() {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
@@ -51,7 +58,7 @@ fn check_file(
         allow_non_finite_numbers: false,
         allow_extended_string_escapes: false,
     };
-    match jsonc_parser::parse_to_serde_value::<JsonDuplicateKeyChecker>(&content, &options) {
+    match jsonc_parser::parse_to_serde_value::<JsonDuplicateKeyChecker>(content, &options) {
         Ok(_) => Ok(HookOutput::unchanged(0, Vec::new())),
         Err(e) => {
             let error_message =
@@ -96,7 +103,7 @@ mod tests {
         }
         "#};
         let file_path = create_test_file(&dir, "valid.jsonc", content.as_bytes())?;
-        let result = check_file(&file_path, &file_path, false)?;
+        let result = check_file(&file_path, &file_path, false, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -113,7 +120,7 @@ mod tests {
         }
         "#};
         let file_path = create_test_file(&dir, "valid.jsonc", content.as_bytes())?;
-        let result = check_file(&file_path, &file_path, true)?;
+        let result = check_file(&file_path, &file_path, true, &FileReadCache::default())?;
         assert_eq!(result.exit_status, 0);
         assert_eq!(result.output, b"");
 
@@ -129,7 +136,7 @@ mod tests {
             r#"{"key": 1, "\u006bey": 2}"#,
         ] {
             let file_path = create_test_file(&dir, "duplicate.jsonc", content.as_bytes())?;
-            let result = check_file(&file_path, &file_path, true)?;
+            let result = check_file(&file_path, &file_path, true, &FileReadCache::default())?;
             assert_eq!(result.exit_status, 1, "input: {content:?}");
             assert!(String::from_utf8_lossy(&result.output).contains("duplicate key"));
         }
@@ -162,7 +169,7 @@ mod tests {
             "# comment\n{}",
         ] {
             let file_path = create_test_file(&dir, "invalid.jsonc", content.as_bytes())?;
-            let result = check_file(&file_path, &file_path, true)?;
+            let result = check_file(&file_path, &file_path, true, &FileReadCache::default())?;
             assert_eq!(result.exit_status, 1, "input: {content:?}");
         }
 

@@ -5,9 +5,10 @@ use std::str;
 use rustc_hash::FxHashSet;
 
 use crate::git;
+use crate::hooks::FileReadCache;
 
-pub(super) fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error> {
-    let mut file = fs_err::File::open(path)?;
+pub(super) fn file_has_shebang(path: &Path, cache: &FileReadCache) -> Result<bool, anyhow::Error> {
+    let mut file = cache.open(path)?;
     let mut buf = [0u8; 2];
     let n = file.read(&mut buf)?;
     Ok(n >= 2 && buf[0] == b'#' && buf[1] == b'!')
@@ -109,7 +110,7 @@ mod tests {
         let file = NamedTempFile::new()?;
         fs_err::write(file.path(), b"#!/bin/sh\necho hi\n")?;
 
-        assert!(file_has_shebang(file.path())?);
+        assert!(file_has_shebang(file.path(), &FileReadCache::default())?);
         Ok(())
     }
 
@@ -118,7 +119,7 @@ mod tests {
         let file = NamedTempFile::new()?;
         fs_err::write(file.path(), b"##!/bin/sh\n")?;
 
-        assert!(!file_has_shebang(file.path())?);
+        assert!(!file_has_shebang(file.path(), &FileReadCache::default())?);
         Ok(())
     }
 }

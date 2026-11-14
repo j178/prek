@@ -708,3 +708,65 @@ fn no_fail_fast_cli_flag() {
     ----- stderr -----
     ");
 }
+
+/// Mixed groups must observe writes immediately; later read-only groups must load fresh contents.
+/// One hook worker fixes execution order without sleeps or racing a reader against the writer.
+#[test]
+fn builtin_file_cache_respects_workspace_changes() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: builtin
+                hooks:
+                  - id: check-json
+                    name: Before JSON
+                    priority: 0
+                  - id: require-pattern
+                    name: Before contents
+                    args: [old]
+                    priority: 0
+                  - id: check-json
+                    name: Mixed JSON
+                    priority: 1
+                  - id: replace-pattern
+                    args: [old, new]
+                    priority: 1
+                  - id: require-pattern
+                    name: Mixed contents
+                    args: [new]
+                    priority: 1
+                  - id: check-json
+                    name: After JSON
+                    priority: 2
+                  - id: require-pattern
+                    name: After contents
+                    args: [new]
+                    priority: 2
+        "})
+        .with_file("file.json", "{\"old\": true}\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run()
+        .args(["--files", "file.json"])
+        .env("PREK_CONCURRENT_HOOKS", "1"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Before JSON..............................................................Passed
+    Before contents..........................................................Passed
+    Files were modified by following hooks...................................Failed
+      ┌ Mixed JSON...........................................................Passed
+      │ replace patterns.....................................................Failed
+      │ - hook id: replace-pattern
+      │ - description: Replaces regular expression matches in text files
+      │ - exit code: 1
+      │
+      │ Fixing file.json
+      └ Mixed contents.......................................................Passed
+    After JSON...............................................................Passed
+    After contents...........................................................Passed
+
+    ----- stderr -----
+    ");
+    assert_eq!(context.read("file.json"), "{\"new\": true}\n");
+}
