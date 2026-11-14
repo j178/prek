@@ -69,7 +69,7 @@ self-replace = { version = "1.5.0" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde-saphyr = { version = "2.1.1", default-features = false, features = ["deserialize", "serialize"] }
-serde_json = { version = "1.0.132", features = ["preserve_order", "unbounded_depth"] }
+serde_json = { version = "1.0.132", features = ["arbitrary_precision", "preserve_order", "unbounded_depth"] }
 serde_stacker = { version = "0.1.12" }
 shlex = { version = "2.0.0" }
 simdutf8 = { version = "0.1.5" }

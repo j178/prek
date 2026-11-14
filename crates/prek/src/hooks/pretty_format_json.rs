@@ -298,6 +298,24 @@ impl Formatter for JsonFormatter<'_> {
 
         write_ascii_only_fragment(writer, fragment)
     }
+
+    // With `arbitrary_precision`, numbers arrive as their source text. Python keeps
+    // integers exact but parses floats, so only integers are written back verbatim.
+    fn write_number_str<W>(&mut self, writer: &mut W, value: &str) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        if value.contains(['.', 'e', 'E']) {
+            let Ok(float) = value.parse::<f64>() else {
+                return writer.write_all(value.as_bytes());
+            };
+            return self.pretty.write_f64(writer, float);
+        }
+        if value == "-0" {
+            return writer.write_all(b"0");
+        }
+        writer.write_all(value.as_bytes())
+    }
 }
 
 fn write_ascii_only_fragment<W>(writer: &mut W, fragment: &str) -> io::Result<()>
@@ -643,6 +661,29 @@ mod tests {
         assert_eq!(result.exit_status, 1);
         let output_str = String::from_utf8_lossy(&result.output);
         assert!(output_str.contains("not pretty-formatted."));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_integers_keep_precision() -> Result<()> {
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
+        let json = r#"{"big": 123456789012345678901234567890, "neg": -18446744073709551617, "zero": -0, "f": 1.50}"#;
+        let expected = indoc::indoc! {r#"
+        {
+          "big": 123456789012345678901234567890,
+          "f": 1.5,
+          "neg": -18446744073709551617,
+          "zero": 0
+        }
+        "#};
+        assert_eq!(prettify_json(json, &args)?, expected);
 
         Ok(())
     }
