@@ -10,7 +10,7 @@ const MAX_ENTRIES: usize = 512;
 const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 
-/// Shares successful reads within one read-only hook group. Disabled by default.
+/// Shares reads within a workspace-read-only hook group. Disabled by default.
 /// Entries stay until the group ends so a faster hook cannot evict a slower hook's inputs.
 #[derive(Clone, Default)]
 pub(crate) struct FileReadCache {

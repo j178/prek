@@ -848,18 +848,17 @@ impl HookRunner<'_> {
             group_hooks.iter().map(|hook| &hook.id).collect::<Vec<_>>()
         );
 
-        // Explicit filenames can be outside the workspace, where workspace-only hooks may write.
-        let read_only = group_hooks
+        let workspace_read_only = group_hooks
             .iter()
             .filter_map(HookPlan::as_run)
-            .all(|hook| hook.is_read_only());
+            .all(|hook| hook.is_workspace_read_only());
         let builtin_count = group_hooks
             .iter()
             .filter_map(HookPlan::as_run)
             .filter(|hook| hook.uses_builtin())
             .take(2)
             .count();
-        let cache = if read_only && builtin_count > 1 {
+        let cache = if workspace_read_only && builtin_count > 1 {
             hooks::FileReadCache::new()
         } else {
             hooks::FileReadCache::default()

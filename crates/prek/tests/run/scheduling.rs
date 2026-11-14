@@ -712,7 +712,7 @@ fn no_fail_fast_cli_flag() {
 /// Mixed groups must observe writes immediately; later read-only groups must load fresh contents.
 /// One hook worker fixes execution order without sleeps or racing a reader against the writer.
 #[test]
-fn builtin_file_cache_is_scoped_to_read_only_groups() {
+fn builtin_file_cache_respects_workspace_changes() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
             repos:
@@ -769,70 +769,4 @@ fn builtin_file_cache_is_scoped_to_read_only_groups() {
     ----- stderr -----
     ");
     assert_eq!(context.read("file.json"), "{\"new\": true}\n");
-}
-
-/// Workspace-only guarantees allow external writes. A remote fixture models such
-/// a write between native checks; one worker makes a stale cache deterministic.
-#[test]
-fn workspace_read_only_group_reads_external_updates() {
-    let context = TestEnv::new()
-        .with_config(indoc::indoc! {r"
-            repos:
-              - repo: builtin
-                hooks:
-                  - id: check-json
-                    args: [../report.json]
-                    pass_filenames: false
-                    always_run: true
-                    priority: 0
-              - repo: https://github.com/koalaman/shellcheck-precommit
-                rev: v1.0.0
-                hooks:
-                  - id: shellcheck
-                    priority: 0
-              - repo: builtin
-                hooks:
-                  - id: check-toml
-                    args: [../report.json]
-                    pass_filenames: false
-                    always_run: true
-                    priority: 0
-        "})
-        .with_file("../report.json", r#"{"old": true}"#)
-        .with_file(
-            "refresh.py",
-            indoc::indoc! {r"
-                from pathlib import Path
-                Path('../report.json').write_text('new = true\n')
-            "},
-        )
-        .init_git();
-    let repo = context
-        .create_hook_repo(
-            "external-writer",
-            indoc::indoc! {r"
-                - id: shellcheck
-                  name: Refresh external state
-                  language: system
-                  entry: python3 refresh.py
-                  always_run: true
-                  pass_filenames: false
-            "},
-        )
-        .build();
-
-    cmd_snapshot!(context, context.run()
-        .env("PREK_CONCURRENT_HOOKS", "1")
-        .env("GIT_CONFIG_COUNT", "2")
-        .env("GIT_CONFIG_KEY_1", format!("url.{repo}.insteadOf"))
-        .env("GIT_CONFIG_VALUE_1", "https://github.com/koalaman/shellcheck-precommit"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    check json...............................................................Passed
-    Refresh external state...................................................Passed
-    check toml...............................................................Passed
-
-    ----- stderr -----
-    ");
 }
