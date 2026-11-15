@@ -5,7 +5,7 @@ FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef3
 # Keep the snapshot at least as recent as the Ubuntu base image.
 ARG UBUNTU_SNAPSHOT=20260928T000000Z
 # renovate: datasource=github-tags depName=rust-lang/rustup
-ARG RUSTUP_VERSION=1.29.2
+ARG RUSTUP_VERSION=1.29.3
 
 ENV HOME="/root"
 WORKDIR $HOME
