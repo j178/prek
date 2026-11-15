@@ -2,14 +2,14 @@
 
 ## General differences
 
-- `prek` supports `.pre-commit-config.yaml`, `.pre-commit-config.yml`, and native `prek.toml` configuration files. Use [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/#prek-util-yaml-to-toml>) to convert an existing YAML config.
+- `prek` supports `.pre-commit-config.yaml`, `.pre-commit-config.yml`, and native `prek.toml` configuration files. Use [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-util-yaml-to-toml>) to convert an existing YAML config.
 - `prek` implements some common hooks from `pre-commit-hooks` in Rust for better performance.
 - `prek` supports `repo: builtin` for offline, zero-setup hooks.
 - `prek` uses `~/.cache/prek` as the default cache directory for repos, environments and toolchains.
 - `prek` decouples hook environments from their repositories, allowing shared toolchains and environments across hooks.
 - `prek` supports `language_version` as a semver specifier and automatically installs the required toolchains.
-- `prek` supports `files` and `exclude` as glob lists (in addition to regex) via `glob` mappings. See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/#top-level-files>).
-- `prek` supports a [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) hook option for explicit shell-source execution through predefined adapters such as `bash`, `sh`, and `pwsh`. Upstream `pre-commit` runs `entry` directly; shell behavior must be spelled into `entry` itself.
+- `prek` supports `files` and `exclude` as glob lists (in addition to regex) via `glob` mappings. See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md#top-level-files>).
+- `prek` supports a [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) hook option for explicit shell-source execution through predefined adapters such as `bash`, `sh`, and `pwsh`. Upstream `pre-commit` runs `entry` directly; shell behavior must be spelled into `entry` itself.
 - `prek` reports more precise configuration parsing errors, including exact source locations.
 
 ## Behavioral divergences
@@ -51,8 +51,8 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 
 ### `prek run`
 
-- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](<https://prek.j178.dev/dev/monorepos/#run-or-skip-a-project>) for details.
-- `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) may run concurrently), instead of strictly serial execution.
+- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](<https://prek.j178.dev/dev/monorepos/index.md#run-or-skip-a-project>) for details.
+- `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>) may run concurrently), instead of strictly serial execution.
 - In workspace mode, `prek run` can execute independent projects at the same directory depth concurrently, while still running child projects before their parents.
 - `prek` provides shell completion for hook ids.
 - `prek run --dry-run` shows which hooks would run without executing them.

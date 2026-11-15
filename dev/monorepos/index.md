@@ -78,7 +78,7 @@ prek run --skip frontend/ --all-files
 
 Selecting `frontend/` leaves out the root project's hooks. Skipping `frontend/` leaves the root's hooks eligible to check files inside `frontend/`.
 
-To skip a project for one commit, use `PREK_SKIP=frontend/ git commit`. See the [workspace reference](<https://prek.j178.dev/dev/reference/workspace/#selectors>) for combining selectors, hook aliases, and skip precedence.
+To skip a project for one commit, use `PREK_SKIP=frontend/ git commit`. See the [workspace reference](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>) for combining selectors, hook aliases, and skip precedence.
 
 ## Choose which checks apply to a project's files
 
@@ -96,7 +96,7 @@ orphan = true
 orphan: true
 ```
 
-For `frontend/`, this excludes its files from the root's hooks. Keep the shared checks you still want in the frontend config. Even if you skip an orphan project, its files do not fall back to parent hooks. See [orphan projects](<https://prek.j178.dev/dev/reference/workspace/#orphan-projects>) for the full rules.
+For `frontend/`, this excludes its files from the root's hooks. Keep the shared checks you still want in the frontend config. Even if you skip an orphan project, its files do not fall back to parent hooks. See [orphan projects](<https://prek.j178.dev/dev/reference/workspace/index.md#orphan-projects>) for the full rules.
 
 ## Exclude a directory from project discovery
 
@@ -110,7 +110,7 @@ legacy/
 
 Then run `prek run --all-files --refresh`. This excludes projects under `legacy/`; root hooks can still check files there. Use the root config's `exclude` if those files should also be excluded from its checks.
 
-Discovery already respects Git ignore rules. `.prekignore` adds exclusions without ignoring the files in Git. See the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/#discovery>) for other exclusions.
+Discovery already respects Git ignore rules. `.prekignore` adds exclusions without ignoring the files in Git. See the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/index.md#discovery>) for other exclusions.
 
 ## Work from a project directory
 
@@ -128,7 +128,7 @@ Use `-C` to change the working directory before discovery. Use `--config` when y
 | `prek -C frontend run` | Frontend and its nested projects | Each project's directory |
 | `prek run --config frontend/prek.toml` | Only `frontend/prek.toml` | Git repository root |
 
-Passing `--config` disables workspace discovery, even when the config is in a subdirectory. See [single config mode](<https://prek.j178.dev/dev/reference/workspace/#single-config-mode>) for file scope and filtering.
+Passing `--config` disables workspace discovery, even when the config is in a subdirectory. See [single config mode](<https://prek.j178.dev/dev/reference/workspace/index.md#single-config-mode>) for file scope and filtering.
 
 ## A new project is not being discovered
 
@@ -139,4 +139,4 @@ prek list --refresh
 prek run --all-files --refresh
 ```
 
-If the project is still missing, check that it is below the workspace root and not excluded by the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/#discovery>). For staged-file runs, also stage the new config. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-config-or-workspace-change-is-not-detected>) for more help.
+If the project is still missing, check that it is below the workspace root and not excluded by the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/index.md#discovery>). For staged-file runs, also stage the new config. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-config-or-workspace-change-is-not-detected>) for more help.

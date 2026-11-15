@@ -63,7 +63,7 @@ The `pre-commit` reference takes 1,942 ms. prek completes the same workload in 1
 
 ### 2\. Fast path
 
-Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration. prek's [automatic fast path](<https://prek.j178.dev/dev/built-in-hooks/#use-the-automatic-fast-path>) recognizes the 13 hooks and runs their built-in Rust implementations. The median falls from 1,534 ms to 105 ms: 93% less time, or a 14.59x speedup.
+Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration. prek's [automatic fast path](<https://prek.j178.dev/dev/built-in-hooks/index.md#use-the-automatic-fast-path>) recognizes the 13 hooks and runs their built-in Rust implementations. The median falls from 1,534 ms to 105 ms: 93% less time, or a 14.59x speedup.
 
 ![Horizontal bars showing the effect of the fast path](<https://prek.j178.dev/dev/assets/benchmark-fast-path.svg>)
 
@@ -73,7 +73,7 @@ This benchmark deliberately uses hooks for which prek has built-in implementatio
 
 The fast path is automatic when a supported hook matches. Priority requires a little more information: you need to tell prek which hooks are independent and can safely run together.
 
-Hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) may run at the same time. Only group hooks that are independent. In the benchmark, hooks which can modify overlapping text files remain ordered, and read-only checks share a named priority. This excerpt shows the grouping:
+Hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>) may run at the same time. Only group hooks that are independent. In the benchmark, hooks which can modify overlapping text files remain ordered, and read-only checks share a named priority. This excerpt shows the grouping:
 
 ```toml
 [priorities]
@@ -147,7 +147,7 @@ benchmark-repo/
 
 Each project declares only the hooks it owns. Common checks appear in both project configurations, but they see disjoint sets of files. This models a configured monorepo rather than duplicating every hook in every project just to exercise the scheduler.
 
-[Projects at the same depth](<https://prek.j178.dev/dev/reference/workspace/#execution-order>) can run concurrently. Nested parent and child projects still run from deepest to shallowest, so a workspace should reflect real ownership boundaries rather than being split only to chase a benchmark number.
+[Projects at the same depth](<https://prek.j178.dev/dev/reference/workspace/index.md#execution-order>) can run concurrently. Nested parent and child projects still run from deepest to shallowest, so a workspace should reflect real ownership boundaries rather than being split only to chase a benchmark number.
 
 Adding the second project lowers the median from 94 ms to 80 ms, another 15% reduction.
 
@@ -186,7 +186,7 @@ At this point, two different kinds of speedup should be visible. Framework savin
 - Correct priority groups shorten the critical path. Three independent 20-second hooks can approach 20 seconds instead of 60 seconds when resources allow.
 - Independent same-depth projects can make the same improvement across a monorepo. Each project advances through its own priority groups without waiting for an unrelated sibling project.
 
-Well-configured priority and project concurrency can therefore produce multi-fold improvements even when fast-path savings are small. Actual scaling is bounded by CPU, memory, disk and cache contention, and by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_concurrent_hooks>). Do not run hooks concurrently when they modify the same files or share mutable global state.
+Well-configured priority and project concurrency can therefore produce multi-fold improvements even when fast-path savings are small. Actual scaling is bounded by CPU, memory, disk and cache contention, and by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_concurrent_hooks>). Do not run hooks concurrently when they modify the same files or share mutable global state.
 
 ## Reproduce the benchmark
 

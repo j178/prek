@@ -8,7 +8,7 @@
 prek run --all-files --dry-run
 ```
 
-Also check the hook's `stages`, file filters, and any `PREK_SKIP` or `SKIP` value. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-hook-is-skipped-or-receives-no-files>) for the full checklist.
+Also check the hook's `stages`, file filters, and any `PREK_SKIP` or `SKIP` value. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-hook-is-skipped-or-receives-no-files>) for the full checklist.
 
 ## Why is the first run slower?
 
@@ -24,7 +24,7 @@ git add path/to/file
 git commit
 ```
 
-The next run checks the newly staged content. See [When a hook modifies files](<https://prek.j178.dev/dev/running-hooks/#when-a-hook-modifies-files>).
+The next run checks the newly staged content. See [When a hook modifies files](<https://prek.j178.dev/dev/running-hooks/index.md#when-a-hook-modifies-files>).
 
 ## Why must a changed config be staged?
 

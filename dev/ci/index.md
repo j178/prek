@@ -54,7 +54,7 @@ The checkout must contain both refs and enough history to calculate the diff. Sh
 
 `PREK_HOME` contains cloned hook repositories, prepared environments, managed toolchains, and logs. Caching it can reduce setup time, but cache correctness depends on the prek version, platform, config, and hook revisions. Start without a cache, then add a narrowly keyed cache only if environment preparation is a meaningful part of the job.
 
-Private hook repositories need non-interactive Git credentials. Configure the CI provider's credential helper or token before running prek, and avoid printing tokens in verbose logs. See the [private repository FAQ](<https://prek.j178.dev/dev/faq/#how-do-i-use-hooks-from-private-repositories>) and the [Security Guide](<https://prek.j178.dev/dev/security/index.md>).
+Private hook repositories need non-interactive Git credentials. Configure the CI provider's credential helper or token before running prek, and avoid printing tokens in verbose logs. See the [private repository FAQ](<https://prek.j178.dev/dev/faq/index.md#how-do-i-use-hooks-from-private-repositories>) and the [Security Guide](<https://prek.j178.dev/dev/security/index.md>).
 
 ## Automatically fix pull requests with autofix.ci
 

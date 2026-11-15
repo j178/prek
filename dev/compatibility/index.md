@@ -48,24 +48,24 @@ These entries are implemented by `prek` and are not part of the documented upstr
 
 - Top-level:
 
-  - [`update`](<https://prek.j178.dev/dev/reference/configuration/#update>)
-  - [`default_env`](<https://prek.j178.dev/dev/reference/configuration/#default_env>)
-  - [`priorities`](<https://prek.j178.dev/dev/reference/configuration/#priorities>)
-  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-minimum-prek-version-config>)
-  - [`orphan`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-orphan>)
-  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/#top-level-files>)
+  - [`update`](<https://prek.j178.dev/dev/reference/configuration/index.md#update>)
+  - [`default_env`](<https://prek.j178.dev/dev/reference/configuration/index.md#default_env>)
+  - [`priorities`](<https://prek.j178.dev/dev/reference/configuration/index.md#priorities>)
+  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-minimum-prek-version-config>)
+  - [`orphan`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-orphan>)
+  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/index.md#top-level-files>)
 - Repo type:
 
-  - [`repo: builtin`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-repo-builtin>)
+  - [`repo: builtin`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-repo-builtin>)
 - Hook-level:
 
-  - [`env`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-env>)
-  - [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>)
-  - [`priority`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-priority>)
-  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-minimum-prek-version-hook>)
-  - [`groups`](<https://prek.j178.dev/dev/reference/configuration/#groups>)
-  - [A positive integer for `pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/#pass_filenames>)
-  - [An options map for `language_version`](<https://prek.j178.dev/dev/reference/configuration/#language_version>)
-  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/#files-exclude>)
+  - [`env`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-env>)
+  - [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>)
+  - [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-priority>)
+  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-minimum-prek-version-hook>)
+  - [`groups`](<https://prek.j178.dev/dev/reference/configuration/index.md#groups>)
+  - [A positive integer for `pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/index.md#pass_filenames>)
+  - [An options map for `language_version`](<https://prek.j178.dev/dev/reference/configuration/index.md#language_version>)
+  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/index.md#files-exclude>)
 
 See [Configuration](<https://prek.j178.dev/dev/configuration/index.md>) for config format guidance, [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md>) for key-level details, and [Differences](<https://prek.j178.dev/dev/diff/index.md>) for broader behavior and CLI differences.

@@ -8,7 +8,7 @@ Without `--config`, prek searches upward from the current working directory for 
 
 From the workspace root, prek recursively discovers projects in subdirectories. The workspace root can be inside the Git repository; it need not be the Git root. `-C` / `--cd` changes the working directory before discovery, so it can change which projects are found.
 
-When several supported config files exist in one directory, prek uses the [configuration filename precedence](<https://prek.j178.dev/dev/configuration/#choose-a-config-file>) to choose one.
+When several supported config files exist in one directory, prek uses the [configuration filename precedence](<https://prek.j178.dev/dev/configuration/index.md#choose-a-config-file>) to choose one.
 
 ### Exclusions
 
@@ -30,7 +30,7 @@ prek list --refresh
 prek run --all-files --refresh
 ```
 
-For staged-file runs, config changes must also be staged. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-config-or-workspace-change-is-not-detected>).
+For staged-file runs, config changes must also be staged. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-config-or-workspace-change-is-not-detected>).
 
 ## Files and working directories
 
@@ -44,11 +44,11 @@ Parent and child projects apply their filters independently. A parent's `exclude
 
 Projects run from deepest to shallowest. For example, `src/backend/` runs before `src/`, which runs before the workspace root.
 
-Projects at the same depth may run concurrently. Their selected file sets do not overlap, but hooks that access shared resources outside their project can still contend. Hook concurrency is bounded by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_concurrent_hooks>).
+Projects at the same depth may run concurrently. Their selected file sets do not overlap, but hooks that access shared resources outside their project can still contend. Hook concurrency is bounded by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_concurrent_hooks>).
 
 ## Orphan projects
 
-Setting [`orphan`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-orphan>) to `true` excludes files under that project from all ancestor projects. Descendant projects still apply their own configurations.
+Setting [`orphan`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-orphan>) to `true` excludes files under that project from all ancestor projects. Descendant projects still apply their own configurations.
 
 For example, with configs at the root, `src/`, and `src/backend/`:
 
@@ -108,4 +108,4 @@ Hooks run from the Git repository root. Candidate files come from the Git reposi
 
 ## Git hook installation
 
-Run `prek install` from the repository root to install Git shims for the whole repository. Installation uses the root config's `default_install_hook_types`; it does not combine values from nested configs. Explicit `--hook-type` options take precedence. See [`prek install`](<https://prek.j178.dev/dev/reference/cli/#prek-install>).
+Run `prek install` from the repository root to install Git shims for the whole repository. Installation uses the root config's `default_install_hook_types`; it does not combine values from nested configs. Explicit `--hook-type` options take precedence. See [`prek install`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-install>).

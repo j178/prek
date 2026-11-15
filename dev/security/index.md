@@ -21,9 +21,9 @@ Use `prek update --freeze` to write commit SHAs when immutable pins are required
 
 ## Downloads and checksums
 
-For managed download paths that support checksum sidecars, prek verifies the download when the upstream source provides that metadata. The [download checksum policy](<https://prek.j178.dev/dev/reference/environment-variables/#prek_download_checksum_policy>) controls what happens when metadata is missing; it cannot create authenticity information that an upstream source did not publish.
+For managed download paths that support checksum sidecars, prek verifies the download when the upstream source provides that metadata. The [download checksum policy](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_download_checksum_policy>) controls what happens when metadata is missing; it cannot create authenticity information that an upstream source did not publish.
 
-Release artifacts for prek itself include GitHub attestations. See [Artifact Verification](<https://prek.j178.dev/dev/installation/#artifact-verification>).
+Release artifacts for prek itself include GitHub attestations. See [Artifact Verification](<https://prek.j178.dev/dev/installation/index.md#artifact-verification>).
 
 ## Credentials and logs
 

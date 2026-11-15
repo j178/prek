@@ -14,7 +14,7 @@ prek reads one config per project. Keep an existing `.pre-commit-config.yaml`, o
 
 If several of these files exist in one directory, prek uses the first one in the order above. Use one file per project to make it clear which config applies.
 
-To convert a YAML config, run [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/#prek-util-yaml-to-toml>). The conversion does not preserve YAML comments. If the config must also work with upstream pre-commit, keep YAML and read [Sharing a config with pre-commit](<#sharing-a-config-with-pre-commit>).
+To convert a YAML config, run [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-util-yaml-to-toml>). The conversion does not preserve YAML comments. If the config must also work with upstream pre-commit, keep YAML and read [Sharing a config with pre-commit](<#sharing-a-config-with-pre-commit>).
 
 ## Add and configure hooks
 
@@ -83,7 +83,7 @@ exclude: '^generated/'
 prek util identify path/to/file
 ```
 
-A hook's `stages` limits the Git hook stages where it runs. To install the corresponding Git shim, use `default_install_hook_types` or [`prek install --hook-type`](<https://prek.j178.dev/dev/reference/cli/#prek-install--hook-type>). Setting `stages` alone does not install a shim.
+A hook's `stages` limits the Git hook stages where it runs. To install the corresponding Git shim, use `default_install_hook_types` or [`prek install --hook-type`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-install--hook-type>). Setting `stages` alone does not install a shim.
 
 See the [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md>) for filter combinations, stage names, and all available options.
 
@@ -93,7 +93,7 @@ prek searches upward from the current directory for a config, stopping at the Gi
 
 Each project applies its config independently. A parent's filters do not disable a child's hooks, and a child config does not override its parent. See [Monorepos](<https://prek.j178.dev/dev/monorepos/index.md>) for setting up and selecting nested projects, or the [Workspace Reference](<https://prek.j178.dev/dev/reference/workspace/index.md>) for discovery and file-scope rules.
 
-Passing `--config` selects one config and disables workspace discovery. Hooks then run from the Git repository root with [repository-relative paths](<https://prek.j178.dev/dev/reference/workspace/#single-config-mode>).
+Passing `--config` selects one config and disables workspace discovery. Hooks then run from the Git repository root with [repository-relative paths](<https://prek.j178.dev/dev/reference/workspace/index.md#single-config-mode>).
 
 ## Validate changes
 
@@ -104,7 +104,7 @@ prek validate-config prek.toml
 prek run --all-files
 ```
 
-Use the repository's YAML config filename instead if applicable. [`prek validate-config`](<https://prek.j178.dev/dev/reference/cli/#prek-validate-config>) accepts one or more config files. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-hook-is-skipped-or-receives-no-files>) if a hook is skipped unexpectedly.
+Use the repository's YAML config filename instead if applicable. [`prek validate-config`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-validate-config>) accepts one or more config files. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-hook-is-skipped-or-receives-no-files>) if a hook is skipped unexpectedly.
 
 If you want IDE completion / validation, prek publishes a JSON Schema through the [JSON Schema Store](<https://www.schemastore.org/prek.json>), so some editors may pick it up automatically.
 
@@ -116,7 +116,7 @@ Update pinned remote hook revisions with:
 prek update
 ```
 
-Review the config diff, then run `prek run --all-files` to check the updated hooks against the repository. Use `prek update --check` to check for available updates without changing the config. See [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) for selecting repositories and controlling updates.
+Review the config diff, then run `prek run --all-files` to check the updated hooks against the repository. Use `prek update --check` to check for available updates without changing the config. See [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) for selecting repositories and controlling updates.
 
 ## User settings
 
@@ -125,10 +125,10 @@ Review the config diff, then run `prek run --all-files` to check the updated hoo
 - Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
 - Windows: `%APPDATA%\prek\prek.toml`
 
-This file is for user-level prek settings, not hook definitions. Project hooks still live in the project config files described above. For the supported global settings, see the [configuration reference](<https://prek.j178.dev/dev/reference/configuration/#global-config-file>).
+This file is for user-level prek settings, not hook definitions. Project hooks still live in the project config files described above. For the supported global settings, see the [configuration reference](<https://prek.j178.dev/dev/reference/configuration/index.md#global-config-file>).
 
 ## Sharing a config with pre-commit
 
 Existing pre-commit YAML configs work in prek. To use the same config with both tools, keep the YAML format and avoid prek-only extensions. Upstream pre-commit may warn about unknown keys or reject unsupported features.
 
-See [Compatibility](<https://prek.j178.dev/dev/compatibility/#if-you-need-strict-upstream-portability>) for the features that affect portability and [Differences](<https://prek.j178.dev/dev/diff/index.md>) for broader behavior differences.
+See [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md#if-you-need-strict-upstream-portability>) for the features that affect portability and [Differences](<https://prek.j178.dev/dev/diff/index.md>) for broader behavior differences.

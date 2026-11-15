@@ -73,11 +73,11 @@ The hook checkout does not become the working directory. Hooks run against the p
 
 ### Direct command entries
 
-For command-style languages such as `system`, `mise`, `python`, and `node`, prek splits `entry` into arguments and invokes it directly. A shell is not involved: shell operators such as `|`, `&&`, `$VAR`, and `*` are not interpreted. Use the prek-only [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) option when shell syntax is required.
+For command-style languages such as `system`, `mise`, `python`, and `node`, prek splits `entry` into arguments and invokes it directly. A shell is not involved: shell operators such as `|`, `&&`, `$VAR`, and `*` are not interpreted. Use the prek-only [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) option when shell syntax is required.
 
 A bare command such as `ruff` is looked up on the `PATH` prepared by the language. An explicit relative path such as `./scripts/check.sh` is resolved from the hook's working directory. For a remote command-style hook, that means the end user's project, not the cached hook checkout. For `repo: local`, it naturally refers to the project that defines the hook.
 
-Hook `args` are appended after the arguments from `entry`, followed by matching filenames when `pass_filenames` allows them. See [Passing arguments to hooks](<https://prek.j178.dev/dev/authoring-hooks/#passing-arguments-to-hooks>) for an example.
+Hook `args` are appended after the arguments from `entry`, followed by matching filenames when `pass_filenames` allows them. See [Passing arguments to hooks](<https://prek.j178.dev/dev/authoring-hooks/index.md#passing-arguments-to-hooks>) for an example.
 
 ### Language-specific meanings
 
@@ -85,12 +85,12 @@ Most languages use the direct command rules above, with their installed tools av
 
 | Language | Meaning of `entry` |
 | --- | --- |
-| [`script`](<https://prek.j178.dev/dev/reference/language-support/#script>) | The first argument is a script path. It is relative to the hook checkout for remote hooks and the project directory for local hooks. |
-| [`julia`](<https://prek.j178.dev/dev/reference/language-support/#julia>) | A Julia source path, relative to the hook checkout for remote hooks and the project directory for local hooks. |
-| [`r`](<https://prek.j178.dev/dev/reference/language-support/#r>) | `Rscript -e <expr>` or `Rscript <file>`; file paths use the same remote-checkout/local-project rule. |
-| [`rust`](<https://prek.j178.dev/dev/reference/language-support/#rust>) | The executable name; for a remote hook, it identifies a binary built and installed from the hook package. |
-| [`docker`](<https://prek.j178.dev/dev/reference/language-support/#docker>), [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/#docker_image>) | Container entrypoint, image, and argument information. The project is mounted as `/src` inside the container. |
-| [`fail`](<https://prek.j178.dev/dev/reference/language-support/#fail>), [`pygrep`](<https://prek.j178.dev/dev/reference/language-support/#pygrep>) | A failure message or regular expression, not a command. |
+| [`script`](<https://prek.j178.dev/dev/reference/language-support/index.md#script>) | The first argument is a script path. It is relative to the hook checkout for remote hooks and the project directory for local hooks. |
+| [`julia`](<https://prek.j178.dev/dev/reference/language-support/index.md#julia>) | A Julia source path, relative to the hook checkout for remote hooks and the project directory for local hooks. |
+| [`r`](<https://prek.j178.dev/dev/reference/language-support/index.md#r>) | `Rscript -e <expr>` or `Rscript <file>`; file paths use the same remote-checkout/local-project rule. |
+| [`rust`](<https://prek.j178.dev/dev/reference/language-support/index.md#rust>) | The executable name; for a remote hook, it identifies a binary built and installed from the hook package. |
+| [`docker`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker>), [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker_image>) | Container entrypoint, image, and argument information. The project is mounted as `/src` inside the container. |
+| [`fail`](<https://prek.j178.dev/dev/reference/language-support/index.md#fail>), [`pygrep`](<https://prek.j178.dev/dev/reference/language-support/index.md#pygrep>) | A failure message or regular expression, not a command. |
 
 The linked language sections describe the complete backend-specific behavior.
 

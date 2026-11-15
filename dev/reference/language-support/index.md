@@ -15,7 +15,7 @@ Most users of remote hooks do not need to choose a language. Start with the hook
 
 For `repo: local` hooks, relative paths in `additional_dependencies` and other installer arguments do not resolve from the work tree. Use an absolute path when an installer needs a local file. Hook commands still run from the work tree.
 
-For help choosing a language, see [Local Hooks](<https://prek.j178.dev/dev/local-hooks/#choose-a-language>).
+For help choosing a language, see [Local Hooks](<https://prek.j178.dev/dev/local-hooks/index.md#choose-a-language>).
 
 ## Toolchain management and `language_version`
 
@@ -69,7 +69,7 @@ If `language_version` is `default`, prek uses the language’s default resolutio
 >
 > **prek-only**
 >
-> `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/#language_version>) for details.
+> `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md#language_version>) for details.
 
 Languages with managed toolchain downloads in prek today:
 
@@ -525,7 +525,7 @@ prek uses `uv` for creating virtual environments and installing dependencies:
 - If not found, automatically installs `uv` from Astral's CDN, falling back to PyPI (and mirrors) then `pip`
 - Automatically installs the required Python version if it's not already available
 
-Set [`PREK_UV_SOURCE=none`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_uv_source>) to disable automatic uv installation and require an existing compatible uv.
+Set [`PREK_UV_SOURCE=none`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_uv_source>) to disable automatic uv installation and require an existing compatible uv.
 
 > [!WARNING]
 >
@@ -616,7 +616,7 @@ Supported formats:
 >
 > Ruby interpreters are downloaded from those built by the `rv` project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86\_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.
 >
-> The `PREK_RUBY_MIRROR` environment variable can point Ruby downloads at a different source, for example a private mirror or an air-gapped CI mirror. Mirrors should provide the selected Ruby archive assets and a `SHA256SUMS` asset from the same release download location so downloaded Rubies can be verified. If checksum metadata is missing, prek warns and continues by default; set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_download_checksum_policy>) to `required` to fail instead. If the mirror is an exact HTTPS GitHub repository URL (`https://github.com/owner/repo`, with an optional `:443` port), prek uses the GitHub API for release metadata and may send `GITHUB_TOKEN` for rate limits or private mirrors. Non-GitHub mirrors are used as-is and never receive `GITHUB_TOKEN`.
+> The `PREK_RUBY_MIRROR` environment variable can point Ruby downloads at a different source, for example a private mirror or an air-gapped CI mirror. Mirrors should provide the selected Ruby archive assets and a `SHA256SUMS` asset from the same release download location so downloaded Rubies can be verified. If checksum metadata is missing, prek warns and continues by default; set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_download_checksum_policy>) to `required` to fail instead. If the mirror is an exact HTTPS GitHub repository URL (`https://github.com/owner/repo`, with an optional `:443` port), prek uses the GitHub API for release metadata and may send `GITHUB_TOKEN` for rate limits or private mirrors. Non-GitHub mirrors are used as-is and never receive `GITHUB_TOKEN`.
 
 Gems specified in hook gemspec files and `additional_dependencies` are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.
 
@@ -624,7 +624,7 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
 
-Only crates.io `cli:` dependencies use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) when [`PREK_USE_CARGO_BINSTALL=1`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_use_cargo_binstall>) is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
+Only crates.io `cli:` dependencies use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) when [`PREK_USE_CARGO_BINSTALL=1`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_use_cargo_binstall>) is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
 
 > [!NOTE]
 >
@@ -645,7 +645,7 @@ prek supports Rust installed through system package managers as well as rustup. 
 
 #### Toolchain profile
 
-When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_rust_profile>) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
+When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_rust_profile>) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
 
 > [!NOTE]
 >
@@ -709,7 +709,7 @@ Regex matching uses Python’s `re` semantics for compatibility with pre-commit.
 >
 > **Compatibility-only**
 >
-> `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/#deny-pattern>) or [`require-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/#require-pattern>) builtin.
+> `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#deny-pattern>) or [`require-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#require-pattern>) builtin.
 
 ### system
 
@@ -737,7 +737,7 @@ prek installs each `additional_dependencies` item with `deno install --global` i
 
 Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available. Managed downloads verify Deno release checksum sidecars when they are available.
 
-By default, missing checksums produce a warning and the download continues without checksum verification. Set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_download_checksum_policy>) to `required` to make missing checksum metadata fail, or to `disabled` to skip checksum verification.
+By default, missing checksums produce a warning and the download continues without checksum verification. Set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_download_checksum_policy>) to `required` to make missing checksum metadata fail, or to `disabled` to skip checksum verification.
 
 #### Rules
 

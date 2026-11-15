@@ -37,10 +37,10 @@ For a project linter or formatter, start with `language = "system"` as in the ex
 
 | What the command needs | Language |
 | --- | --- |
-| A tool already installed by the project or CI image | [`system`](<https://prek.j178.dev/dev/reference/language-support/#system>) |
-| A checked-in executable script | [`script`](<https://prek.j178.dev/dev/reference/language-support/#script>) |
+| A tool already installed by the project or CI image | [`system`](<https://prek.j178.dev/dev/reference/language-support/index.md#system>) |
+| A checked-in executable script | [`script`](<https://prek.j178.dev/dev/reference/language-support/index.md#script>) |
 | Dependencies installed in a hook environment | The ecosystem's language, such as `python` or `node` |
-| A packaged container runtime | [`docker`](<https://prek.j178.dev/dev/reference/language-support/#docker>) or [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/#docker_image>) |
+| A packaged container runtime | [`docker`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker>) or [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker_image>) |
 
 The [Language Support reference](<https://prek.j178.dev/dev/reference/language-support/index.md>) lists supported languages, toolchain requirements, and installation behavior. For simple content or filename checks, a [built-in hook](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md>) may already do what you need.
 
@@ -67,20 +67,20 @@ types = ["rust"]
 pass_filenames = false
 ```
 
-A positive integer limits each invocation to that many filenames and lets prek split a large match set into batches. See [`pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/#pass_filenames>) before using this prek-specific form.
+A positive integer limits each invocation to that many filenames and lets prek split a large match set into batches. See [`pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/index.md#pass_filenames>) before using this prek-specific form.
 
 ## Filter when the hook runs
 
-Local hooks use the same [file and stage filters](<https://prek.j178.dev/dev/configuration/#choose-which-files-and-stages-to-check>) as remote hooks. In the Ruff example, `types = ["python"]` limits the command to Python files. In the Cargo example, `types = ["rust"]` controls whether the command runs, while `pass_filenames = false` lets Cargo select files itself.
+Local hooks use the same [file and stage filters](<https://prek.j178.dev/dev/configuration/index.md#choose-which-files-and-stages-to-check>) as remote hooks. In the Ruff example, `types = ["python"]` limits the command to Python files. In the Cargo example, `types = ["rust"]` controls whether the command runs, while `pass_filenames = false` lets Cargo select files itself.
 
 ## Commands do not use a shell by default
 
 prek splits `entry` into arguments and invokes the program directly. Operators such as `|`, `&&`, redirects, variables, and globs are not interpreted by a shell.
 
-Prefer putting complex logic in a checked-in script and using that script as the entry. If shell syntax is truly part of the hook, set the prek-specific [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) option and write the command for that shell. Shell-specific hooks are less portable, especially between Windows and Unix systems.
+Prefer putting complex logic in a checked-in script and using that script as the entry. If shell syntax is truly part of the hook, set the prek-specific [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) option and write the command for that shell. Shell-specific hooks are less portable, especially between Windows and Unix systems.
 
 ## Working directory
 
 A local hook runs in the directory of the project whose config defines it. In a single-config repository this is normally the Git root. In [workspace mode](<https://prek.j178.dev/dev/monorepos/index.md>), a nested project's hooks run in that nested project directory. Entries should therefore use paths relative to their own project rather than the directory from which the user invoked prek.
 
-For the exact entry resolution model, see [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>).
+For the exact entry resolution model, see [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/index.md#hook-entry-resolution>).

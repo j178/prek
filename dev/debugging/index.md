@@ -44,7 +44,7 @@ Check `files`, `exclude`, `types`, `types_or`, `exclude_types`, `stages`, and an
 prek util identify path/to/file
 ```
 
-In a workspace, use `prek list` to confirm the project and use a [project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/#selectors>) when hook IDs are repeated.
+In a workspace, use `prek list` to confirm the project and use a [project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>) when hook IDs are repeated.
 
 ## A config or workspace change is not detected
 
@@ -67,8 +67,8 @@ prek run --refresh
 
 Use `-vvv` to identify whether the failing step is Git authentication, TLS, toolchain download, or the language package manager. Then check:
 
-- [Private repository authentication](<https://prek.j178.dev/dev/faq/#how-do-i-use-hooks-from-private-repositories>)
-- Proxy and certificate variables in the [Environment Variable Reference](<https://prek.j178.dev/dev/reference/environment-variables/#related-external-variables>)
+- [Private repository authentication](<https://prek.j178.dev/dev/faq/index.md#how-do-i-use-hooks-from-private-repositories>)
+- Proxy and certificate variables in the [Environment Variable Reference](<https://prek.j178.dev/dev/reference/environment-variables/index.md#related-external-variables>)
 - Language-specific prerequisites in [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>)
 - The checksum and trust boundary in the [Security Guide](<https://prek.j178.dev/dev/security/index.md>)
 

@@ -2,7 +2,7 @@
 
 Run hooks on demand or let Git run them when you commit. If you are setting up prek for the first time, start with the [Quickstart](<https://prek.j178.dev/dev/quickstart/index.md>).
 
-For a repository that already has a config, enable its Git hooks in your checkout by running `prek install` from the repository root. If another tool already owns the hook, see [migration mode](<https://prek.j178.dev/dev/migration/#keep-the-existing-hook-during-rollout>).
+For a repository that already has a config, enable its Git hooks in your checkout by running `prek install` from the repository root. If another tool already owns the hook, see [migration mode](<https://prek.j178.dev/dev/migration/index.md#keep-the-existing-hook-during-rollout>).
 
 ## Run hooks yourself
 
@@ -40,7 +40,7 @@ prek normally prepares a hook's environment the first time it is needed. To prep
 prek prepare-hooks
 ```
 
-When setting up a checkout, `prek install --prepare-hooks` installs the Git shims and prepares environments together. See [Debugging](<https://prek.j178.dev/dev/debugging/#cache-problems>) for inspecting and cleaning cached environments.
+When setting up a checkout, `prek install --prepare-hooks` installs the Git shims and prepares environments together. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#cache-problems>) for inspecting and cleaning cached environments.
 
 ## What happens when you commit
 
@@ -119,7 +119,7 @@ When one known hook is not applicable, skip only that hook by ID:
 PREK_SKIP=ruff git commit -m "Update generated files"
 ```
 
-`SKIP=ruff` is accepted for compatibility. In a workspace, the value can also be a [project or project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/#selectors>).
+`SKIP=ruff` is accepted for compatibility. In a workspace, the value can also be a [project or project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>).
 
 When the repository's policy permits it, Git can instead bypass the entire `pre-commit` and `commit-msg` hook chain for one commit:
 
@@ -143,7 +143,7 @@ The hook selector must resolve to exactly one hook. In a workspace, use a projec
 prek exec frontend:prettier -- prettier --version
 ```
 
-The command runs in your current directory with the selected hook's environment. See [`prek exec`](<https://prek.j178.dev/dev/reference/cli/#prek-exec>) for supported hooks and complete execution behavior.
+The command runs in your current directory with the selected hook's environment. See [`prek exec`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-exec>) for supported hooks and complete execution behavior.
 
 ## Inspect and debug
 

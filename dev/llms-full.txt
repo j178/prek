@@ -193,7 +193,7 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 >
 > > **Note**
 > >
-> > `PREK_INSTALL_DIR` controls where the prek binary is installed. To change where caches, toolchains, and hook environments are stored, use [`PREK_HOME`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_home>).
+> > `PREK_INSTALL_DIR` controls where the prek binary is installed. To change where caches, toolchains, and hook environments are stored, use [`PREK_HOME`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_home>).
 >
 > ### Disabling PATH modifications
 >
@@ -341,7 +341,7 @@ cargo binstall prek
 
 prek provides a Docker image at [`ghcr.io/j178/prek`](<https://github.com/j178/prek/pkgs/container/prek>).
 
-See the guide on [using prek in Docker](<https://prek.j178.dev/dev/integrations/#docker>) for more details.
+See the guide on [using prek in Docker](<https://prek.j178.dev/dev/integrations/index.md#docker>) for more details.
 
 ## GitHub Releases
 
@@ -560,7 +560,7 @@ Because `prek init` installed the Git shim, every `git commit` invokes the confi
 
 ### 4\. Go further
 
-For other setups, `prek init --format yaml` creates `.pre-commit-config.yaml`. Use `prek init --no-install` to create only the config, then run `prek install` when you are ready to enable checks on commit. To create a config in an existing subdirectory, see [Monorepos](<https://prek.j178.dev/dev/monorepos/#add-a-project-configuration>).
+For other setups, `prek init --format yaml` creates `.pre-commit-config.yaml`. Use `prek init --no-install` to create only the config, then run `prek install` when you are ready to enable checks on commit. To create a config in an existing subdirectory, see [Monorepos](<https://prek.j178.dev/dev/monorepos/index.md#add-a-project-configuration>).
 
 - Explore richer configuration options in the official [pre-commit documentation](<https://pre-commit.com/>). Every example there works with prek.
 - See [Running Hooks](<https://prek.j178.dev/dev/running-hooks/index.md>) for the commands you will use after setup and how to handle hook failures.
@@ -575,7 +575,7 @@ Move one hook at a time when replacing an existing setup. Keep the old hook avai
 
 ## From pre-commit
 
-Start with the two-step path in the [Quickstart](<https://prek.j178.dev/dev/quickstart/#already-using-pre-commit>). The [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md>) and [Differences](<https://prek.j178.dev/dev/diff/index.md>) pages cover the cases worth checking when a repository depends on less common behavior.
+Start with the two-step path in the [Quickstart](<https://prek.j178.dev/dev/quickstart/index.md#already-using-pre-commit>). The [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md>) and [Differences](<https://prek.j178.dev/dev/diff/index.md>) pages cover the cases worth checking when a repository depends on less common behavior.
 
 ## From lint-staged or Husky
 
@@ -647,7 +647,7 @@ pass_filenames = false
 stages = ["pre-push"]
 ```
 
-Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) only after checking that they do not modify the same files or contend for shared state.
+Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>) only after checking that they do not modify the same files or contend for shared state.
 
 ## Keep the existing hook during rollout
 
@@ -681,7 +681,7 @@ Before using `--force`, make sure the old hook contains no checks that are still
 
 Run hooks on demand or let Git run them when you commit. If you are setting up prek for the first time, start with the [Quickstart](<https://prek.j178.dev/dev/quickstart/index.md>).
 
-For a repository that already has a config, enable its Git hooks in your checkout by running `prek install` from the repository root. If another tool already owns the hook, see [migration mode](<https://prek.j178.dev/dev/migration/#keep-the-existing-hook-during-rollout>).
+For a repository that already has a config, enable its Git hooks in your checkout by running `prek install` from the repository root. If another tool already owns the hook, see [migration mode](<https://prek.j178.dev/dev/migration/index.md#keep-the-existing-hook-during-rollout>).
 
 ## Run hooks yourself
 
@@ -719,7 +719,7 @@ prek normally prepares a hook's environment the first time it is needed. To prep
 prek prepare-hooks
 ```
 
-When setting up a checkout, `prek install --prepare-hooks` installs the Git shims and prepares environments together. See [Debugging](<https://prek.j178.dev/dev/debugging/#cache-problems>) for inspecting and cleaning cached environments.
+When setting up a checkout, `prek install --prepare-hooks` installs the Git shims and prepares environments together. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#cache-problems>) for inspecting and cleaning cached environments.
 
 ## What happens when you commit
 
@@ -798,7 +798,7 @@ When one known hook is not applicable, skip only that hook by ID:
 PREK_SKIP=ruff git commit -m "Update generated files"
 ```
 
-`SKIP=ruff` is accepted for compatibility. In a workspace, the value can also be a [project or project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/#selectors>).
+`SKIP=ruff` is accepted for compatibility. In a workspace, the value can also be a [project or project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>).
 
 When the repository's policy permits it, Git can instead bypass the entire `pre-commit` and `commit-msg` hook chain for one commit:
 
@@ -822,7 +822,7 @@ The hook selector must resolve to exactly one hook. In a workspace, use a projec
 prek exec frontend:prettier -- prettier --version
 ```
 
-The command runs in your current directory with the selected hook's environment. See [`prek exec`](<https://prek.j178.dev/dev/reference/cli/#prek-exec>) for supported hooks and complete execution behavior.
+The command runs in your current directory with the selected hook's environment. See [`prek exec`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-exec>) for supported hooks and complete execution behavior.
 
 ## Inspect and debug
 
@@ -864,7 +864,7 @@ prek reads one config per project. Keep an existing `.pre-commit-config.yaml`, o
 
 If several of these files exist in one directory, prek uses the first one in the order above. Use one file per project to make it clear which config applies.
 
-To convert a YAML config, run [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/#prek-util-yaml-to-toml>). The conversion does not preserve YAML comments. If the config must also work with upstream pre-commit, keep YAML and read [Sharing a config with pre-commit](<#sharing-a-config-with-pre-commit>).
+To convert a YAML config, run [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-util-yaml-to-toml>). The conversion does not preserve YAML comments. If the config must also work with upstream pre-commit, keep YAML and read [Sharing a config with pre-commit](<#sharing-a-config-with-pre-commit>).
 
 ## Add and configure hooks
 
@@ -933,7 +933,7 @@ exclude: '^generated/'
 prek util identify path/to/file
 ```
 
-A hook's `stages` limits the Git hook stages where it runs. To install the corresponding Git shim, use `default_install_hook_types` or [`prek install --hook-type`](<https://prek.j178.dev/dev/reference/cli/#prek-install--hook-type>). Setting `stages` alone does not install a shim.
+A hook's `stages` limits the Git hook stages where it runs. To install the corresponding Git shim, use `default_install_hook_types` or [`prek install --hook-type`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-install--hook-type>). Setting `stages` alone does not install a shim.
 
 See the [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md>) for filter combinations, stage names, and all available options.
 
@@ -943,7 +943,7 @@ prek searches upward from the current directory for a config, stopping at the Gi
 
 Each project applies its config independently. A parent's filters do not disable a child's hooks, and a child config does not override its parent. See [Monorepos](<https://prek.j178.dev/dev/monorepos/index.md>) for setting up and selecting nested projects, or the [Workspace Reference](<https://prek.j178.dev/dev/reference/workspace/index.md>) for discovery and file-scope rules.
 
-Passing `--config` selects one config and disables workspace discovery. Hooks then run from the Git repository root with [repository-relative paths](<https://prek.j178.dev/dev/reference/workspace/#single-config-mode>).
+Passing `--config` selects one config and disables workspace discovery. Hooks then run from the Git repository root with [repository-relative paths](<https://prek.j178.dev/dev/reference/workspace/index.md#single-config-mode>).
 
 ## Validate changes
 
@@ -954,7 +954,7 @@ prek validate-config prek.toml
 prek run --all-files
 ```
 
-Use the repository's YAML config filename instead if applicable. [`prek validate-config`](<https://prek.j178.dev/dev/reference/cli/#prek-validate-config>) accepts one or more config files. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-hook-is-skipped-or-receives-no-files>) if a hook is skipped unexpectedly.
+Use the repository's YAML config filename instead if applicable. [`prek validate-config`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-validate-config>) accepts one or more config files. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-hook-is-skipped-or-receives-no-files>) if a hook is skipped unexpectedly.
 
 If you want IDE completion / validation, prek publishes a JSON Schema through the [JSON Schema Store](<https://www.schemastore.org/prek.json>), so some editors may pick it up automatically.
 
@@ -966,7 +966,7 @@ Update pinned remote hook revisions with:
 prek update
 ```
 
-Review the config diff, then run `prek run --all-files` to check the updated hooks against the repository. Use `prek update --check` to check for available updates without changing the config. See [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) for selecting repositories and controlling updates.
+Review the config diff, then run `prek run --all-files` to check the updated hooks against the repository. Use `prek update --check` to check for available updates without changing the config. See [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) for selecting repositories and controlling updates.
 
 ## User settings
 
@@ -975,13 +975,13 @@ Review the config diff, then run `prek run --all-files` to check the updated hoo
 - Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
 - Windows: `%APPDATA%\prek\prek.toml`
 
-This file is for user-level prek settings, not hook definitions. Project hooks still live in the project config files described above. For the supported global settings, see the [configuration reference](<https://prek.j178.dev/dev/reference/configuration/#global-config-file>).
+This file is for user-level prek settings, not hook definitions. Project hooks still live in the project config files described above. For the supported global settings, see the [configuration reference](<https://prek.j178.dev/dev/reference/configuration/index.md#global-config-file>).
 
 ## Sharing a config with pre-commit
 
 Existing pre-commit YAML configs work in prek. To use the same config with both tools, keep the YAML format and avoid prek-only extensions. Upstream pre-commit may warn about unknown keys or reject unsupported features.
 
-See [Compatibility](<https://prek.j178.dev/dev/compatibility/#if-you-need-strict-upstream-portability>) for the features that affect portability and [Differences](<https://prek.j178.dev/dev/diff/index.md>) for broader behavior differences.
+See [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md#if-you-need-strict-upstream-portability>) for the features that affect portability and [Differences](<https://prek.j178.dev/dev/diff/index.md>) for broader behavior differences.
 
 # Local Hooks
 
@@ -1022,10 +1022,10 @@ For a project linter or formatter, start with `language = "system"` as in the ex
 
 | What the command needs | Language |
 | --- | --- |
-| A tool already installed by the project or CI image | [`system`](<https://prek.j178.dev/dev/reference/language-support/#system>) |
-| A checked-in executable script | [`script`](<https://prek.j178.dev/dev/reference/language-support/#script>) |
+| A tool already installed by the project or CI image | [`system`](<https://prek.j178.dev/dev/reference/language-support/index.md#system>) |
+| A checked-in executable script | [`script`](<https://prek.j178.dev/dev/reference/language-support/index.md#script>) |
 | Dependencies installed in a hook environment | The ecosystem's language, such as `python` or `node` |
-| A packaged container runtime | [`docker`](<https://prek.j178.dev/dev/reference/language-support/#docker>) or [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/#docker_image>) |
+| A packaged container runtime | [`docker`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker>) or [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker_image>) |
 
 The [Language Support reference](<https://prek.j178.dev/dev/reference/language-support/index.md>) lists supported languages, toolchain requirements, and installation behavior. For simple content or filename checks, a [built-in hook](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md>) may already do what you need.
 
@@ -1052,23 +1052,23 @@ types = ["rust"]
 pass_filenames = false
 ```
 
-A positive integer limits each invocation to that many filenames and lets prek split a large match set into batches. See [`pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/#pass_filenames>) before using this prek-specific form.
+A positive integer limits each invocation to that many filenames and lets prek split a large match set into batches. See [`pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/index.md#pass_filenames>) before using this prek-specific form.
 
 ## Filter when the hook runs
 
-Local hooks use the same [file and stage filters](<https://prek.j178.dev/dev/configuration/#choose-which-files-and-stages-to-check>) as remote hooks. In the Ruff example, `types = ["python"]` limits the command to Python files. In the Cargo example, `types = ["rust"]` controls whether the command runs, while `pass_filenames = false` lets Cargo select files itself.
+Local hooks use the same [file and stage filters](<https://prek.j178.dev/dev/configuration/index.md#choose-which-files-and-stages-to-check>) as remote hooks. In the Ruff example, `types = ["python"]` limits the command to Python files. In the Cargo example, `types = ["rust"]` controls whether the command runs, while `pass_filenames = false` lets Cargo select files itself.
 
 ## Commands do not use a shell by default
 
 prek splits `entry` into arguments and invokes the program directly. Operators such as `|`, `&&`, redirects, variables, and globs are not interpreted by a shell.
 
-Prefer putting complex logic in a checked-in script and using that script as the entry. If shell syntax is truly part of the hook, set the prek-specific [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) option and write the command for that shell. Shell-specific hooks are less portable, especially between Windows and Unix systems.
+Prefer putting complex logic in a checked-in script and using that script as the entry. If shell syntax is truly part of the hook, set the prek-specific [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) option and write the command for that shell. Shell-specific hooks are less portable, especially between Windows and Unix systems.
 
 ## Working directory
 
 A local hook runs in the directory of the project whose config defines it. In a single-config repository this is normally the Git root. In [workspace mode](<https://prek.j178.dev/dev/monorepos/index.md>), a nested project's hooks run in that nested project directory. Entries should therefore use paths relative to their own project rather than the directory from which the user invoked prek.
 
-For the exact entry resolution model, see [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>).
+For the exact entry resolution model, see [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/index.md#hook-entry-resolution>).
 
 # Built-in Hooks
 
@@ -1088,7 +1088,7 @@ Use `repo: builtin` to select them directly, or keep a supported remote hook con
 >
 > **Check implementation notes when behavior matters**
 >
-> The Rust implementations target the same purpose as their upstream hooks, but a hook can have documented differences in arguments, defaults, or edge cases. Check its entry in the [Hook Reference](<https://prek.j178.dev/dev/reference/built-in-hooks/#hook-reference>). To compare behavior, disable the fast path and run the pinned implementation.
+> The Rust implementations target the same purpose as their upstream hooks, but a hook can have documented differences in arguments, defaults, or edge cases. Check its entry in the [Hook Reference](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#hook-reference>). To compare behavior, disable the fast path and run the pinned implementation.
 
 ## Use built-in hooks directly
 
@@ -1142,7 +1142,7 @@ repos:
 >
 > In this mode, `prek` will still clone the repository and create the environment (e.g., a Python venv) to ensure full compatibility and fallback capabilities. However, the actual hook execution bypasses the environment and runs the native Rust code.
 
-See [fast-path support](<https://prek.j178.dev/dev/reference/built-in-hooks/#automatic-fast-path>) for the list of hooks that use the built-in implementation automatically. Other hooks run via the standard method.
+See [fast-path support](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#automatic-fast-path>) for the list of hooks that use the built-in implementation automatically. Other hooks run via the standard method.
 
 ### Run the repository implementation
 
@@ -1252,7 +1252,7 @@ prek run --skip frontend/ --all-files
 
 Selecting `frontend/` leaves out the root project's hooks. Skipping `frontend/` leaves the root's hooks eligible to check files inside `frontend/`.
 
-To skip a project for one commit, use `PREK_SKIP=frontend/ git commit`. See the [workspace reference](<https://prek.j178.dev/dev/reference/workspace/#selectors>) for combining selectors, hook aliases, and skip precedence.
+To skip a project for one commit, use `PREK_SKIP=frontend/ git commit`. See the [workspace reference](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>) for combining selectors, hook aliases, and skip precedence.
 
 ## Choose which checks apply to a project's files
 
@@ -1270,7 +1270,7 @@ orphan = true
 orphan: true
 ```
 
-For `frontend/`, this excludes its files from the root's hooks. Keep the shared checks you still want in the frontend config. Even if you skip an orphan project, its files do not fall back to parent hooks. See [orphan projects](<https://prek.j178.dev/dev/reference/workspace/#orphan-projects>) for the full rules.
+For `frontend/`, this excludes its files from the root's hooks. Keep the shared checks you still want in the frontend config. Even if you skip an orphan project, its files do not fall back to parent hooks. See [orphan projects](<https://prek.j178.dev/dev/reference/workspace/index.md#orphan-projects>) for the full rules.
 
 ## Exclude a directory from project discovery
 
@@ -1284,7 +1284,7 @@ legacy/
 
 Then run `prek run --all-files --refresh`. This excludes projects under `legacy/`; root hooks can still check files there. Use the root config's `exclude` if those files should also be excluded from its checks.
 
-Discovery already respects Git ignore rules. `.prekignore` adds exclusions without ignoring the files in Git. See the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/#discovery>) for other exclusions.
+Discovery already respects Git ignore rules. `.prekignore` adds exclusions without ignoring the files in Git. See the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/index.md#discovery>) for other exclusions.
 
 ## Work from a project directory
 
@@ -1302,7 +1302,7 @@ Use `-C` to change the working directory before discovery. Use `--config` when y
 | `prek -C frontend run` | Frontend and its nested projects | Each project's directory |
 | `prek run --config frontend/prek.toml` | Only `frontend/prek.toml` | Git repository root |
 
-Passing `--config` disables workspace discovery, even when the config is in a subdirectory. See [single config mode](<https://prek.j178.dev/dev/reference/workspace/#single-config-mode>) for file scope and filtering.
+Passing `--config` disables workspace discovery, even when the config is in a subdirectory. See [single config mode](<https://prek.j178.dev/dev/reference/workspace/index.md#single-config-mode>) for file scope and filtering.
 
 ## A new project is not being discovered
 
@@ -1313,7 +1313,7 @@ prek list --refresh
 prek run --all-files --refresh
 ```
 
-If the project is still missing, check that it is below the workspace root and not excluded by the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/#discovery>). For staged-file runs, also stage the new config. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-config-or-workspace-change-is-not-detected>) for more help.
+If the project is still missing, check that it is below the workspace root and not excluded by the [discovery rules](<https://prek.j178.dev/dev/reference/workspace/index.md#discovery>). For staged-file runs, also stage the new config. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-config-or-workspace-change-is-not-detected>) for more help.
 
 # Continuous Integration
 
@@ -1371,7 +1371,7 @@ The checkout must contain both refs and enough history to calculate the diff. Sh
 
 `PREK_HOME` contains cloned hook repositories, prepared environments, managed toolchains, and logs. Caching it can reduce setup time, but cache correctness depends on the prek version, platform, config, and hook revisions. Start without a cache, then add a narrowly keyed cache only if environment preparation is a meaningful part of the job.
 
-Private hook repositories need non-interactive Git credentials. Configure the CI provider's credential helper or token before running prek, and avoid printing tokens in verbose logs. See the [private repository FAQ](<https://prek.j178.dev/dev/faq/#how-do-i-use-hooks-from-private-repositories>) and the [Security Guide](<https://prek.j178.dev/dev/security/index.md>).
+Private hook repositories need non-interactive Git credentials. Configure the CI provider's credential helper or token before running prek, and avoid printing tokens in verbose logs. See the [private repository FAQ](<https://prek.j178.dev/dev/faq/index.md#how-do-i-use-hooks-from-private-repositories>) and the [Security Guide](<https://prek.j178.dev/dev/security/index.md>).
 
 ## Automatically fix pull requests with autofix.ci
 
@@ -1505,7 +1505,7 @@ For a different friendly name, replace `prek-pre-commit` in both commands. This 
 
 - [Run an existing project linter or formatter](<https://prek.j178.dev/dev/local-hooks/index.md>)
 - [Run hooks in continuous integration](<https://prek.j178.dev/dev/ci/index.md>)
-- [Migrate while preserving an existing Git hook](<https://prek.j178.dev/dev/migration/#keep-the-existing-hook-during-rollout>)
+- [Migrate while preserving an existing Git hook](<https://prek.j178.dev/dev/migration/index.md#keep-the-existing-hook-during-rollout>)
 
 # Integrations
 
@@ -1641,7 +1641,7 @@ For fields shared with upstream `pre-commit`, `prek` follows the upstream manife
 >
 > `prek`-only fields are accepted by `prek`, but upstream `pre-commit` will not recognize them.
 >
-> End-user configuration may also set [`env`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-env>) and [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>). When both the manifest and end-user config define `env`, the maps are merged and end-user values override duplicate keys.
+> End-user configuration may also set [`env`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-env>) and [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>). When both the manifest and end-user config define `env`, the maps are merged and end-user values override duplicate keys.
 >
 > `pass_filenames: n` with a positive integer is also a `prek` extension. Upstream `pre-commit` only accepts a boolean value.
 >
@@ -1649,7 +1649,7 @@ For fields shared with upstream `pre-commit`, `prek` follows the upstream manife
 >
 > The `language_version` options map with `request` and `preference` fields is a `prek` extension. Use the string form when a manifest must also work with upstream `pre-commit`.
 >
-> When `shell` is set, `entry` is treated as shell source. Hook `args` and filenames are passed as script arguments, so POSIX shell entries should read them with `"$@"`. `shell` is supported only for language backends that use the shell-aware entry resolver; see [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) for the supported languages and exact shell adapter commands.
+> When `shell` is set, `entry` is treated as shell source. Hook `args` and filenames are passed as script arguments, so POSIX shell entries should read them with `"$@"`. `shell` is supported only for language backends that use the shell-aware entry resolver; see [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) for the supported languages and exact shell adapter commands.
 
 > [!NOTE]
 >
@@ -1685,7 +1685,7 @@ Example:
   types: [shell]
 ```
 
-Prefer entries that invoke an executable directly. Do not assume a shell is present or that POSIX paths work on Windows unless the hook explicitly declares that platform requirement. The [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>) and [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>) pages describe the runtime and working-directory contracts.
+Prefer entries that invoke an executable directly. Do not assume a shell is present or that POSIX paths work on Windows unless the hook explicitly declares that platform requirement. The [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>) and [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/index.md#hook-entry-resolution>) pages describe the runtime and working-directory contracts.
 
 ## Choosing hook stages
 
@@ -1693,7 +1693,7 @@ Hook authors can declare which Git hook stages they support with `stages` in `.p
 
 The `manual` stage is special: it never runs automatically and is only executed when a user explicitly runs `prek run --hook-stage manual <hook-id>`.
 
-For what each stage means and whether it operates on repository files, see [Supported Git Hook Stages](<https://prek.j178.dev/dev/reference/configuration/#supported-git-hook-stages>).
+For what each stage means and whether it operates on repository files, see [Supported Git Hook Stages](<https://prek.j178.dev/dev/reference/configuration/index.md#supported-git-hook-stages>).
 
 Example:
 
@@ -1735,11 +1735,11 @@ Invocation shape:
 my-hook --max-line-length=120 path/to/file1 path/to/file2
 ```
 
-Hook processes also receive stage-specific `PRE_COMMIT_*` variables. See [Variables exposed to hooks](<https://prek.j178.dev/dev/reference/environment-variables/#variables-exposed-to-hooks>) for the values available during `pre-push`, commit-message, rebase, checkout, and rewrite stages.
+Hook processes also receive stage-specific `PRE_COMMIT_*` variables. See [Variables exposed to hooks](<https://prek.j178.dev/dev/reference/environment-variables/index.md#variables-exposed-to-hooks>) for the values available during `pre-push`, commit-message, rebase, checkout, and rewrite stages.
 
 ## Versioning for `prek update`
 
-End users pin your repository using the `rev` field in their config. To make [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) work as expected, publish git tags for releases:
+End users pin your repository using the `rev` field in their config. To make [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) work as expected, publish git tags for releases:
 
 - Prefer semantic version tags like `v1.2.3` or `1.2.3`.
 - Push tags to the remote (annotated or lightweight tags both work).
@@ -1749,7 +1749,7 @@ End users pin your repository using the `rev` field in their config. To make [`p
 
 ## Develop locally with `prek try-repo`
 
-[`prek try-repo`](<https://prek.j178.dev/dev/reference/cli/#prek-try-repo>) runs hooks from a repository without publishing a release. This is handy while iterating on a hook.
+[`prek try-repo`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-try-repo>) runs hooks from a repository without publishing a release. This is handy while iterating on a hook.
 
 ```bash
 # In another repository where you want to test the hook
@@ -1763,7 +1763,7 @@ Notes:
 
 ## Validation and CI
 
-Validate your manifest locally with [`prek validate-manifest`](<https://prek.j178.dev/dev/reference/cli/#prek-validate-manifest>):
+Validate your manifest locally with [`prek validate-manifest`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-validate-manifest>):
 
 ```bash
 prek validate-manifest .pre-commit-hooks.yaml
@@ -4138,14 +4138,14 @@ The default is an empty list, which shows all reports. CLI options override proj
 
 ### Global `update`
 
-User-level defaults for [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>):
+User-level defaults for [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>):
 
 | Key | Type | Default | CLI override |
 | --- | --- | --- | --- |
-| `update.cooldown_days` | integer days, `0` to `255` | `0` | [`--cooldown-days <DAYS>`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) |
-| `update.freeze` | boolean | `false` | [`--freeze`](<https://prek.j178.dev/dev/reference/cli/#prek-update--freeze>), which forces freezing on |
-| `update.include_tags` | glob string or list of glob strings | empty | [`--include-tag`](<https://prek.j178.dev/dev/reference/cli/#prek-update--include-tag>) |
-| `update.exclude_tags` | glob string or list of glob strings | empty | [`--exclude-tag`](<https://prek.j178.dev/dev/reference/cli/#prek-update--exclude-tag>) |
+| `update.cooldown_days` | integer days, `0` to `255` | `0` | [`--cooldown-days <DAYS>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) |
+| `update.freeze` | boolean | `false` | [`--freeze`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update--freeze>), which forces freezing on |
+| `update.include_tags` | glob string or list of glob strings | empty | [`--include-tag`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update--include-tag>) |
+| `update.exclude_tags` | glob string or list of glob strings | empty | [`--exclude-tag`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update--exclude-tag>) |
 
 ```toml
 [update]
@@ -4168,7 +4168,7 @@ The cooldown age is computed from the tag creation timestamp for annotated tags,
 >
 > **Cooldowns never downgrade**
 >
-> If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) keeps the current `rev` instead of downgrading it.
+> If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) keeps the current `rev` instead of downgrading it.
 
 ## Extension keys (`x-`)
 
@@ -4465,7 +4465,7 @@ default_env:
 
 ### `default_install_hook_types`
 
-Default Git shim name(s) installed by [`prek install`](<https://prek.j178.dev/dev/reference/cli/#prek-install>) when you don’t pass `--hook-type`.
+Default Git shim name(s) installed by [`prek install`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-install>) when you don’t pass `--hook-type`.
 
 - Type: list of `--hook-type` values
 - Default: `[pre-commit]`
@@ -4493,7 +4493,7 @@ Allowed values:
 >
 > This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
 
-Project settings for [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>):
+Project settings for [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>):
 
 | Key | Type | Default or behavior |
 | --- | --- | --- |
@@ -4596,7 +4596,7 @@ repos:
       - id: ruff
 ```
 
-See [Orphan projects](<https://prek.j178.dev/dev/reference/workspace/#orphan-projects>) for details.
+See [Orphan projects](<https://prek.j178.dev/dev/reference/workspace/index.md#orphan-projects>) for details.
 
 ## Repo entries
 
@@ -4653,7 +4653,7 @@ repos:
 Notes:
 
 - For reproducibility, prefer a versioned release tag or an immutable commit SHA.
-- [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) can help update [`rev`](<#rev>) values.
+- [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) can help update [`rev`](<#rev>) values.
 
 ### `repo: local`
 
@@ -4783,7 +4783,7 @@ All other hook keys are optional overrides (for example [`args`](<#args>), [`fil
 
 For `repo: local`, the hook entry is a full definition and must include:
 
-- `id` (required): stable identifier used by [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) and selectors
+- `id` (required): stable identifier used by [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>) and selectors
 - `name` (required): label shown in output
 - `entry` (required): command to execute
 - `language` (required): how `prek` sets up and runs the hook
@@ -4835,7 +4835,7 @@ The stable identifier of the hook.
 - For remote hooks, this must match a hook id defined by the remote repository.
 - For local hooks, you choose it.
 
-`id` is also used for CLI selection (for example [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) and [`PREK_SKIP`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_skip>)).
+`id` is also used for CLI selection (for example [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>) and [`PREK_SKIP`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_skip>)).
 
 > [!NOTE]
 >
@@ -4858,7 +4858,7 @@ The command line to execute for the hook.
 - Optional override for remote hooks.
 - Not allowed for `repo: meta` and `repo: builtin`.
 
-The repository type, language, and optional `shell` setting determine how this value is interpreted. See [Hook entry resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>) for the command, path, and working-directory rules.
+The repository type, language, and optional `shell` setting determine how this value is interpreted. See [Hook entry resolution](<https://prek.j178.dev/dev/internals/index.md#hook-entry-resolution>) for the command, path, and working-directory rules.
 
 If [`pass_filenames`](<#pass_filenames>) is `true`, `prek` appends matching filenames to this command when running.
 
@@ -4959,7 +4959,7 @@ See [Language Support](<https://prek.j178.dev/dev/reference/language-support/ind
 
 An alternate identifier for selecting the hook from the CLI.
 
-If set, you can run the hook via either [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) or [`prek run <alias>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>).
+If set, you can run the hook via either [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>) or [`prek run <alias>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>).
 
 ### `args`
 
@@ -5054,7 +5054,7 @@ File-type filters based on [`identify`](<https://pre-commit.com/#filtering-files
 
 > [!TIP]
 >
-> Use [`prek util identify <path>`](<https://prek.j178.dev/dev/reference/cli/#prek-util-identify>) to see how prek tags a file when you’re troubleshooting `types` filters.
+> Use [`prek util identify <path>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-util-identify>) to see how prek tags a file when you’re troubleshooting `types` filters.
 
 Compared to regex-only filtering ([`files` / `exclude`](<#hook-files-exclude>)), tag-based filtering is often easier and more robust:
 
@@ -5264,7 +5264,7 @@ Allowed values:
 
 For behavior of each stage and whether it operates on repository files, see [Supported Git Hook Stages](<#supported-git-hook-stages>).
 
-When you run [`prek run --hook-stage <stage>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>), only hooks configured for that stage are considered.
+When you run [`prek run --hook-stage <stage>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>), only hooks configured for that stage are considered.
 
 ### `groups`
 
@@ -5279,7 +5279,7 @@ Tag a hook with user-defined run groups.
 - Type: list of strings
 - Default: `[]`
 
-Groups are arbitrary labels used by [`prek run --group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--group>), [`prek run --require-group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--require-group>), and [`prek run --no-group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--no-group>). Group names cannot be empty, contain whitespace, or start with `@`. Names that start with `@` are reserved for special selectors:
+Groups are arbitrary labels used by [`prek run --group <group>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run--group>), [`prek run --require-group <group>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run--require-group>), and [`prek run --no-group <group>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run--no-group>). Group names cannot be empty, contain whitespace, or start with `@`. Names that start with `@` are reserved for special selectors:
 
 - `@ungrouped` matches hooks whose effective `groups` list is empty.
 
@@ -6235,7 +6235,7 @@ repos:
 > **Caveats**
 >
 > - Inserted text is not searched again during the same run, but rules need not be idempotent: replacing `foo` with `foobar` changes the file again on the next run.
-> - Rules run in configuration order by default, so later rules see earlier changes. Rules that modify the same files should not share a concurrent [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>).
+> - Rules run in configuration order by default, so later rules see earlier changes. Rules that modify the same files should not share a concurrent [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>).
 
 ---
 
@@ -6544,7 +6544,7 @@ Most users of remote hooks do not need to choose a language. Start with the hook
 
 For `repo: local` hooks, relative paths in `additional_dependencies` and other installer arguments do not resolve from the work tree. Use an absolute path when an installer needs a local file. Hook commands still run from the work tree.
 
-For help choosing a language, see [Local Hooks](<https://prek.j178.dev/dev/local-hooks/#choose-a-language>).
+For help choosing a language, see [Local Hooks](<https://prek.j178.dev/dev/local-hooks/index.md#choose-a-language>).
 
 ## Toolchain management and `language_version`
 
@@ -6598,7 +6598,7 @@ If `language_version` is `default`, prek uses the language’s default resolutio
 >
 > **prek-only**
 >
-> `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/#language_version>) for details.
+> `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md#language_version>) for details.
 
 Languages with managed toolchain downloads in prek today:
 
@@ -7054,7 +7054,7 @@ prek uses `uv` for creating virtual environments and installing dependencies:
 - If not found, automatically installs `uv` from Astral's CDN, falling back to PyPI (and mirrors) then `pip`
 - Automatically installs the required Python version if it's not already available
 
-Set [`PREK_UV_SOURCE=none`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_uv_source>) to disable automatic uv installation and require an existing compatible uv.
+Set [`PREK_UV_SOURCE=none`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_uv_source>) to disable automatic uv installation and require an existing compatible uv.
 
 > [!WARNING]
 >
@@ -7145,7 +7145,7 @@ Supported formats:
 >
 > Ruby interpreters are downloaded from those built by the `rv` project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86\_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.
 >
-> The `PREK_RUBY_MIRROR` environment variable can point Ruby downloads at a different source, for example a private mirror or an air-gapped CI mirror. Mirrors should provide the selected Ruby archive assets and a `SHA256SUMS` asset from the same release download location so downloaded Rubies can be verified. If checksum metadata is missing, prek warns and continues by default; set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_download_checksum_policy>) to `required` to fail instead. If the mirror is an exact HTTPS GitHub repository URL (`https://github.com/owner/repo`, with an optional `:443` port), prek uses the GitHub API for release metadata and may send `GITHUB_TOKEN` for rate limits or private mirrors. Non-GitHub mirrors are used as-is and never receive `GITHUB_TOKEN`.
+> The `PREK_RUBY_MIRROR` environment variable can point Ruby downloads at a different source, for example a private mirror or an air-gapped CI mirror. Mirrors should provide the selected Ruby archive assets and a `SHA256SUMS` asset from the same release download location so downloaded Rubies can be verified. If checksum metadata is missing, prek warns and continues by default; set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_download_checksum_policy>) to `required` to fail instead. If the mirror is an exact HTTPS GitHub repository URL (`https://github.com/owner/repo`, with an optional `:443` port), prek uses the GitHub API for release metadata and may send `GITHUB_TOKEN` for rate limits or private mirrors. Non-GitHub mirrors are used as-is and never receive `GITHUB_TOKEN`.
 
 Gems specified in hook gemspec files and `additional_dependencies` are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.
 
@@ -7153,7 +7153,7 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
 
-Only crates.io `cli:` dependencies use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) when [`PREK_USE_CARGO_BINSTALL=1`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_use_cargo_binstall>) is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
+Only crates.io `cli:` dependencies use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) when [`PREK_USE_CARGO_BINSTALL=1`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_use_cargo_binstall>) is set. prek does not install cargo-binstall or change its telemetry settings. cargo-binstall falls back to compiling from source when it cannot find a suitable binary, unless the user disables its `compile` strategy.
 
 > [!NOTE]
 >
@@ -7174,7 +7174,7 @@ prek supports Rust installed through system package managers as well as rustup. 
 
 #### Toolchain profile
 
-When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_rust_profile>) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
+When prek installs a managed Rust toolchain it uses `rustup`'s `minimal` profile by default (just `rustc`, `rust-std`, and `cargo`). Set the [`PREK_RUST_PROFILE`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_rust_profile>) environment variable to `default` or `complete` to include extra components such as `rustfmt` and `clippy`.
 
 > [!NOTE]
 >
@@ -7238,7 +7238,7 @@ Regex matching uses Python’s `re` semantics for compatibility with pre-commit.
 >
 > **Compatibility-only**
 >
-> `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/#deny-pattern>) or [`require-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/#require-pattern>) builtin.
+> `pygrep` is provided for compatibility with `pre-commit`. Because it uses Python’s `re` semantics, `prek` must find or provision a Python interpreter and spawn a Python process to perform the matching. If upstream `pre-commit` compatibility is not required, prefer the native [`deny-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#deny-pattern>) or [`require-pattern`](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#require-pattern>) builtin.
 
 ### system
 
@@ -7266,7 +7266,7 @@ prek installs each `additional_dependencies` item with `deno install --global` i
 
 Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available. Managed downloads verify Deno release checksum sidecars when they are available.
 
-By default, missing checksums produce a warning and the download continues without checksum verification. Set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_download_checksum_policy>) to `required` to make missing checksum metadata fail, or to `disabled` to skip checksum verification.
+By default, missing checksums produce a warning and the download continues without checksum verification. Set [`PREK_DOWNLOAD_CHECKSUM_POLICY`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_download_checksum_policy>) to `required` to make missing checksum metadata fail, or to `disabled` to skip checksum verification.
 
 #### Rules
 
@@ -7432,7 +7432,7 @@ Without `--config`, prek searches upward from the current working directory for 
 
 From the workspace root, prek recursively discovers projects in subdirectories. The workspace root can be inside the Git repository; it need not be the Git root. `-C` / `--cd` changes the working directory before discovery, so it can change which projects are found.
 
-When several supported config files exist in one directory, prek uses the [configuration filename precedence](<https://prek.j178.dev/dev/configuration/#choose-a-config-file>) to choose one.
+When several supported config files exist in one directory, prek uses the [configuration filename precedence](<https://prek.j178.dev/dev/configuration/index.md#choose-a-config-file>) to choose one.
 
 ### Exclusions
 
@@ -7454,7 +7454,7 @@ prek list --refresh
 prek run --all-files --refresh
 ```
 
-For staged-file runs, config changes must also be staged. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-config-or-workspace-change-is-not-detected>).
+For staged-file runs, config changes must also be staged. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-config-or-workspace-change-is-not-detected>).
 
 ## Files and working directories
 
@@ -7468,11 +7468,11 @@ Parent and child projects apply their filters independently. A parent's `exclude
 
 Projects run from deepest to shallowest. For example, `src/backend/` runs before `src/`, which runs before the workspace root.
 
-Projects at the same depth may run concurrently. Their selected file sets do not overlap, but hooks that access shared resources outside their project can still contend. Hook concurrency is bounded by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_concurrent_hooks>).
+Projects at the same depth may run concurrently. Their selected file sets do not overlap, but hooks that access shared resources outside their project can still contend. Hook concurrency is bounded by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_concurrent_hooks>).
 
 ## Orphan projects
 
-Setting [`orphan`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-orphan>) to `true` excludes files under that project from all ancestor projects. Descendant projects still apply their own configurations.
+Setting [`orphan`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-orphan>) to `true` excludes files under that project from all ancestor projects. Descendant projects still apply their own configurations.
 
 For example, with configs at the root, `src/`, and `src/backend/`:
 
@@ -7532,7 +7532,7 @@ Hooks run from the Git repository root. Candidate files come from the Git reposi
 
 ## Git hook installation
 
-Run `prek install` from the repository root to install Git shims for the whole repository. Installation uses the root config's `default_install_hook_types`; it does not combine values from nested configs. Explicit `--hook-type` options take precedence. See [`prek install`](<https://prek.j178.dev/dev/reference/cli/#prek-install>).
+Run `prek install` from the repository root to install Git shims for the whole repository. Installation uses the root config's `default_install_hook_types`; it does not combine values from nested configs. Explicit `--hook-type` options take precedence. See [`prek install`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-install>).
 
 # Environment Variable Reference
 
@@ -7554,7 +7554,7 @@ Control quiet output mode. Set to `1` for quiet mode (equivalent to `-q`, only s
 
 ### `PREK_SKIP`
 
-Comma-separated list of selectors to skip. A selector can be a hook ID, a project path ending in `/`, or a project-qualified hook such as `frontend:eslint`. For example, `PREK_SKIP=ruff,frontend/` skips every `ruff` hook and the `frontend` project. See [Skipping Projects or Hooks](<https://prek.j178.dev/dev/reference/workspace/#selectors>) for details.
+Comma-separated list of selectors to skip. A selector can be a hook ID, a project path ending in `/`, or a project-qualified hook such as `frontend:eslint`. For example, `PREK_SKIP=ruff,frontend/` skips every `ruff` hook and the `frontend` project. See [Skipping Projects or Hooks](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>) for details.
 
 ### `PREK_ALLOW_NO_CONFIG`
 
@@ -7629,19 +7629,19 @@ Disable passing the runtime's `--init` flag when running `docker` and `docker_im
 
 ### `PREK_RUBY_MIRROR`
 
-Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location. Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication. See [Ruby language support](<https://prek.j178.dev/dev/reference/language-support/#ruby>) for details.
+Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location. Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication. See [Ruby language support](<https://prek.j178.dev/dev/reference/language-support/index.md#ruby>) for details.
 
 ### `PREK_CONDA_INSTALLER`
 
-Select the preinstalled tool used to create environments for `language: conda` hooks. Supported values are `auto`, `pixi`, `micromamba`, `mamba`, and `conda`. The default is `auto`, which searches for `pixi`, `micromamba`, `mamba`, then `conda`. This setting only affects newly created environments; existing matching environments are reused without requiring the selected installer to remain available. prek does not install these tools. See [Conda language support](<https://prek.j178.dev/dev/reference/language-support/#conda>) for details.
+Select the preinstalled tool used to create environments for `language: conda` hooks. Supported values are `auto`, `pixi`, `micromamba`, `mamba`, and `conda`. The default is `auto`, which searches for `pixi`, `micromamba`, `mamba`, then `conda`. This setting only affects newly created environments; existing matching environments are reused without requiring the selected installer to remain available. prek does not install these tools. See [Conda language support](<https://prek.j178.dev/dev/reference/language-support/index.md#conda>) for details.
 
 ### `PREK_RUST_PROFILE`
 
-Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/#rust>) for details.
+Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/index.md#rust>) for details.
 
 ### `PREK_USE_CARGO_BINSTALL`
 
-Use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) for crates.io `cli:` dependencies of `language: rust` hooks. prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/#rust>) for installations that continue to use Cargo.
+Use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) for crates.io `cli:` dependencies of `language: rust` hooks. prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/index.md#rust>) for installations that continue to use Cargo.
 
 ## Compatibility fallbacks
 
@@ -7766,11 +7766,11 @@ The hook checkout does not become the working directory. Hooks run against the p
 
 ### Direct command entries
 
-For command-style languages such as `system`, `mise`, `python`, and `node`, prek splits `entry` into arguments and invokes it directly. A shell is not involved: shell operators such as `|`, `&&`, `$VAR`, and `*` are not interpreted. Use the prek-only [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) option when shell syntax is required.
+For command-style languages such as `system`, `mise`, `python`, and `node`, prek splits `entry` into arguments and invokes it directly. A shell is not involved: shell operators such as `|`, `&&`, `$VAR`, and `*` are not interpreted. Use the prek-only [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) option when shell syntax is required.
 
 A bare command such as `ruff` is looked up on the `PATH` prepared by the language. An explicit relative path such as `./scripts/check.sh` is resolved from the hook's working directory. For a remote command-style hook, that means the end user's project, not the cached hook checkout. For `repo: local`, it naturally refers to the project that defines the hook.
 
-Hook `args` are appended after the arguments from `entry`, followed by matching filenames when `pass_filenames` allows them. See [Passing arguments to hooks](<https://prek.j178.dev/dev/authoring-hooks/#passing-arguments-to-hooks>) for an example.
+Hook `args` are appended after the arguments from `entry`, followed by matching filenames when `pass_filenames` allows them. See [Passing arguments to hooks](<https://prek.j178.dev/dev/authoring-hooks/index.md#passing-arguments-to-hooks>) for an example.
 
 ### Language-specific meanings
 
@@ -7778,12 +7778,12 @@ Most languages use the direct command rules above, with their installed tools av
 
 | Language | Meaning of `entry` |
 | --- | --- |
-| [`script`](<https://prek.j178.dev/dev/reference/language-support/#script>) | The first argument is a script path. It is relative to the hook checkout for remote hooks and the project directory for local hooks. |
-| [`julia`](<https://prek.j178.dev/dev/reference/language-support/#julia>) | A Julia source path, relative to the hook checkout for remote hooks and the project directory for local hooks. |
-| [`r`](<https://prek.j178.dev/dev/reference/language-support/#r>) | `Rscript -e <expr>` or `Rscript <file>`; file paths use the same remote-checkout/local-project rule. |
-| [`rust`](<https://prek.j178.dev/dev/reference/language-support/#rust>) | The executable name; for a remote hook, it identifies a binary built and installed from the hook package. |
-| [`docker`](<https://prek.j178.dev/dev/reference/language-support/#docker>), [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/#docker_image>) | Container entrypoint, image, and argument information. The project is mounted as `/src` inside the container. |
-| [`fail`](<https://prek.j178.dev/dev/reference/language-support/#fail>), [`pygrep`](<https://prek.j178.dev/dev/reference/language-support/#pygrep>) | A failure message or regular expression, not a command. |
+| [`script`](<https://prek.j178.dev/dev/reference/language-support/index.md#script>) | The first argument is a script path. It is relative to the hook checkout for remote hooks and the project directory for local hooks. |
+| [`julia`](<https://prek.j178.dev/dev/reference/language-support/index.md#julia>) | A Julia source path, relative to the hook checkout for remote hooks and the project directory for local hooks. |
+| [`r`](<https://prek.j178.dev/dev/reference/language-support/index.md#r>) | `Rscript -e <expr>` or `Rscript <file>`; file paths use the same remote-checkout/local-project rule. |
+| [`rust`](<https://prek.j178.dev/dev/reference/language-support/index.md#rust>) | The executable name; for a remote hook, it identifies a binary built and installed from the hook package. |
+| [`docker`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker>), [`docker_image`](<https://prek.j178.dev/dev/reference/language-support/index.md#docker_image>) | Container entrypoint, image, and argument information. The project is mounted as `/src` inside the container. |
+| [`fail`](<https://prek.j178.dev/dev/reference/language-support/index.md#fail>), [`pygrep`](<https://prek.j178.dev/dev/reference/language-support/index.md#pygrep>) | A failure message or regular expression, not a command. |
 
 The linked language sections describe the complete backend-specific behavior.
 
@@ -7877,7 +7877,7 @@ Check `files`, `exclude`, `types`, `types_or`, `exclude_types`, `stages`, and an
 prek util identify path/to/file
 ```
 
-In a workspace, use `prek list` to confirm the project and use a [project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/#selectors>) when hook IDs are repeated.
+In a workspace, use `prek list` to confirm the project and use a [project-qualified selector](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>) when hook IDs are repeated.
 
 ## A config or workspace change is not detected
 
@@ -7900,8 +7900,8 @@ prek run --refresh
 
 Use `-vvv` to identify whether the failing step is Git authentication, TLS, toolchain download, or the language package manager. Then check:
 
-- [Private repository authentication](<https://prek.j178.dev/dev/faq/#how-do-i-use-hooks-from-private-repositories>)
-- Proxy and certificate variables in the [Environment Variable Reference](<https://prek.j178.dev/dev/reference/environment-variables/#related-external-variables>)
+- [Private repository authentication](<https://prek.j178.dev/dev/faq/index.md#how-do-i-use-hooks-from-private-repositories>)
+- Proxy and certificate variables in the [Environment Variable Reference](<https://prek.j178.dev/dev/reference/environment-variables/index.md#related-external-variables>)
 - Language-specific prerequisites in [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>)
 - The checksum and trust boundary in the [Security Guide](<https://prek.j178.dev/dev/security/index.md>)
 
@@ -7948,7 +7948,7 @@ When reporting a bug, include the smallest reproducer, command, complete error, 
 prek run --all-files --dry-run
 ```
 
-Also check the hook's `stages`, file filters, and any `PREK_SKIP` or `SKIP` value. See [Debugging](<https://prek.j178.dev/dev/debugging/#a-hook-is-skipped-or-receives-no-files>) for the full checklist.
+Also check the hook's `stages`, file filters, and any `PREK_SKIP` or `SKIP` value. See [Debugging](<https://prek.j178.dev/dev/debugging/index.md#a-hook-is-skipped-or-receives-no-files>) for the full checklist.
 
 ## Why is the first run slower?
 
@@ -7964,7 +7964,7 @@ git add path/to/file
 git commit
 ```
 
-The next run checks the newly staged content. See [When a hook modifies files](<https://prek.j178.dev/dev/running-hooks/#when-a-hook-modifies-files>).
+The next run checks the newly staged content. See [When a hook modifies files](<https://prek.j178.dev/dev/running-hooks/index.md#when-a-hook-modifies-files>).
 
 ## Why must a changed config be staged?
 
@@ -8132,25 +8132,25 @@ These entries are implemented by `prek` and are not part of the documented upstr
 
 - Top-level:
 
-  - [`update`](<https://prek.j178.dev/dev/reference/configuration/#update>)
-  - [`default_env`](<https://prek.j178.dev/dev/reference/configuration/#default_env>)
-  - [`priorities`](<https://prek.j178.dev/dev/reference/configuration/#priorities>)
-  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-minimum-prek-version-config>)
-  - [`orphan`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-orphan>)
-  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/#top-level-files>)
+  - [`update`](<https://prek.j178.dev/dev/reference/configuration/index.md#update>)
+  - [`default_env`](<https://prek.j178.dev/dev/reference/configuration/index.md#default_env>)
+  - [`priorities`](<https://prek.j178.dev/dev/reference/configuration/index.md#priorities>)
+  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-minimum-prek-version-config>)
+  - [`orphan`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-orphan>)
+  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/index.md#top-level-files>)
 - Repo type:
 
-  - [`repo: builtin`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-repo-builtin>)
+  - [`repo: builtin`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-repo-builtin>)
 - Hook-level:
 
-  - [`env`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-env>)
-  - [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>)
-  - [`priority`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-priority>)
-  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-minimum-prek-version-hook>)
-  - [`groups`](<https://prek.j178.dev/dev/reference/configuration/#groups>)
-  - [A positive integer for `pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/#pass_filenames>)
-  - [An options map for `language_version`](<https://prek.j178.dev/dev/reference/configuration/#language_version>)
-  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/#files-exclude>)
+  - [`env`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-env>)
+  - [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>)
+  - [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-priority>)
+  - [`minimum_prek_version`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-minimum-prek-version-hook>)
+  - [`groups`](<https://prek.j178.dev/dev/reference/configuration/index.md#groups>)
+  - [A positive integer for `pass_filenames`](<https://prek.j178.dev/dev/reference/configuration/index.md#pass_filenames>)
+  - [An options map for `language_version`](<https://prek.j178.dev/dev/reference/configuration/index.md#language_version>)
+  - [`files` and `exclude` glob mappings](<https://prek.j178.dev/dev/reference/configuration/index.md#files-exclude>)
 
 See [Configuration](<https://prek.j178.dev/dev/configuration/index.md>) for config format guidance, [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md>) for key-level details, and [Differences](<https://prek.j178.dev/dev/diff/index.md>) for broader behavior and CLI differences.
 
@@ -8158,14 +8158,14 @@ See [Configuration](<https://prek.j178.dev/dev/configuration/index.md>) for conf
 
 ## General differences
 
-- `prek` supports `.pre-commit-config.yaml`, `.pre-commit-config.yml`, and native `prek.toml` configuration files. Use [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/#prek-util-yaml-to-toml>) to convert an existing YAML config.
+- `prek` supports `.pre-commit-config.yaml`, `.pre-commit-config.yml`, and native `prek.toml` configuration files. Use [`prek util yaml-to-toml`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-util-yaml-to-toml>) to convert an existing YAML config.
 - `prek` implements some common hooks from `pre-commit-hooks` in Rust for better performance.
 - `prek` supports `repo: builtin` for offline, zero-setup hooks.
 - `prek` uses `~/.cache/prek` as the default cache directory for repos, environments and toolchains.
 - `prek` decouples hook environments from their repositories, allowing shared toolchains and environments across hooks.
 - `prek` supports `language_version` as a semver specifier and automatically installs the required toolchains.
-- `prek` supports `files` and `exclude` as glob lists (in addition to regex) via `glob` mappings. See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/#top-level-files>).
-- `prek` supports a [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) hook option for explicit shell-source execution through predefined adapters such as `bash`, `sh`, and `pwsh`. Upstream `pre-commit` runs `entry` directly; shell behavior must be spelled into `entry` itself.
+- `prek` supports `files` and `exclude` as glob lists (in addition to regex) via `glob` mappings. See [Configuration Reference](<https://prek.j178.dev/dev/reference/configuration/index.md#top-level-files>).
+- `prek` supports a [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) hook option for explicit shell-source execution through predefined adapters such as `bash`, `sh`, and `pwsh`. Upstream `pre-commit` runs `entry` directly; shell behavior must be spelled into `entry` itself.
 - `prek` reports more precise configuration parsing errors, including exact source locations.
 
 ## Behavioral divergences
@@ -8207,8 +8207,8 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 
 ### `prek run`
 
-- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](<https://prek.j178.dev/dev/monorepos/#run-or-skip-a-project>) for details.
-- `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) may run concurrently), instead of strictly serial execution.
+- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id. See [Running Specific Hooks or Projects](<https://prek.j178.dev/dev/monorepos/index.md#run-or-skip-a-project>) for details.
+- `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>) may run concurrently), instead of strictly serial execution.
 - In workspace mode, `prek run` can execute independent projects at the same directory depth concurrently, while still running child projects before their parents.
 - `prek` provides shell completion for hook ids.
 - `prek run --dry-run` shows which hooks would run without executing them.
@@ -8279,9 +8279,9 @@ Use `prek update --freeze` to write commit SHAs when immutable pins are required
 
 ## Downloads and checksums
 
-For managed download paths that support checksum sidecars, prek verifies the download when the upstream source provides that metadata. The [download checksum policy](<https://prek.j178.dev/dev/reference/environment-variables/#prek_download_checksum_policy>) controls what happens when metadata is missing; it cannot create authenticity information that an upstream source did not publish.
+For managed download paths that support checksum sidecars, prek verifies the download when the upstream source provides that metadata. The [download checksum policy](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_download_checksum_policy>) controls what happens when metadata is missing; it cannot create authenticity information that an upstream source did not publish.
 
-Release artifacts for prek itself include GitHub attestations. See [Artifact Verification](<https://prek.j178.dev/dev/installation/#artifact-verification>).
+Release artifacts for prek itself include GitHub attestations. See [Artifact Verification](<https://prek.j178.dev/dev/installation/index.md#artifact-verification>).
 
 ## Credentials and logs
 
@@ -8352,7 +8352,7 @@ The `pre-commit` reference takes 1,942 ms. prek completes the same workload in 1
 
 ### 2\. Fast path
 
-Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration. prek's [automatic fast path](<https://prek.j178.dev/dev/built-in-hooks/#use-the-automatic-fast-path>) recognizes the 13 hooks and runs their built-in Rust implementations. The median falls from 1,534 ms to 105 ms: 93% less time, or a 14.59x speedup.
+Next, we remove `PREK_NO_FAST_PATH` without changing the hook configuration. prek's [automatic fast path](<https://prek.j178.dev/dev/built-in-hooks/index.md#use-the-automatic-fast-path>) recognizes the 13 hooks and runs their built-in Rust implementations. The median falls from 1,534 ms to 105 ms: 93% less time, or a 14.59x speedup.
 
 ![Horizontal bars showing the effect of the fast path](<https://prek.j178.dev/dev/assets/benchmark-fast-path.svg>)
 
@@ -8362,7 +8362,7 @@ This benchmark deliberately uses hooks for which prek has built-in implementatio
 
 The fast path is automatic when a supported hook matches. Priority requires a little more information: you need to tell prek which hooks are independent and can safely run together.
 
-Hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) may run at the same time. Only group hooks that are independent. In the benchmark, hooks which can modify overlapping text files remain ordered, and read-only checks share a named priority. This excerpt shows the grouping:
+Hooks with the same [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>) may run at the same time. Only group hooks that are independent. In the benchmark, hooks which can modify overlapping text files remain ordered, and read-only checks share a named priority. This excerpt shows the grouping:
 
 ```toml
 [priorities]
@@ -8436,7 +8436,7 @@ benchmark-repo/
 
 Each project declares only the hooks it owns. Common checks appear in both project configurations, but they see disjoint sets of files. This models a configured monorepo rather than duplicating every hook in every project just to exercise the scheduler.
 
-[Projects at the same depth](<https://prek.j178.dev/dev/reference/workspace/#execution-order>) can run concurrently. Nested parent and child projects still run from deepest to shallowest, so a workspace should reflect real ownership boundaries rather than being split only to chase a benchmark number.
+[Projects at the same depth](<https://prek.j178.dev/dev/reference/workspace/index.md#execution-order>) can run concurrently. Nested parent and child projects still run from deepest to shallowest, so a workspace should reflect real ownership boundaries rather than being split only to chase a benchmark number.
 
 Adding the second project lowers the median from 94 ms to 80 ms, another 15% reduction.
 
@@ -8475,7 +8475,7 @@ At this point, two different kinds of speedup should be visible. Framework savin
 - Correct priority groups shorten the critical path. Three independent 20-second hooks can approach 20 seconds instead of 60 seconds when resources allow.
 - Independent same-depth projects can make the same improvement across a monorepo. Each project advances through its own priority groups without waiting for an unrelated sibling project.
 
-Well-configured priority and project concurrency can therefore produce multi-fold improvements even when fast-path savings are small. Actual scaling is bounded by CPU, memory, disk and cache contention, and by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_concurrent_hooks>). Do not run hooks concurrently when they modify the same files or share mutable global state.
+Well-configured priority and project concurrency can therefore produce multi-fold improvements even when fast-path savings are small. Actual scaling is bounded by CPU, memory, disk and cache contention, and by [`PREK_CONCURRENT_HOOKS`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_concurrent_hooks>). Do not run hooks concurrently when they modify the same files or share mutable global state.
 
 ## Reproduce the benchmark
 

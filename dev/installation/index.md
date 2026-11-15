@@ -44,7 +44,7 @@ Changing the [execution policy](<https://learn.microsoft.com/en-us/powershell/mo
 >
 > > **Note**
 > >
-> > `PREK_INSTALL_DIR` controls where the prek binary is installed. To change where caches, toolchains, and hook environments are stored, use [`PREK_HOME`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_home>).
+> > `PREK_INSTALL_DIR` controls where the prek binary is installed. To change where caches, toolchains, and hook environments are stored, use [`PREK_HOME`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_home>).
 >
 > ### Disabling PATH modifications
 >
@@ -192,7 +192,7 @@ cargo binstall prek
 
 prek provides a Docker image at [`ghcr.io/j178/prek`](<https://github.com/j178/prek/pkgs/container/prek>).
 
-See the guide on [using prek in Docker](<https://prek.j178.dev/dev/integrations/#docker>) for more details.
+See the guide on [using prek in Docker](<https://prek.j178.dev/dev/integrations/index.md#docker>) for more details.
 
 ## GitHub Releases
 

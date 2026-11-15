@@ -86,4 +86,4 @@ For a different friendly name, replace `prek-pre-commit` in both commands. This 
 
 - [Run an existing project linter or formatter](<https://prek.j178.dev/dev/local-hooks/index.md>)
 - [Run hooks in continuous integration](<https://prek.j178.dev/dev/ci/index.md>)
-- [Migrate while preserving an existing Git hook](<https://prek.j178.dev/dev/migration/#keep-the-existing-hook-during-rollout>)
+- [Migrate while preserving an existing Git hook](<https://prek.j178.dev/dev/migration/index.md#keep-the-existing-hook-during-rollout>)

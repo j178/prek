@@ -610,7 +610,7 @@ repos:
 > **Caveats**
 >
 > - Inserted text is not searched again during the same run, but rules need not be idempotent: replacing `foo` with `foobar` changes the file again on the next run.
-> - Rules run in configuration order by default, so later rules see earlier changes. Rules that modify the same files should not share a concurrent [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>).
+> - Rules run in configuration order by default, so later rules see earlier changes. Rules that modify the same files should not share a concurrent [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>).
 
 ---
 

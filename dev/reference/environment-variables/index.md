@@ -18,7 +18,7 @@ Control quiet output mode. Set to `1` for quiet mode (equivalent to `-q`, only s
 
 ### `PREK_SKIP`
 
-Comma-separated list of selectors to skip. A selector can be a hook ID, a project path ending in `/`, or a project-qualified hook such as `frontend:eslint`. For example, `PREK_SKIP=ruff,frontend/` skips every `ruff` hook and the `frontend` project. See [Skipping Projects or Hooks](<https://prek.j178.dev/dev/reference/workspace/#selectors>) for details.
+Comma-separated list of selectors to skip. A selector can be a hook ID, a project path ending in `/`, or a project-qualified hook such as `frontend:eslint`. For example, `PREK_SKIP=ruff,frontend/` skips every `ruff` hook and the `frontend` project. See [Skipping Projects or Hooks](<https://prek.j178.dev/dev/reference/workspace/index.md#selectors>) for details.
 
 ### `PREK_ALLOW_NO_CONFIG`
 
@@ -93,19 +93,19 @@ Disable passing the runtime's `--init` flag when running `docker` and `docker_im
 
 ### `PREK_RUBY_MIRROR`
 
-Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location. Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication. See [Ruby language support](<https://prek.j178.dev/dev/reference/language-support/#ruby>) for details.
+Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). Mirrors should provide release-compatible Ruby archive assets and a `SHA256SUMS` asset in the same release download location. Only exact HTTPS GitHub repository mirrors (`https://github.com/owner/repo`, optionally with port `443`) receive `GITHUB_TOKEN`; other mirrors are used without GitHub authentication. See [Ruby language support](<https://prek.j178.dev/dev/reference/language-support/index.md#ruby>) for details.
 
 ### `PREK_CONDA_INSTALLER`
 
-Select the preinstalled tool used to create environments for `language: conda` hooks. Supported values are `auto`, `pixi`, `micromamba`, `mamba`, and `conda`. The default is `auto`, which searches for `pixi`, `micromamba`, `mamba`, then `conda`. This setting only affects newly created environments; existing matching environments are reused without requiring the selected installer to remain available. prek does not install these tools. See [Conda language support](<https://prek.j178.dev/dev/reference/language-support/#conda>) for details.
+Select the preinstalled tool used to create environments for `language: conda` hooks. Supported values are `auto`, `pixi`, `micromamba`, `mamba`, and `conda`. The default is `auto`, which searches for `pixi`, `micromamba`, `mamba`, then `conda`. This setting only affects newly created environments; existing matching environments are reused without requiring the selected installer to remain available. prek does not install these tools. See [Conda language support](<https://prek.j178.dev/dev/reference/language-support/index.md#conda>) for details.
 
 ### `PREK_RUST_PROFILE`
 
-Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/#rust>) for details.
+Override the `rustup` profile used when installing managed Rust toolchains (`minimal`, `default`, or `complete`). Defaults to `minimal`. Set to `default` to include `rustfmt` and `clippy`. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/index.md#rust>) for details.
 
 ### `PREK_USE_CARGO_BINSTALL`
 
-Use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) for crates.io `cli:` dependencies of `language: rust` hooks. prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/#rust>) for installations that continue to use Cargo.
+Use a preinstalled [`cargo-binstall`](<https://github.com/cargo-bins/cargo-binstall>) for crates.io `cli:` dependencies of `language: rust` hooks. prek does not install cargo-binstall or override its telemetry and strategy settings. See [Rust language support](<https://prek.j178.dev/dev/reference/language-support/index.md#rust>) for installations that continue to use Cargo.
 
 ## Compatibility fallbacks
 

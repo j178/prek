@@ -58,7 +58,7 @@ For fields shared with upstream `pre-commit`, `prek` follows the upstream manife
 >
 > `prek`-only fields are accepted by `prek`, but upstream `pre-commit` will not recognize them.
 >
-> End-user configuration may also set [`env`](<https://prek.j178.dev/dev/reference/configuration/#prek-only-env>) and [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>). When both the manifest and end-user config define `env`, the maps are merged and end-user values override duplicate keys.
+> End-user configuration may also set [`env`](<https://prek.j178.dev/dev/reference/configuration/index.md#prek-only-env>) and [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>). When both the manifest and end-user config define `env`, the maps are merged and end-user values override duplicate keys.
 >
 > `pass_filenames: n` with a positive integer is also a `prek` extension. Upstream `pre-commit` only accepts a boolean value.
 >
@@ -66,7 +66,7 @@ For fields shared with upstream `pre-commit`, `prek` follows the upstream manife
 >
 > The `language_version` options map with `request` and `preference` fields is a `prek` extension. Use the string form when a manifest must also work with upstream `pre-commit`.
 >
-> When `shell` is set, `entry` is treated as shell source. Hook `args` and filenames are passed as script arguments, so POSIX shell entries should read them with `"$@"`. `shell` is supported only for language backends that use the shell-aware entry resolver; see [`shell`](<https://prek.j178.dev/dev/reference/configuration/#shell>) for the supported languages and exact shell adapter commands.
+> When `shell` is set, `entry` is treated as shell source. Hook `args` and filenames are passed as script arguments, so POSIX shell entries should read them with `"$@"`. `shell` is supported only for language backends that use the shell-aware entry resolver; see [`shell`](<https://prek.j178.dev/dev/reference/configuration/index.md#shell>) for the supported languages and exact shell adapter commands.
 
 > [!NOTE]
 >
@@ -102,7 +102,7 @@ Example:
   types: [shell]
 ```
 
-Prefer entries that invoke an executable directly. Do not assume a shell is present or that POSIX paths work on Windows unless the hook explicitly declares that platform requirement. The [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>) and [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>) pages describe the runtime and working-directory contracts.
+Prefer entries that invoke an executable directly. Do not assume a shell is present or that POSIX paths work on Windows unless the hook explicitly declares that platform requirement. The [Language Support](<https://prek.j178.dev/dev/reference/language-support/index.md>) and [Hook Entry Resolution](<https://prek.j178.dev/dev/internals/index.md#hook-entry-resolution>) pages describe the runtime and working-directory contracts.
 
 ## Choosing hook stages
 
@@ -110,7 +110,7 @@ Hook authors can declare which Git hook stages they support with `stages` in `.p
 
 The `manual` stage is special: it never runs automatically and is only executed when a user explicitly runs `prek run --hook-stage manual <hook-id>`.
 
-For what each stage means and whether it operates on repository files, see [Supported Git Hook Stages](<https://prek.j178.dev/dev/reference/configuration/#supported-git-hook-stages>).
+For what each stage means and whether it operates on repository files, see [Supported Git Hook Stages](<https://prek.j178.dev/dev/reference/configuration/index.md#supported-git-hook-stages>).
 
 Example:
 
@@ -152,11 +152,11 @@ Invocation shape:
 my-hook --max-line-length=120 path/to/file1 path/to/file2
 ```
 
-Hook processes also receive stage-specific `PRE_COMMIT_*` variables. See [Variables exposed to hooks](<https://prek.j178.dev/dev/reference/environment-variables/#variables-exposed-to-hooks>) for the values available during `pre-push`, commit-message, rebase, checkout, and rewrite stages.
+Hook processes also receive stage-specific `PRE_COMMIT_*` variables. See [Variables exposed to hooks](<https://prek.j178.dev/dev/reference/environment-variables/index.md#variables-exposed-to-hooks>) for the values available during `pre-push`, commit-message, rebase, checkout, and rewrite stages.
 
 ## Versioning for `prek update`
 
-End users pin your repository using the `rev` field in their config. To make [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) work as expected, publish git tags for releases:
+End users pin your repository using the `rev` field in their config. To make [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) work as expected, publish git tags for releases:
 
 - Prefer semantic version tags like `v1.2.3` or `1.2.3`.
 - Push tags to the remote (annotated or lightweight tags both work).
@@ -166,7 +166,7 @@ End users pin your repository using the `rev` field in their config. To make [`p
 
 ## Develop locally with `prek try-repo`
 
-[`prek try-repo`](<https://prek.j178.dev/dev/reference/cli/#prek-try-repo>) runs hooks from a repository without publishing a release. This is handy while iterating on a hook.
+[`prek try-repo`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-try-repo>) runs hooks from a repository without publishing a release. This is handy while iterating on a hook.
 
 ```bash
 # In another repository where you want to test the hook
@@ -180,7 +180,7 @@ Notes:
 
 ## Validation and CI
 
-Validate your manifest locally with [`prek validate-manifest`](<https://prek.j178.dev/dev/reference/cli/#prek-validate-manifest>):
+Validate your manifest locally with [`prek validate-manifest`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-validate-manifest>):
 
 ```bash
 prek validate-manifest .pre-commit-hooks.yaml

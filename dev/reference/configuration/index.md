@@ -23,14 +23,14 @@ The default is an empty list, which shows all reports. CLI options override proj
 
 ### Global `update`
 
-User-level defaults for [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>):
+User-level defaults for [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>):
 
 | Key | Type | Default | CLI override |
 | --- | --- | --- | --- |
-| `update.cooldown_days` | integer days, `0` to `255` | `0` | [`--cooldown-days <DAYS>`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) |
-| `update.freeze` | boolean | `false` | [`--freeze`](<https://prek.j178.dev/dev/reference/cli/#prek-update--freeze>), which forces freezing on |
-| `update.include_tags` | glob string or list of glob strings | empty | [`--include-tag`](<https://prek.j178.dev/dev/reference/cli/#prek-update--include-tag>) |
-| `update.exclude_tags` | glob string or list of glob strings | empty | [`--exclude-tag`](<https://prek.j178.dev/dev/reference/cli/#prek-update--exclude-tag>) |
+| `update.cooldown_days` | integer days, `0` to `255` | `0` | [`--cooldown-days <DAYS>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) |
+| `update.freeze` | boolean | `false` | [`--freeze`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update--freeze>), which forces freezing on |
+| `update.include_tags` | glob string or list of glob strings | empty | [`--include-tag`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update--include-tag>) |
+| `update.exclude_tags` | glob string or list of glob strings | empty | [`--exclude-tag`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update--exclude-tag>) |
 
 ```toml
 [update]
@@ -53,7 +53,7 @@ The cooldown age is computed from the tag creation timestamp for annotated tags,
 >
 > **Cooldowns never downgrade**
 >
-> If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) keeps the current `rev` instead of downgrading it.
+> If the current `rev` is newer than the latest cooldown-eligible tag, [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) keeps the current `rev` instead of downgrading it.
 
 ## Extension keys (`x-`)
 
@@ -350,7 +350,7 @@ default_env:
 
 ### `default_install_hook_types`
 
-Default Git shim name(s) installed by [`prek install`](<https://prek.j178.dev/dev/reference/cli/#prek-install>) when you don’t pass `--hook-type`.
+Default Git shim name(s) installed by [`prek install`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-install>) when you don’t pass `--hook-type`.
 
 - Type: list of `--hook-type` values
 - Default: `[pre-commit]`
@@ -378,7 +378,7 @@ Allowed values:
 >
 > This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
 
-Project settings for [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>):
+Project settings for [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>):
 
 | Key | Type | Default or behavior |
 | --- | --- | --- |
@@ -481,7 +481,7 @@ repos:
       - id: ruff
 ```
 
-See [Orphan projects](<https://prek.j178.dev/dev/reference/workspace/#orphan-projects>) for details.
+See [Orphan projects](<https://prek.j178.dev/dev/reference/workspace/index.md#orphan-projects>) for details.
 
 ## Repo entries
 
@@ -538,7 +538,7 @@ repos:
 Notes:
 
 - For reproducibility, prefer a versioned release tag or an immutable commit SHA.
-- [`prek update`](<https://prek.j178.dev/dev/reference/cli/#prek-update>) can help update [`rev`](<#rev>) values.
+- [`prek update`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-update>) can help update [`rev`](<#rev>) values.
 
 ### `repo: local`
 
@@ -668,7 +668,7 @@ All other hook keys are optional overrides (for example [`args`](<#args>), [`fil
 
 For `repo: local`, the hook entry is a full definition and must include:
 
-- `id` (required): stable identifier used by [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) and selectors
+- `id` (required): stable identifier used by [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>) and selectors
 - `name` (required): label shown in output
 - `entry` (required): command to execute
 - `language` (required): how `prek` sets up and runs the hook
@@ -720,7 +720,7 @@ The stable identifier of the hook.
 - For remote hooks, this must match a hook id defined by the remote repository.
 - For local hooks, you choose it.
 
-`id` is also used for CLI selection (for example [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) and [`PREK_SKIP`](<https://prek.j178.dev/dev/reference/environment-variables/#prek_skip>)).
+`id` is also used for CLI selection (for example [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>) and [`PREK_SKIP`](<https://prek.j178.dev/dev/reference/environment-variables/index.md#prek_skip>)).
 
 > [!NOTE]
 >
@@ -743,7 +743,7 @@ The command line to execute for the hook.
 - Optional override for remote hooks.
 - Not allowed for `repo: meta` and `repo: builtin`.
 
-The repository type, language, and optional `shell` setting determine how this value is interpreted. See [Hook entry resolution](<https://prek.j178.dev/dev/internals/#hook-entry-resolution>) for the command, path, and working-directory rules.
+The repository type, language, and optional `shell` setting determine how this value is interpreted. See [Hook entry resolution](<https://prek.j178.dev/dev/internals/index.md#hook-entry-resolution>) for the command, path, and working-directory rules.
 
 If [`pass_filenames`](<#pass_filenames>) is `true`, `prek` appends matching filenames to this command when running.
 
@@ -844,7 +844,7 @@ See [Language Support](<https://prek.j178.dev/dev/reference/language-support/ind
 
 An alternate identifier for selecting the hook from the CLI.
 
-If set, you can run the hook via either [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>) or [`prek run <alias>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>).
+If set, you can run the hook via either [`prek run <id>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>) or [`prek run <alias>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>).
 
 ### `args`
 
@@ -939,7 +939,7 @@ File-type filters based on [`identify`](<https://pre-commit.com/#filtering-files
 
 > [!TIP]
 >
-> Use [`prek util identify <path>`](<https://prek.j178.dev/dev/reference/cli/#prek-util-identify>) to see how prek tags a file when you’re troubleshooting `types` filters.
+> Use [`prek util identify <path>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-util-identify>) to see how prek tags a file when you’re troubleshooting `types` filters.
 
 Compared to regex-only filtering ([`files` / `exclude`](<#hook-files-exclude>)), tag-based filtering is often easier and more robust:
 
@@ -1149,7 +1149,7 @@ Allowed values:
 
 For behavior of each stage and whether it operates on repository files, see [Supported Git Hook Stages](<#supported-git-hook-stages>).
 
-When you run [`prek run --hook-stage <stage>`](<https://prek.j178.dev/dev/reference/cli/#prek-run>), only hooks configured for that stage are considered.
+When you run [`prek run --hook-stage <stage>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run>), only hooks configured for that stage are considered.
 
 ### `groups`
 
@@ -1164,7 +1164,7 @@ Tag a hook with user-defined run groups.
 - Type: list of strings
 - Default: `[]`
 
-Groups are arbitrary labels used by [`prek run --group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--group>), [`prek run --require-group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--require-group>), and [`prek run --no-group <group>`](<https://prek.j178.dev/dev/reference/cli/#prek-run--no-group>). Group names cannot be empty, contain whitespace, or start with `@`. Names that start with `@` are reserved for special selectors:
+Groups are arbitrary labels used by [`prek run --group <group>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run--group>), [`prek run --require-group <group>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run--require-group>), and [`prek run --no-group <group>`](<https://prek.j178.dev/dev/reference/cli/index.md#prek-run--no-group>). Group names cannot be empty, contain whitespace, or start with `@`. Names that start with `@` are reserved for special selectors:
 
 - `@ungrouped` matches hooks whose effective `groups` list is empty.
 

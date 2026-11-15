@@ -106,7 +106,7 @@ Because `prek init` installed the Git shim, every `git commit` invokes the confi
 
 ### 4\. Go further
 
-For other setups, `prek init --format yaml` creates `.pre-commit-config.yaml`. Use `prek init --no-install` to create only the config, then run `prek install` when you are ready to enable checks on commit. To create a config in an existing subdirectory, see [Monorepos](<https://prek.j178.dev/dev/monorepos/#add-a-project-configuration>).
+For other setups, `prek init --format yaml` creates `.pre-commit-config.yaml`. Use `prek init --no-install` to create only the config, then run `prek install` when you are ready to enable checks on commit. To create a config in an existing subdirectory, see [Monorepos](<https://prek.j178.dev/dev/monorepos/index.md#add-a-project-configuration>).
 
 - Explore richer configuration options in the official [pre-commit documentation](<https://pre-commit.com/>). Every example there works with prek.
 - See [Running Hooks](<https://prek.j178.dev/dev/running-hooks/index.md>) for the commands you will use after setup and how to handle hook failures.

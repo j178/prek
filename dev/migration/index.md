@@ -4,7 +4,7 @@ Move one hook at a time when replacing an existing setup. Keep the old hook avai
 
 ## From pre-commit
 
-Start with the two-step path in the [Quickstart](<https://prek.j178.dev/dev/quickstart/#already-using-pre-commit>). The [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md>) and [Differences](<https://prek.j178.dev/dev/diff/index.md>) pages cover the cases worth checking when a repository depends on less common behavior.
+Start with the two-step path in the [Quickstart](<https://prek.j178.dev/dev/quickstart/index.md#already-using-pre-commit>). The [Compatibility](<https://prek.j178.dev/dev/compatibility/index.md>) and [Differences](<https://prek.j178.dev/dev/diff/index.md>) pages cover the cases worth checking when a repository depends on less common behavior.
 
 ## From lint-staged or Husky
 
@@ -76,7 +76,7 @@ pass_filenames = false
 stages = ["pre-push"]
 ```
 
-Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/#priority>) only after checking that they do not modify the same files or contend for shared state.
+Give independent hooks the same explicit [`priority`](<https://prek.j178.dev/dev/reference/configuration/index.md#priority>) only after checking that they do not modify the same files or contend for shared state.
 
 ## Keep the existing hook during rollout
 

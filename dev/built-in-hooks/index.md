@@ -16,7 +16,7 @@ Use `repo: builtin` to select them directly, or keep a supported remote hook con
 >
 > **Check implementation notes when behavior matters**
 >
-> The Rust implementations target the same purpose as their upstream hooks, but a hook can have documented differences in arguments, defaults, or edge cases. Check its entry in the [Hook Reference](<https://prek.j178.dev/dev/reference/built-in-hooks/#hook-reference>). To compare behavior, disable the fast path and run the pinned implementation.
+> The Rust implementations target the same purpose as their upstream hooks, but a hook can have documented differences in arguments, defaults, or edge cases. Check its entry in the [Hook Reference](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#hook-reference>). To compare behavior, disable the fast path and run the pinned implementation.
 
 ## Use built-in hooks directly
 
@@ -70,7 +70,7 @@ repos:
 >
 > In this mode, `prek` will still clone the repository and create the environment (e.g., a Python venv) to ensure full compatibility and fallback capabilities. However, the actual hook execution bypasses the environment and runs the native Rust code.
 
-See [fast-path support](<https://prek.j178.dev/dev/reference/built-in-hooks/#automatic-fast-path>) for the list of hooks that use the built-in implementation automatically. Other hooks run via the standard method.
+See [fast-path support](<https://prek.j178.dev/dev/reference/built-in-hooks/index.md#automatic-fast-path>) for the list of hooks that use the built-in implementation automatically. Other hooks run via the standard method.
 
 ### Run the repository implementation
 
