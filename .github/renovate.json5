@@ -121,7 +121,7 @@
     },
     {
       groupName: 'Docker images',
-      matchManagers: ['dockerfile'],
+      matchFileNames: ['Dockerfile'],
       minimumGroupSize: 2,
       separateMajorMinor: false,
     },
