@@ -38,7 +38,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-bloat
 
@@ -192,7 +192,7 @@ jobs:
           cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
-        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: hyperfine
 
