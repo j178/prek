@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.15.0,<2.0"]
+requires = ["maturin>=1.16.0,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -32,9 +32,9 @@ dev = ["rooster"]
 docs = [
   "llmstxt-standalone>=0.2.0",
   "mike",
-  "zensical>=0.0.72",
+  "zensical>=0.1.0",
 ]
-docker = ["cargo-zigbuild>=0.24.0"]
+docker = ["cargo-zigbuild>=0.24.1"]
 
 [tool.uv.sources]
 rooster = { git = "https://github.com/j178/rooster", rev = "c1901e113611dbe4c2c30917a4d4d392e6d0c679" }
