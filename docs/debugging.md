@@ -91,6 +91,24 @@ with:
 PREK_NO_FAST_PATH=1 prek run check-yaml --all-files
 ```
 
+## A hook command works in a terminal but fails in prek
+
+prek runs hook commands directly, without an interactive shell. Shell aliases
+and functions are not available, and prek does not load shell startup files such
+as `.bashrc` or `.zshrc`. A tool initialized by those files may work in your
+terminal but be unavailable to Git hooks, GUI Git clients, or CI.
+
+Check the command and working directory in the error, together with the original
+OS error. "No such file or directory" can mean a missing executable, working
+directory, or script interpreter; it does not necessarily mean the command is
+absent from `PATH`.
+
+Make sure the executable is installed and available on `PATH` in the environment
+that launches prek. For `language: system` hooks, prek does not install the tool
+for you. Use an absolute executable path or a wrapper script that explicitly
+sets up the required environment instead of relying on an alias or function.
+Relative paths are resolved from the hook's working directory.
+
 ## Cache problems
 
 Inspect the cache before removing anything:
