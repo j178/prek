@@ -298,25 +298,6 @@ impl Formatter for JsonFormatter<'_> {
 
         write_ascii_only_fragment(writer, fragment)
     }
-
-    // With `arbitrary_precision`, numbers arrive as their source text. Python keeps
-    // integers exact but parses floats, so only integers are written back verbatim.
-    fn write_number_str<W>(&mut self, writer: &mut W, value: &str) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        if value.contains(['.', 'e', 'E']) {
-            return match value.parse::<f64>() {
-                Ok(float) if float.is_finite() => self.pretty.write_f64(writer, float),
-                // Out of f64 range (`1e400`): keep the text, the `f64` path only knows finite values.
-                _ => writer.write_all(value.as_bytes()),
-            };
-        }
-        if value == "-0" {
-            return writer.write_all(b"0");
-        }
-        writer.write_all(value.as_bytes())
-    }
 }
 
 fn write_ascii_only_fragment<W>(writer: &mut W, fragment: &str) -> io::Result<()>
@@ -666,8 +647,9 @@ mod tests {
         Ok(())
     }
 
+    // Formatting must preserve numbers beyond f64's precision and range.
     #[test]
-    fn test_integers_keep_precision() -> Result<()> {
+    fn test_numbers_keep_precision() -> Result<()> {
         let args = PreparedArgs {
             auto_fix: false,
             ensure_ascii: true,
@@ -675,14 +657,26 @@ mod tests {
             ordered_top_keys: vec![],
             sort_keys: true,
         };
-        let json = r#"{"big": 123456789012345678901234567890, "neg": -18446744073709551617, "zero": -0, "f": 1.50, "huge": 1e400}"#;
+        let json = indoc::indoc! {r#"
+        {
+          "big": 123456789012345678901234567890,
+          "neg": -18446744073709551617,
+          "zero": -0,
+          "f": 1.50,
+          "decimal": 1.234567890123456789,
+          "huge": 1e400,
+          "tiny": 1e-400
+        }
+        "#};
         let expected = indoc::indoc! {r#"
         {
           "big": 123456789012345678901234567890,
-          "f": 1.5,
+          "decimal": 1.234567890123456789,
+          "f": 1.50,
           "huge": 1e+400,
           "neg": -18446744073709551617,
-          "zero": 0
+          "tiny": 1e-400,
+          "zero": -0
         }
         "#};
         assert_eq!(prettify_json(json, &args)?, expected);
