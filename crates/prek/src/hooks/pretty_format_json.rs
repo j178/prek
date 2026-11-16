@@ -647,6 +647,43 @@ mod tests {
         Ok(())
     }
 
+    // Formatting must preserve numbers beyond f64's precision and range.
+    #[test]
+    fn test_numbers_keep_precision() -> Result<()> {
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
+        let json = indoc::indoc! {r#"
+        {
+          "big": 123456789012345678901234567890,
+          "neg": -18446744073709551617,
+          "zero": -0,
+          "f": 1.50,
+          "decimal": 1.234567890123456789,
+          "huge": 1e400,
+          "tiny": 1e-400
+        }
+        "#};
+        let expected = indoc::indoc! {r#"
+        {
+          "big": 123456789012345678901234567890,
+          "decimal": 1.234567890123456789,
+          "f": 1.50,
+          "huge": 1e+400,
+          "neg": -18446744073709551617,
+          "tiny": 1e-400,
+          "zero": -0
+        }
+        "#};
+        assert_eq!(prettify_json(json, &args)?, expected);
+
+        Ok(())
+    }
+
     #[test]
     fn test_prepared_args_deduplicates_top_keys() {
         let args = Args {
