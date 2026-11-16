@@ -242,6 +242,48 @@ pub enum Error {
 
 /// Identify tags for a file at the given path.
 pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
+    tags_from_path_with(path, TagQuery::ALL)
+}
+
+/// The content checks needed to answer a set of type filters.
+///
+/// The default query uses only metadata and filename tags.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TagQuery {
+    shebang: bool,
+    text: bool,
+}
+
+impl TagQuery {
+    /// Request complete identification, including shebang and text/binary tags.
+    pub const ALL: Self = Self {
+        shebang: true,
+        text: true,
+    };
+
+    /// Request enough information to match filters referring to these tags.
+    pub fn from_tags(required: &TagSet) -> Self {
+        Self {
+            shebang: !required.is_disjoint(&tags::TAG_SET_INTERPRETER),
+            text: !required.is_disjoint(&tags::TAG_SET_TEXT_OR_BINARY),
+        }
+    }
+
+    /// Combine the information needed by two queries.
+    #[must_use]
+    pub fn union(self, other: Self) -> Self {
+        Self {
+            shebang: self.shebang || other.shebang,
+            text: self.text || other.text,
+        }
+    }
+}
+
+/// Identify the tags requested by `query`.
+///
+/// Requested tags have the same membership as in [`tags_from_path`]. The result may also include
+/// other tags discovered along the way. File metadata is always checked, even for an empty query.
+pub fn tags_from_path_with(path: &Path, query: TagQuery) -> Result<TagSet, Error> {
     let metadata = fs_err::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(tags::TAG_SET_DIRECTORY);
@@ -281,14 +323,14 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
 
     let filename_tags = tags_from_filename(path);
     tags |= &filename_tags;
-    if executable {
+    if query.shebang && executable {
         if let Ok(shebang) = parse_shebang(path) {
             let interpreter_tags = tags_from_interpreter(shebang[0].as_str());
             tags |= &interpreter_tags;
         }
     }
 
-    if tags.is_disjoint(&tags::TAG_SET_TEXT_OR_BINARY) {
+    if query.text && tags.is_disjoint(&tags::TAG_SET_TEXT_OR_BINARY) {
         if is_text_file(path) {
             tags.insert(tags::TAG_TEXT);
         } else {
@@ -628,6 +670,59 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("Tiltfile.dev"));
         assert_tagset(&tags, &["text", "tiltfile"]);
+    }
+
+    /// Requested tags must agree with full identification, including tags from executable files
+    /// whose names and contents suggest different types, and non-file paths with language suffixes.
+    #[test]
+    fn tag_queries_match_full_identification() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mut paths = Vec::new();
+        for (name, content, executable) in [
+            ("plain", b"plain text\n".as_slice(), false),
+            ("binary", b"\0binary\n", false),
+            ("tool", b"#!/usr/bin/env python3\nprint('hello')\n", true),
+            ("script.txt", b"#!/bin/sh\n\0\n", true),
+            ("script.json", b"#!/usr/bin/env python3\n{}\n", true),
+            ("Cargo.toml", b"[package]\n", false),
+        ] {
+            let path = dir.path().join(name);
+            fs_err::write(&path, content)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = if executable { 0o755 } else { 0o644 };
+                fs_err::set_permissions(&path, std::fs::Permissions::from_mode(mode))?;
+            }
+            #[cfg(not(unix))]
+            let _ = executable;
+            paths.push(path);
+        }
+        let directory = dir.path().join("directory.py");
+        fs_err::create_dir(&directory)?;
+        paths.push(directory);
+        #[cfg(unix)]
+        {
+            let link = dir.path().join("link.py");
+            fs_err::os::unix::fs::symlink(dir.path().join("missing"), &link)?;
+            paths.push(link);
+        }
+
+        for path in paths {
+            let full = super::tags_from_path(&path)?;
+            for tag in tags::ALL_TAGS {
+                let required = TagSet::from_tags([tag]);
+                let query = super::TagQuery::from_tags(&required);
+                let partial = super::tags_from_path_with(&path, query)?;
+                assert_eq!(
+                    required.is_subset(&partial),
+                    required.is_subset(&full),
+                    "{tag} for {}",
+                    path.display(),
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]

@@ -1277,6 +1277,61 @@ fn cookiecutter_template_directories_are_skipped() {
     "#);
 }
 
+/// A shared executable must match the child's interpreter filter and the parent's content filter.
+#[test]
+fn shared_file_matches_different_project_types() {
+    let context = TestEnv::new()
+        .with_config(indoc! {r"
+    files: ^sub/tool$
+    repos:
+      - repo: local
+        hooks:
+          - id: text
+            name: text
+            entry: echo
+            language: system
+            types: [text]
+            verbose: true
+    "})
+        .with_project_config(
+            "sub",
+            indoc! {r"
+    files: ^tool$
+    repos:
+      - repo: local
+        hooks:
+          - id: python
+            name: python
+            entry: echo
+            language: system
+            types: [python]
+            verbose: true
+    "},
+        )
+        .with_executable_file("sub/tool", "#!/usr/bin/env python3\nprint('hello')\n")
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ✓ sub
+      python.................................................................Passed
+      - hook id: python
+      - duration: [TIME]
+
+        tool
+    ✓ <workspace>
+      text...................................................................Passed
+      - hook id: text
+      - duration: [TIME]
+
+        sub/tool
+
+    ----- stderr -----
+    ");
+}
+
 #[test]
 fn orphan_projects() {
     let context = TestEnv::new().init_git();

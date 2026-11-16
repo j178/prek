@@ -212,6 +212,60 @@ fn file_types() {
     "#);
 }
 
+/// Later filters must use the initial shebang and text/binary tags even after a hook rewrites them.
+#[test]
+fn file_types_are_captured_before_hooks_run() {
+    let context = TestEnv::new()
+        .with_executable_file("tool", "#!/usr/bin/env python3\nprint('hello')\n")
+        .with_config(indoc::indoc! {r##"
+        files: ^tool$
+        repos:
+          - repo: local
+            hooks:
+              - id: rewrite
+                name: rewrite
+                language: system
+                entry: python3 -c 'from pathlib import Path; Path("tool").write_bytes(b"#!/bin/sh\n\x00\n")'
+                pass_filenames: false
+              - id: python
+                name: python
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:])'
+                types: [python]
+                exclude_types: [binary]
+                verbose: true
+              - id: shell
+                name: shell
+                language: system
+                entry: echo
+                types_or: [shell]
+              - id: binary
+                name: binary
+                language: system
+                entry: echo
+                types: [binary]
+        "##})
+        .init_git();
+
+    cmd_snapshot!(context, context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    rewrite..................................................................Failed
+    - hook id: rewrite
+    - files were modified by this hook
+    python...................................................................Passed
+    - hook id: python
+    - duration: [TIME]
+
+      ['tool']
+    shell................................................(no files to check)Skipped
+    binary...............................................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+}
+
 /// Run from a subdirectory. File arguments should be fixed to be relative to the root.
 #[test]
 fn subdirectory() {

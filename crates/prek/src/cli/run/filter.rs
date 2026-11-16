@@ -7,13 +7,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use globset::Glob;
 use prek_consts::env_vars::{EnvVars, EnvVarsRead};
-use prek_identify::{TagSet, tags, tags_from_filename, tags_from_path};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use prek_identify::{TagQuery, TagSet, tags, tags_from_filename, tags_from_path_with};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::io::AsyncReadExt;
 use tracing::{debug, error, instrument};
 
-use crate::config::{FilePattern, GlobPatterns, Stage};
+use crate::config::{FilePattern, GlobPatterns, PassFilenames, Stage};
 use crate::fs::PathClean;
 use crate::git::FileEntry;
 use crate::hook::Hook;
@@ -157,16 +157,25 @@ pub(crate) struct FileTagCache {
 
 impl FileTagCache {
     pub(crate) fn from_paths(paths: &[PathBuf]) -> Self {
-        let tags_by_file = paths.par_iter().map(|path| identify_file(path)).collect();
+        let tags_by_file = paths
+            .par_iter()
+            .map(|path| identify_file(path, TagQuery::ALL))
+            .collect();
         Self { tags_by_file }
     }
 
-    fn from_files(files: &[FileEntry]) -> Self {
+    fn from_files(files: &[FileEntry], queries: &[Option<TagQuery>]) -> Self {
         let tags_by_file = files
             .par_iter()
-            .map(|file| match file.deleted_mode {
-                Some(mode) => Some(deleted_file_tags(&file.path, mode)),
-                None => identify_file(&file.path),
+            .zip(queries)
+            .map(|(file, query)| {
+                let Some(query) = query else {
+                    return None;
+                };
+                match file.deleted_mode {
+                    Some(mode) => Some(deleted_file_tags(&file.path, mode)),
+                    None => identify_file(&file.path, *query),
+                }
             })
             .collect();
         Self { tags_by_file }
@@ -177,8 +186,8 @@ impl FileTagCache {
     }
 }
 
-fn identify_file(path: &Path) -> Option<TagSet> {
-    match tags_from_path(path) {
+fn identify_file(path: &Path, query: TagQuery) -> Option<TagSet> {
+    match tags_from_path_with(path, query) {
         Ok(tags) => Some(tags),
         Err(err) => {
             error!(filename = ?path.display(), error = %err, "Failed to get tags");
@@ -367,7 +376,11 @@ pub(crate) struct RunFileIndex<'a> {
 }
 
 impl<'a> RunFileIndex<'a> {
-    pub(crate) fn new(input: &'a RunInput, projects: &[Arc<Project>]) -> Self {
+    pub(crate) fn new<'h>(
+        input: &'a RunInput,
+        projects: &[Arc<Project>],
+        hooks: impl IntoIterator<Item = &'h Hook>,
+    ) -> Self {
         let RunInput::Files(filenames) = input else {
             return Self {
                 projects: Vec::new(),
@@ -382,6 +395,18 @@ impl<'a> RunFileIndex<'a> {
                 .all(|(idx, project)| project.idx() == idx),
             "workspace projects must be indexed in storage order"
         );
+
+        let mut project_queries = vec![None::<TagQuery>; projects.len()];
+        for hook in hooks {
+            if hook.always_run && hook.pass_filenames == PassFilenames::None {
+                continue;
+            }
+            let mut required = hook.types;
+            required |= &hook.types_or;
+            required |= &hook.exclude_types;
+            let query = project_queries[hook.project().idx()].get_or_insert_default();
+            *query = query.union(TagQuery::from_tags(&required));
+        }
 
         let mut project_tree = ProjectPathNode::default();
         let project_filters = projects
@@ -405,6 +430,9 @@ impl<'a> RunFileIndex<'a> {
             })
             .collect::<Vec<_>>();
 
+        // Keep the initial tag snapshot even if an earlier hook changes a file's contents or mode.
+        // Shared files need every owning project's query; unselected or excluded files need none.
+        let mut file_queries = vec![None::<TagQuery>; filenames.len()];
         let mut matching_projects = Vec::new();
         for (file_idx, file) in filenames.iter().enumerate() {
             project_tree.matching_projects(&file.path, &mut matching_projects);
@@ -423,6 +451,10 @@ impl<'a> RunFileIndex<'a> {
                         hook_path,
                         deleted: file.deleted_mode.is_some(),
                     });
+                    if let Some(project_query) = project_queries[project_idx] {
+                        let query = file_queries[file_idx].get_or_insert_default();
+                        *query = query.union(project_query);
+                    }
                 }
                 if project.config().orphan.unwrap_or(false) {
                     break;
@@ -432,7 +464,7 @@ impl<'a> RunFileIndex<'a> {
 
         Self {
             projects: project_files,
-            tag_cache: FileTagCache::from_files(filenames),
+            tag_cache: FileTagCache::from_files(filenames, &file_queries),
         }
     }
 

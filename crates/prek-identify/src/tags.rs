@@ -342,6 +342,10 @@ pub const TAG_SET_FILE: TagSet = TagSet::new(&[78]);
 pub const TAG_SET_DIRECTORY: TagSet = TagSet::new(&[58]);
 pub const TAG_SET_SYMLINK: TagSet = TagSet::new(&[255]);
 pub const TAG_SET_SOCKET: TagSet = TagSet::new(&[245]);
+pub const TAG_SET_INTERPRETER: TagSet = TagSet::new(&[
+    5, 12, 14, 16, 35, 43, 54, 73, 75, 130, 146, 182, 192, 193, 194, 195, 219, 220, 221, 230, 241,
+    242, 258, 323,
+]);
 pub const TAG_SET_TEXT: TagSet = TagSet::new(&[262]);
 pub const TAG_SET_TEXT_OR_BINARY: TagSet = TagSet::new(&[21, 262]);
 pub const TAG_SET_EXECUTABLE_TEXT: TagSet = TagSet::new(&[74, 262]);
