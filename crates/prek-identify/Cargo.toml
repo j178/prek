@@ -12,7 +12,6 @@ serde = ["dep:serde"]
 schemars = ["dep:schemars"]
 
 [dependencies]
-anyhow = { workspace = true }
 fs-err = { workspace = true }
 phf = { workspace = true, default-features = false, features = ["macros"] }
 schemars = { workspace = true, optional = true }
@@ -21,6 +20,7 @@ shlex = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 indoc = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
