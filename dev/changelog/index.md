@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.5.11
+
+Released on 2026-11-16.
+
+### Enhancements
+
+- Add `prek install --hook-command` to customize how Git hooks launch prek ([\#3002](<https://github.com/j178/prek/pull/3002>))
+- Bundle the `py.typed` marker in wheels ([\#3011](<https://github.com/j178/prek/pull/3011>))
+- Match installer glibc requirements to release builds ([\#3024](<https://github.com/j178/prek/pull/3024>))
+- Stream completed hook groups without progress output ([\#3004](<https://github.com/j178/prek/pull/3004>))
+- Support NUL-separated file lists with `--files0-from` ([\#3013](<https://github.com/j178/prek/pull/3013>))
+
+### Performance
+
+- Infer hook effects to skip unnecessary Git diffs ([\#3014](<https://github.com/j178/prek/pull/3014>))
+- Automatically group read-only hooks ([\#3020](<https://github.com/j178/prek/pull/3020>))
+- Cache file contents across read-only builtin hooks ([\#3021](<https://github.com/j178/prek/pull/3021>))
+
+### Bug fixes
+
+- Preserve number precision in `pretty-format-json` ([\#3033](<https://github.com/j178/prek/pull/3033>))
+- Quote installed hook arguments for the shell ([\#3034](<https://github.com/j178/prek/pull/3034>))
+
+### Contributors
+
+- @j178
+- @patrick-immometrica
+- @MaicoTimmerman
+- @tisonkun
+
 ## 0.5.10
 
 Released on 2026-11-04.
