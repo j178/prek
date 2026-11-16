@@ -222,9 +222,9 @@ dependencies = [
 
 [[package]]
 name = "asyncband"
-version = "0.7.4"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d2050892d4691cf110586070786712b504985a4d37ed64a9cd8a402718e1706"
+checksum = "5e53c31fb18f42e765610b2146531390e56966f601d8ffca530d292a34fe4218"
 dependencies = [
  "hashbrown",
 ]
