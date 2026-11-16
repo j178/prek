@@ -328,6 +328,36 @@ impl RunReport {
         self.progress.on_complete();
 
         if summary.failed && show_diff_on_failure && summary.modified_files {
+            let color = if *USE_COLOR {
+                "--color=always"
+            } else {
+                "--color=never"
+            };
+            let diff = git::git_cmd()?
+                .current_dir(workspace.root())
+                .arg("--no-pager")
+                .arg("diff")
+                .hidden_args(["--no-ext-diff"])
+                .arg(color)
+                .arg("--")
+                .arg(workspace.root())
+                // Like the hook snapshots, this diff is best-effort: a missing
+                // blob must not turn a failed hook run into a fatal error.
+                .check(false)
+                .output()
+                .await?;
+            // `output()` captures stderr, so forward Git's own error message.
+            std::io::stderr().write_all(&diff.stderr)?;
+
+            // Only a successful empty diff means the final tree has no changes.
+            if diff.status.success() && diff.stdout.is_empty() {
+                writeln!(
+                    self.printer.stdout_important(),
+                    "Hooks made changes, but the final diff is empty; later hooks may have reverted them."
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
+
             if EnvVars::is_under_ci() {
                 writeln!(
                     self.printer.stdout(),
@@ -348,23 +378,7 @@ impl RunReport {
                 "All changes made by hooks:"
             )?;
 
-            let color = if *USE_COLOR {
-                "--color=always"
-            } else {
-                "--color=never"
-            };
-            git::git_cmd()?
-                .current_dir(workspace.root())
-                .arg("--no-pager")
-                .arg("diff")
-                .hidden_args(["--no-ext-diff"])
-                .arg(color)
-                .arg("--")
-                .arg(workspace.root())
-                .check(true)
-                .spawn()?
-                .wait()
-                .await?;
+            std::io::stdout().write_all(&diff.stdout)?;
         }
 
         if summary.failed {
