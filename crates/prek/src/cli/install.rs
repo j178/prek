@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -287,7 +286,7 @@ async fn install_hook_script(
     // Add include/skip selectors.
     if let Some(selectors) = selectors {
         for include in selectors.includes() {
-            args.push(include.as_normalized_flag());
+            args.push(shlex::try_quote(&include.as_normalized_flag())?.into_owned());
         }
 
         // Find any skip selectors from environment variables.
@@ -305,8 +304,8 @@ async fn install_hook_script(
         }
 
         for skip in selectors.skips() {
-            if matches!(skip.source(), SelectorSource::CliFlag(_)) {
-                args.push(skip.as_normalized_flag());
+            if let SelectorSource::CliFlag(flag) = skip.source() {
+                args.push(format!("{flag}={}", shlex::try_quote(&skip.to_string())?));
             }
         }
     }
@@ -323,7 +322,10 @@ async fn install_hook_script(
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
     if let Some(config) = config {
-        args.push(format!("--config={}", config.display()));
+        args.push(format!(
+            "--config={}",
+            shlex::try_quote(&config.display().to_string())?
+        ));
 
         write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
@@ -331,7 +333,10 @@ async fn install_hook_script(
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.is_empty() {
-            args.push(format!("--cd={}", relative_path.display()));
+            args.push(format!(
+                "--cd={}",
+                shlex::try_quote(&relative_path.display().to_string())?
+            ));
         }
 
         // Show workspace path if it's not the root project.
@@ -372,10 +377,10 @@ async fn install_hook_script(
 
         HERE="$(cd "$(dirname "$0")" && pwd)"
         {setup}
-        exec {command} hook-impl --hook-dir "$HERE" --script-version {CUR_SCRIPT_VERSION} {args} -- "$@"
+        exec {command} hook-impl --hook-dir="$HERE" --script-version={CUR_SCRIPT_VERSION} {args} -- "$@"
 
         "#,
-        args = args.iter().map(|arg| shell_quote(arg)).collect::<Result<Vec<_>, _>>()?.join(" "),
+        args = args.join(" "),
     };
 
     fs_err::OpenOptions::new()
@@ -403,21 +408,9 @@ async fn install_hook_script(
     Ok(())
 }
 
-/// Quotes `arg` for the generated `sh` script, leaving plain flags and paths readable.
-fn shell_quote(arg: &str) -> Result<Cow<'_, str>, shlex::QuoteError> {
-    if !arg.is_empty()
-        && arg
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b"-_./=:,+@%".contains(&b))
-    {
-        return Ok(Cow::Borrowed(arg));
-    }
-    shlex::try_quote(arg)
-}
-
 /// The version of the hook script. Increment this when the script changes in a way that
 /// requires re-installation.
-pub(crate) static CUR_SCRIPT_VERSION: usize = 5;
+pub(crate) static CUR_SCRIPT_VERSION: usize = 4;
 
 const SCRIPT_ID: &str = "182c10f181da4464a3eec51b83331688";
 
