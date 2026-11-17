@@ -4,6 +4,7 @@
 #     "identify>=2.6.16",
 # ]
 # ///
+import subprocess
 from pathlib import Path
 
 from identify.identify import ALL_TAGS
@@ -27,6 +28,7 @@ TAG_SET_CONSTS = [
     ("TAG_SET_DIRECTORY", ["directory"]),
     ("TAG_SET_SYMLINK", ["symlink"]),
     ("TAG_SET_SOCKET", ["socket"]),
+    ("TAG_SET_INTERPRETER", set().union(*INTERPRETERS.values())),
     ("TAG_SET_TEXT", ["text"]),
     ("TAG_SET_TEXT_OR_BINARY", ["text", "binary"]),
     ("TAG_SET_EXECUTABLE_TEXT", ["executable", "text"]),
@@ -111,6 +113,7 @@ def gen():
 
 def main():
     gen()
+    subprocess.run(["rustfmt", TAGS_FILE], check=True, cwd=SELF_DIR)
 
 
 if __name__ == "__main__":
