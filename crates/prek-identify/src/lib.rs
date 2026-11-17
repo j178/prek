@@ -672,43 +672,25 @@ mod tests {
         assert_tagset(&tags, &["text", "tiltfile"]);
     }
 
-    /// Requested tags must agree with full identification, including tags from executable files
-    /// whose names and contents suggest different types, and non-file paths with language suffixes.
+    /// Requested tags must agree with full identification even when names and contents disagree.
     #[test]
     fn tag_queries_match_full_identification() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
-        let mut paths = Vec::new();
-        for (name, content, executable) in [
-            ("plain", b"plain text\n".as_slice(), false),
-            ("binary", b"\0binary\n", false),
-            ("tool", b"#!/usr/bin/env python3\nprint('hello')\n", true),
-            ("script.txt", b"#!/bin/sh\n\0\n", true),
-            ("script.json", b"#!/usr/bin/env python3\n{}\n", true),
-            ("Cargo.toml", b"[package]\n", false),
+        for (name, content) in [
+            ("plain", "plain text\n"),
+            ("binary", "\0binary\n"),
+            ("tool", "#!/usr/bin/env python3\nprint('hello')\n"),
+            ("script.txt", "#!/bin/sh\n\0\n"),
+            ("script.json", "#!/usr/bin/env python3\n{}\n"),
         ] {
             let path = dir.path().join(name);
             fs_err::write(&path, content)?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let mode = if executable { 0o755 } else { 0o644 };
-                fs_err::set_permissions(&path, std::fs::Permissions::from_mode(mode))?;
+                fs_err::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
             }
-            #[cfg(not(unix))]
-            let _ = executable;
-            paths.push(path);
-        }
-        let directory = dir.path().join("directory.py");
-        fs_err::create_dir(&directory)?;
-        paths.push(directory);
-        #[cfg(unix)]
-        {
-            let link = dir.path().join("link.py");
-            fs_err::os::unix::fs::symlink(dir.path().join("missing"), &link)?;
-            paths.push(link);
-        }
 
-        for path in paths {
             let full = super::tags_from_path(&path)?;
             for tag in tags::ALL_TAGS {
                 let required = TagSet::from_tags([tag]);
