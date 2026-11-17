@@ -33,6 +33,40 @@ with pre-commit configurations and hooks, so you can use it as a drop-in replace
 
 Although prek is pretty new, it’s already powering real‑world projects like [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
 
+## Sponsors
+
+Thank you to everyone supporting prek's development, including our private sponsors.
+
+### Premium sponsors
+
+<table>
+  <tr>
+    <td align="center" width="600">
+      <br />
+      <a href="https://github.com/sponsors/j178"><strong>Your logo here</strong></a>
+      <br />
+      Become prek's first premium sponsor.
+      <br /><br />
+    </td>
+  </tr>
+</table>
+
+### Community sponsors
+
+<p>
+  <a href="https://github.com/frostming"><img src="https://avatars.githubusercontent.com/u/16336606?s=96&amp;v=4" width="48" height="48" alt="Frost Ming (@frostming)" title="Frost Ming (@frostming)" /></a>
+  <a href="https://github.com/ssbarnea"><img src="https://avatars.githubusercontent.com/u/102495?s=96&amp;v=4" width="48" height="48" alt="Sorin Sbarnea (@ssbarnea)" title="Sorin Sbarnea (@ssbarnea)" /></a>
+  <a href="https://github.com/ddanier"><img src="https://avatars.githubusercontent.com/u/113563?s=96&amp;v=4" width="48" height="48" alt="David Danier (@ddanier)" title="David Danier (@ddanier)" /></a>
+  <a href="https://github.com/tabletcorry"><img src="https://avatars.githubusercontent.com/u/456754?s=96&amp;v=4" width="48" height="48" alt="Corry Haines (@tabletcorry)" title="Corry Haines (@tabletcorry)" /></a>
+  <a href="https://github.com/qorbani"><img src="https://avatars.githubusercontent.com/u/771382?s=96&amp;v=4" width="48" height="48" alt="Reza Qorbani (@qorbani)" title="Reza Qorbani (@qorbani)" /></a>
+  <a href="https://github.com/kraker"><img src="https://avatars.githubusercontent.com/u/6409212?s=96&amp;v=4" width="48" height="48" alt="Alex Kraker (@kraker)" title="Alex Kraker (@kraker)" /></a>
+  <a href="https://github.com/janosh"><img src="https://avatars.githubusercontent.com/u/30958850?s=96&amp;v=4" width="48" height="48" alt="Janosh Riebesell (@janosh)" title="Janosh Riebesell (@janosh)" /></a>
+  <a href="https://github.com/udaya2899"><img src="https://avatars.githubusercontent.com/u/35005125?s=96&amp;v=4" width="48" height="48" alt="Udaya Prakash (@udaya2899)" title="Udaya Prakash (@udaya2899)" /></a>
+  <a href="https://github.com/openclaw"><img src="https://avatars.githubusercontent.com/u/252820863?s=96&amp;v=4" width="48" height="48" alt="openclaw" title="openclaw" /></a>
+</p>
+
+[Become a sponsor](https://github.com/sponsors/j178) and help keep prek growing.
+
 <!-- --8<-- [start:features] -->
 
 ## Features
