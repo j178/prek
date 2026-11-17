@@ -33,6 +33,39 @@ with pre-commit configurations and hooks, so you can use it as a drop-in replace
 
 Although prek is pretty new, it’s already powering real‑world projects like [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
 
+<!-- --8<-- [start:sponsors] -->
+
+## Sponsors
+
+Thank you to everyone supporting prek's development, including our private sponsors.
+
+### Logo sponsors
+
+<table>
+  <tr>
+    <td align="center" width="600">
+      <br />
+      <a href="https://github.com/sponsors/j178"><strong>Your logo here</strong></a>
+      <br />
+      Become a sponsor and feature your logo here.
+      <br /><br />
+    </td>
+  </tr>
+</table>
+
+### Community sponsors
+
+[Frost Ming](https://github.com/frostming) ·
+[Corry Haines](https://github.com/tabletcorry) ·
+[Alex Kraker](https://github.com/kraker) ·
+[Janosh Riebesell](https://github.com/janosh) ·
+[Udaya Prakash](https://github.com/udaya2899) ·
+[openclaw](https://github.com/openclaw)
+
+[Become a sponsor](https://github.com/sponsors/j178) and help keep prek growing.
+
+<!-- --8<-- [end:sponsors] -->
+
 <!-- --8<-- [start:features] -->
 
 ## Features
