@@ -15,7 +15,7 @@ use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::python::PythonRequest;
 use crate::languages::python::uv::Uv;
-use crate::languages::version::{LanguageRequest, ToolchainSource};
+use crate::languages::version::{LanguageRequest, ToolchainSource, UNQUALIFIED_REQUEST_KEY};
 use crate::languages::{ExecutionEnvironment, LanguageBackend};
 use crate::process;
 use crate::process::Cmd;
@@ -58,8 +58,14 @@ static PYTHON_INFO_CACHE: LazyLock<OnceMap<PathBuf, Arc<PythonInfo>, FxBuildHash
 async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError> {
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
     import sys
-    info = ".".join(map(str, sys.version_info[:3])) + "\n" + sys.base_exec_prefix
-    sys.stdout.buffer.write(info.encode("utf-8"))
+    v = sys.version_info
+    version = ".".join(map(str, v[:3]))
+    # Encode the PEP 440 prerelease level and serial as a semver prerelease, so a `3.13.0rc1`
+    # request is not satisfied by a final `3.13.0` or by a different release candidate.
+    pre = {"alpha": "a", "beta": "b", "candidate": "rc"}.get(v.releaselevel)
+    if pre:
+        version += f"-{pre}.{v.serial}"
+    sys.stdout.buffer.write((version + "\n" + sys.base_exec_prefix).encode("utf-8"))
     "#};
 
     let stdout = Cmd::new(python)
@@ -149,6 +155,12 @@ impl LanguageBackend for Python {
 
         info.with_language_version(python_info.version)
             .with_toolchain(python_info.python_exec);
+        let request: &PythonRequest = hook.language_request.version();
+        if request.is_any() {
+            // The unqualified request picked this interpreter, so record it: a prerelease it had
+            // nothing else to choose from stays reusable instead of being rebuilt every run.
+            info.with_extra(UNQUALIFIED_REQUEST_KEY, "1");
+        }
 
         info.persist_env_path();
 
@@ -203,6 +215,8 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
         PythonRequest::MajorMinorPatch(major, minor, patch) => {
             Some(format!("{major}.{minor}.{patch}"))
         }
+        // uv understands PEP 440 prerelease requests.
+        PythonRequest::Prerelease(_, raw) => Some(raw.clone()),
         PythonRequest::Range(_, raw) => Some(raw.clone()),
     }
 }
