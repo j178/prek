@@ -109,6 +109,8 @@ impl ProgressReporter {
 impl From<Printer> for ProgressReporter {
     fn from(printer: Printer) -> Self {
         let multi = MultiProgress::with_draw_target(printer.target());
+        multi.set_move_cursor(true);
+
         let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
         root.enable_steady_tick(Duration::from_millis(200));
         root.set_style(
