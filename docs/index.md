@@ -13,6 +13,8 @@
 
     Although prek is pretty new, it's already powering real‑world projects like [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you're looking for an alternative to `pre-commit`, please give it a try—we'd love your feedback!
 
+--8<-- "README.md:sponsors"
+
 --8<-- "README.md:features"
 
 ## Where to Start
