@@ -275,7 +275,9 @@ async fn hook_run_options(
             run_args.file_selection.to_ref = Some(args[1].to_string_lossy().into_owned());
             run_args.extra.checkout_type = Some(args[2].to_string_lossy().into_owned());
         }
-        HookType::PostMerge => run_args.extra.is_squash_merge = args[0] == "1",
+        HookType::PostMerge => {
+            run_args.extra.is_squash_merge = Some(args[0].to_string_lossy().into_owned());
+        }
         HookType::PostRewrite => {
             run_args.extra.rewrite_command = Some(args[0].to_string_lossy().into_owned());
         }
