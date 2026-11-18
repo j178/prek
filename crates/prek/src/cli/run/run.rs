@@ -420,8 +420,8 @@ fn set_env_vars(
             std::env::set_var("PRE_COMMIT_CHECKOUT_TYPE", checkout);
         }
 
-        if args.is_squash_merge {
-            std::env::set_var("PRE_COMMIT_SQUASH_MERGE", "1");
+        if let Some(is_squash_merge) = &args.is_squash_merge {
+            std::env::set_var("PRE_COMMIT_IS_SQUASH_MERGE", is_squash_merge);
         }
 
         if let Some(command) = &args.rewrite_command {

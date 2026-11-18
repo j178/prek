@@ -535,7 +535,7 @@ pub(crate) struct RunExtraArgs {
     #[arg(long, hide = true)]
     pub(crate) checkout_type: Option<String>,
     #[arg(long, hide = true)]
-    pub(crate) is_squash_merge: bool,
+    pub(crate) is_squash_merge: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) rewrite_command: Option<String>,
 }
