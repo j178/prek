@@ -96,9 +96,9 @@ checking that they do not modify the same files or contend for shared state.
 
 ## Keep the existing hook during rollout
 
-If `.git/hooks/<hook-name>` already belongs to another tool, a normal
-`prek install` moves it to `<hook-name>.legacy` and installs prek in migration
-mode. The prek shim runs both hook implementations.
+If `.git/hooks/<hook-name>` contains a custom hook or belongs to a tool other
+than prek or pre-commit, a normal `prek install` moves it to `<hook-name>.legacy`
+and installs prek in migration mode. The prek shim runs both hook implementations.
 
 ```bash
 prek install
