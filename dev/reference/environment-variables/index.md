@@ -136,7 +136,7 @@ prek exports `PRE_COMMIT=1` to hook processes. It also exports the following var
 | `PRE_COMMIT_LOCAL_BRANCH`, `PRE_COMMIT_REMOTE_BRANCH` | `pre-push` local and remote refs, including branches and tags |
 | `PRE_COMMIT_REMOTE_NAME`, `PRE_COMMIT_REMOTE_URL` | `pre-push` remote values |
 | `PRE_COMMIT_CHECKOUT_TYPE` | The checkout flag supplied to `post-checkout` |
-| `PRE_COMMIT_SQUASH_MERGE` | Set to `1` for a squash merge |
+| `PRE_COMMIT_IS_SQUASH_MERGE` | The flag supplied to `post-merge`: `1` for a squash merge, `0` otherwise |
 | `PRE_COMMIT_REWRITE_COMMAND` | The command supplied to `post-rewrite` |
 
 These values describe the current hook invocation. Hooks should tolerate a variable being absent when they also support stages where Git does not provide that value.
