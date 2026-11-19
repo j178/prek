@@ -4,7 +4,9 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hooks::{FixArgs, HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{
+    BINARY_PROBE_SIZE, FixArgs, HookOutput, looks_binary, parse_hook_args, run_blocking_file_checks,
+};
 
 /// Runs the `end-of-file-fixer` hook.
 pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> {
@@ -59,34 +61,66 @@ fn fix_eof(file_path: &Path, check: bool) -> Result<bool> {
     Ok(true)
 }
 
+/// Compute the target length for a newly opened file, including the binary-file check.
 fn fixed_file_len(reader: &mut (impl Read + Seek), file_size: u64) -> Result<u64> {
-    let mut buf = [0u8; 4096];
-    let mut offset = file_size;
-    let mut ending_len = 0;
-    let mut next_byte = None;
+    let mut buf = [0; BINARY_PROBE_SIZE];
+    let fits_in_buffer = file_size <= buf.len() as u64;
+    // Small files fit in the binary probe. Larger files often need only a content byte and CRLF.
+    let mut len = if fits_in_buffer {
+        usize::try_from(file_size)?
+    } else {
+        3
+    };
+    let mut offset = file_size - len as u64;
 
-    while offset > 0 {
-        let block_size = usize::try_from(offset.min(buf.len() as u64))?;
-        offset -= block_size as u64;
-        reader.seek(SeekFrom::Start(offset))?;
-        reader.read_exact(&mut buf[..block_size])?;
-
-        for (index, &byte) in buf[..block_size].iter().enumerate().rev() {
-            if !matches!(byte, b'\r' | b'\n') {
-                // Files without a trailing line ending need an appended LF.
-                return Ok(offset + index as u64 + 1 + ending_len.max(1));
-            }
-            ending_len = if byte == b'\r' && next_byte == Some(b'\n') {
-                2
-            } else {
-                1
-            };
-            // Preserve CRLF detection across block boundaries.
-            next_byte = Some(byte);
+    let fixed_len = loop {
+        if !fits_in_buffer {
+            reader.seek(SeekFrom::Start(offset))?;
         }
-    }
+        let tail = &mut buf[..len];
+        reader.read_exact(tail)?;
+        if let Some(len) = fixed_tail_len(tail) {
+            break offset + len as u64;
+        }
+        if offset == 0 {
+            return Ok(0);
+        }
 
-    Ok(0)
+        // Overlap two bytes so the first CRLF after the body is in the same window.
+        let end = offset + 2;
+        offset = end.saturating_sub(buf.len() as u64);
+        len = usize::try_from(end - offset)?;
+    };
+
+    if fixed_len == file_size {
+        return Ok(file_size);
+    }
+    let prefix = if offset == 0 {
+        // Any bytes beyond this window were already scanned and contained only CR/LF.
+        &buf[..len]
+    } else {
+        reader.rewind()?;
+        reader.read_exact(&mut buf)?;
+        &buf[..]
+    };
+    Ok(if looks_binary(prefix) {
+        file_size
+    } else {
+        fixed_len
+    })
+}
+
+/// Keep the first trailing line ending, or make room for an LF if the body ends at EOF.
+/// A window containing only CR/LF needs more context from the preceding bytes.
+fn fixed_tail_len(tail: &[u8]) -> Option<usize> {
+    let last = tail.iter().rposition(|b| !matches!(b, b'\r' | b'\n'))?;
+    let body_len = last + 1;
+    let ending_len = if tail[body_len..].starts_with(b"\r\n") {
+        2
+    } else {
+        1
+    };
+    Some(body_len + ending_len)
 }
 
 #[cfg(test)]
@@ -131,38 +165,39 @@ mod tests {
         Ok(())
     }
 
+    /// Preserve the body's CRLF even when the following blank lines use LF
+    /// and the body and its terminator fall in different reads.
     #[tokio::test]
-    async fn test_no_line_ending_1() -> Result<()> {
+    async fn preserves_crlf_before_a_long_run_of_lfs() -> Result<()> {
         let dir = tempdir()?;
+        let mut content = b"keep\r\n".to_vec();
+        content.extend(std::iter::repeat_n(b'\n', 8192));
+        let path = create_test_file(&dir, "mixed.txt", &content).await?;
 
-        // For files without line endings, just append "\n" at the end, no matter
-        // what line endings are previously used.
-        // This is consistent with the behavior of `pre-commit`.
+        fix_file(&path, &path, false)?;
+        assert_eq!(fs_err::read(path)?, b"keep\r\n");
+        Ok(())
+    }
 
-        let content = b"line1\nline2\nline3";
-        let file_path = create_test_file(&dir, "unix_no_eof.txt", content).await?;
-        let result = fix_file(&file_path, &file_path, false)?;
-        assert_eq!(result.exit_status, 1, "Should fix the file");
-        assert!(result.output.as_bytes().contains_str("Fixing"));
-        let new_content = fs_err::tokio::read(&file_path).await?;
-        assert_eq!(new_content, b"line1\nline2\nline3\n");
+    /// Appending a missing LF preserves the original bytes, including earlier line endings.
+    #[tokio::test]
+    async fn appends_lf_to_text_without_a_final_newline() -> Result<()> {
+        let dir = tempdir()?;
+        let cases: &[(&str, &[u8])] = &[
+            ("lf.txt", b"one\ntwo"),
+            ("crlf.txt", b"one\r\ntwo"),
+            ("mixed.txt", b"one\r\ntwo\nthree"),
+            ("utf8-bom.txt", "\u{feff}中文".as_bytes()),
+            ("gbk.txt", b"\xd6\xd0\xce\xc4"), // 中文
+        ];
+        for &(name, contents) in cases {
+            let path = create_test_file(&dir, name, contents).await?;
+            let result = fix_file(&path, &path, false)?;
 
-        let content = b"line1\r\nline2\nline3\r\nline4";
-        let file_path = create_test_file(&dir, "mixed.txt", content).await?;
-        let result = fix_file(&file_path, &file_path, false)?;
-        assert_eq!(result.exit_status, 1, "Should fix the file");
-        assert!(result.output.as_bytes().contains_str("Fixing"));
-        let new_content = fs_err::tokio::read(&file_path).await?;
-        assert_eq!(new_content, b"line1\r\nline2\nline3\r\nline4\n");
-
-        let content = b"line1\r\nline2\r\nline3";
-        let file_path = create_test_file(&dir, "windows_no_eof.txt", content).await?;
-        let result = fix_file(&file_path, &file_path, false)?;
-        assert_eq!(result.exit_status, 1, "Should fix the file");
-        assert!(result.output.as_bytes().contains_str("Fixing"));
-        let new_content = fs_err::tokio::read(&file_path).await?;
-        assert_eq!(new_content, b"line1\r\nline2\r\nline3\n");
-
+            assert_eq!(result.exit_status, 1, "{name}");
+            assert!(result.output.as_bytes().contains_str("Fixing"), "{name}");
+            assert_eq!(fs_err::read(&path)?, [contents, b"\n"].concat(), "{name}");
+        }
         Ok(())
     }
 

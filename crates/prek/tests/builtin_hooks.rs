@@ -73,6 +73,56 @@ fn builtin_hooks_unknown_hook() {
     "#);
 }
 
+/// Text fixers must preserve BOM-marked documents and files with a NUL in the prefix.
+#[test]
+fn fixers_preserve_binary_and_wide_text_files() -> Result<()> {
+    // Both encodings contain apparent LF and tab bytes but no NUL.
+    let text = "\u{feff}ऊपर";
+    let utf16_le: Vec<_> = text.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let utf16_be: Vec<_> = text.encode_utf16().flat_map(u16::to_be_bytes).collect();
+
+    // All fixers should skip a file with a NUL in the last byte of the probe.
+    let mut embedded_nul = vec![b'a'; 8191];
+    embedded_nul.extend_from_slice(b"\0tail ");
+    let files: [(&str, &[u8]); 6] = [
+        ("settings.ini", b"\xff\xfea\0=\x001\0"),
+        ("little-endian.txt", &utf16_le),
+        ("big-endian.txt", &utf16_be),
+        ("requirements.txt", b"\xff\xfe\0\0a\0\0\0"),
+        ("note.txt", b"\0\0\xfe\xff\0\0\0a\0\0\0 "),
+        ("requirements-export.txt", &embedded_nul),
+    ];
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: builtin
+                hooks:
+                  - id: end-of-file-fixer
+                  - id: trailing-whitespace
+                  - id: mixed-line-ending
+                    args: [--fix=crlf]
+                  - id: normalize-indentation
+                  - id: file-contents-sorter
+                    files: '.'
+                  - id: requirements-txt-fixer
+                  - id: replace-pattern
+                    args: ['a', 'b']
+        "})
+        .with_files(files)
+        .init_git();
+
+    context
+        .run()
+        .arg("--files")
+        .args(files.map(|(name, _)| name))
+        .assert()
+        .success();
+    for (name, contents) in files {
+        assert_eq!(fs_err::read(context.child(name))?, contents, "{name}");
+    }
+    Ok(())
+}
+
 #[test]
 fn deny_filename_pattern_hook_matches_only_basename() {
     let context = TestEnv::new()

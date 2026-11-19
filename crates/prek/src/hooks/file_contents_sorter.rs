@@ -5,7 +5,9 @@ use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, contents_equal, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{
+    HookOutput, contents_equal, looks_binary, parse_hook_args, run_blocking_file_checks,
+};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -54,6 +56,10 @@ fn sort_file(
     unique: bool,
 ) -> Result<HookOutput> {
     let before = fs_err::read(file_path)?;
+    if looks_binary(&before) {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    }
+
     let lines = sorted_lines(&before, ignore_case, unique);
 
     if contents_equal(&before, lines.iter().flat_map(|&line| [line, b"\n"])) {

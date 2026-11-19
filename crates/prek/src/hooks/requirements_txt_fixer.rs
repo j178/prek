@@ -8,7 +8,7 @@ use bstr::ByteSlice;
 
 use crate::hook::Hook;
 use crate::hooks::{
-    FixArgs, HookOutput, contents_equal, parse_hook_args, run_blocking_file_checks,
+    FixArgs, HookOutput, contents_equal, looks_binary, parse_hook_args, run_blocking_file_checks,
 };
 
 const BROKEN_PKG_RESOURCES: [&[u8]; 2] = [b"pkg-resources==0.0.0\n", b"pkg_resources==0.0.0\n"];
@@ -202,6 +202,10 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 
 fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOutput> {
     let mut before = fs_err::read(file_path)?;
+    if looks_binary(&before) {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    }
+
     let capacity = before.len() + 1;
 
     let fixed = match fixed_requirements(&mut before) {

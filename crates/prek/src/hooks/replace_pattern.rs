@@ -8,7 +8,7 @@ use memchr::memchr_iter;
 
 use super::pattern::{regex_options, trim_line_ending};
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, looks_binary, parse_hook_args, run_blocking_file_checks};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -133,6 +133,10 @@ fn fix_file(
     check: bool,
 ) -> Result<HookOutput> {
     let contents = fs_err::read(file_path)?;
+    if looks_binary(&contents) {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    }
+
     let mut output = Vec::with_capacity(contents.len());
     let mut diagnostics = Vec::new();
 
