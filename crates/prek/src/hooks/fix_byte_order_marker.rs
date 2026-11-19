@@ -21,8 +21,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 }
 
 fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOutput> {
-    let needs_fix = fix_file_sync(file_path, check)?;
-    if !needs_fix {
+    if !strip_bom(file_path, check)? {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
@@ -34,7 +33,7 @@ fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOu
     ))
 }
 
-fn fix_file_sync(file_path: &Path, check: bool) -> Result<bool> {
+fn strip_bom(file_path: &Path, check: bool) -> Result<bool> {
     let mut file = fs_err::OpenOptions::new()
         .read(true)
         .write(!check)

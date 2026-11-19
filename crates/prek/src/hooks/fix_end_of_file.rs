@@ -19,8 +19,7 @@ pub(crate) async fn run(hook: &Hook, filenames: &[&Path]) -> Result<HookOutput> 
 }
 
 fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOutput> {
-    let needs_fix = fix_file_sync(file_path, check)?;
-    if needs_fix {
+    if fix_eof(file_path, check)? {
         let action = if check { "Would fix" } else { "Fixing" };
         Ok(HookOutput::known(
             1,
@@ -32,7 +31,7 @@ fn fix_file(file_path: &Path, display_path: &Path, check: bool) -> Result<HookOu
     }
 }
 
-fn fix_file_sync(file_path: &Path, check: bool) -> Result<bool> {
+fn fix_eof(file_path: &Path, check: bool) -> Result<bool> {
     // If the file is empty, do nothing and avoid opening a write handle.
     let file_size = fs_err::metadata(file_path)?.len();
     if file_size == 0 {

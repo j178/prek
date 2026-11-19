@@ -59,14 +59,8 @@ pub(crate) async fn run(
     .await
 }
 
-/// Scan the file in chunks while preserving a small tail between reads.
-///
-/// For example, if one read ends with `BEGIN RSA PRIV` and the next read starts
-/// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
-/// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
 fn check_file(file_path: &Path, display_path: &Path, cache: &FileReadCache) -> Result<HookOutput> {
-    let found = check_file_sync(file_path, cache)?;
-    if found {
+    if has_key_marker(file_path, cache)? {
         let error_message = format!("Private key found: {}\n", display_path.display());
         Ok(HookOutput::unchanged(1, error_message.into_bytes()))
     } else {
@@ -74,7 +68,12 @@ fn check_file(file_path: &Path, display_path: &Path, cache: &FileReadCache) -> R
     }
 }
 
-fn check_file_sync(file_path: &Path, cache: &FileReadCache) -> Result<bool> {
+/// Scan the file in chunks while preserving a small tail between reads.
+///
+/// For example, if one read ends with `BEGIN RSA PRIV` and the next read starts
+/// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
+/// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
+fn has_key_marker(file_path: &Path, cache: &FileReadCache) -> Result<bool> {
     let mut file = cache.open(file_path)?;
     let mut buf = [0u8; BUFFER_SIZE + CARRY_CAPACITY];
     let mut carry_len = 0;
