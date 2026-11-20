@@ -122,6 +122,21 @@ pub(crate) struct FixArgs {
     pub(crate) filenames: Vec<PathBuf>,
 }
 
+const BINARY_PROBE_SIZE: usize = 8 * 1024;
+
+/// A file tagged as text by its extension can still contain binary data or UTF-16/32 text.
+fn looks_binary(contents: &[u8]) -> bool {
+    const BOMS: [&[u8]; 4] = [
+        b"\xff\xfe\x00\x00", // UTF-32LE
+        b"\x00\x00\xfe\xff", // UTF-32BE
+        b"\xff\xfe",         // UTF-16LE
+        b"\xfe\xff",         // UTF-16BE
+    ];
+
+    let prefix = &contents[..contents.len().min(BINARY_PROBE_SIZE)];
+    BOMS.iter().any(|bom| prefix.starts_with(bom)) || memchr::memchr(0, prefix).is_some()
+}
+
 pub(crate) fn contents_equal<'a>(
     mut original: &[u8],
     chunks: impl IntoIterator<Item = &'a [u8]>,

@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
 use memchr::memchr2;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, looks_binary, parse_hook_args, run_blocking_file_checks};
 
 const CRLF: &[u8] = b"\r\n";
 const LF: &[u8] = b"\n";
@@ -83,8 +82,7 @@ fn fix_file(file_path: &Path, display_path: &Path, fix_mode: FixMode) -> Result<
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 
-    // Skip empty files or binary files
-    if contents.is_empty() || contents.find_byte(0).is_some() {
+    if contents.is_empty() || looks_binary(&contents) {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 

@@ -2,10 +2,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use memchr::{memchr, memchr2};
+use memchr::memchr2;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, looks_binary, parse_hook_args, run_blocking_file_checks};
 
 const BOM: &[u8] = b"\xEF\xBB\xBF";
 
@@ -60,8 +60,7 @@ fn fix_file(
 ) -> Result<HookOutput> {
     let contents = fs_err::read(file_path)?;
 
-    // Binary files can be passed explicitly, bypassing the text file filter.
-    if memchr(0, &contents).is_some() {
+    if looks_binary(&contents) {
         return Ok(HookOutput::unchanged(0, Vec::new()));
     }
 

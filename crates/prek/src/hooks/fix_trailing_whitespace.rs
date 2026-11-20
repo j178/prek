@@ -6,7 +6,7 @@ use bstr::ByteSlice;
 use clap::Parser;
 
 use crate::hook::Hook;
-use crate::hooks::{HookOutput, parse_hook_args, run_blocking_file_checks};
+use crate::hooks::{HookOutput, looks_binary, parse_hook_args, run_blocking_file_checks};
 
 const MARKDOWN_LINE_BREAK: &[u8] = b"  ";
 
@@ -101,6 +101,10 @@ fn fix_file(
     let is_markdown = force_markdown || is_markdown_file(display_path, markdown_exts);
 
     let mut content = fs_err::read(file_path)?;
+    if looks_binary(&content) {
+        return Ok(HookOutput::unchanged(0, Vec::new()));
+    }
+
     let mut line_start = if chars.is_none() && !is_markdown {
         let Some(start) = first_line_with_trailing_whitespace(&content) else {
             return Ok(HookOutput::unchanged(0, Vec::new()));
