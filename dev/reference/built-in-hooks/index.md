@@ -79,6 +79,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - Configure arguments via `args: [...]` just like `pre-commit`.
 - For `repo: builtin`, `entry` is not allowed and `language` must be `system` (it is fine to omit `language`).
 - Some hooks are **fixers** (they modify files). Like `pre-commit-hooks`, they typically exit non-zero after making changes so you can re-run the commit.
+- Fixers such as `end-of-file-fixer` and `trailing-whitespace` skip files with a UTF-16 or UTF-32 byte order mark or a NUL byte near the start.
 
 Example:
 
