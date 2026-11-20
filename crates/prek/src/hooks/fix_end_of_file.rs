@@ -65,11 +65,11 @@ fn fix_eof(file_path: &Path, check: bool) -> Result<bool> {
 fn fixed_file_len(reader: &mut (impl Read + Seek), file_size: u64) -> Result<u64> {
     let mut buf = [0; BINARY_PROBE_SIZE];
     let fits_in_buffer = file_size <= buf.len() as u64;
-    // Small files fit in the binary probe. Larger files often need only a content byte and CRLF.
     let mut len = if fits_in_buffer {
         usize::try_from(file_size)?
     } else {
-        3
+        // A content byte and two CRLFs fit, so one extra blank line needs no further tail scan.
+        5
     };
     let mut offset = file_size - len as u64;
 
@@ -171,7 +171,7 @@ mod tests {
     async fn preserves_crlf_before_a_long_run_of_lfs() -> Result<()> {
         let dir = tempdir()?;
         let mut content = b"keep\r\n".to_vec();
-        content.extend(std::iter::repeat_n(b'\n', 8192));
+        content.extend(std::iter::repeat_n(b'\n', 8194));
         let path = create_test_file(&dir, "mixed.txt", &content).await?;
 
         fix_file(&path, &path, false)?;
