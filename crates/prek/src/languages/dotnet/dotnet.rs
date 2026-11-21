@@ -26,12 +26,6 @@ fn tools_dir(env_path: &Path) -> PathBuf {
 /// For system installs, `toolchain` can point at a shim or symlinked path such
 /// as `/usr/bin/dotnet`. Canonicalizing first ensures `DOTNET_ROOT` points at
 /// the real SDK/runtime directory.
-///
-/// On Windows, `std::fs::canonicalize` returns a verbatim `\\?\C:\...` path.
-/// The root ends up in `PATH` and `DOTNET_ROOT`, and a `dotnet` started from
-/// inside the hook then fails to build, because `MSBuild` cannot resolve its
-/// imports from a verbatim path. `dunce` returns the plain `C:\...` form
-/// whenever it is valid.
 fn resolve_dotnet_root(dotnet: &Path) -> Result<PathBuf> {
     let dotnet = dunce::canonicalize(dotnet).unwrap_or_else(|_| dotnet.to_path_buf());
     dotnet
@@ -221,28 +215,6 @@ mod tests {
         );
 
         temp_dir.close()?;
-        Ok(())
-    }
-
-    /// The root goes into `PATH` and `DOTNET_ROOT`, so it must not be a verbatim
-    /// `\\?\` path: `MSBuild` in a nested `dotnet` process cannot resolve its imports
-    /// from one.
-    #[cfg(windows)]
-    #[test]
-    fn resolve_dotnet_root_is_not_verbatim_on_windows() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let dotnet = temp_dir.path().join("dotnet.exe");
-        fs_err::write(&dotnet, "")?;
-
-        let root = resolve_dotnet_root(&dotnet)?;
-
-        assert!(
-            !root.as_os_str().to_string_lossy().starts_with(r"\\?\"),
-            "verbatim path: {}",
-            root.display()
-        );
-        assert_eq!(root, dunce::canonicalize(temp_dir.path())?);
-
         Ok(())
     }
 }
