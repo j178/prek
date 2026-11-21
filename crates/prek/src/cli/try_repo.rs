@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::fmt::Write;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
+use seahash::SeaHasher;
 use strum::IntoEnumIterator;
 use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
@@ -18,24 +20,105 @@ use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
-async fn get_head_rev(repo: &Path) -> Result<String> {
-    let head_rev = git::git_cmd()?
+/// Resolve `rev` in a local repository to the commit it points to.
+async fn resolve_local_rev(repo: &Path, rev: &str) -> Result<String> {
+    let output = git::git_cmd()?
         .arg("rev-parse")
-        .arg("HEAD")
+        .arg("--verify")
+        .arg(format!("{rev}^{{commit}}"))
         .current_dir(repo)
         .output()
         .await?
         .stdout;
-    let head_rev = str::from_utf8(&head_rev)?.trim().to_string();
-    Ok(head_rev)
+    Ok(str::from_utf8(&output)?.trim().to_string())
 }
 
-async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
-    let shadow = tmp_dir.join("shadow-repo");
+fn is_full_object_id(rev: &str) -> bool {
+    matches!(rev.len(), 40 | 64) && rev.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// Resolve `rev` (or `HEAD` when it is `None`) on a remote to the object it points to.
+///
+/// A `rev` that matches no remote ref is returned unchanged, because it can only be fetched as
+/// a commit SHA, which cannot move.
+async fn resolve_remote_rev(url: &str, rev: Option<&str>) -> Result<String> {
+    if let Some(rev) = rev
+        && is_full_object_id(rev)
+    {
+        return Ok(rev.to_string());
+    }
+
+    let name = rev.unwrap_or("HEAD");
+    let output = git::git_cmd()?
+        .arg("ls-remote")
+        .arg(url)
+        .arg(name)
+        .output()
+        .await?
+        .stdout;
+
+    match (select_remote_ref(str::from_utf8(&output)?, name), rev) {
+        (Some(object_id), _) => Ok(object_id.to_string()),
+        (None, Some(rev)) => Ok(rev.to_string()),
+        (None, None) => anyhow::bail!("Failed to resolve the HEAD revision of `{url}`"),
+    }
+}
+
+/// Pick the object ID of the ref that `git fetch origin <name>` would fetch from `git ls-remote
+/// <url> <name>` output.
+///
+/// `ls-remote` lists every ref whose name ends with `name`, so the candidates are checked in the
+/// order Git uses to resolve a short ref name.
+fn select_remote_ref<'a>(ls_remote_output: &'a str, name: &str) -> Option<&'a str> {
+    let refs: Vec<(&str, &str)> = ls_remote_output
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .collect();
+    let candidates = [
+        name.to_string(),
+        format!("refs/{name}"),
+        format!("refs/tags/{name}"),
+        format!("refs/heads/{name}"),
+        format!("refs/remotes/{name}"),
+    ];
+    candidates.iter().find_map(|candidate| {
+        refs.iter()
+            .find(|(_, refname)| refname == candidate)
+            .map(|(object_id, _)| *object_id)
+    })
+}
+
+/// Create an empty directory for the shadow copy of `repo_path`.
+///
+/// The directory name depends only on the source repository, so hook environments installed
+/// from the shadow copy keep the same repository identity across runs and can be reused.
+/// Callers must hold the store lock: it keeps concurrent `try-repo` runs for the same source from
+/// sharing the directory and keeps cache GC from removing it while it is in use.
+fn create_shadow_dir(scratch: &Path, repo_path: &Path) -> Result<TempDir> {
+    let mut hasher = SeaHasher::new();
+    repo_path.hash(&mut hasher);
+    let name = format!(
+        "try-repo-shadow-{}",
+        hex::encode(hasher.finish().to_le_bytes())
+    );
+
+    // A previous run that was killed may have left the directory behind.
+    match fs_err::remove_dir_all(scratch.join(&name)) {
+        Err(err) if err.kind() != std::io::ErrorKind::NotFound => return Err(err.into()),
+        _ => {}
+    }
+
+    Ok(tempfile::Builder::new()
+        .prefix(&name)
+        .rand_bytes(0)
+        .tempdir_in(scratch)?)
+}
+
+async fn clone_and_commit(repo_path: &Path, head_rev: &str, shadow: &Path) -> Result<()> {
     git::git_cmd()?
         .arg("clone")
         .arg(repo_path)
-        .arg(&shadow)
+        .arg(shadow)
         .output()
         .await?;
     git::git_cmd()?
@@ -43,7 +126,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg(head_rev)
         .arg("-b")
         .arg("_prek_tmp")
-        .current_dir(&shadow)
+        .current_dir(shadow)
         .output()
         .await?;
 
@@ -73,6 +156,8 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .output()
         .await?;
 
+    // Fixed identity and dates make the commit hash depend only on the parent and the tree, so
+    // unchanged contents produce the same revision and reuse the installed hook environments.
     git::git_cmd()?
         .arg("commit")
         .arg("-m")
@@ -80,27 +165,34 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
         .arg("--no-gpg-sign")
         .arg("--no-edit")
         .arg("--no-verify")
-        .current_dir(&shadow)
+        .current_dir(shadow)
         .env("GIT_AUTHOR_NAME", "prek test")
         .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_AUTHOR_DATE", SHADOW_COMMIT_DATE)
         .env("GIT_COMMITTER_NAME", "prek test")
         .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_DATE", SHADOW_COMMIT_DATE)
         .output()
         .await?;
 
-    Ok(shadow)
+    Ok(())
 }
+
+const SHADOW_COMMIT_DATE: &str = "2000-01-01T00:00:00+00:00";
 
 struct PreparedRepo<'a> {
     runtime_source: Cow<'a, str>,
     display_source: Option<&'a str>,
     rev: String,
+    /// The shadow copy of a local repository with uncommitted changes. It is only needed until
+    /// the store has cloned it, and dropping it removes the directory.
+    _shadow: Option<TempDir>,
 }
 
 async fn prepare_repo<'a>(
     repo: &'a str,
     rev: Option<&str>,
-    tmp_dir: &Path,
+    scratch: &Path,
 ) -> Result<PreparedRepo<'a>> {
     let repo_path = Path::new(repo);
     let is_local = repo_path.is_dir();
@@ -115,50 +207,32 @@ async fn prepare_repo<'a>(
     };
     let repo_path = Path::new(runtime_source.as_ref());
 
-    // If rev is provided, use it directly.
-    if let Some(rev) = rev {
-        return Ok(PreparedRepo {
-            runtime_source,
-            display_source: is_local.then_some(repo),
-            rev: rev.to_string(),
-        });
-    }
-
-    // Get HEAD revision
-    let head_rev = if is_local {
-        get_head_rev(repo_path).await?
+    // The store caches clones and hook environments by revision, so resolve refs such as
+    // branches to what they point to now. Otherwise a later run would reuse an outdated clone.
+    let resolved_rev = if is_local {
+        resolve_local_rev(repo_path, rev.unwrap_or("HEAD")).await?
     } else {
-        // For remote repositories, use ls-remote
-        let head_rev = git::git_cmd()?
-            .arg("ls-remote")
-            .arg("--exit-code")
-            .arg(runtime_source.as_ref())
-            .arg("HEAD")
-            .output()
-            .await?
-            .stdout;
-        let head_rev = head_rev
-            .split(u8::is_ascii_whitespace)
-            .find(|part| !part.is_empty())
-            .context("Failed to parse HEAD revision from git ls-remote output")?;
-        str::from_utf8(head_rev)?.to_string()
+        resolve_remote_rev(repo, rev).await?
     };
 
-    // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
-    if is_local && git::has_diff("HEAD", repo_path).await? {
+    // Uncommitted changes only apply when trying the checked-out `HEAD`.
+    if rev.is_none() && is_local && git::has_diff("HEAD", repo_path).await? {
         warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
-        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
-        let head_rev = get_head_rev(&shadow).await?;
+        let shadow = create_shadow_dir(scratch, repo_path)?;
+        clone_and_commit(repo_path, &resolved_rev, shadow.path()).await?;
+        let head_rev = resolve_local_rev(shadow.path(), "HEAD").await?;
         Ok(PreparedRepo {
-            runtime_source: Cow::Owned(shadow.to_string_lossy().into_owned()),
+            runtime_source: Cow::Owned(shadow.path().to_string_lossy().into_owned()),
             display_source: None,
             rev: head_rev,
+            _shadow: Some(shadow),
         })
     } else {
         Ok(PreparedRepo {
             runtime_source,
             display_source: is_local.then_some(repo),
-            rev: head_rev,
+            rev: resolved_rev,
+            _shadow: None,
         })
     }
 }
@@ -214,10 +288,9 @@ pub(crate) async fn try_repo(
         warn_user!("`--config` option is ignored when using `try-repo`");
     }
 
+    // Use the shared store so repeated runs reuse cloned revisions, hook environments, and
+    // toolchains. Only the generated config is temporary.
     let store = Store::from_settings()?;
-    let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
-
-    let store = Store::from_path(tmp_dir.path())?.init()?;
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, git::root()?)?;
 
     let predefined_hooks = match repo.as_str() {
@@ -226,13 +299,20 @@ pub(crate) async fn try_repo(
         _ => None,
     };
 
+    // Cache GC removes scratch, and any clone or hook environment that no tracked config uses.
+    // Hold the store lock until the generated config is tracked so GC cannot remove what this run
+    // is about to use. `run` takes the lock again, so it must be released before running hooks.
+    let lock = store.lock_async().await?;
+    let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
+    let config_file = tmp_dir.path().join(PREK_TOML);
+
     let (config_str, display_config_str) = if let Some(hooks) = predefined_hooks {
         if rev.is_some() {
             warn_user!("`--rev` option is ignored for the `{repo}` repo");
         }
         (render_repo_config_toml(&repo, None, &hooks), None)
     } else {
-        let prepared = prepare_repo(&repo, rev.as_deref(), tmp_dir.path())
+        let prepared = prepare_repo(&repo, rev.as_deref(), &store.scratch_path())
             .await
             .context("Failed to determine repository and revision")?;
 
@@ -254,17 +334,19 @@ pub(crate) async fn try_repo(
             .map(|hook| hook.id)
             .collect::<Vec<_>>();
 
-        // The scratch config needs the resolved source, while the displayed config should preserve
-        // the user's path so it remains meaningful when copied into their project.
+        // The scratch config needs the resolved source and revision, while the displayed config
+        // should preserve the user's path and `--ref` so it remains meaningful when copied into
+        // their project.
         let config_str =
             render_repo_config_toml(&prepared.runtime_source, Some(&prepared.rev), &hooks);
-        let display_config_str = prepared
-            .display_source
-            .map(|source| render_repo_config_toml(source, Some(&prepared.rev), &hooks));
-        (config_str, display_config_str)
+        let display_source = prepared.display_source.unwrap_or(&prepared.runtime_source);
+        let display_rev = rev.as_deref().unwrap_or(&prepared.rev);
+        let display_config_str = render_repo_config_toml(display_source, Some(display_rev), &hooks);
+        (config_str, Some(display_config_str))
     };
-    let config_file = tmp_dir.path().join(PREK_TOML);
     fs_err::tokio::write(&config_file, &config_str).await?;
+    store.track_configs(std::iter::once(config_file.as_path()))?;
+    drop(lock);
 
     let display_config_str = display_config_str.as_deref().unwrap_or(&config_str);
 
@@ -293,4 +375,54 @@ pub(crate) async fn try_repo(
         printer,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_full_object_id, select_remote_ref};
+
+    const LS_REMOTE: &str = "\
+1111111111111111111111111111111111111111\tHEAD
+2222222222222222222222222222222222222222\trefs/heads/feature/main
+3333333333333333333333333333333333333333\trefs/heads/main
+4444444444444444444444444444444444444444\trefs/tags/main
+5555555555555555555555555555555555555555\trefs/tags/main^{}
+";
+
+    #[test]
+    fn select_remote_ref_follows_git_short_name_order() {
+        assert_eq!(
+            select_remote_ref(LS_REMOTE, "HEAD"),
+            Some("1111111111111111111111111111111111111111")
+        );
+        // A tag wins over a branch with the same name, as it does for `git fetch`.
+        assert_eq!(
+            select_remote_ref(LS_REMOTE, "main"),
+            Some("4444444444444444444444444444444444444444")
+        );
+        assert_eq!(
+            select_remote_ref(LS_REMOTE, "heads/main"),
+            Some("3333333333333333333333333333333333333333")
+        );
+        assert_eq!(
+            select_remote_ref(LS_REMOTE, "refs/heads/feature/main"),
+            Some("2222222222222222222222222222222222222222")
+        );
+    }
+
+    #[test]
+    fn select_remote_ref_ignores_partial_matches() {
+        // `ls-remote` matches `main` against `refs/heads/feature/main`, but `git fetch` does not.
+        let output = "2222222222222222222222222222222222222222\trefs/heads/feature/main\n";
+        assert_eq!(select_remote_ref(output, "main"), None);
+        assert_eq!(select_remote_ref("", "main"), None);
+    }
+
+    #[test]
+    fn full_object_ids() {
+        assert!(is_full_object_id(&"a".repeat(40)));
+        assert!(is_full_object_id(&"0".repeat(64)));
+        assert!(!is_full_object_id("abc1234"));
+        assert!(!is_full_object_id(&"g".repeat(40)));
+    }
 }
