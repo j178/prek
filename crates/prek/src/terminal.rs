@@ -79,6 +79,7 @@ impl TermLike for WindowsVtTerm {
     }
 
     fn move_cursor_up(&self, n: usize) -> io::Result<()> {
+        self.inner.hide_cursor()?;
         self.inner.move_cursor_up(n)
     }
 
@@ -107,23 +108,25 @@ impl TermLike for WindowsVtTerm {
     }
 
     fn flush(&self) -> io::Result<()> {
-        enable_ansi_colors();
+        self.inner.clear_to_end_of_screen()?;
+        self.inner.show_cursor()?;
+        if cfg!(windows) {
+            enable_ansi_colors();
+        }
         self.inner.flush()
     }
 }
 
 /// Returns the progress draw target for the current terminal.
 pub(crate) fn progress_draw_target() -> ProgressDrawTarget {
-    if cfg!(windows) {
-        let term = WindowsVtTerm::stderr();
-        if term.inner.features().colors_supported() {
-            ProgressDrawTarget::term_like_with_hz(Box::new(term), 20)
-        } else {
-            ProgressDrawTarget::hidden()
-        }
-    } else {
-        ProgressDrawTarget::stderr()
+    let term = WindowsVtTerm::stderr();
+    if !term.inner.is_term() || console::is_dumb() {
+        return ProgressDrawTarget::hidden();
     }
+    if cfg!(windows) && !term.inner.features().colors_supported() {
+        return ProgressDrawTarget::hidden();
+    }
+    ProgressDrawTarget::term_like_with_hz(Box::new(term), 20)
 }
 
 /// Converts captured terminal bytes into text that is safe to display later.
