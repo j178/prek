@@ -13,12 +13,15 @@ jobs:
   sync:
     if: github.repository == 'j178/prek'
     runs-on: ubuntu-latest
+    concurrency: sync-identify-tags
     permissions:
       contents: write
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
@@ -31,14 +34,11 @@ jobs:
         working-directory: ./crates/prek-identify
 
       - name: "Create Pull Request"
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
-        with:
-          commit-message: "Sync latest identify tags"
-          add-paths: |
-            crates/prek-identify/src/tags.rs
-            crates/prek-identify/gen.py.lock
-          branch: "sync-identify-tags"
-          title: "Sync latest identify tags"
-          body: "Automated update for identify tags."
-          base: "main"
-          draft: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BRANCH: sync-identify-tags
+          PR_TITLE: Sync latest identify tags
+          PR_BODY: "Automated update for identify tags."
+        run: |
+          git add -- crates/prek-identify/src/tags.rs crates/prek-identify/gen.py.lock
+          scripts/update-pr.sh --draft
