@@ -20,6 +20,9 @@ jobs:
   publish:
     name: Publish prek-action known versions
     runs-on: ubuntu-latest
+    concurrency: publish-prek-action-known-versions
+    permissions:
+      contents: read
     environment:
       name: release
     steps:
@@ -27,6 +30,7 @@ jobs:
         with:
           repository: j178/prek-action
           ref: main
+          fetch-depth: 0
           token: ${{ secrets.PREK_ACTION_TOKEN }}
           persist-credentials: false
 
@@ -65,32 +69,36 @@ jobs:
         if: steps.changes.outputs.known_versions_changed == 'true'
         run: npm run bundle
 
-      - name: Create pull request
-        id: cpr
+      - name: Check out the prek workflow script
         if: steps.changes.outputs.known_versions_changed == 'true'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.PREK_ACTION_TOKEN }}
-          add-paths: |
-            version-manifest.json
-            src/known-checksums.ts
-            dist/index.cjs
-          branch: automation/update-known-versions
-          base: main
-          commit-message: ${{ steps.refresh.outputs.pr_title }}
-          title: ${{ steps.refresh.outputs.pr_title }}
-          body: |
+          path: prek
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - name: Create pull request
+        id: pr
+        if: steps.changes.outputs.known_versions_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PREK_ACTION_TOKEN }}
+          GH_REPO: j178/prek-action
+          PR_BRANCH: automation/update-known-versions
+          PR_TITLE: ${{ steps.refresh.outputs.pr_title }}
+          PR_BODY: |
             Automated update from the prek release workflow.
 
             Added releases:
             ${{ steps.refresh.outputs.added_versions_markdown }}
+        run: |
+          git add -- version-manifest.json src/known-checksums.ts dist/index.cjs
+          prek/scripts/update-pr.sh
 
       - name: Merge pull request
-        if: steps.cpr.outputs.pull-request-number != ''
+        if: steps.pr.outputs.url != ''
         env:
           GH_TOKEN: ${{ secrets.PREK_ACTION_TOKEN }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        shell: bash
+          PR_URL: ${{ steps.pr.outputs.url }}
         run: |
           sleep 10
-          gh pr merge --squash --repo j178/prek-action "$PR_NUMBER"
+          gh pr merge --squash "$PR_URL"
