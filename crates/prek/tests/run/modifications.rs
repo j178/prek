@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::Result;
 use assert_fs::prelude::*;
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -404,6 +405,52 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
         "missing blobs should not turn hook modification detection into a fatal git diff error.\n\
          stderr:\n{stderr}"
     );
+
+    Ok(())
+}
+
+/// The final `--show-diff-on-failure` diff is best-effort, like the hook
+/// snapshots. When Git cannot read a blob, the hook failure is still reported
+/// with exit code 1. The empty output is not described as reverted changes.
+#[test]
+fn show_diff_on_failure_missing_blob_keeps_best_effort_diff() -> Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+    "})
+        .with_file("a.txt", "missing newline")
+        .with_file("z.txt", "original\n")
+        .init_git();
+
+    context.git().commit("init");
+
+    remove_loose_blob(&context, "z.txt")?;
+    // Stale stat data makes `git diff` read the missing blob.
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(context.child("z.txt").path())?
+        .set_modified(SystemTime::now() + Duration::from_secs(10))?;
+
+    cmd_snapshot!(context, context.run().env_remove(EnvVars::CI).args(["--all-files", "--show-diff-on-failure"]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - description: Ensures that a file is either empty, or ends with one newline
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing a.txt
+    All changes made by hooks:
+
+    ----- stderr -----
+    fatal: unable to read 4b48deed3a433909bfd6b6ab3d4b91348b6af464
+    ");
+    assert_eq!(context.read("a.txt"), "missing newline\n");
 
     Ok(())
 }

@@ -720,6 +720,67 @@ fn show_diff_on_failure() {
     "#);
 }
 
+/// A later priority group restores the file. The run still fails because hooks
+/// modified files, but there is no final patch, so prek explains the empty diff
+/// instead of printing an empty "All changes made by hooks:" section.
+#[test]
+fn show_diff_on_failure_reverted_changes() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: first
+                    name: first
+                    language: system
+                    entry: python3 -c "from pathlib import Path; Path('file.txt').write_text('changed\n')"
+                    pass_filenames: false
+                    priority: 0
+                  - id: second
+                    name: second
+                    language: system
+                    entry: python3 -c "from pathlib import Path; Path('file.txt').write_text('original\n')"
+                    pass_filenames: false
+                    priority: 1
+        "#})
+        .init_git();
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    first....................................................................Failed
+    - hook id: first
+    - files were modified by this hook
+    second...................................................................Failed
+    - hook id: second
+    - files were modified by this hook
+    Hooks made changes, but the final diff is empty; later hooks may have reverted them.
+
+    ----- stderr -----
+    ");
+
+    // The CI hint is about changed files, so it is omitted as well.
+    cmd_snapshot!(context, context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    first....................................................................Failed
+    - hook id: first
+    - files were modified by this hook
+    second...................................................................Failed
+    - hook id: second
+    - files were modified by this hook
+    Hooks made changes, but the final diff is empty; later hooks may have reverted them.
+
+    ----- stderr -----
+    ");
+
+    assert_eq!(context.read("file.txt"), "original\n");
+}
+
 #[test]
 fn run_quiet() {
     let context = TestEnv::new()
