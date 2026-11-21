@@ -27,7 +27,7 @@ fn tools_dir(env_path: &Path) -> PathBuf {
 /// as `/usr/bin/dotnet`. Canonicalizing first ensures `DOTNET_ROOT` points at
 /// the real SDK/runtime directory.
 fn resolve_dotnet_root(dotnet: &Path) -> Result<PathBuf> {
-    let dotnet = fs_err::canonicalize(dotnet).unwrap_or_else(|_| dotnet.to_path_buf());
+    let dotnet = dunce::canonicalize(dotnet).unwrap_or_else(|_| dotnet.to_path_buf());
     dotnet
         .parent()
         .map(Path::to_path_buf)
