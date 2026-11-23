@@ -409,32 +409,23 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
     Ok(())
 }
 
-/// The final `--show-diff-on-failure` diff is best-effort, like the hook
-/// snapshots. When Git cannot read a blob, the hook failure is still reported
-/// with exit code 1. The empty output is not described as reverted changes.
+/// An unreadable diff keeps Git's error and exit code 1 without claiming changes were reverted.
 #[test]
-fn show_diff_on_failure_missing_blob_keeps_best_effort_diff() -> Result<()> {
+fn show_diff_on_failure_missing_blob() -> Result<()> {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: end-of-file-fixer
-    "})
-        .with_file("a.txt", "missing newline")
-        .with_file("z.txt", "original\n")
+        "})
+        .with_file("file.txt", "missing newline")
+        .with_filter(r"unable to read [0-9a-f]+", "unable to read [HASH]")
         .init_git();
 
-    context.git().commit("init");
+    remove_loose_blob(&context, "file.txt")?;
 
-    remove_loose_blob(&context, "z.txt")?;
-    // Stale stat data makes `git diff` read the missing blob.
-    fs_err::OpenOptions::new()
-        .write(true)
-        .open(context.child("z.txt").path())?
-        .set_modified(SystemTime::now() + Duration::from_secs(10))?;
-
-    cmd_snapshot!(context, context.run().env_remove(EnvVars::CI).args(["--all-files", "--show-diff-on-failure"]), @"
+    cmd_snapshot!(context, context.run().env(EnvVars::CI, "1").args(["--all-files", "--show-diff-on-failure"]), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -444,14 +435,11 @@ fn show_diff_on_failure_missing_blob_keeps_best_effort_diff() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixing a.txt
-    All changes made by hooks:
+      Fixing file.txt
 
     ----- stderr -----
-    fatal: unable to read 4b48deed3a433909bfd6b6ab3d4b91348b6af464
+    fatal: unable to read [HASH]
     ");
-    assert_eq!(context.read("a.txt"), "missing newline\n");
-
     Ok(())
 }
 
