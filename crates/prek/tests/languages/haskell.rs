@@ -70,6 +70,74 @@ fn local_hook() {
 }
 
 #[test]
+fn library_and_executable_share_name() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: hello
+                name: hello
+                language: haskell
+                entry: hello
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "})
+        .with_file(
+            "hello.cabal",
+            indoc::indoc! {r"
+            cabal-version:       3.0
+            name:                hello
+            version:             0.1.0.0
+            build-type:          Simple
+
+            library
+              exposed-modules:     Hello
+              hs-source-dirs:      src
+              default-language:    GHC2021
+              build-depends:       base >= 4.19 && < 5
+
+            executable hello
+              main-is:             Main.hs
+              hs-source-dirs:      app
+              default-language:    GHC2021
+              build-depends:       base >= 4.19 && < 5, hello
+        "},
+        )
+        .with_file(
+            "src/Hello.hs",
+            indoc::indoc! {r#"
+            module Hello (hello) where
+            hello :: String
+            hello = "Hello, World!"
+        "#},
+        )
+        .with_file(
+            "app/Main.hs",
+            indoc::indoc! {r#"
+            module Main where
+            main :: IO ()
+            main = putStrLn "Hello from exe"
+        "#},
+        )
+        .init_git();
+
+    cmd_snapshot!(context, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello....................................................................Passed
+    - hook id: hello
+    - duration: [TIME]
+
+      Hello from exe
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn additional_dependencies() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
