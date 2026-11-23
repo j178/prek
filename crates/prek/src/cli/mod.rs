@@ -751,6 +751,13 @@ pub(crate) struct RunOptions {
     pub(crate) extra: RunExtraArgs,
 }
 
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
+pub(crate) enum RunOutputFormat {
+    #[default]
+    PreCommit,
+    Concise,
+}
+
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunArgs {
     #[command(flatten)]
@@ -809,6 +816,15 @@ pub(crate) struct RunArgs {
         help_heading = "Hook selection"
     )]
     pub(crate) no_groups: Vec<String>,
+
+    /// Set the format of the final hook reports.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "pre-commit",
+        help_heading = "Run options"
+    )]
+    pub(crate) output_format: RunOutputFormat,
 }
 
 #[derive(Debug, Clone, Default, Args)]
