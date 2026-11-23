@@ -1012,3 +1012,133 @@ fn json_output_format() {
     }
     "#);
 }
+
+/// JSON mode still writes one document when `--stage` leaves no hooks to run. The report
+/// is empty and successful.
+#[test]
+fn json_output_format_no_hooks_for_stage() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: pass
+                    name: Passing Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+                    stages: [pre-commit]
+        "#})
+        .init_git();
+
+    let output = context
+        .run()
+        .args(["--stage=post-commit", "--output-format=json"])
+        .output()
+        .expect("prek should run");
+    assert_eq!(output.status.code(), Some(0));
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be a single JSON document");
+    insta::assert_snapshot!(serde_json::to_string_pretty(&report).expect("report should serialize"), @r#"
+    {
+      "failed": false,
+      "hooks": []
+    }
+    "#);
+}
+
+/// Hooks that `--fail-fast` never started are still reported, as skipped with the
+/// `fail-fast` reason, so consumers can tell them apart from unselected hooks.
+#[test]
+fn json_output_format_fail_fast() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: fail
+                    name: Failing Hook
+                    language: system
+                    entry: "false"
+                    always_run: true
+                    priority: 0
+                  - id: later
+                    name: Later Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+                    priority: 1
+        "#})
+        .init_git();
+
+    let output = context
+        .run()
+        .args(["--all-files", "--fail-fast", "--output-format=json"])
+        .output()
+        .expect("prek should run");
+    assert_eq!(output.status.code(), Some(1));
+
+    let mut report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be a single JSON document");
+    for hook in report["hooks"].as_array_mut().expect("hooks array") {
+        hook["duration_secs"] = serde_json::Value::Null;
+    }
+    insta::assert_snapshot!(serde_json::to_string_pretty(&report).expect("report should serialize"), @r#"
+    {
+      "failed": true,
+      "hooks": [
+        {
+          "project": "",
+          "id": "fail",
+          "name": "Failing Hook",
+          "alias": "",
+          "status": "failed",
+          "skip_reason": null,
+          "exit_code": 1,
+          "duration_secs": null,
+          "files_modified": null,
+          "output": ""
+        },
+        {
+          "project": "",
+          "id": "later",
+          "name": "Later Hook",
+          "alias": "",
+          "status": "skipped",
+          "skip_reason": "fail-fast",
+          "exit_code": 0,
+          "duration_secs": null,
+          "files_modified": null,
+          "output": ""
+        }
+      ]
+    }
+    "#);
+}
+
+/// `try-repo` must not print its generated-config preamble in JSON mode.
+#[test]
+fn json_output_format_try_repo() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .init_git();
+
+    let output = context
+        .command()
+        .args([
+            "try-repo",
+            "builtin",
+            "trailing-whitespace",
+            "--all-files",
+            "--output-format=json",
+        ])
+        .output()
+        .expect("prek should run");
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be a single JSON document");
+    assert_eq!(report["hooks"][0]["id"], "trailing-whitespace");
+}

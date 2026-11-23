@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::run::Selectors;
-use crate::cli::{ExitStatus, RunArgs, RunOptions};
+use crate::cli::{ExitStatus, RunArgs, RunOptions, RunOutputFormat};
 use crate::config::{self, Stage};
 use crate::git;
 use crate::hooks::{BuiltinHooks, MetaHooks};
@@ -269,12 +269,15 @@ pub(crate) async fn try_repo(
 
     let display_config_str = display_config_str.as_deref().unwrap_or(&config_str);
 
-    writeln!(
-        printer.stdout(),
-        "{}",
-        format!("Using generated `{PREK_TOML}`:").cyan().bold()
-    )?;
-    writeln!(printer.stdout(), "{}", display_config_str.dimmed())?;
+    // JSON mode keeps stdout to a single document, so the preamble is omitted.
+    if run_args.output_format == RunOutputFormat::Text {
+        writeln!(
+            printer.stdout(),
+            "{}",
+            format!("Using generated `{PREK_TOML}`:").cyan().bold()
+        )?;
+        writeln!(printer.stdout(), "{}", display_config_str.dimmed())?;
+    }
 
     let mut run_args = run_args;
     // The generated config already contains only the hooks selected above.

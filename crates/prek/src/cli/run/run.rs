@@ -157,7 +157,12 @@ pub(crate) async fn run(
         workspace.check_configs_staged(&status.unstaged)?;
     }
 
-    let reporter = HookInitReporter::new(printer);
+    // JSON mode must not draw progress or styled text while hooks are prepared.
+    let setup_printer = match output_format {
+        RunOutputFormat::Text => printer,
+        RunOutputFormat::Json => Printer::Silent,
+    };
+    let reporter = HookInitReporter::new(setup_printer);
     let hooks = {
         let write_guard = store.write_lock().await?;
         write_guard.track_configs(workspace.config_files())?;
@@ -222,6 +227,9 @@ pub(crate) async fn run(
     if selected_hooks.is_empty() {
         if let Some(stage) = stage_filter {
             debug!("No hooks found for stage {stage} after filtering, exit early");
+            if output_format == RunOutputFormat::Json {
+                JsonReport::default().write(false, &[], printer)?;
+            }
         } else {
             warn_user!(
                 "all hooks selected by group filters require `commit-msg` or `prepare-commit-msg` stage and were not run; pass `--stage commit-msg` or `--stage prepare-commit-msg` to run them"
@@ -289,7 +297,7 @@ pub(crate) async fn run(
         );
         let installed_hooks = ensure_hooks_installed(
             store,
-            printer,
+            setup_printer,
             &workspace,
             &input,
             &file_index,
@@ -641,7 +649,7 @@ async fn run_hooks<'paths>(
         )
         .await?;
     if let Some(json_report) = json_report {
-        json_report.write(failed, printer)?;
+        json_report.write(failed, hooks, printer)?;
     }
 
     Ok(status)
