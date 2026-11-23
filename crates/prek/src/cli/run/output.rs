@@ -328,29 +328,22 @@ impl RunReport {
         self.progress.on_complete();
 
         if summary.failed && show_diff_on_failure && summary.modified_files {
-            let color = if *USE_COLOR {
-                "--color=always"
-            } else {
-                "--color=never"
-            };
-            let diff = git::git_cmd()?
+            // `--quiet` exits with 0 only when the final tree has no changes, and
+            // it stops at the first difference instead of producing the patch.
+            // Exit code 1 means changes, and any other code is a Git error that
+            // the streamed diff below will report. Both fall through.
+            let final_diff_is_empty = git::git_cmd()?
                 .current_dir(workspace.root())
-                .arg("--no-pager")
                 .arg("diff")
                 .hidden_args(["--no-ext-diff"])
-                .arg(color)
+                .arg("--quiet")
                 .arg("--")
                 .arg(workspace.root())
-                // Like the hook snapshots, this diff is best-effort: a missing
-                // blob must not turn a failed hook run into a fatal error.
                 .check(false)
-                .output()
-                .await?;
-            // `output()` captures stderr, so forward Git's own error message.
-            std::io::stderr().write_all(&diff.stderr)?;
-
-            // Only a successful empty diff means the final tree has no changes.
-            if diff.status.success() && diff.stdout.is_empty() {
+                .status()
+                .await?
+                .success();
+            if final_diff_is_empty {
                 writeln!(
                     self.printer.stdout_important(),
                     "Hooks made changes, but the final diff is empty; later hooks may have reverted them."
@@ -378,7 +371,25 @@ impl RunReport {
                 "All changes made by hooks:"
             )?;
 
-            std::io::stdout().write_all(&diff.stdout)?;
+            let color = if *USE_COLOR {
+                "--color=always"
+            } else {
+                "--color=never"
+            };
+            // Stream the patch straight to the terminal so a large diff is never
+            // held in memory.
+            git::git_cmd()?
+                .current_dir(workspace.root())
+                .arg("--no-pager")
+                .arg("diff")
+                .hidden_args(["--no-ext-diff"])
+                .arg(color)
+                .arg("--")
+                .arg(workspace.root())
+                .check(true)
+                .spawn()?
+                .wait()
+                .await?;
         }
 
         if summary.failed {
