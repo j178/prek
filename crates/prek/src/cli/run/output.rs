@@ -490,9 +490,9 @@ impl StatusPrinter {
             name_len + 3 + status_width,
         );
         Self {
+            format,
             printer,
             columns,
-            format,
         }
     }
 
