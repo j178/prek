@@ -7,8 +7,9 @@ use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot, snapshot};
 
+/// Default and explicit pre-commit output agree, while concise keeps the same failure details.
 #[test]
-fn concise_format_preserves_hook_output_and_exit_status() -> Result<()> {
+fn concise_format_preserves_hook_output_and_exit_status() {
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r#"
             repos:
@@ -22,23 +23,42 @@ fn concise_format_preserves_hook_output_and_exit_status() -> Result<()> {
         "#})
         .init_git();
 
-    let default = context.run().output()?;
-    let explicit = context
-        .run()
-        .args(["--output-format", "pre-commit"])
-        .output()?;
-    assert_eq!(explicit.stdout, default.stdout);
-    let concise = context
-        .run()
-        .args(["--output-format", "concise"])
-        .output()?;
-    assert_eq!(concise.status.code(), Some(1));
-    assert_eq!(concise.status, default.status);
-    let stdout = String::from_utf8(concise.stdout)?;
-    assert!(stdout.contains("Failed Lint"), "{stdout}");
-    assert!(stdout.contains("check.py:17 [E1]"), "{stdout}");
-    assert!(stdout.contains("exit code: 3"), "{stdout}");
-    Ok(())
+    cmd_snapshot!(context, context.run().arg("--color=never"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Lint.....................................................................Failed
+    - hook id: lint
+    - exit code: 3
+
+      check.py:17 [E1]
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run().args(["--color=never", "--output-format", "pre-commit"]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Lint.....................................................................Failed
+    - hook id: lint
+    - exit code: 3
+
+      check.py:17 [E1]
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run().args(["--color=never", "--output-format", "concise"]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failed Lint
+    - hook id: lint
+    - exit code: 3
+
+      check.py:17 [E1]
+
+    ----- stderr -----
+    ");
 }
 
 /// The next hook must see the previous group's final report, while hook log
