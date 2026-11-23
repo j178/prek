@@ -127,11 +127,6 @@ A hook can both modify files and report another error. In that case, keep the
 automatic fixes you want and resolve the remaining error before staging and
 retrying.
 
-Use `prek run --show-diff-on-failure` to see the final diff. If no diff remains,
-prek explains that later hooks may have reverted the changes instead of showing
-an empty diff heading. The run still fails because individual hooks modified
-files.
-
 ## Skip hooks for one commit
 
 When one known hook is not applicable, skip only that hook by ID:
