@@ -3,10 +3,12 @@
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::Path;
+use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use owo_colors::{OwoColorize, Styled};
 use prek_consts::env_vars::EnvVars;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::ExitStatus;
@@ -328,6 +330,38 @@ impl RunReport {
         self.progress.on_complete();
 
         if summary.failed && show_diff_on_failure && summary.modified_files {
+            self.render_final_diff(workspace.root()).await?;
+        }
+
+        if summary.failed {
+            Ok(ExitStatus::Failure)
+        } else {
+            Ok(ExitStatus::Success)
+        }
+    }
+
+    async fn render_final_diff(&self, root: &Path) -> Result<()> {
+        let color = if *USE_COLOR {
+            "--color=always"
+        } else {
+            "--color=never"
+        };
+        let mut child = git::git_cmd()?
+            .current_dir(root)
+            .arg("--no-pager")
+            .arg("diff")
+            .hidden_args(["--no-ext-diff"])
+            .arg(color)
+            .arg("--")
+            .arg(root)
+            .stdout(Stdio::piped())
+            .spawn()?;
+        let mut diff = child.stdout.take().context("Failed to capture git diff")?;
+
+        // Delay the heading until Git produces output, without buffering the whole patch.
+        let mut buffer = [0; 4096];
+        let len = diff.read(&mut buffer).await?;
+        if len > 0 {
             if EnvVars::is_under_ci() {
                 writeln!(
                     self.printer.stdout(),
@@ -348,30 +382,22 @@ impl RunReport {
                 "All changes made by hooks:"
             )?;
 
-            let color = if *USE_COLOR {
-                "--color=always"
-            } else {
-                "--color=never"
-            };
-            git::git_cmd()?
-                .current_dir(workspace.root())
-                .arg("--no-pager")
-                .arg("diff")
-                .hidden_args(["--no-ext-diff"])
-                .arg(color)
-                .arg("--")
-                .arg(workspace.root())
-                .check(true)
-                .spawn()?
-                .wait()
-                .await?;
+            let mut stdout = tokio::io::stdout();
+            stdout.write_all(&buffer[..len]).await?;
+            tokio::io::copy(&mut diff, &mut stdout).await?;
+            stdout.flush().await?;
         }
 
-        if summary.failed {
-            Ok(ExitStatus::Failure)
-        } else {
-            Ok(ExitStatus::Success)
+        // Git errors are already written to stderr; an empty stdout alone is not conclusive.
+        let status = child.wait().await?;
+        if len == 0 && status.success() {
+            writeln!(
+                self.printer.stdout_important(),
+                "Hooks made changes, but the final diff is empty; later hooks may have reverted them."
+            )?;
         }
+
+        Ok(())
     }
 }
 

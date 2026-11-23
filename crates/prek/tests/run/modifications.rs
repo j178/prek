@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::Result;
 use assert_fs::prelude::*;
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -405,6 +406,40 @@ fn all_files_clean_missing_blob_ignores_diff_snapshot_errors() -> Result<()> {
          stderr:\n{stderr}"
     );
 
+    Ok(())
+}
+
+/// An unreadable diff keeps Git's error and exit code 1 without claiming changes were reverted.
+#[test]
+fn show_diff_on_failure_missing_blob() -> Result<()> {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+        "})
+        .with_file("file.txt", "missing newline")
+        .with_filter(r"unable to read [0-9a-f]+", "unable to read [HASH]")
+        .init_git();
+
+    remove_loose_blob(&context, "file.txt")?;
+
+    cmd_snapshot!(context, context.run().env(EnvVars::CI, "1").args(["--all-files", "--show-diff-on-failure"]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - description: Ensures that a file is either empty, or ends with one newline
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file.txt
+
+    ----- stderr -----
+    fatal: unable to read [HASH]
+    ");
     Ok(())
 }
 

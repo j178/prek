@@ -587,10 +587,6 @@ fn tty_output_preserves_color_without_replaying_terminal_controls() {
 
 #[test]
 fn show_diff_on_failure() {
-    let context = TestEnv::new()
-        .with_filter(r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644")
-        .init_git();
-
     let config = indoc::indoc! {r#"
         repos:
           - repo: local
@@ -601,11 +597,14 @@ fn show_diff_on_failure() {
                 entry: python -c "import sys; open('file.txt', 'a').write('Added line\n')"
                 pass_filenames: false
     "#};
-    let context = context
+    // Only the complete line matches the snapshot filter, so a truncated patch fails the test.
+    let long_line = "café".repeat(4096);
+    let context = TestEnv::new()
+        .with_filter(r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644")
         .with_config(config)
-        .with_file("file.txt", "Original line\n");
-
-    context.git().add(".");
+        .with_file("file.txt", format!("{long_line}\n"))
+        .with_filter(long_line, "[LONG LINE]")
+        .init_git();
 
     // When failed in CI environment
     cmd_snapshot!(context, context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @"
@@ -627,7 +626,7 @@ fn show_diff_on_failure() {
     --- a/file.txt
     +++ b/file.txt
     @@ -1 +1,2 @@
-     Original line
+     [LONG LINE]
     +Added line
 
     ----- stderr -----
@@ -718,6 +717,42 @@ fn show_diff_on_failure() {
 
     ----- stderr -----
     "#);
+}
+
+/// When a later hook restores the file, CI reports the empty diff and the run still fails.
+#[test]
+fn show_diff_on_failure_reverted_changes() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: edit
+                name: edit
+                language: system
+                entry: python3 -c "open('file.txt', 'a').write('changed')"
+              - id: restore
+                name: restore
+                language: system
+                entry: git restore --
+        "#})
+        .init_git();
+
+    cmd_snapshot!(context, context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    edit.....................................................................Failed
+    - hook id: edit
+    - files were modified by this hook
+    restore..................................................................Failed
+    - hook id: restore
+    - files were modified by this hook
+    Hooks made changes, but the final diff is empty; later hooks may have reverted them.
+
+    ----- stderr -----
+    ");
 }
 
 #[test]
