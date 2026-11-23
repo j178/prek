@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 
 use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::config::{RemoteRepo, RemoteRepoKey};
-use crate::fs::{LockedFile, expand_tilde};
+use crate::fs::{LockedFile, expand_tilde, open_lock_file};
 use crate::git::{self, TerminalPrompt};
 use crate::warn_user;
 use crate::workspace::HookInitReporter;
@@ -46,6 +46,8 @@ enum FirstClonePass<'a> {
 pub enum Error {
     #[error("Home directory not found")]
     HomeNotFound,
+    #[error("Cache at `{0}` is in use. Retry after other prek commands finish.")]
+    CacheInUse(PathBuf),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to clone repo `{repo}`")]
@@ -58,23 +60,36 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
-pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
+impl Error {
+    fn from_lock(err: std::fs::TryLockError, path: &Path) -> Self {
+        match err {
+            std::fs::TryLockError::WouldBlock => Self::CacheInUse(path.to_owned()),
+            std::fs::TryLockError::Error(err) => Self::Io(err),
+        }
+    }
+}
 
-/// A store for managing repos.
+pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
+pub(crate) const STORE_LOCK: &str = ".lock";
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum CacheLock {
+    Shared,
+    TryShared,
+    TryExclusive,
+}
+
+/// Holds the cache lock until this command finishes using its files.
 #[derive(Debug)]
 pub struct Store {
     path: PathBuf,
+    mode: CacheLock,
+    _cache_lock: fs_err::File,
 }
 
 impl Store {
-    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
-        Ok(Self {
-            path: std::path::absolute(path)?,
-        })
-    }
-
     /// Create a store from environment variables or default paths.
-    pub(crate) fn from_settings() -> Result<Self, Error> {
+    pub(crate) fn from_settings(mode: CacheLock) -> Result<Self, Error> {
         let path = if let Some(path) = EnvVars.var_os(EnvVars::PREK_HOME) {
             Some(expand_tilde(PathBuf::from(path)))
         } else {
@@ -86,39 +101,67 @@ impl Store {
         let Some(path) = path else {
             return Err(Error::HomeNotFound);
         };
-        let store = Store::from_path(path)?.init()?;
-
-        Ok(store)
+        Self::open(&path, mode)
     }
 
     pub(crate) fn path(&self) -> &Path {
         self.path.as_ref()
     }
 
-    /// Initialize the store.
-    pub(crate) fn init(self) -> Result<Self, Error> {
-        fs_err::create_dir_all(&self.path)?;
-        fs_err::create_dir_all(self.repos_dir())?;
-        fs_err::create_dir_all(self.hooks_dir())?;
-        fs_err::create_dir_all(self.scratch_path())?;
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        Self::open(path.as_ref(), CacheLock::Shared)
+    }
+
+    fn open(path: &Path, mode: CacheLock) -> Result<Self, Error> {
+        let path = std::path::absolute(path)?;
+        fs_err::create_dir_all(&path)?;
+        let lock = open_lock_file(&path.join(STORE_LOCK))?;
+        // A hook or installer can invoke a cache command while its parent holds a lock.
+        match mode {
+            CacheLock::Shared => lock.lock_shared()?,
+            CacheLock::TryShared => lock
+                .try_lock_shared()
+                .map_err(|e| Error::from_lock(e, &path))?,
+            CacheLock::TryExclusive => lock.try_lock().map_err(|e| Error::from_lock(e, &path))?,
+        }
+        let store = Self {
+            path,
+            mode,
+            _cache_lock: lock,
+        };
+        // Cleanup must also work on an empty or partially initialized cache.
+        if !matches!(mode, CacheLock::Shared) {
+            return Ok(store);
+        }
+        fs_err::create_dir_all(store.repos_dir())?;
+        fs_err::create_dir_all(store.hooks_dir())?;
+        fs_err::create_dir_all(store.scratch_path())?;
 
         match fs_err::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(self.path.join("README")) {
+            .open(store.path.join("README")) {
             Ok(mut f) => f.write_all(b"This directory is maintained by the prek project.\nLearn more: https://github.com/j178/prek\n")?,
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err.into()),
         }
-        Ok(self)
+        Ok(store)
     }
 
-    /// Acquire the cross-process lock for repository, environment, and config tracking operations.
-    pub(crate) async fn lock(&self) -> Result<StoreGuard<'_>, std::io::Error> {
-        let lock = LockedFile::acquire(self.path.join(".lock"), "store").await?;
+    /// Serialize repository, environment, and config tracking updates by concurrent cache users.
+    pub(crate) async fn lock(&self) -> Result<StoreGuard<'_>, Error> {
+        let path = self.path.join(".write.lock");
+        let write_lock = match self.mode {
+            CacheLock::Shared => Some(LockedFile::acquire(path, "store").await?),
+            CacheLock::TryShared => {
+                Some(LockedFile::try_acquire(&path).map_err(|e| Error::from_lock(e, &self.path))?)
+            }
+            // Exclusive access already excludes every writer and everyone waiting to write.
+            CacheLock::TryExclusive => None,
+        };
         Ok(StoreGuard {
             store: self,
-            _lock: lock,
+            _write_lock: write_lock,
         })
     }
 
@@ -178,12 +221,12 @@ impl Store {
     }
 }
 
-/// Access to a store while its cross-process lock is held.
+/// Exclusive access to repository, environment, and config tracking updates.
 #[derive(Debug)]
 #[must_use = "the store lock is released when the guard is dropped"]
 pub(crate) struct StoreGuard<'a> {
     store: &'a Store,
-    _lock: LockedFile,
+    _write_lock: Option<LockedFile>,
 }
 
 impl Deref for StoreGuard<'_> {

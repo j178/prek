@@ -1,34 +1,27 @@
 use std::fmt::Write;
-use std::fs::FileType;
 use std::io;
 use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use tracing::error;
 
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::human_readable_bytes;
 use crate::cli::reporter::CleaningReporter;
 use crate::printer::Printer;
-use crate::store::{CacheBucket, Store};
+use crate::store::{STORE_LOCK, StoreGuard};
 
-pub(crate) fn cache_clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
-    if !store.path().exists() {
-        writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
-        return Ok(ExitStatus::Success);
-    }
+pub(crate) fn cache_clean(store: &StoreGuard<'_>, printer: Printer) -> Result<ExitStatus> {
+    let reporter = if printer.target().is_hidden() {
+        None
+    } else {
+        Some(CleaningReporter::new(
+            printer,
+            cache_entries(store.path()).count(),
+        ))
+    };
 
-    let num_paths = walkdir::WalkDir::new(store.path()).into_iter().count();
-    let reporter = CleaningReporter::new(printer, num_paths);
-
-    if let Err(e) = fix_permissions(store.cache_path(CacheBucket::Go))
-        && e.kind() != io::ErrorKind::NotFound
-    {
-        error!("Failed to fix permissions: {}", e);
-    }
-
-    let removal = remove_dir_all(store.path(), Some(&reporter))?;
+    let removal = clear_cache(store.path(), reporter.as_ref())?;
 
     match (removal.num_files, removal.num_dirs) {
         (0, 0) => {
@@ -67,8 +60,17 @@ pub struct RemovalStats {
     pub total_bytes: u64,
 }
 
-/// Recursively remove a directory and all its contents.
-fn remove_dir_all(path: &Path, reporter: Option<&CleaningReporter>) -> io::Result<RemovalStats> {
+// All processes must open the same lock file, including those that arrive during cleanup.
+fn cache_entries(root: &Path) -> impl Iterator<Item = walkdir::Result<walkdir::DirEntry>> {
+    walkdir::WalkDir::new(root)
+        .follow_root_links(false)
+        .min_depth(1)
+        .contents_first(true)
+        .into_iter()
+        .filter(|entry| !matches!(entry, Ok(e) if e.depth() == 1 && e.file_name() == STORE_LOCK))
+}
+
+fn clear_cache(path: &Path, reporter: Option<&CleaningReporter>) -> io::Result<RemovalStats> {
     match fs_err::symlink_metadata(path) {
         Ok(metadata) => {
             if !metadata.is_dir() {
@@ -87,25 +89,17 @@ fn remove_dir_all(path: &Path, reporter: Option<&CleaningReporter>) -> io::Resul
 
     let mut stats = RemovalStats::default();
 
-    for entry in walkdir::WalkDir::new(path).contents_first(true) {
+    for entry in cache_entries(path) {
         let entry = entry?;
-        if entry.file_type().is_symlink() {
-            stats.num_files += 1;
-            if let Ok(metadata) = entry.metadata() {
-                stats.total_bytes += metadata.len();
-            }
-            remove_symlink(entry.path(), entry.file_type())?;
-        } else if entry.file_type().is_dir() {
+        if entry.file_type().is_dir() {
             stats.num_dirs += 1;
-            fs_err::remove_dir_all(entry.path())?;
         } else {
             stats.num_files += 1;
             if let Ok(metadata) = entry.metadata() {
                 stats.total_bytes += metadata.len();
             }
-            fs_err::remove_file(entry.path())?;
         }
-
+        remove_entry(&entry)?;
         reporter.map(CleaningReporter::on_clean);
     }
 
@@ -114,105 +108,88 @@ fn remove_dir_all(path: &Path, reporter: Option<&CleaningReporter>) -> io::Resul
     Ok(stats)
 }
 
-fn remove_symlink(path: &Path, file_type: FileType) -> io::Result<()> {
+fn remove_entry(entry: &walkdir::DirEntry) -> io::Result<()> {
+    let path = entry.path();
+    let is_dir = entry.file_type().is_dir();
     #[cfg(windows)]
-    {
+    let is_dir = {
         use std::os::windows::fs::FileTypeExt;
-
-        if file_type.is_symlink_dir() {
+        is_dir || entry.file_type().is_symlink_dir()
+    };
+    let remove = || {
+        if is_dir {
             fs_err::remove_dir(path)
         } else {
             fs_err::remove_file(path)
         }
-    }
-    #[cfg(not(windows))]
+    };
+    let result = remove();
+    // Go modules can contain read-only directories. Unlinking requires write access
+    // to the parent, even when the entry itself is a symlink or a read-only file.
+    #[cfg(unix)]
+    if let Err(err) = &result
+        && err.kind() == io::ErrorKind::PermissionDenied
+        && entry.depth() > 1
+        && let Some(parent) = path.parent()
     {
-        let _ = file_type;
-        fs_err::remove_file(path)
-    }
-}
-
-/// Add write permission to GOMODCACHE directory recursively.
-/// Go sets the permissions to read-only by default.
-#[cfg(not(windows))]
-pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let path = path.as_ref();
-    let metadata = fs_err::metadata(path)?;
-
-    let mut permissions = metadata.permissions();
-    let current_mode = permissions.mode();
-
-    // Add write permissions for owner, group, and others
-    let new_mode = current_mode | 0o222;
-    permissions.set_mode(new_mode);
-    fs_err::set_permissions(path, permissions)?;
-
-    // If it's a directory, recursively process its contents
-    if metadata.is_dir() {
-        let entries = fs_err::read_dir(path)?;
-        for entry in entries {
-            let entry = entry?;
-            fix_permissions(entry.path())?;
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs_err::symlink_metadata(parent)?.permissions();
+        if permissions.mode() & 0o200 == 0 {
+            permissions.set_mode(permissions.mode() | 0o200);
+            fs_err::set_permissions(parent, permissions)?;
+            return remove();
         }
     }
-
-    Ok(())
-}
-
-#[cfg(windows)]
-#[allow(clippy::unnecessary_wraps)]
-pub fn fix_permissions<P: AsRef<Path>>(_path: P) -> io::Result<()> {
-    // On Windows, permissions are handled differently and this function does nothing.
-    Ok(())
+    result
 }
 
 #[cfg(test)]
 mod tests {
-    use super::remove_dir_all;
+    use super::{STORE_LOCK, clear_cache};
     use assert_fs::fixture::TempDir;
 
     #[test]
-    fn rm_rf_counts_and_removes_tree() -> anyhow::Result<()> {
+    fn clear_cache_preserves_lock_and_counts_removed_entries() -> anyhow::Result<()> {
         let temp = TempDir::new()?;
         let cache_root = temp.path().join("cache");
         fs_err::create_dir_all(cache_root.join("nested/deep"))?;
+        fs_err::write(cache_root.join(STORE_LOCK), b"")?;
         fs_err::write(cache_root.join("root.txt"), b"hello")?;
-        fs_err::write(cache_root.join("nested/data.txt"), b"abc")?;
+        fs_err::write(cache_root.join("nested").join(STORE_LOCK), b"abc")?;
         fs_err::write(cache_root.join("nested/deep/end.bin"), b"zz")?;
 
-        let stats = remove_dir_all(&cache_root, None)?;
+        let stats = clear_cache(&cache_root, None)?;
         assert_eq!(stats.num_files, 3);
-        assert_eq!(stats.num_dirs, 3);
+        assert_eq!(stats.num_dirs, 2);
         assert_eq!(stats.total_bytes, 10);
-        assert!(!cache_root.exists());
+        assert!(cache_root.join(STORE_LOCK).is_file());
+        assert_eq!(fs_err::read_dir(&cache_root)?.count(), 1);
 
         Ok(())
     }
 
     #[test]
-    fn rm_rf_empty_directory() -> anyhow::Result<()> {
+    fn clear_cache_empty_directory() -> anyhow::Result<()> {
         let temp = TempDir::new()?;
         let cache_root = temp.path().join("cache");
         fs_err::create_dir_all(&cache_root)?;
 
-        let stats = remove_dir_all(&cache_root, None)?;
+        let stats = clear_cache(&cache_root, None)?;
         assert_eq!(stats.num_files, 0);
-        assert_eq!(stats.num_dirs, 1);
+        assert_eq!(stats.num_dirs, 0);
         assert_eq!(stats.total_bytes, 0);
-        assert!(!cache_root.exists());
+        assert_eq!(fs_err::read_dir(&cache_root)?.count(), 0);
 
         Ok(())
     }
 
     #[test]
-    fn rm_rf_rejects_non_directory() -> anyhow::Result<()> {
+    fn clear_cache_rejects_non_directory() -> anyhow::Result<()> {
         let temp = TempDir::new()?;
         let file_path = temp.path().join("not-a-dir.txt");
         fs_err::write(&file_path, b"important data")?;
 
-        let err = remove_dir_all(&file_path, None).unwrap_err();
+        let err = clear_cache(&file_path, None).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory);
         assert!(file_path.exists(), "file must not be deleted");
 
@@ -220,11 +197,11 @@ mod tests {
     }
 
     #[test]
-    fn rm_rf_non_exist_directory() -> anyhow::Result<()> {
+    fn clear_cache_non_exist_directory() -> anyhow::Result<()> {
         let temp = TempDir::new()?;
         let dir_path = temp.path().join("non-existent");
 
-        let stats = remove_dir_all(&dir_path, None)?;
+        let stats = clear_cache(&dir_path, None)?;
         assert_eq!(stats.num_files, 0);
         assert_eq!(stats.num_dirs, 0);
         assert_eq!(stats.total_bytes, 0);
@@ -234,7 +211,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn rm_rf_counts_symlink_entries() -> anyhow::Result<()> {
+    fn clear_cache_counts_symlink_entries() -> anyhow::Result<()> {
         use fs_err::os::unix::fs::symlink;
 
         let temp = TempDir::new()?;
@@ -245,11 +222,11 @@ mod tests {
         symlink("missing-target", &link_path)?;
         let expected_len = fs_err::symlink_metadata(&link_path)?.len();
 
-        let stats = remove_dir_all(&cache_root, None)?;
+        let stats = clear_cache(&cache_root, None)?;
         assert_eq!(stats.num_files, 1);
-        assert_eq!(stats.num_dirs, 1);
+        assert_eq!(stats.num_dirs, 0);
         assert_eq!(stats.total_bytes, expected_len);
-        assert!(!cache_root.exists());
+        assert_eq!(fs_err::read_dir(&cache_root)?.count(), 0);
 
         Ok(())
     }

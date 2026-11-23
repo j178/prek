@@ -10,7 +10,7 @@ use clap_complete::{CompletionCandidate, Generator};
 use crate::cli::{Cli, ExitStatus};
 use crate::config::Repo;
 use crate::fs::{CWD, PathClean};
-use crate::store::Store;
+use crate::store::{CacheLock, Store};
 use crate::workspace::{Project, Workspace};
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, strum::Display)]
@@ -94,7 +94,7 @@ struct SelectorCompleter {
 
 impl SelectorCompleter {
     fn load() -> Option<Self> {
-        let store = Store::from_settings().ok()?;
+        let store = Store::from_settings(CacheLock::TryShared).ok()?;
         let root = Workspace::find_root(None, &CWD).ok()?;
         let workspace = Workspace::discover(&store, root, None, None, false).ok()?;
 

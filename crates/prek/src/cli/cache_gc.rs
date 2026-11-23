@@ -19,7 +19,7 @@ use crate::hook::{
     HOOK_MARKER, HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef,
 };
 use crate::printer::Printer;
-use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
+use crate::store::{CacheBucket, REPO_MARKER, Store, StoreGuard, ToolBucket};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
@@ -143,13 +143,11 @@ impl AddAssign<&Removal> for RemovalSummary {
 }
 
 pub(crate) async fn cache_gc(
-    store: &Store,
+    store: &StoreGuard<'_>,
     dry_run: bool,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let store = store.lock().await?;
-
     let tracked_configs = store.tracked_configs()?;
     if tracked_configs.is_empty() {
         writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
@@ -189,7 +187,7 @@ pub(crate) async fn cache_gc(
         };
         kept_configs.insert(config_path);
 
-        used_env_requirements.extend(hook_env_requirements_from_config(&store, &config));
+        used_env_requirements.extend(hook_env_requirements_from_config(store, &config));
 
         // Mark repos referenced by this config (if present in store).
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
@@ -216,7 +214,7 @@ pub(crate) async fn cache_gc(
     // Mark hook environments by matching already-installed env metadata.
     // While doing this, try to derive the specific tool *version* directories in use from
     // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
-    for installed in install_cache.installed_hooks(&store).await {
+    for installed in install_cache.installed_hooks(store).await {
         let info = installed.info_ref();
         if used_env_requirements
             .iter()
@@ -231,7 +229,7 @@ pub(crate) async fn cache_gc(
                 used_hook_env_dirs.insert(dir);
             }
 
-            mark_tool_versions_from_install_info(&store, info, &mut used_tool_versions);
+            mark_tool_versions_from_install_info(store, info, &mut used_tool_versions);
         }
     }
 
@@ -271,7 +269,7 @@ pub(crate) async fn cache_gc(
     )?;
 
     // Sweep tools/<bucket>/<version>
-    let removed_tool_versions = sweep_tool_versions(&store, &used_tool_versions, dry_run, verbose)?;
+    let removed_tool_versions = sweep_tool_versions(store, &used_tool_versions, dry_run, verbose)?;
 
     let mut removed_tools = removed_tool_buckets;
     removed_tools += removed_tool_versions;

@@ -977,7 +977,7 @@ mod tests {
             let (base_url, server) = serve_files(files).await?;
 
             let temp = tempfile::tempdir()?;
-            let store = Store::from_path(temp.path().join("store"))?.init()?;
+            let store = Store::from_path(temp.path().join("store"))?;
             let target = temp.path().join("target");
             let source = InstallSource::Astral;
             let result = source

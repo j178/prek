@@ -178,15 +178,22 @@ pub(crate) fn expand_tilde(path: PathBuf) -> PathBuf {
     path
 }
 
+pub(crate) fn open_lock_file(path: &Path) -> std::io::Result<fs_err::File> {
+    fs_err::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 pub struct LockedFile {
     file: fs_err::File,
-    path: PathBuf,
 }
 
 impl LockedFile {
-    /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
     fn lock_file_blocking(
         file: fs_err::File,
         resource: &str,
@@ -230,15 +237,12 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let path = path.as_ref().to_path_buf();
-
-        let file = fs_err::File::create(&path)?;
+        let warning_path = path.as_ref();
+        let file = open_lock_file(warning_path)?;
 
         let resource = resource.to_string();
         let mut task =
             tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource));
-
-        let warning_path = path.clone();
 
         let file = tokio::select! {
             result = &mut task => result??,
@@ -247,7 +251,7 @@ impl LockedFile {
                     let held_by_this_process = IN_PROCESS_LOCK_HELD_COUNTS
                                 .lock()
                                 .unwrap()
-                                .get(&warning_path)
+                                .get(warning_path)
                                 .is_some_and(|count| *count > 0);
 
                     #[cfg(test)]
@@ -255,7 +259,7 @@ impl LockedFile {
                         let forced_cross_process = FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
                             .lock()
                             .unwrap()
-                            .contains(&warning_path);
+                            .contains(warning_path);
 
                         if forced_cross_process {
                             false
@@ -273,7 +277,7 @@ impl LockedFile {
                 if !held_by_this_process {
                     #[cfg(test)]
                     {
-                        LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path);
+                        LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path.to_owned());
                     }
 
                     #[cfg(not(test))]
@@ -289,12 +293,19 @@ impl LockedFile {
             }
         };
 
-        {
-            let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
-            *held.entry(path.clone()).or_insert(0) += 1;
-        }
+        Ok(Self::from_locked(file))
+    }
 
-        Ok(Self { file, path })
+    pub(crate) fn try_acquire(path: &Path) -> Result<Self, std::fs::TryLockError> {
+        let file = open_lock_file(path).map_err(std::fs::TryLockError::Error)?;
+        file.try_lock()?;
+        Ok(Self::from_locked(file))
+    }
+
+    fn from_locked(file: fs_err::File) -> Self {
+        let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
+        *held.entry(file.path().to_owned()).or_default() += 1;
+        Self { file }
     }
 }
 
@@ -308,10 +319,10 @@ impl Drop for LockedFile {
             );
         } else {
             let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
-            if let Some(count) = held.get_mut(&self.path) {
+            if let Some(count) = held.get_mut(self.file.path()) {
                 *count = count.saturating_sub(1);
                 if *count == 0 {
-                    held.remove(&self.path);
+                    held.remove(self.file.path());
                 }
             }
             trace!(path = %self.file.path().display(), "Released lock");
