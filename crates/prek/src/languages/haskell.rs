@@ -43,8 +43,7 @@ impl LanguageBackend for Haskell {
         fs_err::tokio::create_dir_all(&bin_dir).await?;
 
         let project_dir = hook.repo_path().unwrap_or(hook.work_dir());
-        // A Cabal package file is named `<package>.cabal`, so its stem is a cwd-independent package
-        // target. `--project-dir` below locates the source without making it the process cwd.
+        // Select the package's executables without matching component names.
         let project_targets = fs_err::read_dir(project_dir)?
             .flatten()
             .filter_map(|entry| {
@@ -55,7 +54,7 @@ impl LanguageBackend for Haskell {
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("cabal"))
                 {
                     path.file_stem()
-                        .map(|name| name.to_string_lossy().into_owned())
+                        .map(|name| format!("pkg:{}:exes", name.to_string_lossy()))
                 } else {
                     None
                 }
