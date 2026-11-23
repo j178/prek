@@ -917,3 +917,98 @@ fn version_info() {
     ----- stderr -----
     ");
 }
+
+/// `--output-format json` writes exactly one JSON document to stdout, reports every
+/// selected hook regardless of `--hide-status`, strips ANSI styles from captured
+/// output, and keeps the exit code of the text format.
+#[test]
+fn json_output_format() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: pass
+                    name: Passing Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+                    pass_filenames: false
+                  - id: fail
+                    name: Failing Hook
+                    language: system
+                    entry: python3 -c "import sys; print('\x1b[31mboom\x1b[0m'); sys.exit(3)"
+                    always_run: true
+                    pass_filenames: false
+                  - id: no-files
+                    name: Unmatched Hook
+                    language: system
+                    entry: "true"
+                    files: '\.nomatch$'
+        "#})
+        .init_git();
+
+    let output = context
+        .run()
+        .args([
+            "--all-files",
+            "--output-format=json",
+            "--hide-status=passed,skipped",
+        ])
+        .output()
+        .expect("prek should run");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+
+    let mut report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be a single JSON document");
+    // Durations vary between runs.
+    for hook in report["hooks"].as_array_mut().expect("hooks array") {
+        hook["duration_secs"] = serde_json::Value::Null;
+    }
+
+    insta::assert_snapshot!(serde_json::to_string_pretty(&report).expect("report should serialize"), @r#"
+    {
+      "failed": true,
+      "hooks": [
+        {
+          "project": "",
+          "id": "pass",
+          "name": "Passing Hook",
+          "alias": "",
+          "status": "passed",
+          "skip_reason": null,
+          "exit_code": 0,
+          "duration_secs": null,
+          "files_modified": null,
+          "output": ""
+        },
+        {
+          "project": "",
+          "id": "fail",
+          "name": "Failing Hook",
+          "alias": "",
+          "status": "failed",
+          "skip_reason": null,
+          "exit_code": 3,
+          "duration_secs": null,
+          "files_modified": null,
+          "output": "boom"
+        },
+        {
+          "project": "",
+          "id": "no-files",
+          "name": "Unmatched Hook",
+          "alias": "",
+          "status": "skipped",
+          "skip_reason": "no-files",
+          "exit_code": 0,
+          "duration_secs": null,
+          "files_modified": null,
+          "output": ""
+        }
+      ]
+    }
+    "#);
+}

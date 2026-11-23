@@ -747,8 +747,28 @@ pub(crate) struct RunOptions {
     #[arg(long, conflicts_with = "hide_status", help_heading = "Run options")]
     pub(crate) no_hide_status: bool,
 
+    /// The output format.
+    ///
+    /// `json` writes a single JSON document to stdout after all hooks finish, without
+    /// progress output or ANSI styling. It reports every selected hook and ignores
+    /// `--hide-status`. Captured hook output is included as text and is not parsed.
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = RunOutputFormat::Text,
+        help_heading = "Run options"
+    )]
+    pub(crate) output_format: RunOutputFormat,
+
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, clap::ValueEnum, Default)]
+pub(crate) enum RunOutputFormat {
+    #[default]
+    Text,
+    Json,
 }
 
 #[derive(Debug, Clone, Default, Args)]

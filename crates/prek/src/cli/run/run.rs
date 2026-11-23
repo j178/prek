@@ -26,7 +26,7 @@ use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
     ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input,
 };
-use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
+use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, RunOutputFormat, flag};
 use crate::concurrency::HOOK_CONCURRENCY;
 use crate::config::{HideStatus, PassFilenames, Stage};
 use crate::fs::CWD;
@@ -37,6 +37,7 @@ use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 
+use super::json::JsonReport;
 use super::output::{ReportFilter, RunReport};
 use super::selector::HookSelection;
 
@@ -97,6 +98,7 @@ pub(crate) async fn run(
         dry_run,
         hide_status,
         no_hide_status,
+        output_format,
         extra: extra_args,
     } = options;
 
@@ -305,6 +307,7 @@ pub(crate) async fn run(
             fail_fast,
             dry_run,
             hide_status,
+            output_format,
             filesystem.as_ref(),
             requires_clean_worktree,
             verbose,
@@ -537,6 +540,7 @@ async fn run_hooks<'paths>(
     fail_fast: Option<bool>,
     dry_run: bool,
     hide_status: Option<&[HideStatus]>,
+    output_format: RunOutputFormat,
     filesystem: Option<&FilesystemOptions>,
     worktree_cleaned: bool,
     verbose: bool,
@@ -557,7 +561,17 @@ async fn run_hooks<'paths>(
 
     let show_project_headers =
         project_to_hooks.len() > 1 || project_to_hooks.keys().any(|project| !project.is_root());
-    let report = RunReport::new(hooks, verbose, show_project_headers, printer);
+    // JSON mode renders nothing through the text report, so stdout only carries the document.
+    let mut json_report = match output_format {
+        RunOutputFormat::Text => None,
+        RunOutputFormat::Json => Some(JsonReport::default()),
+    };
+    let report_printer = if json_report.is_some() {
+        Printer::Silent
+    } else {
+        printer
+    };
+    let report = RunReport::new(hooks, verbose, show_project_headers, report_printer);
     let runner = HookRunner {
         store,
         report: &report,
@@ -607,6 +621,9 @@ async fn run_hooks<'paths>(
         for project_result in project_results {
             stop_after_level |= project_result.stop_after_level;
             summary.include(&project_result);
+            if let Some(json_report) = &mut json_report {
+                json_report.add(&project_result);
+            }
             report.write_project(project_result)?;
         }
 
@@ -615,9 +632,19 @@ async fn run_hooks<'paths>(
         }
     }
 
-    report
-        .finish(summary, workspace, show_diff_on_failure)
-        .await
+    let failed = summary.failed;
+    let status = report
+        .finish(
+            summary,
+            workspace,
+            show_diff_on_failure && json_report.is_none(),
+        )
+        .await?;
+    if let Some(json_report) = json_report {
+        json_report.write(failed, printer)?;
+    }
+
+    Ok(status)
 }
 
 struct ProjectRun<'project> {
