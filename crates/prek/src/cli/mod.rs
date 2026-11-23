@@ -714,7 +714,9 @@ pub(crate) struct RunOptions {
     pub(crate) file_selection: FileSelectionArgs,
 
     /// When hooks fail, run `git diff` directly afterward.
-    #[arg(long, help_heading = "Run options")]
+    ///
+    /// Not available with `--output-format json`, which reserves stdout for its document.
+    #[arg(long, conflicts_with = "output_format", help_heading = "Run options")]
     pub(crate) show_diff_on_failure: bool,
 
     /// Stop running hooks after the first failure.

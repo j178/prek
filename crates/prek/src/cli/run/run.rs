@@ -641,13 +641,7 @@ async fn run_hooks<'paths>(
     }
 
     let failed = summary.failed;
-    let status = report
-        .finish(
-            summary,
-            workspace,
-            show_diff_on_failure && json_report.is_none(),
-        )
-        .await?;
+    let status = report.finish(summary, workspace, show_diff_on_failure).await?;
     if let Some(json_report) = json_report {
         json_report.write(failed, hooks, printer)?;
     }

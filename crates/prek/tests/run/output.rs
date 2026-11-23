@@ -1142,3 +1142,22 @@ fn json_output_format_try_repo() {
         serde_json::from_slice(&output.stdout).expect("stdout should be a single JSON document");
     assert_eq!(report["hooks"][0]["id"], "trailing-whitespace");
 }
+
+/// `--show-diff-on-failure` would write a diff next to the JSON document, so clap rejects the combination.
+#[test]
+fn json_output_format_rejects_show_diff_on_failure() {
+    let context = TestEnv::new().init_git();
+
+    cmd_snapshot!(context, context.run().args(["--output-format=json", "--show-diff-on-failure"]), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--output-format <OUTPUT_FORMAT>' cannot be used with '--show-diff-on-failure'
+
+    Usage: prek run --output-format <OUTPUT_FORMAT> [HOOK|PROJECT]...
+
+    For more information, try '--help'.
+    ");
+}

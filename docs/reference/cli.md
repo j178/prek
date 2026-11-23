@@ -323,7 +323,8 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--require-group"><a href="#prek-run--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to every specified group.</p>
 <p>Can be specified multiple times; a hook must match every specified group. When combined with <code>--group</code>, it must also match at least one <code>--group</code>. <code>--no-group</code> excludes matching hooks regardless of argument order.</p>
 <p>For example, <code>--require-group fast --group format --group lint-only</code> selects hooks in <code>fast</code> and either <code>format</code> or <code>lint-only</code>. The special selector <code>@ungrouped</code> is also supported.</p>
-</dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
+</dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward.</p>
+<p>Not available with <code>--output-format json</code>, which reserves stdout for its document.</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
@@ -917,7 +918,8 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-try-repo--rev"><a href="#prek-try-repo--rev"><code>--rev</code></a>, <code>--ref</code> <i>rev</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
-</dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
+</dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward.</p>
+<p>Not available with <code>--output-format json</code>, which reserves stdout for its document.</p>
 </dd><dt id="prek-try-repo--skip"><a href="#prek-try-repo--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
