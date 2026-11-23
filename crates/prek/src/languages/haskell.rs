@@ -43,7 +43,8 @@ impl LanguageBackend for Haskell {
         fs_err::tokio::create_dir_all(&bin_dir).await?;
 
         let project_dir = hook.repo_path().unwrap_or(hook.work_dir());
-        // Select the package's executables without matching component names.
+        // A bare package name can match both the main library and an executable of the same name.
+        // `pkg:<package>:exes` selects all executables in that package.
         let project_targets = fs_err::read_dir(project_dir)?
             .flatten()
             .filter_map(|entry| {
