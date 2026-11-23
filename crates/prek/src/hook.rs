@@ -697,6 +697,11 @@ impl Hook {
         !matches!(self.repo(), Repo::Meta | Repo::Builtin) && self.language.supports_install_env()
     }
 
+    /// Explicit preparation includes fallback environments. A native run does not use them.
+    pub(crate) fn needs_env_to_run(&self) -> bool {
+        matches!(self.implementation, HookImpl::Language(_)) && self.needs_install_env()
+    }
+
     /// Returns a lightweight view of the hook's environment requirement.
     ///
     /// Returns `None` for hooks that do not install an environment.

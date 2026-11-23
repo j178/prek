@@ -482,7 +482,7 @@ fn select_runnable_env_hooks<'paths>(
     let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
         FxHashMap::with_capacity_and_hasher(workspace.all_projects().len(), FxBuildHasher);
     for hook in hooks.iter().filter_map(HookPlan::as_run) {
-        if !hook.needs_install_env() {
+        if !hook.needs_env_to_run() {
             continue;
         }
 

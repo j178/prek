@@ -764,7 +764,7 @@ fn install_with_existing_legacy_hook() {
         .assert(predicates::path::missing());
 }
 
-/// Run `prek prepare-hooks` to prepare prek hook environments without installing the git hook.
+/// An ordinary run uses the native hook. Explicit preparation installs its offline fallback.
 #[test]
 fn install_hooks_only() -> anyhow::Result<()> {
     let context = TestEnv::new()
@@ -779,6 +779,7 @@ fn install_hooks_only() -> anyhow::Result<()> {
             hooks:
               - id: trailing-whitespace
     "})
+        .with_file("example.txt", "clean\n")
         .init_git();
 
     context
@@ -789,6 +790,15 @@ fn install_hooks_only() -> anyhow::Result<()> {
         .home_dir()
         .child("hooks")
         .assert(predicates::path::missing());
+
+    context
+        .run()
+        .args(["--files", "example.txt"])
+        .env_remove(EnvVars::PREK_NO_FAST_PATH)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Passed"));
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 0);
 
     cmd_snapshot!(context, context.prepare_hooks(), @r#"
     success: true

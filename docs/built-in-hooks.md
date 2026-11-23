@@ -9,7 +9,7 @@ config and let prek use its automatic fast path.
 | -- | -- | -- |
 | Config remains usable by upstream `pre-commit` | No | Yes |
 | Remote repository and manifest | Not used | Cloned at the pinned `rev` |
-| Environment available for fallback | Not needed | Yes |
+| Environment for the pinned implementation | Not needed | Installed on demand or by `prek prepare-hooks` |
 | Network needed for first preparation | No | Yes |
 | How to opt out | Replace `repo: builtin` with a remote or local hook | Set the hook's declared language or `PREK_NO_FAST_PATH=1` |
 
@@ -83,7 +83,8 @@ manifest that prek reads and the repository implementation used for fallback.
 
 !!! note
 
-    In this mode, `prek` will still clone the repository and create the environment (e.g., a Python venv) to ensure full compatibility and fallback capabilities. However, the actual hook execution bypasses the environment and runs the native Rust code.
+    `prek run` installs a language environment only for hooks that use it. Run
+    `prek prepare-hooks` before going offline to make the pinned implementations available too.
 
 See [fast-path support](reference/built-in-hooks.md#automatic-fast-path) for the list of
 hooks that use the built-in implementation automatically. Other hooks run via
