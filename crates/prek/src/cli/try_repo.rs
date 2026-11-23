@@ -270,7 +270,7 @@ pub(crate) async fn try_repo(
     let display_config_str = display_config_str.as_deref().unwrap_or(&config_str);
 
     // JSON mode keeps stdout to a single document, so the preamble is omitted.
-    if run_args.output_format == RunOutputFormat::Text {
+    if run_args.output_format != RunOutputFormat::Json {
         writeln!(
             printer.stdout(),
             "{}",

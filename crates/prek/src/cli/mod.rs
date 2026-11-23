@@ -751,6 +751,9 @@ pub(crate) struct RunOptions {
 
     /// The output format.
     ///
+    /// `text` prints dotted status lines. `concise` prints the status before the hook
+    /// name, without dot padding.
+    ///
     /// `json` writes a single JSON document to stdout after all hooks finish, without
     /// progress output or ANSI styling. It reports every selected hook and ignores
     /// `--hide-status`. Captured hook output is included as text and is not parsed.
@@ -773,6 +776,7 @@ pub(crate) struct RunOptions {
 pub(crate) enum RunOutputFormat {
     #[default]
     Text,
+    Concise,
     Json,
 }
 

@@ -165,7 +165,7 @@ pub(crate) async fn run(
 
     // JSON mode must not draw progress or styled text while hooks are prepared.
     let setup_printer = match output_format {
-        RunOutputFormat::Text => printer,
+        RunOutputFormat::Text | RunOutputFormat::Concise => printer,
         RunOutputFormat::Json => Printer::Silent,
     };
     let reporter = HookInitReporter::new(setup_printer);
@@ -263,7 +263,7 @@ pub(crate) async fn run(
                 store,
                 workspace.root(),
                 status,
-                output_format == RunOutputFormat::Text,
+                output_format != RunOutputFormat::Json,
             )
             .context("Failed to clean work tree")?,
         )
@@ -323,10 +323,10 @@ pub(crate) async fn run(
             &installed_hooks,
             store,
             show_diff_on_failure,
+            output_format,
             fail_fast,
             dry_run,
             hide_status,
-            output_format,
             filesystem.as_ref(),
             requires_clean_worktree,
             verbose,
@@ -556,10 +556,10 @@ async fn run_hooks<'paths>(
     hooks: &[ScheduledHook],
     store: &Store,
     show_diff_on_failure: bool,
+    output_format: RunOutputFormat,
     fail_fast: Option<bool>,
     dry_run: bool,
     hide_status: Option<&[HideStatus]>,
-    output_format: RunOutputFormat,
     filesystem: Option<&FilesystemOptions>,
     worktree_cleaned: bool,
     verbose: bool,
@@ -582,7 +582,7 @@ async fn run_hooks<'paths>(
         project_to_hooks.len() > 1 || project_to_hooks.keys().any(|project| !project.is_root());
     // JSON mode renders nothing through the text report, so stdout only carries the document.
     let mut json_report = match output_format {
-        RunOutputFormat::Text => None,
+        RunOutputFormat::Text | RunOutputFormat::Concise => None,
         RunOutputFormat::Json => Some(JsonReport::default()),
     };
     let report_printer = if json_report.is_some() {
@@ -590,7 +590,13 @@ async fn run_hooks<'paths>(
     } else {
         printer
     };
-    let report = RunReport::new(hooks, verbose, show_project_headers, report_printer);
+    let report = RunReport::new(
+        hooks,
+        verbose,
+        show_project_headers,
+        output_format,
+        report_printer,
+    );
     let runner = HookRunner {
         store,
         report: &report,
