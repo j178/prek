@@ -143,9 +143,16 @@ impl MiseInstaller {
             anyhow::bail!("No compatible mise executable found for toolchain policy: {policy}");
         }
 
-        let version = self.resolve_version(request).await?;
-        trace!(%version, "Downloading mise");
-        self.download(store, &version).await
+        // mise pushes release tags before the release assets are published, so the newest
+        // matching tag may not be downloadable yet. Only the newest few are worth probing.
+        for version in self.list_versions(request).await?.into_iter().take(3) {
+            trace!(%version, "Downloading mise");
+            if let Some(result) = self.download(store, &version).await? {
+                return Ok(result);
+            }
+            debug!(%version, "mise release is not published yet");
+        }
+        anyhow::bail!("No released mise version matches the request")
     }
 
     async fn find_installed(&self, request: &SemverRequest) -> Option<MiseResult> {
@@ -210,7 +217,8 @@ impl MiseInstaller {
         None
     }
 
-    async fn resolve_version(&self, request: &SemverRequest) -> Result<Version> {
+    /// Lists the tagged mise versions matching `request`, newest first.
+    async fn list_versions(&self, request: &SemverRequest) -> Result<Vec<Version>> {
         let output = git::git_cmd()?
             .arg("ls-remote")
             .arg("--tags")
@@ -219,7 +227,7 @@ impl MiseInstaller {
             .await?;
         let output = str::from_utf8(&output.stdout)?;
 
-        output
+        Ok(output
             .lines()
             .filter_map(|line| {
                 let reference = line.split_once('\t')?.1;
@@ -229,25 +237,31 @@ impl MiseInstaller {
                     .ok()
             })
             .filter(|version| is_compatible(request, version))
-            .max()
-            .context("No released mise version matches the request")
+            .sorted_unstable_by(|a, b| b.cmp(a))
+            .collect())
     }
 
-    async fn download(&self, store: &Store, version: &Version) -> Result<MiseResult> {
+    /// Downloads mise `version`, or returns `None` if its release is not published.
+    async fn download(&self, store: &Store, version: &Version) -> Result<Option<MiseResult>> {
         let (platform, extension) = release_platform(&HOST)?;
         let filename = format!("mise-v{version}-{platform}.{extension}");
         let base_url = format!("https://github.com/jdx/mise/releases/download/v{version}");
         let url = format!("{base_url}/{filename}");
         let checksum_url = format!("{base_url}/SHASUMS256.txt");
 
-        let download = download_artifact(&url, &filename, store, async || {
+        let download = match download_artifact(&url, &filename, store, async || {
             let Some(checksums) = fetch_checksum(&checksum_url).await? else {
                 return Ok(None);
             };
             digest_from_sha256sums(&checksums, &filename)
         })
         .await
-        .context("Failed to download mise")?;
+        {
+            Ok(download) => download,
+            // A tag without a published release has no assets, so its download 404s.
+            Err(err) if is_not_found(&err) => return Ok(None),
+            Err(err) => return Err(err.context("Failed to download mise")),
+        };
         let install_dir = tempfile::Builder::new()
             .prefix(".install-")
             .tempdir_in(&self.root)?;
@@ -273,8 +287,16 @@ impl MiseInstaller {
         }
         crate::fs::rename_with_retry(install_dir.keep(), &target).await?;
 
-        Ok(MiseResult::from_dir(&target, version.clone()))
+        Ok(Some(MiseResult::from_dir(&target, version.clone())))
     }
+}
+
+fn is_not_found(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<reqwest::Error>()
+            .is_some_and(|err| err.status() == Some(reqwest::StatusCode::NOT_FOUND))
+    })
 }
 
 fn is_compatible(request: &SemverRequest, version: &Version) -> bool {
