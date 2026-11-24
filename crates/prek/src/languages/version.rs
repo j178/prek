@@ -55,6 +55,30 @@ impl ToolchainPolicy {
     }
 }
 
+/// Lists managed tool directories whose names parse as versions.
+pub(crate) fn installed_version_dirs<V: FromStr>(
+    root: &Path,
+) -> impl Iterator<Item = (V, PathBuf)> {
+    let entries = fs_err::read_dir(root).into_iter().flatten();
+
+    entries.filter_map(move |entry| {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                tracing::warn!(?err, path = %root.display(), "Failed to read managed tool entry");
+                return None;
+            }
+        };
+
+        if !entry.file_type().ok()?.is_dir() {
+            return None;
+        }
+
+        let version = entry.file_name().to_string_lossy().parse().ok()?;
+        Some((version, entry.path()))
+    })
+}
+
 pub(crate) fn find_system_executables(
     binary_name: impl AsRef<OsStr>,
     managed_root: &Path,

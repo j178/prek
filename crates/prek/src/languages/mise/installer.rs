@@ -20,6 +20,7 @@ use crate::git;
 use crate::http::download_artifact;
 use crate::languages::version::{
     SemverRequest, ToolchainPolicy, ToolchainSource, find_system_executables,
+    installed_version_dirs,
 };
 use crate::process::Cmd;
 use crate::store::Store;
@@ -46,57 +47,12 @@ impl Display for MiseResult {
 }
 
 impl MiseResult {
-    fn from_dir(dir: &Path, version: Version) -> Self {
-        Self {
-            mise: bin_dir(dir).join("mise").with_extension(EXE_EXTENSION),
-            version,
-        }
-    }
-
     pub(crate) async fn from_executable(mise: PathBuf) -> Result<Self> {
         static CACHE: LazyLock<OnceMap<PathBuf, Version, FxBuildHasher>> =
             LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+
         let key = fs_err::canonicalize(&mise).unwrap_or_else(|_| mise.clone());
-        let version = CACHE
-            .try_compute(key, async || {
-                let isolated = tempfile::tempdir()?;
-                let mut command = Cmd::new(&mise);
-                for key in inherited_mise_vars() {
-                    command.env_remove(key);
-                }
-                // Even `mise --version` discovers miserc files, initializes backend state,
-                // runs migrations and cache pruning, then checks for updates. CI disables
-                // the update check; disposable roots keep the probe away from user state.
-                let output = command
-                    .current_dir(isolated.path())
-                    .env(EnvVars::CI, "1")
-                    .env(EnvVars::MISE_DATA_DIR, isolated.path().join("data"))
-                    .env(EnvVars::MISE_CACHE_DIR, isolated.path().join("cache"))
-                    .env(EnvVars::MISE_CONFIG_DIR, isolated.path().join("config"))
-                    .env(EnvVars::MISE_STATE_DIR, isolated.path().join("state"))
-                    .env(
-                        EnvVars::MISE_SYSTEM_CONFIG_DIR,
-                        isolated.path().join("system-config"),
-                    )
-                    .env(
-                        EnvVars::MISE_SYSTEM_DATA_DIR,
-                        isolated.path().join("system-data"),
-                    )
-                    .env(EnvVars::MISE_CEILING_PATHS, mise_ceiling(isolated.path())?)
-                    .env(EnvVars::MISE_NO_CONFIG, "1")
-                    .arg("--version")
-                    .check(true)
-                    .output()
-                    .await?;
-                let output = str::from_utf8(&output.stdout)?;
-                output
-                    .split_whitespace()
-                    .next()
-                    .context("Failed to parse mise version output")?
-                    .parse()
-                    .context("Failed to parse mise version")
-            })
-            .await?;
+        let version = CACHE.try_compute(key, || query_mise_version(&mise)).await?;
 
         Ok(Self { mise, version })
     }
@@ -108,6 +64,41 @@ impl MiseResult {
     pub(crate) fn version(&self) -> &Version {
         &self.version
     }
+}
+
+async fn query_mise_version(mise: &Path) -> Result<Version> {
+    // Even `mise --version` discovers config files and runs migrations and cache pruning.
+    // Disposable directories isolate those side effects. CI disables the update check.
+    let isolated = tempfile::tempdir()?;
+    let root = isolated.path();
+
+    let mut command = Cmd::new(mise);
+    for key in inherited_mise_vars() {
+        command.env_remove(key);
+    }
+
+    let output = command
+        .current_dir(root)
+        .env(EnvVars::CI, "1")
+        .env(EnvVars::MISE_DATA_DIR, root.join("data"))
+        .env(EnvVars::MISE_CACHE_DIR, root.join("cache"))
+        .env(EnvVars::MISE_CONFIG_DIR, root.join("config"))
+        .env(EnvVars::MISE_STATE_DIR, root.join("state"))
+        .env(EnvVars::MISE_SYSTEM_CONFIG_DIR, root.join("system-config"))
+        .env(EnvVars::MISE_SYSTEM_DATA_DIR, root.join("system-data"))
+        .env(EnvVars::MISE_CEILING_PATHS, mise_ceiling(root)?)
+        .env(EnvVars::MISE_NO_CONFIG, "1")
+        .arg("--version")
+        .check(true)
+        .output()
+        .await?;
+
+    let stdout = str::from_utf8(&output.stdout)?;
+    let version = stdout
+        .split_whitespace()
+        .next()
+        .context("Failed to parse mise version output")?;
+    version.parse().context("Failed to parse mise version")
 }
 
 pub(crate) struct MiseInstaller {
@@ -156,37 +147,24 @@ impl MiseInstaller {
     }
 
     async fn find_installed(&self, request: &SemverRequest) -> Option<MiseResult> {
-        let installed = fs_err::read_dir(&self.root)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(err) => {
-                    warn!(?err, "Failed to read managed mise entry");
-                    None
-                }
-            })
-            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
-            .filter_map(|entry| {
-                let version = entry
-                    .file_name()
-                    .to_string_lossy()
-                    .parse::<Version>()
-                    .ok()?;
-                Some((version, entry.path()))
-            })
+        let installed = installed_version_dirs::<Version>(&self.root)
             .sorted_unstable_by(|(a, _), (b, _)| b.cmp(a));
 
         for (version, path) in installed {
-            let candidate = MiseResult::from_dir(&path, version.clone());
-            if !is_compatible(request, &version) || !is_executable(candidate.mise()) {
+            let binary = mise_binary(&path);
+            if !is_compatible(request, &version) || !is_executable(&binary) {
                 continue;
             }
-            match MiseResult::from_executable(candidate.mise().to_path_buf()).await {
+
+            match MiseResult::from_executable(binary).await {
                 Ok(result) if result.version() == &version => return Some(result),
                 Ok(result) => {
-                    warn!(expected = %version, found = %result.version(), path = %path.display(), "Managed mise version mismatch");
+                    warn!(
+                        expected = %version,
+                        found = %result.version(),
+                        path = %path.display(),
+                        "Managed mise version mismatch"
+                    );
                 }
                 Err(err) => {
                     warn!(?err, path = %path.display(), "Failed to query managed mise version");
@@ -225,16 +203,14 @@ impl MiseInstaller {
             .arg("https://github.com/jdx/mise")
             .output()
             .await?;
-        let output = str::from_utf8(&output.stdout)?;
 
-        Ok(output
+        let stdout = str::from_utf8(&output.stdout)?;
+        Ok(stdout
             .lines()
             .filter_map(|line| {
-                let reference = line.split_once('\t')?.1;
-                reference
-                    .strip_prefix("refs/tags/v")?
-                    .parse::<Version>()
-                    .ok()
+                let (_, reference) = line.split_once('\t')?;
+                let tag = reference.strip_prefix("refs/tags/v")?;
+                tag.parse().ok()
             })
             .filter(|version| is_compatible(request, version))
             .sorted_unstable_by(|a, b| b.cmp(a))
@@ -262,24 +238,11 @@ impl MiseInstaller {
             Err(err) if is_not_found(&err) => return Ok(None),
             Err(err) => return Err(err.context("Failed to download mise")),
         };
+
         let install_dir = tempfile::Builder::new()
             .prefix(".install-")
             .tempdir_in(&self.root)?;
-        let target_bin_dir = bin_dir(install_dir.path());
-        fs_err::tokio::create_dir_all(&target_bin_dir).await?;
-        let target_binary = target_bin_dir.join("mise").with_extension(EXE_EXTENSION);
-        if HOST.operating_system == OperatingSystem::Windows {
-            fs_err::tokio::copy(download.path(), &target_binary).await?;
-        } else {
-            let extracted = archive::extract_archive(download.path())
-                .await
-                .context("Failed to extract mise")?;
-            let source = bin_dir(&extracted)
-                .join("mise")
-                .with_extension(EXE_EXTENSION);
-            crate::fs::rename_with_retry(&source, &target_binary).await?;
-        }
-        crate::fs::make_executable(&target_binary)?;
+        install_binary(download.path(), install_dir.path()).await?;
 
         let target = self.root.join(version.to_string());
         if target.exists() {
@@ -287,8 +250,35 @@ impl MiseInstaller {
         }
         crate::fs::rename_with_retry(install_dir.keep(), &target).await?;
 
-        Ok(Some(MiseResult::from_dir(&target, version.clone())))
+        Ok(Some(MiseResult {
+            mise: mise_binary(&target),
+            version: version.clone(),
+        }))
     }
+}
+
+async fn install_binary(download: &Path, install_dir: &Path) -> Result<()> {
+    fs_err::tokio::create_dir_all(install_dir.join("bin")).await?;
+    let binary = mise_binary(install_dir);
+
+    if HOST.operating_system == OperatingSystem::Windows {
+        fs_err::tokio::copy(download, &binary).await?;
+    } else {
+        let extracted = archive::extract_archive(download)
+            .await
+            .context("Failed to extract mise")?;
+        crate::fs::rename_with_retry(mise_binary(&extracted), &binary).await?;
+    }
+
+    crate::fs::make_executable(&binary)?;
+    Ok(())
+}
+
+fn mise_binary(prefix: &Path) -> PathBuf {
+    prefix
+        .join("bin")
+        .join("mise")
+        .with_extension(EXE_EXTENSION)
 }
 
 fn is_not_found(err: &anyhow::Error) -> bool {
@@ -320,6 +310,7 @@ fn release_platform(host: &Triple) -> Result<(String, &'static str)> {
             "Unsupported platform for mise: operating_system={operating_system:?}, architecture={architecture:?}"
         ),
     };
+
     let extension = if host.operating_system == OperatingSystem::Windows {
         // mise's signed ZIP starts with a zipsign preamble, which async_zip's streaming reader
         // cannot skip.
@@ -328,22 +319,18 @@ fn release_platform(host: &Triple) -> Result<(String, &'static str)> {
         "tar.gz"
     };
 
-    let platform = if host.operating_system == OperatingSystem::Linux
-        && matches!(
-            host.environment,
-            Environment::Musl
-                | Environment::Musleabi
-                | Environment::Musleabihf
-                | Environment::Muslabi64
-        ) {
+    let is_musl = matches!(
+        host.environment,
+        Environment::Musl
+            | Environment::Musleabi
+            | Environment::Musleabihf
+            | Environment::Muslabi64
+    );
+    let platform = if host.operating_system == OperatingSystem::Linux && is_musl {
         format!("{platform}-musl")
     } else {
         platform.to_string()
     };
 
     Ok((platform, extension))
-}
-
-fn bin_dir(prefix: &Path) -> PathBuf {
-    prefix.join("bin")
 }
