@@ -1,7 +1,6 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
@@ -13,7 +12,9 @@ use super::version::DotnetVersion;
 use crate::fs::LockedFile;
 use crate::http::REQWEST_CLIENT;
 use crate::languages::dotnet::DotnetRequest;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::languages::version::{
+    ToolchainPolicy, ToolchainSource, find_system_executables, installed_version_dirs,
+};
 use crate::process::Cmd;
 
 static DOTNET_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
@@ -118,34 +119,11 @@ impl DotnetInstaller {
 
     /// Finds the newest managed SDK installation that satisfies the request.
     fn find_installed(&self, request: &DotnetRequest) -> Result<DotnetResult> {
-        let mut installed = fs_err::read_dir(&self.root)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(err) => {
-                    warn!(?err, "Failed to read entry");
-                    None
-                }
-            })
-            .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_dir()))
-            .filter_map(|entry| {
-                let dir_name = entry.file_name();
-                let version = DotnetVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
-            })
+        installed_version_dirs::<DotnetVersion>(&self.root)
             .sorted_unstable_by(|(a, _), (b, _)| a.cmp(b))
-            .rev();
-
-        installed
-            .find_map(|(version, path)| {
-                if request.matches(&version) {
-                    Some(DotnetResult::from_dir(&path, version))
-                } else {
-                    None
-                }
-            })
+            .rev()
+            .find(|(version, _)| request.matches(version))
+            .map(|(version, path)| DotnetResult::from_dir(&path, version))
             .context("No installed dotnet version matches the request")
     }
 

@@ -19,7 +19,9 @@ use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::languages::version::{
+    ToolchainPolicy, ToolchainSource, find_system_executables, installed_version_dirs,
+};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -151,37 +153,20 @@ impl GoInstaller {
     }
 
     fn find_installed(&self, request: &GoRequest) -> Result<GoResult> {
-        let mut installed = fs_err::read_dir(&self.root)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(e) => {
-                    warn!(?e, "Failed to read entry");
-                    None
-                }
-            })
-            .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
-            .filter_map(|entry| {
-                let dir_name = entry.file_name();
-                let version = GoVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
-            })
+        let installed = installed_version_dirs::<GoVersion>(&self.root)
             .sorted_unstable_by(|(a, _), (b, _)| a.cmp(b))
             .rev();
 
-        installed
-            .find_map(|(version, path)| {
-                if request.matches(&version) {
-                    trace!(%version, "Found matching installed go");
-                    Some(GoResult::from_dir(&path, version))
-                } else {
-                    trace!(%version, "Installed go does not match request");
-                    None
-                }
-            })
-            .context("No installed go version matches the request")
+        for (version, path) in installed {
+            if request.matches(&version) {
+                trace!(%version, "Found matching installed go");
+                return Ok(GoResult::from_dir(&path, version));
+            }
+
+            trace!(%version, "Installed go does not match request");
+        }
+
+        anyhow::bail!("No installed go version matches the request")
     }
 
     async fn resolve_version(&self, req: &GoRequest) -> Result<GoVersion> {
@@ -240,9 +225,11 @@ impl GoInstaller {
         })
         .await
         .context("Failed to download go")?;
+
         let extracted = archive::extract_archive(download.path())
             .await
             .context("Failed to extract go")?;
+
         if target.exists() {
             debug!(target = %target.display(), "Removing existing go");
             fs_err::tokio::remove_dir_all(&target).await?;

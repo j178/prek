@@ -33,6 +33,7 @@ impl MiseEnvironment {
 
     fn vars(&self) -> [(&'static str, OsString); 9] {
         let path = |name| self.root.join(name).into_os_string();
+
         [
             (EnvVars::MISE_DATA_DIR, path("data")),
             (EnvVars::MISE_CACHE_DIR, path("cache")),
@@ -51,12 +52,14 @@ impl MiseEnvironment {
         for key in inherited_mise_vars() {
             command.env_remove(key);
         }
+
         command
             .current_dir(cwd)
             .envs(self.vars())
             .env(EnvVars::MISE_CEILING_PATHS, mise_ceiling(cwd)?)
             .arg("--yes")
             .check(true);
+
         Ok(command)
     }
 
@@ -92,17 +95,16 @@ impl LanguageBackend for Mise {
         info.with_toolchain(mise.mise().to_path_buf())
             .with_language_version(mise.version().clone());
 
-        let environment = MiseEnvironment::new(&info.env_path);
-
         // TODO(#2022): Support provisioning remote hooks from the repository's `mise.toml`.
         if !hook.additional_dependencies.is_empty() {
             debug!(deps = ?hook.additional_dependencies, "Installing mise tools");
-            let mut command = environment.command(mise.mise(), install_cwd)?;
-            command
+
+            let environment = MiseEnvironment::new(&info.env_path);
+            environment
+                .command(mise.mise(), install_cwd)?
                 .arg("install")
                 .arg("--")
-                .args(tools_with_versions(&hook.additional_dependencies));
-            command
+                .args(tools_with_versions(&hook.additional_dependencies))
                 .output()
                 .await
                 .context("Failed to install mise tools")?;
@@ -121,6 +123,7 @@ impl LanguageBackend for Mise {
         let mise = MiseResult::from_executable(info.toolchain.clone())
             .await
             .context("Failed to query mise version")?;
+
         if mise.version() != &info.language_version {
             anyhow::bail!(
                 "mise version mismatch: expected {}, found {}",
@@ -131,6 +134,7 @@ impl LanguageBackend for Mise {
         if !is_supported_version(mise.version()) {
             anyhow::bail!("mise {} is no longer supported", mise.version());
         }
+
         Ok(())
     }
 
@@ -168,19 +172,19 @@ impl LanguageBackend for Mise {
 
         let info = hook.install_info().context("mise must be installed")?;
         let mise_environment = MiseEnvironment::new(&info.env_path);
-        let tool_cwd = tool_cwd(hook);
+
         // Backends can contribute dynamic environment variables and PATH entries, so activation
         // must be delegated to the selected mise CLI. Hook argv never crosses its UTF-8 boundary.
-        let mut command = mise_environment.command(&info.toolchain, tool_cwd)?;
+        let mut command = mise_environment.command(&info.toolchain, tool_cwd(hook))?;
         if let Some(path) = environment.language_path() {
             command.env(EnvVars::PATH, path);
         }
-        command
+
+        let output = command
             .arg("env")
             .arg("--json")
             .arg("--")
-            .args(tools_with_versions(&hook.additional_dependencies));
-        let output = command
+            .args(tools_with_versions(&hook.additional_dependencies))
             .output()
             .await
             .context("Failed to activate mise tools")?;
@@ -189,14 +193,10 @@ impl LanguageBackend for Mise {
             serde_json::from_slice(&output.stdout).context("Failed to parse mise environment")?;
         let activated_path = activated
             .iter()
-            .find_map(|(key, value)| {
-                if is_path_env(key) {
-                    Some(value.clone())
-                } else {
-                    None
-                }
-            })
+            .find(|(key, _)| is_path_env(key))
+            .map(|(_, value)| value.clone())
             .context("mise environment did not include PATH")?;
+
         // TODO(#2022): Preserve non-UTF-8 PATH entries omitted by `mise env --json`.
         activated.retain(|key, _| !is_path_env(key) && !is_mise_var(OsStr::new(key)));
         environment.envs(&activated).set_path(activated_path);
@@ -220,15 +220,10 @@ fn managed_mise_path(mise: &Path) -> Result<OsString> {
         .context("mise executable must have a parent directory")?
         .to_path_buf();
     let base_path = EnvVars.var_os(EnvVars::PATH);
-    std::env::join_paths(
-        std::iter::once(bin_dir).chain(
-            base_path
-                .as_ref()
-                .into_iter()
-                .flat_map(std::env::split_paths),
-        ),
-    )
-    .context("Failed to join mise PATH")
+    let inherited = base_path.iter().flat_map(std::env::split_paths);
+
+    std::env::join_paths(std::iter::once(bin_dir).chain(inherited))
+        .context("Failed to join mise PATH")
 }
 
 fn tools_with_versions(tools: &[String]) -> impl Iterator<Item = String> + '_ {
@@ -236,34 +231,20 @@ fn tools_with_versions(tools: &[String]) -> impl Iterator<Item = String> + '_ {
 }
 
 fn tool_with_version(tool: &str) -> String {
-    let (backend, version) = split_tool_version(tool);
-    let version = version.unwrap_or("latest");
-    format!("{backend}@{version}")
-}
+    let version = tool.split_once('@').and_then(|(name, rest)| {
+        // In `@scope/package` and `npm:@scope/package`, the first @ belongs to the name.
+        if name.is_empty() || name.ends_with(':') {
+            rest.split_once('@').map(|(_, version)| version)
+        } else {
+            Some(rest)
+        }
+    });
 
-fn split_tool_version(tool: &str) -> (&str, Option<&str>) {
-    let Some((left, right)) = tool.split_once('@') else {
-        return (tool, None);
-    };
-    let (backend, version) = if left.is_empty() {
-        let Some((name, version)) = right.split_once('@') else {
-            return (tool, None);
-        };
-        (&tool[..=name.len()], version)
-    } else if left.ends_with(':') {
-        let Some((name, version)) = right.split_once('@') else {
-            return (tool, None);
-        };
-        (&tool[..=(left.len() + name.len())], version)
-    } else {
-        (left, right)
-    };
-    let version = if version.is_empty() {
-        None
-    } else {
-        Some(version)
-    };
-    (backend, version)
+    match version {
+        None => format!("{tool}@latest"),
+        Some("") => format!("{tool}latest"),
+        Some(_) => tool.to_owned(),
+    }
 }
 
 #[cfg(test)]

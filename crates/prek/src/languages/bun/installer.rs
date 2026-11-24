@@ -19,7 +19,9 @@ use crate::git;
 use crate::http::download_artifact;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::languages::version::{
+    ToolchainPolicy, ToolchainSource, find_system_executables, installed_version_dirs,
+};
 use crate::libc::Libc;
 use crate::process::Cmd;
 use crate::store::Store;
@@ -123,34 +125,11 @@ impl BunInstaller {
 
     /// Get the installed version of Bun.
     fn find_installed(&self, req: &BunRequest) -> Result<BunResult> {
-        let mut installed = fs_err::read_dir(&self.root)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(err) => {
-                    warn!(?err, "Failed to read entry");
-                    None
-                }
-            })
-            .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
-            .filter_map(|entry| {
-                let dir_name = entry.file_name();
-                let version = BunVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
-            })
+        installed_version_dirs::<BunVersion>(&self.root)
             .sorted_unstable_by(|(a, _), (b, _)| a.cmp(b))
-            .rev();
-
-        installed
-            .find_map(|(v, path)| {
-                if req.matches(&v) {
-                    Some(BunResult::from_dir(&path, v))
-                } else {
-                    None
-                }
-            })
+            .rev()
+            .find(|(version, _)| req.matches(version))
+            .map(|(version, path)| BunResult::from_dir(&path, version))
             .context("No installed bun version matches the request")
     }
 
@@ -215,9 +194,11 @@ impl BunInstaller {
         })
         .await
         .context("Failed to download bun")?;
+
         let extracted = archive::extract_archive(download.path())
             .await
             .context("Failed to extract bun")?;
+
         if target.exists() {
             debug!(target = %target.display(), "Removing existing bun");
             fs_err::tokio::remove_dir_all(&target).await?;

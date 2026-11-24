@@ -19,7 +19,9 @@ use crate::fs::LockedFile;
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::version::DenoVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::languages::version::{
+    ToolchainPolicy, ToolchainSource, find_system_executables, installed_version_dirs,
+};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -132,34 +134,11 @@ impl DenoInstaller {
 
     /// Get the installed version of Deno.
     fn find_installed(&self, req: &DenoRequest) -> Result<DenoResult> {
-        let mut installed = fs_err::read_dir(&self.root)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(err) => {
-                    warn!(?err, "Failed to read entry");
-                    None
-                }
-            })
-            .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
-            .filter_map(|entry| {
-                let dir_name = entry.file_name();
-                let version = DenoVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
-            })
+        installed_version_dirs::<DenoVersion>(&self.root)
             .sorted_unstable_by(|(a, _), (b, _)| a.cmp(b))
-            .rev();
-
-        installed
-            .find_map(|(v, path)| {
-                if req.matches(&v, Some(&path)) {
-                    Some(DenoResult::from_dir(&path, v))
-                } else {
-                    None
-                }
-            })
+            .rev()
+            .find(|(version, path)| req.matches(version, Some(path)))
+            .map(|(version, path)| DenoResult::from_dir(&path, version))
             .context("No installed deno version matches the request")
     }
 
@@ -231,9 +210,11 @@ impl DenoInstaller {
         })
         .await
         .context("Failed to download deno")?;
+
         let extracted = archive::extract_archive(download.path())
             .await
             .context("Failed to extract deno")?;
+
         Self::install_extracted(&target, &extracted).await?;
 
         Ok(DenoResult::from_dir(&target, version.clone()))

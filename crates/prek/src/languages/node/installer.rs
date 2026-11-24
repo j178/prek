@@ -1,7 +1,6 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::string::ToString;
 use std::sync::{Arc, LazyLock};
 
@@ -20,7 +19,9 @@ use crate::fs::{LockedFile, is_executable};
 use crate::http::{REQWEST_CLIENT, download_artifact};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
-use crate::languages::version::{ToolchainPolicy, ToolchainSource, find_system_executables};
+use crate::languages::version::{
+    ToolchainPolicy, ToolchainSource, find_system_executables, installed_version_dirs,
+};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -197,34 +198,11 @@ impl NodeInstaller {
 
     /// Get the installed version of Node.js.
     fn find_installed(&self, req: &NodeRequest) -> Result<NodeResult> {
-        let mut installed = fs_err::read_dir(&self.root)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(err) => {
-                    warn!(?err, "Failed to read entry");
-                    None
-                }
-            })
-            .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
-            .filter_map(|entry| {
-                let dir_name = entry.file_name();
-                let version = NodeVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
-            })
+        installed_version_dirs::<NodeVersion>(&self.root)
             .sorted_unstable_by(|(a, _), (b, _)| a.version.cmp(&b.version))
-            .rev();
-
-        installed
-            .find_map(|(v, path)| {
-                if req.matches(&v) {
-                    Some(NodeResult::from_dir(&path, v))
-                } else {
-                    None
-                }
-            })
+            .rev()
+            .find(|(version, _)| req.matches(version))
+            .map(|(version, path)| NodeResult::from_dir(&path, version))
             .context("No installed node version matches the request")
     }
 
@@ -281,9 +259,11 @@ impl NodeInstaller {
         })
         .await
         .context("Failed to download node")?;
+
         let extracted = archive::extract_archive(download.path())
             .await
             .context("Failed to extract node")?;
+
         if target.exists() {
             debug!(target = %target.display(), "Removing existing node");
             fs_err::tokio::remove_dir_all(&target).await?;
