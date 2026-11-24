@@ -249,15 +249,19 @@ impl MiseInstaller {
         let url = format!("{base_url}/{filename}");
         let checksum_url = format!("{base_url}/SHASUMS256.txt");
 
-        // Every published mise release has a checksum file, so its absence means the tag
-        // has no release yet.
-        let Some(checksums) = fetch_checksum(&checksum_url).await? else {
-            return Ok(None);
+        let download = match download_artifact(&url, &filename, store, async || {
+            let Some(checksums) = fetch_checksum(&checksum_url).await? else {
+                return Ok(None);
+            };
+            digest_from_sha256sums(&checksums, &filename)
+        })
+        .await
+        {
+            Ok(download) => download,
+            // A tag without a published release has no assets, so its download 404s.
+            Err(err) if is_not_found(&err) => return Ok(None),
+            Err(err) => return Err(err.context("Failed to download mise")),
         };
-        let digest = digest_from_sha256sums(&checksums, &filename)?;
-        let download = download_artifact(&url, &filename, store, async || Ok(digest))
-            .await
-            .context("Failed to download mise")?;
         let install_dir = tempfile::Builder::new()
             .prefix(".install-")
             .tempdir_in(&self.root)?;
@@ -285,6 +289,14 @@ impl MiseInstaller {
 
         Ok(Some(MiseResult::from_dir(&target, version.clone())))
     }
+}
+
+fn is_not_found(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<reqwest::Error>()
+            .is_some_and(|err| err.status() == Some(reqwest::StatusCode::NOT_FOUND))
+    })
 }
 
 fn is_compatible(request: &SemverRequest, version: &Version) -> bool {
