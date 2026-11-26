@@ -46,6 +46,8 @@ enum FirstClonePass<'a> {
 pub enum Error {
     #[error("Home directory not found")]
     HomeNotFound,
+    #[error("Cache at `{0}` is in use. Retry after other prek commands finish.")]
+    CacheInUse(PathBuf),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to clone repo `{repo}`")]
@@ -58,46 +60,86 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
-pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
+impl Error {
+    fn from_lock(err: std::io::Error, path: &Path) -> Self {
+        if err.kind() == std::io::ErrorKind::WouldBlock {
+            Self::CacheInUse(path.to_owned())
+        } else {
+            Self::Io(err)
+        }
+    }
+}
 
-/// A store for managing repos.
+pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
+pub(crate) const STORE_LOCK: &str = ".lock";
+const STORE_WRITE_LOCK: &str = ".write.lock";
+
+/// The on-disk cache for hook repositories, environments, and toolchains.
+///
+/// `PREK_HOME` overrides the default `prek` subdirectory of the platform cache
+/// directory. Opening a store creates the root and lock file as needed.
+/// The store holds its cache lock until it is dropped.
 #[derive(Debug)]
 pub struct Store {
     path: PathBuf,
+    _cache_lock: LockedFile,
 }
 
 impl Store {
-    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
-        Ok(Self {
-            path: std::path::absolute(path)?,
-        })
+    /// Open the configured cache, waiting until a shared lock is available.
+    /// Call [`Self::init`] before preparing hooks.
+    pub(crate) fn open() -> Result<Self, Error> {
+        Self::open_configured(LockedFile::acquire_shared)
     }
 
-    /// Create a store from environment variables or default paths.
-    pub(crate) fn from_settings() -> Result<Self, Error> {
+    /// Open the configured cache with a shared lock. Return [`Error::CacheInUse`]
+    /// immediately if the cache is locked exclusively.
+    pub(crate) fn try_open() -> Result<Self, Error> {
+        Self::open_configured(LockedFile::try_shared)
+    }
+
+    /// Open the configured cache with an exclusive lock. Return [`Error::CacheInUse`]
+    /// immediately if another handle holds a shared or exclusive lock.
+    pub(crate) fn try_open_exclusive() -> Result<ExclusiveStore, Error> {
+        Self::open_configured(LockedFile::try_exclusive).map(ExclusiveStore)
+    }
+
+    fn open_configured(lock: fn(&Path) -> std::io::Result<LockedFile>) -> Result<Self, Error> {
         let path = if let Some(path) = EnvVars.var_os(EnvVars::PREK_HOME) {
-            Some(expand_tilde(PathBuf::from(path)))
+            expand_tilde(PathBuf::from(path))
         } else {
             etcetera::choose_base_strategy()
-                .map(|path| path.cache_dir().join("prek"))
-                .ok()
+                .map_err(|_| Error::HomeNotFound)?
+                .cache_dir()
+                .join("prek")
         };
-
-        let Some(path) = path else {
-            return Err(Error::HomeNotFound);
-        };
-        let store = Store::from_path(path)?.init()?;
-
-        Ok(store)
+        Self::open_at(&path, lock)
     }
 
+    /// The absolute path to the cache root.
     pub(crate) fn path(&self) -> &Path {
         self.path.as_ref()
     }
 
-    /// Initialize the store.
+    fn open_at(path: &Path, lock: fn(&Path) -> std::io::Result<LockedFile>) -> Result<Self, Error> {
+        let path = std::path::absolute(path)?;
+        fs_err::create_dir_all(&path)?;
+        let cache_lock =
+            lock(&path.join(STORE_LOCK)).map_err(|err| Error::from_lock(err, &path))?;
+        Ok(Self {
+            path,
+            _cache_lock: cache_lock,
+        })
+    }
+
+    /// Open and initialize a cache at `path`, waiting for shared access.
+    pub(crate) fn init_at(path: impl AsRef<Path>) -> Result<Self, Error> {
+        Self::open_at(path.as_ref(), LockedFile::acquire_shared)?.init()
+    }
+
+    /// Ensure the repository, hook environment, and scratch directories exist.
+    /// Create the cache README if it is missing.
     pub(crate) fn init(self) -> Result<Self, Error> {
-        fs_err::create_dir_all(&self.path)?;
         fs_err::create_dir_all(self.repos_dir())?;
         fs_err::create_dir_all(self.hooks_dir())?;
         fs_err::create_dir_all(self.scratch_path())?;
@@ -113,21 +155,33 @@ impl Store {
         Ok(self)
     }
 
-    /// Acquire the cross-process lock for repository, environment, and config tracking operations.
-    pub(crate) async fn lock(&self) -> Result<StoreGuard<'_>, std::io::Error> {
-        let lock = LockedFile::acquire(self.path.join(".lock"), "store").await?;
-        Ok(StoreGuard {
+    /// Wait for the write lock before preparing hooks or updating tracked configs.
+    /// Drop the guard before executing a hook so a nested `prek run` can acquire it.
+    pub(crate) async fn write_lock(&self) -> Result<StoreWriteGuard<'_>, Error> {
+        let lock = LockedFile::acquire(self.path.join(STORE_WRITE_LOCK), "store updates").await?;
+        Ok(StoreWriteGuard {
             store: self,
-            _lock: lock,
+            _write_lock: lock,
         })
     }
 
-    /// Returns the path to where a remote repo would be stored.
+    /// Acquire the same lock as [`Self::write_lock`], returning [`Error::CacheInUse`]
+    /// immediately if another writer holds it.
+    pub(crate) fn try_write_lock(&self) -> Result<StoreWriteGuard<'_>, Error> {
+        let lock = LockedFile::try_exclusive(&self.path.join(STORE_WRITE_LOCK))
+            .map_err(|err| Error::from_lock(err, &self.path))?;
+        Ok(StoreWriteGuard {
+            store: self,
+            _write_lock: lock,
+        })
+    }
+
+    /// The checkout path for this repository and revision, whether or not it exists yet.
     pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
         self.repos_dir().join(Self::repo_key(repo))
     }
 
-    /// Returns the store key (directory name) for a remote repo.
+    /// The checkout directory name derived from the repository source and revision.
     pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
         let mut hasher = SeaHasher::new();
         repo.source().hash(&mut hasher);
@@ -135,58 +189,112 @@ impl Store {
         to_hex(hasher.finish())
     }
 
+    /// Directory containing cached repository checkouts.
     pub(crate) fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
     }
 
+    /// Directory containing installed hook environments.
     pub(crate) fn hooks_dir(&self) -> PathBuf {
         self.path.join("hooks")
     }
 
+    /// Directory for patches that preserve unstaged changes during a hook run.
     pub(crate) fn patches_dir(&self) -> PathBuf {
         self.path.join("patches")
     }
 
+    /// Root directory for toolchains installed by prek.
     pub(crate) fn tools_dir(&self) -> PathBuf {
         self.path.join("tools")
     }
 
+    /// Root directory for tool caches and prek's own cached metadata.
     pub(crate) fn cache_dir(&self) -> PathBuf {
         self.path.join("cache")
     }
 
-    /// The path to the tool directory in the store.
+    /// Directory for installed versions of a particular tool.
     pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
         self.tools_dir().join(tool.as_ref())
     }
 
+    /// Cache directory for a single tool or for prek itself.
     pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
         self.cache_dir().join(tool.as_ref())
     }
 
-    /// Scratch path for temporary files.
+    /// Workspace for temporary files such as in-progress clones and downloads.
     pub(crate) fn scratch_path(&self) -> PathBuf {
         self.path.join("scratch")
     }
 
+    /// Default log path for commands that write a trace log.
     pub(crate) fn log_file(&self) -> PathBuf {
         self.path.join("prek.log")
     }
 
+    /// File recording the config paths that garbage collection consults.
     pub(crate) fn config_tracking_file(&self) -> PathBuf {
         self.path.join("config-tracking.json")
     }
+
+    /// Read the config paths recorded for garbage collection. Hold the write
+    /// lock or the exclusive cache lock for a consistent read. A missing file
+    /// or JSON that cannot be decoded as a set of paths yields an empty set.
+    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
+        let tracking_file = self.config_tracking_file();
+        match fs_err::read_to_string(&tracking_file) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
+            Err(e) => Err(e.into()),
+            Ok(content) => {
+                let tracked = serde_json::from_str(&content).unwrap_or_else(|e| {
+                    warn!("Failed to parse config tracking file: {e}, resetting");
+                    FxHashSet::default()
+                });
+                Ok(tracked)
+            }
+        }
+    }
+
+    fn write_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
+        let content = serde_json::to_string_pretty(configs)?;
+        fs_err::write(self.config_tracking_file(), content)?;
+
+        Ok(())
+    }
 }
 
-/// Access to a store while its cross-process lock is held.
+/// Allows cache entries to be removed. Other commands cannot open this cache
+/// until the exclusive store is dropped.
+pub(crate) struct ExclusiveStore(Store);
+
+impl Deref for ExclusiveStore {
+    type Target = Store;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ExclusiveStore {
+    /// Replace the tracked config paths with the set retained by garbage collection.
+    pub(crate) fn update_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
+        self.write_tracked_configs(configs)
+    }
+}
+
+/// Serializes checkout creation, hook installation, and config tracking updates.
+/// Dropping the guard releases the write lock. The store's cache lock stays
+/// held, so other commands can prepare hooks while this one runs.
 #[derive(Debug)]
-#[must_use = "the store lock is released when the guard is dropped"]
-pub(crate) struct StoreGuard<'a> {
+#[must_use]
+pub(crate) struct StoreWriteGuard<'a> {
     store: &'a Store,
-    _lock: LockedFile,
+    _write_lock: LockedFile,
 }
 
-impl Deref for StoreGuard<'_> {
+impl Deref for StoreWriteGuard<'_> {
     type Target = Store;
 
     fn deref(&self) -> &Self::Target {
@@ -194,7 +302,7 @@ impl Deref for StoreGuard<'_> {
     }
 }
 
-impl StoreGuard<'_> {
+impl StoreWriteGuard<'_> {
     async fn clone_repo_to_temp(
         &self,
         repo: &RemoteRepo,
@@ -231,11 +339,11 @@ impl StoreGuard<'_> {
         Ok(target)
     }
 
-    /// Clone remote repositories into the store.
+    /// Return a checkout path for each requested repository and revision,
+    /// reusing cached checkouts and cloning those that are missing.
     ///
-    /// The first pass runs in parallel with terminal prompts disabled. Repositories that fail
-    /// with an authentication error are retried afterwards, sequentially, with terminal prompts
-    /// enabled so the user can provide credentials for one repository at a time.
+    /// Clones run in parallel with terminal prompts disabled. Outside CI,
+    /// authentication failures are retried one at a time with prompts enabled.
     pub(crate) async fn clone_repos<'a>(
         &self,
         repos: impl IntoIterator<Item = &'a RemoteRepo>,
@@ -352,7 +460,7 @@ impl StoreGuard<'_> {
         Ok(cloned)
     }
 
-    /// Clone a single remote repository into the store.
+    /// Return the local checkout for this repository and revision, cloning it if needed.
     pub(crate) async fn clone_repo(
         &self,
         repo: &RemoteRepo,
@@ -369,23 +477,7 @@ impl StoreGuard<'_> {
             })
     }
 
-    /// Get all tracked config files.
-    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
-        let tracking_file = self.config_tracking_file();
-        match fs_err::read_to_string(&tracking_file) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
-            Err(e) => Err(e.into()),
-            Ok(content) => {
-                let tracked = serde_json::from_str(&content).unwrap_or_else(|e| {
-                    warn!("Failed to parse config tracking file: {e}, resetting");
-                    FxHashSet::default()
-                });
-                Ok(tracked)
-            }
-        }
-    }
-
-    /// Track new config files for GC.
+    /// Add config paths to the set that garbage collection uses to find live cache entries.
     pub(crate) fn track_configs<'a>(
         &self,
         config_paths: impl Iterator<Item = &'a Path>,
@@ -395,16 +487,8 @@ impl StoreGuard<'_> {
         tracked.extend(config_paths.map(Path::to_path_buf));
 
         if tracked.len() != previous_len {
-            self.update_tracked_configs(&tracked)?;
+            self.write_tracked_configs(&tracked)?;
         }
-
-        Ok(())
-    }
-
-    /// Update the tracked configs file.
-    pub(crate) fn update_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
-        let content = serde_json::to_string_pretty(configs)?;
-        fs_err::write(self.config_tracking_file(), content)?;
 
         Ok(())
     }

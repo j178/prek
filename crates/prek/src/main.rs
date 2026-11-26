@@ -20,7 +20,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
 use crate::cli::{
-    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace,
+    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, GlobalArgs, UtilCommand, UtilNamespace,
 };
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
@@ -78,29 +78,7 @@ pub(crate) enum Level {
     TraceAll,
 }
 
-enum LogFile {
-    Default,
-    Path(PathBuf),
-    Disabled,
-}
-
-impl LogFile {
-    fn from_args(log_file: Option<PathBuf>, no_log_file: bool) -> Self {
-        if no_log_file {
-            Self::Disabled
-        } else if let Some(path) = log_file {
-            Self::Path(path)
-        } else {
-            Self::Default
-        }
-    }
-
-    fn is_disabled(&self) -> bool {
-        matches!(self, Self::Disabled)
-    }
-}
-
-fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
+fn setup_logging(level: Level, log_file: Option<PathBuf>) -> Result<()> {
     let directive = match level {
         Level::Default | Level::Verbose => LevelFilter::OFF.into(),
         Level::Debug => Directive::from_str("prek=debug")?,
@@ -124,14 +102,7 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
 
     let registry = tracing_subscriber::registry().with(stderr_layer);
 
-    if log_file.is_disabled() {
-        registry.init();
-    } else {
-        let log_file_path = match log_file {
-            LogFile::Default => store.log_file(),
-            LogFile::Path(path) => path,
-            LogFile::Disabled => unreachable!(),
-        };
+    if let Some(log_file_path) = log_file {
         let log_file = fs_err::OpenOptions::new()
             .create(true)
             .write(true)
@@ -150,28 +121,21 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
             .with_filter(EnvFilter::new("prek=trace"));
 
         registry.with(file_layer).init();
+    } else {
+        registry.init();
     }
 
     Ok(())
 }
 
-async fn run(cli: Cli) -> Result<ExitStatus> {
-    // Shell startup must not initialize the cache or overwrite the log from the last run.
-    if let Some(Command::Util(UtilNamespace {
-        command: UtilCommand::GenerateShellCompletion(args),
-    })) = &cli.command
-    {
-        return cli::generate_shell_completion(args.shell);
-    }
-
-    terminal::enable_ansi_colors();
-
-    ColorChoice::write_global(cli.globals.color.into());
-
-    let store = Store::from_settings()?;
-    let log_file = LogFile::from_args(cli.globals.log_file.clone(), cli.globals.no_log_file);
+fn initialize_command(globals: &GlobalArgs, default_log: Option<PathBuf>) -> Result<Printer> {
+    let log_file = if globals.no_log_file {
+        None
+    } else {
+        globals.log_file.clone().or(default_log)
+    };
     setup_logging(
-        match cli.globals.verbose {
+        match globals.verbose {
             0 => Level::Default,
             1 => Level::Verbose,
             2 => Level::Debug,
@@ -179,22 +143,21 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             _ => Level::TraceAll,
         },
         log_file,
-        &store,
     )?;
 
-    let printer = if cli.globals.quiet == 1 {
+    let printer = if globals.quiet == 1 {
         Printer::Quiet
-    } else if cli.globals.quiet > 1 {
+    } else if globals.quiet > 1 {
         Printer::Silent
-    } else if cli.globals.verbose > 1 {
+    } else if globals.verbose > 1 {
         Printer::Verbose
-    } else if cli.globals.no_progress {
+    } else if globals.no_progress {
         Printer::NoProgress
     } else {
         Printer::Default
     };
 
-    if cli.globals.quiet > 0 {
+    if globals.quiet > 0 {
         warnings::disable();
     } else {
         warnings::enable();
@@ -218,16 +181,60 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //      https://github.com/pre-commit/pre-commit/issues/2295
     git::init_git_work_tree()?;
 
-    if let Some(dir) = cli.globals.cd.as_ref() {
+    if let Some(dir) = globals.cd.as_ref() {
         debug!("Changing current directory to: `{}`", dir.display());
         std::env::set_current_dir(dir)?;
     }
 
     debug!("Args: {:?}", std::env::args().collect::<Vec<_>>());
 
+    Ok(printer)
+}
+
+async fn run(cli: Cli) -> Result<ExitStatus> {
+    // Shell startup must not initialize the cache or overwrite the log from the last run.
+    if let Some(Command::Util(UtilNamespace {
+        command: UtilCommand::GenerateShellCompletion(args),
+    })) = &cli.command
+    {
+        return cli::generate_shell_completion(args.shell);
+    }
+
+    terminal::enable_ansi_colors();
+
+    ColorChoice::write_global(cli.globals.color.into());
+
     let command = cli
         .command
         .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
+    match &command {
+        Command::Clean
+        | Command::Cache(CacheNamespace {
+            command: CacheCommand::Clean,
+        }) => {
+            let store = Store::try_open_exclusive()?;
+            let printer = initialize_command(&cli.globals, None)?;
+            return cli::cache_clean(&store, printer);
+        }
+        Command::GC(args)
+        | Command::Cache(CacheNamespace {
+            command: CacheCommand::GC(args),
+        }) => {
+            let shared;
+            let mode = if args.dry_run {
+                shared = Store::try_open()?;
+                cli::GcMode::DryRun(shared.try_write_lock()?)
+            } else {
+                cli::GcMode::Remove(Store::try_open_exclusive()?)
+            };
+            let printer = initialize_command(&cli.globals, Some(mode.store().log_file()))?;
+            return cli::cache_gc(mode, cli.globals.verbose > 0, printer).await;
+        }
+        _ => {}
+    }
+
+    let store = Store::open()?.init()?;
+    let printer = initialize_command(&cli.globals, Some(store.log_file()))?;
     match command {
         Command::Init(args) => {
             if cli.globals.config.is_some() {
@@ -332,33 +339,30 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Command::Cache(CacheNamespace {
-            command: cache_command,
-        }) => match cache_command {
-            CacheCommand::Clean => cli::cache_clean(&store, printer),
-            CacheCommand::Dir => {
-                writeln!(
-                    printer.stdout_important(),
-                    "{}",
-                    store.path().display().cyan()
-                )?;
-                Ok(ExitStatus::Success)
-            }
-            CacheCommand::GC(args) => {
-                cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
-            }
-            CacheCommand::Size(args) => {
-                let output_format = if args.human {
-                    cli::CacheSizeOutputFormat::Human
-                } else {
-                    args.output_format
-                };
-                cli::cache_size(&store, output_format, printer)
-            }
-        },
-        Command::Clean => cli::cache_clean(&store, printer),
-        Command::GC(args) => {
-            cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
+            command: CacheCommand::Dir,
+        }) => {
+            writeln!(
+                printer.stdout_important(),
+                "{}",
+                store.path().display().cyan()
+            )?;
+            Ok(ExitStatus::Success)
         }
+        Command::Cache(CacheNamespace {
+            command: CacheCommand::Size(args),
+        }) => {
+            let output_format = if args.human {
+                cli::CacheSizeOutputFormat::Human
+            } else {
+                args.output_format
+            };
+            cli::cache_size(&store, output_format, printer)
+        }
+        Command::Clean
+        | Command::GC(_)
+        | Command::Cache(CacheNamespace {
+            command: CacheCommand::Clean | CacheCommand::GC(_),
+        }) => unreachable!("cache maintenance is dispatched before opening the shared store"),
         Command::ValidateConfig(args) => cli::validate_configs(args.configs, printer),
         Command::ValidateManifest(args) => cli::validate_manifest(args.manifests, printer),
         Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),
@@ -387,6 +391,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Command::TryRepo(args) => {
             cli::try_repo(
+                &store,
                 cli.globals.config,
                 args.repo,
                 args.rev,

@@ -182,119 +182,78 @@ pub(crate) fn expand_tilde(path: PathBuf) -> PathBuf {
 #[derive(Debug)]
 pub struct LockedFile {
     file: fs_err::File,
-    path: PathBuf,
 }
 
 impl LockedFile {
-    /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(
-        file: fs_err::File,
-        resource: &str,
-    ) -> Result<fs_err::File, std::io::Error> {
-        trace!(
-            resource,
-            path = %file.path().display(),
-            "Checking lock",
-        );
-        match file.try_lock() {
-            Ok(()) => {
-                debug!(resource, "Acquired lock");
-                Ok(file)
-            }
-            Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures
-                if !matches!(err, std::fs::TryLockError::WouldBlock) {
-                    trace!(error = ?err, "Try lock error");
-                }
-                info!(
-                    resource,
-                    path = %file.path().display(),
-                    "Waiting to acquire lock",
-                );
-                file.lock().map_err(|err| {
-                    // Not a fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
-                        "Could not acquire lock for `{resource}` at `{}`: {}",
-                        file.path().display(),
-                        err
-                    ))
-                })?;
-                trace!(resource, "Acquired lock");
-                Ok(file)
-            }
-        }
+    fn open(path: &Path) -> std::io::Result<fs_err::File> {
+        fs_err::File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)
     }
 
-    /// Acquire a cross-process lock for a resource using a file at the provided path.
-    pub async fn acquire(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
-        let path = path.as_ref().to_path_buf();
+    fn from_locked(file: fs_err::File) -> Self {
+        let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
+        *held.entry(file.path().to_owned()).or_default() += 1;
+        Self { file }
+    }
 
-        let file = fs_err::File::create(&path)?;
+    pub(crate) fn acquire_shared(path: &Path) -> std::io::Result<Self> {
+        let file = Self::open(path)?;
+        file.lock_shared()?;
+        Ok(Self::from_locked(file))
+    }
 
-        let resource = resource.to_string();
-        let mut task =
-            tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource));
+    pub(crate) fn try_shared(path: &Path) -> std::io::Result<Self> {
+        let file = Self::open(path)?;
+        file.try_lock_shared()?;
+        Ok(Self::from_locked(file))
+    }
 
-        let warning_path = path.clone();
+    pub(crate) fn try_exclusive(path: &Path) -> std::io::Result<Self> {
+        let file = Self::open(path)?;
+        file.try_lock()?;
+        Ok(Self::from_locked(file))
+    }
 
-        let file = tokio::select! {
+    /// Wait for an exclusive lock without blocking the async runtime.
+    pub async fn acquire(path: impl AsRef<Path>, resource: impl Display) -> std::io::Result<Self> {
+        let path = path.as_ref();
+        trace!(%resource, path = %path.display(), "Checking lock");
+        // Open while the caller still holds its cache lock. A cancelled task may
+        // outlive the caller and must not recreate its lock file after cleanup.
+        let file = Self::open(path)?;
+        let mut task = tokio::task::spawn_blocking(move || -> std::io::Result<Self> {
+            file.lock()?;
+            Ok(Self::from_locked(file))
+        });
+
+        let lock = tokio::select! {
             result = &mut task => result??,
             () = tokio::time::sleep(Duration::from_secs(1)) => {
-                let held_by_this_process = {
-                    let held_by_this_process = IN_PROCESS_LOCK_HELD_COUNTS
-                                .lock()
-                                .unwrap()
-                                .get(&warning_path)
-                                .is_some_and(|count| *count > 0);
-
-                    #[cfg(test)]
-                    {
-                        let forced_cross_process = FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
-                            .lock()
-                            .unwrap()
-                            .contains(&warning_path);
-
-                        if forced_cross_process {
-                            false
-                        } else {
-                            held_by_this_process
-                        }
-                    }
-
-                    #[cfg(not(test))]
-                    {
-                        held_by_this_process
-                    }
-                };
+                info!(%resource, path = %path.display(), "Waiting to acquire lock");
+                let held_by_this_process = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap().contains_key(path);
+                #[cfg(test)]
+                let held_by_this_process = held_by_this_process
+                    && !FORCE_CROSS_PROCESS_LOCK_WARNING_FOR.lock().unwrap().contains(path);
 
                 if !held_by_this_process {
                     #[cfg(test)]
-                    {
-                        LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path);
-                    }
-
+                    LOCK_WARNING_PATHS.lock().unwrap().insert(path.to_owned());
                     #[cfg(not(test))]
-                    {
-                        crate::warn_user!(
-                            "Waiting to acquire lock at `{}`. Another prek process may still be running",
-                            warning_path.display()
-                        );
-                    }
+                    crate::warn_user!(
+                        "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                        path.display()
+                    );
                 }
-
                 task.await??
             }
         };
 
-        {
-            let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
-            *held.entry(path.clone()).or_insert(0) += 1;
-        }
-
-        Ok(Self { file, path })
+        debug!(%resource, "Acquired lock");
+        Ok(lock)
     }
 }
 
@@ -308,10 +267,10 @@ impl Drop for LockedFile {
             );
         } else {
             let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
-            if let Some(count) = held.get_mut(&self.path) {
+            if let Some(count) = held.get_mut(self.file.path()) {
                 *count = count.saturating_sub(1);
                 if *count == 0 {
-                    held.remove(&self.path);
+                    held.remove(self.file.path());
                 }
             }
             trace!(path = %self.file.path().display(), "Released lock");

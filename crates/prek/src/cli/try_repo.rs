@@ -201,6 +201,7 @@ where
 }
 
 pub(crate) async fn try_repo(
+    store: &Store,
     config: Option<PathBuf>,
     repo: String,
     rev: Option<String>,
@@ -214,10 +215,9 @@ pub(crate) async fn try_repo(
         warn_user!("`--config` option is ignored when using `try-repo`");
     }
 
-    let store = Store::from_settings()?;
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
-    let store = Store::from_path(tmp_dir.path())?.init()?;
+    let store = Store::init_at(tmp_dir.path())?;
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, git::root()?)?;
 
     let predefined_hooks = match repo.as_str() {
@@ -241,10 +241,11 @@ pub(crate) async fn try_repo(
             prepared.rev.clone(),
             vec![],
         );
-        let repo_clone_path = {
-            let store = store.lock().await?;
-            store.clone_repo(&repo_config, None).await?
-        };
+        let repo_clone_path = store
+            .write_lock()
+            .await?
+            .clone_repo(&repo_config, None)
+            .await?;
         let manifest =
             config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
         let hooks = manifest

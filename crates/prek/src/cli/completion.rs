@@ -94,7 +94,7 @@ struct SelectorCompleter {
 
 impl SelectorCompleter {
     fn load() -> Option<Self> {
-        let store = Store::from_settings().ok()?;
+        let store = Store::try_open().ok()?;
         let root = Workspace::find_root(None, &CWD).ok()?;
         let workspace = Workspace::discover(&store, root, None, None, false).ok()?;
 

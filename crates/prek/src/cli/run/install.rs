@@ -12,7 +12,7 @@ use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::config::Language;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::printer::Printer;
-use crate::store::StoreGuard;
+use crate::store::{Store, StoreWriteGuard};
 
 /// Resolve already-installed hook environments and install the missing ones.
 ///
@@ -20,7 +20,7 @@ use crate::store::StoreGuard;
 /// by this call are returned directly and reused within each install partition.
 pub(crate) async fn install_hooks(
     hooks: Vec<Arc<Hook>>,
-    store: &StoreGuard<'_>,
+    store: &StoreWriteGuard<'_>,
     printer: Printer,
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
@@ -58,7 +58,7 @@ pub(crate) async fn install_hooks(
 
 async fn install_partition(
     hooks: Vec<Arc<Hook>>,
-    store: &StoreGuard<'_>,
+    store: &StoreWriteGuard<'_>,
     reporter: &HookInstallReporter,
     semaphore: Rc<Semaphore>,
 ) -> Result<Vec<InstalledHook>> {
@@ -236,7 +236,7 @@ impl InstallCache {
     /// Loading is lazy and happens at most once per `InstallCache`.
     pub(crate) async fn installed_hooks<'a>(
         &'a self,
-        store: &StoreGuard<'_>,
+        store: &Store,
     ) -> impl Iterator<Item = &'a CachedInstallInfo> + 'a {
         let store_hooks = self.store_hooks(store).await;
         store_hooks.iter()
@@ -245,7 +245,7 @@ impl InstallCache {
     /// Resolve cached environments concurrently, preserving hook order in each output.
     async fn partition_installed_hooks(
         &self,
-        store: &StoreGuard<'_>,
+        store: &StoreWriteGuard<'_>,
         hooks: Vec<Arc<Hook>>,
     ) -> (Vec<InstalledHook>, Vec<Arc<Hook>>) {
         let mut installed = Vec::with_capacity(hooks.len());
@@ -278,7 +278,7 @@ impl InstallCache {
     /// same install partition are processed sequentially.
     async fn installed_hook(
         &self,
-        store: &StoreGuard<'_>,
+        store: &StoreWriteGuard<'_>,
         hook: Arc<Hook>,
     ) -> Option<InstalledHook> {
         let requirement = hook.environment_requirement()?;
@@ -294,13 +294,13 @@ impl InstallCache {
         None
     }
 
-    async fn store_hooks(&self, store: &StoreGuard<'_>) -> &[CachedInstallInfo] {
+    async fn store_hooks(&self, store: &Store) -> &[CachedInstallInfo] {
         self.store_hooks
             .get_or_init(async || Self::load_store_installed_hooks(store).await)
             .await
     }
 
-    async fn load_store_installed_hooks(store: &StoreGuard<'_>) -> Vec<CachedInstallInfo> {
+    async fn load_store_installed_hooks(store: &Store) -> Vec<CachedInstallInfo> {
         match fs_err::read_dir(store.hooks_dir()) {
             Ok(dirs) => {
                 let mut tasks = futures_util::stream::iter(dirs)

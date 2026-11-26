@@ -1,3 +1,4 @@
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
@@ -112,12 +113,70 @@ fn cache_gc_verbose_shows_removed_entries() -> anyhow::Result<()> {
 }
 
 #[test]
+fn active_hook_protects_cache_from_cleanup() {
+    // Both run and exec must allow nested hook runs while keeping cache cleanup
+    // from removing files that the outer command is still using.
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: probe
+                    name: probe
+                    language: system
+                    entry: python3 probe.py
+                  - id: inner
+                    name: inner
+                    language: system
+                    entry: python3 -c pass
+        "})
+        .with_file(
+            "probe.py",
+            indoc::indoc! {r"
+            import os
+            from pathlib import Path
+            import subprocess
+
+            prek = os.environ['TEST_PREK']
+            live = Path(os.environ['PREK_HOME'], 'scratch', 'live')
+            live.write_text('in use')
+            subprocess.run([prek, 'run', 'inner', '--all-files'], check=True, timeout=30)
+            subprocess.run([prek, 'cache', 'gc', '--dry-run'], check=True, timeout=30)
+            for args in (['cache', 'gc'], ['cache', 'clean'], ['gc'], ['clean']):
+                cleanup = subprocess.run([prek, *args], capture_output=True, text=True, timeout=30)
+                assert cleanup.returncode == 2 and 'is in use' in cleanup.stderr, cleanup
+                assert live.read_text() == 'in use'
+        "},
+        )
+        .init_git();
+    for args in [
+        &["run", "probe", "--all-files"][..],
+        &["exec", "probe", "--", "python3", "probe.py"],
+    ] {
+        context
+            .command()
+            .args(args)
+            .env("TEST_PREK", assert_cmd::cargo::cargo_bin!("prek"))
+            .assert()
+            .success();
+    }
+    context.command().args(["cache", "gc"]).assert().success();
+    context
+        .home_dir()
+        .child("scratch/live")
+        .assert(predicates::path::missing());
+}
+
+#[test]
 fn cache_clean() {
     let context = TestEnv::new()
         .with_filter(
             r"(?m)^Removed \d+ files? \([^)]+\)\n",
             "Removed [N] file(s) ([SIZE])\n",
         )
+        // Full cleanup must also recover a cache whose expected directories or default log are broken.
+        .with_file("home/repos", "incomplete cache")
+        .with_file("home/prek.log/stale", "")
         .with_file("home/cache/data.bin", "hello")
         .with_file("home/cache/nested/data.bin", "world!");
     let home = context.child("home");
@@ -131,7 +190,18 @@ fn cache_clean() {
     Removed [N] file(s) ([SIZE])
     ");
 
-    home.assert(predicates::path::missing());
+    home.child("cache").assert(predicates::path::missing());
+    home.child("repos").assert(predicates::path::missing());
+    home.child("prek.log").assert(predicates::path::missing());
+
+    cmd_snapshot!(context, context.command().args(["cache", "clean"]).env("PREK_HOME", &*home), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No cache entries found
+    ");
 
     // Test `prek clean` works for backward compatibility
     context.write_file("home/cache/one.txt", "abc");
@@ -144,7 +214,35 @@ fn cache_clean() {
     Removed [N] file(s) ([SIZE])
     ");
 
-    home.assert(predicates::path::missing());
+    home.child("cache").assert(predicates::path::missing());
+}
+
+#[cfg(unix)]
+#[test]
+fn cache_clean_unlinks_read_only_go_modules() -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Removing a link from a read-only module must preserve the target's contents and mode.
+    let context = TestEnv::new().with_file("outside", "private");
+    let target = context.child("outside");
+    let module = context.home_dir().child("cache/go/mod");
+    module.create_dir_all()?;
+    fs_err::os::unix::fs::symlink(target.path(), module.child("link").path())?;
+    fs_err::set_permissions(&*target, std::fs::Permissions::from_mode(0o600))?;
+    fs_err::set_permissions(&*module, std::fs::Permissions::from_mode(0o555))?;
+
+    context
+        .command()
+        .args(["cache", "clean"])
+        .assert()
+        .success();
+    module.assert(predicates::path::missing());
+    target.assert("private");
+    assert_eq!(
+        fs_err::metadata(&*target)?.permissions().mode() & 0o777,
+        0o600
+    );
+    Ok(())
 }
 
 #[test]

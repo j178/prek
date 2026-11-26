@@ -46,17 +46,14 @@ pub(crate) async fn list(
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     let reporter = HookInitReporter::new(printer);
-    let store = store.lock().await?;
     let mut hooks = workspace
         .init_hooks(
-            &store,
+            &store.write_lock().await?,
             HookInitFilters::new(Some(&selectors), Some(&group_filters)),
             Some(&reporter),
         )
         .await
         .context("Failed to init hooks")?;
-
-    drop(store);
 
     hooks.retain(|h| {
         selectors.matches_hook(h)

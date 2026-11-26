@@ -19,7 +19,7 @@ use crate::hook::{
     HOOK_MARKER, HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef,
 };
 use crate::printer::Printer;
-use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
+use crate::store::{CacheBucket, ExclusiveStore, REPO_MARKER, Store, StoreWriteGuard, ToolBucket};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
@@ -142,14 +142,26 @@ impl AddAssign<&Removal> for RemovalSummary {
     }
 }
 
+pub(crate) enum GcMode<'a> {
+    DryRun(StoreWriteGuard<'a>),
+    Remove(ExclusiveStore),
+}
+
+impl GcMode<'_> {
+    pub(crate) fn store(&self) -> &Store {
+        match self {
+            Self::DryRun(store) => store,
+            Self::Remove(store) => store,
+        }
+    }
+}
+
 pub(crate) async fn cache_gc(
-    store: &Store,
-    dry_run: bool,
+    mode: GcMode<'_>,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let store = store.lock().await?;
-
+    let store = mode.store();
     let tracked_configs = store.tracked_configs()?;
     if tracked_configs.is_empty() {
         writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
@@ -189,7 +201,7 @@ pub(crate) async fn cache_gc(
         };
         kept_configs.insert(config_path);
 
-        used_env_requirements.extend(hook_env_requirements_from_config(&store, &config));
+        used_env_requirements.extend(hook_env_requirements_from_config(store, &config));
 
         // Mark repos referenced by this config (if present in store).
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
@@ -216,7 +228,7 @@ pub(crate) async fn cache_gc(
     // Mark hook environments by matching already-installed env metadata.
     // While doing this, try to derive the specific tool *version* directories in use from
     // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
-    for installed in install_cache.installed_hooks(&store).await {
+    for installed in install_cache.installed_hooks(store).await {
         let info = installed.info_ref();
         if used_env_requirements
             .iter()
@@ -231,15 +243,19 @@ pub(crate) async fn cache_gc(
                 used_hook_env_dirs.insert(dir);
             }
 
-            mark_tool_versions_from_install_info(&store, info, &mut used_tool_versions);
+            mark_tool_versions_from_install_info(store, info, &mut used_tool_versions);
         }
     }
 
     // Update tracking file to drop configs that no longer exist.
-    if !dry_run && kept_configs.len() != tracked_configs.len() {
+    if let GcMode::Remove(exclusive) = &mode
+        && kept_configs.len() != tracked_configs.len()
+    {
         let kept_configs = kept_configs.into_iter().map(Path::to_path_buf).collect();
-        store.update_tracked_configs(&kept_configs)?;
+        exclusive.update_tracked_configs(&kept_configs)?;
     }
+
+    let dry_run = matches!(mode, GcMode::DryRun(_));
 
     // Sweep repos/<hash>
     let removed_repos = sweep_dir_by_name(
@@ -271,7 +287,7 @@ pub(crate) async fn cache_gc(
     )?;
 
     // Sweep tools/<bucket>/<version>
-    let removed_tool_versions = sweep_tool_versions(&store, &used_tool_versions, dry_run, verbose)?;
+    let removed_tool_versions = sweep_tool_versions(store, &used_tool_versions, dry_run, verbose)?;
 
     let mut removed_tools = removed_tool_buckets;
     removed_tools += removed_tool_versions;
