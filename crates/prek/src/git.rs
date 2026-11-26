@@ -12,6 +12,7 @@ use same_file::is_same_file;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
 
+use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::fs::{PathClean, path_from_bytes};
 use crate::process;
 use crate::process::{Cmd, StatusError};
@@ -821,6 +822,31 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
     Ok(())
 }
 
+async fn default_submodule_jobs(path: &Path) -> Result<Option<usize>, Error> {
+    let jobs = (*INTERNAL_CONCURRENCY).min(4);
+    if jobs == 1 || EnvVars.is_set(EnvVars::PREK_NO_CONCURRENCY) {
+        return Ok(None);
+    }
+
+    // Git also reads submodule.fetchJobs from the checked-out .gitmodules.
+    // Leave both the repository's settings and the user's settings in effect.
+    for scope in [&["--file", ".gitmodules"][..], &[]] {
+        let output = git_cmd()?
+            .current_dir(path)
+            .arg("config")
+            .args(scope)
+            .args(["--get-regexp", r"^(submodule\.fetchjobs|fetch\.parallel)$"])
+            .sanitize_git_repo_env()
+            .check(false)
+            .output()
+            .await?;
+        if output.status.code() != Some(1) {
+            return Ok(None);
+        }
+    }
+    Ok(Some(jobs))
+}
+
 async fn update_submodules(
     path: &Path,
     terminal_prompt: TerminalPrompt,
@@ -839,6 +865,11 @@ async fn update_submodules(
         .arg("--recursive");
     if shallow {
         cmd.arg("--depth=1");
+    }
+    if terminal_prompt == TerminalPrompt::Disabled
+        && let Some(jobs) = default_submodule_jobs(path).await?
+    {
+        cmd.arg(format!("--jobs={jobs}"));
     }
     cmd.sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
