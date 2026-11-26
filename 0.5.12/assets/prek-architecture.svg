@@ -1,0 +1,278 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1040" viewBox="0 0 1200 1040" role="img" aria-labelledby="title desc">
+  <title id="title">How prek runs hooks</title>
+  <desc id="desc">A system-level architecture diagram showing how prek resolves projects and hook sources, collects project file views, prepares reusable environments, and orders execution across projects, priority groups, hooks, and command batches.</desc>
+  <style>
+    text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .diagram-title {
+      fill: #111827;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .diagram-subtitle {
+      fill: #6b7280;
+      font-size: 12px;
+    }
+    .section-label {
+      fill: #6b7280;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.1px;
+    }
+    .type-label {
+      fill: #9ca3af;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+    }
+    .node-title {
+      fill: #111827;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .node-copy {
+      fill: #4b5563;
+      font-size: 11px;
+    }
+    .store-title {
+      fill: #111827;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .store-copy {
+      fill: #6b7280;
+      font-size: 10px;
+    }
+    .edge-label {
+      fill: #4b5563;
+      font-size: 10.5px;
+      font-weight: 500;
+    }
+    .footer-label {
+      fill: #6b7280;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+    }
+    .footer-copy {
+      fill: #4b5563;
+      font-size: 11px;
+    }
+  </style>
+  <defs>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-gray" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#9ca3af"/>
+    </marker>
+  </defs>
+
+  <rect data-graph-role="background" width="1200" height="1040" fill="#ffffff"/>
+  <text class="diagram-title" x="40" y="36">How prek runs hooks</text>
+  <text class="diagram-subtitle" x="40" y="58">From invocation context through reusable assets to ordered execution</text>
+  <text class="section-label" x="1160" y="36" text-anchor="end">SYSTEM + EXECUTION VIEW</text>
+  <line x1="40" y1="72" x2="1160" y2="72" stroke="#e5e7eb"/>
+
+  <g data-graph-role="container" data-container-id="invocation-context">
+    <rect data-graph-role="container" x="20" y="85" width="1160" height="95" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <rect x="20" y="85" width="1160" height="28" rx="4" fill="#f9fafb"/>
+    <line x1="20" y1="113" x2="1180" y2="113" stroke="#e5e7eb"/>
+    <text class="section-label" x="36" y="104">RUN CONTEXT</text>
+  </g>
+  <g data-graph-role="container" data-container-id="hook-resolution">
+    <rect data-graph-role="container" x="20" y="200" width="1160" height="230" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <rect x="20" y="200" width="1160" height="28" rx="4" fill="#f9fafb"/>
+    <line x1="20" y1="228" x2="1180" y2="228" stroke="#e5e7eb"/>
+    <text class="section-label" x="36" y="219">RESOLVE PROJECTS AND HOOKS</text>
+  </g>
+  <g data-graph-role="container" data-container-id="run-preparation">
+    <rect data-graph-role="container" x="20" y="450" width="1160" height="220" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <rect x="20" y="450" width="1160" height="28" rx="4" fill="#f9fafb"/>
+    <line x1="20" y1="478" x2="1180" y2="478" stroke="#e5e7eb"/>
+    <text class="section-label" x="36" y="469">PREPARE THIS RUN</text>
+  </g>
+  <g data-graph-role="container" data-container-id="execution-scheduler">
+    <rect data-graph-role="container" x="20" y="710" width="1160" height="240" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <rect x="20" y="710" width="1160" height="28" rx="4" fill="#f9fafb"/>
+    <line x1="20" y1="738" x2="1180" y2="738" stroke="#e5e7eb"/>
+    <text class="section-label" x="1164" y="729" text-anchor="end">ORDER AND EXECUTE</text>
+  </g>
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path data-graph-role="edge" data-edge-id="config-discover" data-source="configuration" data-target="workspace-discover" d="M180 160 V250" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+    <path data-graph-role="edge" data-edge-id="invocation-init" data-source="invocation" data-target="workspace-init" d="M500 160 V250" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+    <path data-graph-role="edge" data-edge-id="git-collect" data-source="git-context" data-target="collect-input" d="M1020 160 V500" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+
+    <path data-graph-role="edge" data-edge-id="discover-init" data-source="workspace-discover" data-target="workspace-init" d="M300 288 H380" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="init-select" data-source="workspace-init" data-target="selected-hooks" d="M620 288 H700" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="repo-read" data-source="repository-store" data-target="workspace-init" d="M475 355 V326" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+    <path data-graph-role="edge" data-edge-id="repo-write" data-source="workspace-init" data-target="repository-store" d="M525 326 V355" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+    <path data-graph-role="edge" data-edge-id="selection-collect" data-source="selected-hooks" data-target="collect-input" d="M940 288 H970 V500" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+
+    <path data-graph-role="edge" data-edge-id="collect-index" data-source="collect-input" data-target="run-file-index" d="M900 540 H860" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="index-filter" data-source="run-file-index" data-target="runnable-hooks" d="M620 540 H580" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="filter-install" data-source="runnable-hooks" data-target="install-hooks" d="M340 540 H300" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="environment-cache" data-source="environment-store" data-target="install-hooks" d="M340 626 H320 V565 H300" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+    <path data-graph-role="edge" data-edge-id="installed-run" data-source="install-hooks" data-target="run-hooks" d="M180 580 V685 H130 V755" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="index-run" data-source="run-file-index" data-target="run-hooks" d="M740 580 V700 H170 V755" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+
+    <path data-graph-role="edge" data-edge-id="run-depth" data-source="run-hooks" data-target="project-depth" d="M220 810 H275" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="depth-priority" data-source="project-depth" data-target="priority-groups" d="M455 810 H510" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="priority-parallel" data-source="priority-groups" data-target="priority-run" d="M690 810 H745" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="parallel-hook" data-source="priority-run" data-target="hook-runner" d="M925 810 H980" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <path data-graph-role="edge" data-edge-id="hook-result" data-source="hook-runner" data-target="run-result" d="M1070 865 V890" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <g data-graph-role="edge-label">
+    <text class="edge-label" x="958" y="405" text-anchor="end">hook plan + required input</text>
+    <text class="edge-label" x="190" y="640">ready environments</text>
+    <text class="edge-label" x="750" y="640">project file views</text>
+  </g>
+
+  <g data-graph-role="node" data-node-id="configuration">
+    <rect x="40" y="120" width="280" height="40" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text class="type-label" x="54" y="136">CONFIGURATION</text>
+    <text class="node-copy" x="54" y="152">projects · hooks · filters · priorities</text>
+  </g>
+  <g data-graph-role="node" data-node-id="invocation">
+    <rect x="360" y="120" width="280" height="40" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text class="type-label" x="374" y="136">CLI CONTEXT</text>
+    <text class="node-copy" x="374" y="152">hook selection · stage · file scope</text>
+  </g>
+  <g data-graph-role="node" data-node-id="git-context">
+    <rect x="880" y="120" width="280" height="40" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text class="type-label" x="894" y="136">GIT CONTEXT</text>
+    <text class="node-copy" x="894" y="152">index · worktree · revisions · message file</text>
+  </g>
+
+  <g data-graph-role="node" data-node-id="workspace-discover">
+    <rect x="60" y="250" width="240" height="76" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="74" y="269">PROJECT DISCOVERY</text>
+    <text class="node-title" x="74" y="291">Locate configured projects</text>
+    <line x1="74" y1="301" x2="286" y2="301" stroke="#e5e7eb"/>
+    <text class="node-copy" x="74" y="318">workspace root · nesting · cached discovery</text>
+  </g>
+  <g data-graph-role="node" data-node-id="workspace-init">
+    <rect x="380" y="250" width="240" height="76" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+    <text class="type-label" x="394" y="269">HOOK SOURCES</text>
+    <text class="node-title" x="394" y="291">Resolve hook definitions</text>
+    <line x1="394" y1="301" x2="606" y2="301" stroke="#e5e7eb"/>
+    <text class="node-copy" x="394" y="318">select · fetch sources · apply overrides</text>
+  </g>
+  <g data-graph-role="node" data-node-id="selected-hooks">
+    <rect x="700" y="250" width="240" height="76" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="714" y="269">EXECUTION PLAN</text>
+    <text class="node-title" x="714" y="291">Hooks grouped by project</text>
+    <line x1="714" y1="301" x2="926" y2="301" stroke="#e5e7eb"/>
+    <text class="node-copy" x="714" y="318">selection · stage eligibility · input kind</text>
+  </g>
+  <g data-graph-role="node" data-node-id="repository-store">
+    <rect x="380" y="355" width="240" height="55" rx="4" fill="#f9fafb" stroke="#d1d5db"/>
+    <text class="type-label" x="394" y="372">PERSISTENT STORE</text>
+    <text class="store-title" x="394" y="390">Repository cache</text>
+    <text class="store-copy" x="394" y="404">versioned source · hook manifest · install files</text>
+  </g>
+
+  <g data-graph-role="node" data-node-id="install-hooks">
+    <rect x="60" y="500" width="240" height="80" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+    <text class="type-label" x="74" y="519">ENVIRONMENT PREPARATION</text>
+    <text class="node-title" x="74" y="541">Reuse or install environments</text>
+    <line x1="74" y1="551" x2="286" y2="551" stroke="#e5e7eb"/>
+    <text class="node-copy" x="74" y="568">validate cache · install compatible groups</text>
+  </g>
+  <g data-graph-role="node" data-node-id="runnable-hooks">
+    <rect x="340" y="500" width="240" height="80" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="354" y="519">INSTALLATION GATE</text>
+    <text class="node-title" x="354" y="541">Keep hooks that can run</text>
+    <line x1="354" y1="551" x2="566" y2="551" stroke="#e5e7eb"/>
+    <text class="node-copy" x="354" y="568">matching files or unconditional hooks</text>
+  </g>
+  <g data-graph-role="node" data-node-id="run-file-index">
+    <rect x="620" y="500" width="240" height="80" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+    <text class="type-label" x="634" y="519">PROJECT FILE VIEWS</text>
+    <text class="node-title" x="634" y="541">Match files once per run</text>
+    <line x1="634" y1="551" x2="846" y2="551" stroke="#e5e7eb"/>
+    <text class="node-copy" x="634" y="568">project boundaries · path filters · file types</text>
+  </g>
+  <g data-graph-role="node" data-node-id="collect-input">
+    <rect x="900" y="500" width="240" height="80" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="914" y="519">RUN INPUT</text>
+    <text class="node-title" x="914" y="541">Collect candidate files</text>
+    <line x1="914" y1="551" x2="1126" y2="551" stroke="#e5e7eb"/>
+    <text class="node-copy" x="914" y="568">staged · conflicted · changed · tracked · explicit</text>
+  </g>
+  <g data-graph-role="node" data-node-id="environment-store">
+    <rect x="340" y="595" width="240" height="55" rx="4" fill="#f9fafb" stroke="#d1d5db"/>
+    <text class="type-label" x="354" y="612">PERSISTENT STORE</text>
+    <text class="store-title" x="354" y="630">Environment cache</text>
+    <text class="store-copy" x="354" y="644">installed tools · dependencies · health</text>
+  </g>
+
+  <g data-graph-role="node" data-node-id="run-hooks">
+    <rect x="40" y="755" width="180" height="110" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+    <text class="type-label" x="52" y="774">EXECUTION CONTROL</text>
+    <text class="node-title" x="52" y="796">Start execution</text>
+    <line x1="52" y1="807" x2="208" y2="807" stroke="#e5e7eb"/>
+    <text class="node-copy" x="52" y="825">project hook plan</text>
+    <text class="node-copy" x="52" y="843">project file views</text>
+    <text class="node-copy" x="52" y="858">failure policy</text>
+  </g>
+  <g data-graph-role="node" data-node-id="project-depth">
+    <rect x="275" y="755" width="180" height="110" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="287" y="774">PROJECT ORDER</text>
+    <text class="node-title" x="287" y="796">Nested projects</text>
+    <line x1="287" y1="807" x2="443" y2="807" stroke="#e5e7eb"/>
+    <text class="node-copy" x="287" y="825">deepest projects first</text>
+    <text class="node-copy" x="287" y="843">same depth concurrent</text>
+  </g>
+  <g data-graph-role="node" data-node-id="priority-groups">
+    <rect x="510" y="755" width="180" height="110" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="522" y="774">ORDERING BARRIER</text>
+    <text class="node-title" x="522" y="796">Priority groups</text>
+    <line x1="522" y1="807" x2="678" y2="807" stroke="#e5e7eb"/>
+    <text class="node-copy" x="522" y="825">lower priority first</text>
+    <text class="node-copy" x="522" y="843">next group waits</text>
+  </g>
+  <g data-graph-role="node" data-node-id="priority-run">
+    <rect x="745" y="755" width="180" height="110" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text class="type-label" x="757" y="774">HOOK PARALLELISM</text>
+    <text class="node-title" x="757" y="796">Hooks in one group</text>
+    <line x1="757" y1="807" x2="913" y2="807" stroke="#e5e7eb"/>
+    <text class="node-copy" x="757" y="825">same priority concurrent</text>
+    <text class="node-copy" x="757" y="843">bounded concurrency</text>
+  </g>
+  <g data-graph-role="node" data-node-id="hook-runner">
+    <rect x="980" y="755" width="180" height="110" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+    <text class="type-label" x="992" y="774">COMMAND EXECUTION</text>
+    <text class="node-title" x="992" y="796">Run each hook</text>
+    <line x1="992" y1="807" x2="1148" y2="807" stroke="#e5e7eb"/>
+    <text class="node-copy" x="992" y="825">final file filtering</text>
+    <text class="node-copy" x="992" y="843">project working directory</text>
+    <text class="node-copy" x="992" y="858">batched or serial commands</text>
+  </g>
+  <g data-graph-role="node" data-node-id="run-result">
+    <rect x="40" y="890" width="1120" height="30" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text class="type-label" x="54" y="909">RESULT</text>
+    <text class="store-title" x="125" y="909">Run results</text>
+    <text class="node-copy" x="225" y="909">status · output · modified files · optional diff</text>
+  </g>
+
+  <line x1="40" y1="968" x2="1160" y2="968" stroke="#e5e7eb"/>
+  <g data-graph-role="legend">
+    <line x1="40" y1="988" x2="74" y2="988" stroke="#3b82f6" stroke-width="1.75" marker-end="url(#arrow-blue)"/>
+    <text class="footer-copy" x="86" y="992">ordered dependency</text>
+    <line x1="235" y1="988" x2="269" y2="988" stroke="#9ca3af" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#arrow-gray)"/>
+    <text class="footer-copy" x="281" y="992">context / cache dependency</text>
+    <text class="footer-label" x="520" y="992">RUN-SCOPED</text>
+    <text class="footer-copy" x="605" y="992">hook plan · input · project views</text>
+    <text class="footer-label" x="875" y="992">PERSISTENT</text>
+    <text class="footer-copy" x="958" y="992">repos · environments</text>
+  </g>
+  <g data-graph-role="annotation">
+    <text class="footer-label" x="40" y="1018">EXECUTION BOUNDARY</text>
+    <text class="footer-copy" x="175" y="1018">remote checkout = hook source and install input</text>
+    <text class="footer-copy" x="550" y="1018">owning project = hook working directory</text>
+  </g>
+</svg>
