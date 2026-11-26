@@ -755,24 +755,53 @@ pub(crate) fn is_auth_error(err: &Error) -> bool {
     .any(|needle| error.contains(needle))
 }
 
+/// Import only the cached commit and its tree, leaving the two object stores independent.
+async fn fetch_cached_tip(path: &Path, cached: &Path) -> Result<String, Error> {
+    git_cmd()?
+        .current_dir(path)
+        .args(["fetch", "--depth=1", "--no-tags", "--no-recurse-submodules"])
+        .arg(cached)
+        .arg("HEAD")
+        .sanitize_git_repo_env()
+        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
+        .output()
+        .await?;
+    let output = git_cmd()?
+        .current_dir(path)
+        .args(["rev-parse", "--verify", "FETCH_HEAD^{commit}"])
+        .sanitize_git_repo_env()
+        .output()
+        .await?;
+    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
+}
+
 async fn shallow_clone(
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
+    cached_tip: Option<&str>,
 ) -> Result<(), Error> {
-    git_cmd()?
-        .current_dir(path)
-        .hidden_args(["-c", "protocol.version=2"])
-        .arg("fetch")
-        .arg("origin")
-        .arg(rev)
-        .arg("--depth=1")
-        .sanitize_git_repo_env()
-        .env(EnvVars::LC_ALL, "C")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
-        .check(true)
-        .output()
-        .await?;
+    if !cached_tip.is_some_and(|tip| tip.eq_ignore_ascii_case(rev)) {
+        let mut fetch = git_cmd()?;
+        fetch
+            .current_dir(path)
+            .hidden_args(["-c", "protocol.version=2"])
+            .arg("fetch");
+        if let Some(tip) = cached_tip {
+            // The imported commit has no local ref. Advertise it so the server
+            // can send just the objects needed to reach the requested revision.
+            fetch.arg(format!("--negotiation-tip={tip}"));
+        }
+        fetch
+            .arg("origin")
+            .arg(rev)
+            .arg("--depth=1")
+            .sanitize_git_repo_env()
+            .env(EnvVars::LC_ALL, "C")
+            .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+            .output()
+            .await?;
+    }
 
     git_cmd()?
         .current_dir(path)
@@ -872,12 +901,20 @@ async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
         .any(|entry| entry.starts_with(b"160000 ")))
 }
 
-async fn clone_repo_attempt(
+/// Clone a repository, optionally using a previous checkout of the same source.
+pub(crate) async fn clone_repo(
+    url: &str,
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
+    cached: Option<&Path>,
 ) -> Result<(), Error> {
-    if let Err(err) = shallow_clone(rev, path, terminal_prompt).await {
+    init_repo(url, path).await?;
+    if let Some(cached) = cached {
+        let tip = fetch_cached_tip(path, cached).await?;
+        return shallow_clone(rev, path, terminal_prompt, Some(&tip)).await;
+    }
+    if let Err(err) = shallow_clone(rev, path, terminal_prompt, None).await {
         if is_auth_error(&err) {
             warn!(?err, "Failed to shallow clone due to authentication error");
             return Err(err);
@@ -888,17 +925,6 @@ async fn clone_repo_attempt(
     }
 
     Ok(())
-}
-
-/// Clone a repository into an initialized destination with the requested terminal prompt mode.
-pub(crate) async fn clone_repo(
-    url: &str,
-    rev: &str,
-    path: &Path,
-    terminal_prompt: TerminalPrompt,
-) -> Result<(), Error> {
-    init_repo(url, path).await?;
-    clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
 async fn config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {

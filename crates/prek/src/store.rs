@@ -23,10 +23,17 @@ struct PendingClone<'a> {
     repo: &'a RemoteRepo,
 }
 
-#[derive(serde::Serialize)]
-struct RepoMarker<'a> {
-    repo: &'a str,
-    rev: &'a str,
+#[derive(serde::Deserialize, serde::Serialize)]
+pub(crate) struct RepoMarker {
+    pub(crate) repo: String,
+    pub(crate) rev: String,
+}
+
+impl RepoMarker {
+    pub(crate) fn read(root: &Path) -> Option<Self> {
+        let content = fs_err::read(root.join(REPO_MARKER)).ok()?;
+        serde_json::from_slice(&content).ok()
+    }
 }
 
 enum FirstClonePass<'a> {
@@ -178,14 +185,15 @@ impl Store {
 
     /// The checkout path for this repository and revision, whether or not it exists yet.
     pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
-        self.repos_dir().join(Self::repo_key(repo))
+        self.repos_dir()
+            .join(Self::repo_key(repo.source(), &repo.rev))
     }
 
     /// The checkout directory name derived from the repository source and revision.
-    pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
+    fn repo_key(source: &str, rev: &str) -> String {
         let mut hasher = SeaHasher::new();
-        repo.source().hash(&mut hasher);
-        repo.rev.hash(&mut hasher);
+        source.hash(&mut hasher);
+        rev.hash(&mut hasher);
         to_hex(hasher.finish())
     }
 
@@ -303,20 +311,69 @@ impl Deref for StoreWriteGuard<'_> {
 }
 
 impl StoreWriteGuard<'_> {
+    /// Pick the most recently installed revision of each missing repository.
+    fn cached_revisions(
+        &self,
+        pending: &[PendingClone<'_>],
+    ) -> FxHashMap<String, (std::time::SystemTime, PathBuf)> {
+        let mut newest = FxHashMap::default();
+        if pending.is_empty() {
+            return newest;
+        }
+        let sources: FxHashSet<_> = pending.iter().map(|p| p.repo.source()).collect();
+        let Ok(entries) = fs_err::read_dir(self.repos_dir()) else {
+            return newest;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(marker) = RepoMarker::read(&path) else {
+                continue;
+            };
+            if !sources.contains(marker.repo.as_str())
+                || entry.file_name() != Store::repo_key(&marker.repo, &marker.rev).as_str()
+            {
+                continue;
+            }
+            let Ok(modified) = fs_err::metadata(path.join(REPO_MARKER)).and_then(|m| m.modified())
+            else {
+                continue;
+            };
+            if newest
+                .get(&marker.repo)
+                .is_none_or(|(time, _)| *time < modified)
+            {
+                newest.insert(marker.repo, (modified, path));
+            }
+        }
+        newest
+    }
+
     async fn clone_repo_to_temp(
         &self,
         repo: &RemoteRepo,
         terminal_prompt: TerminalPrompt,
+        cached: Option<&Path>,
     ) -> Result<tempfile::TempDir, git::Error> {
-        let temp = tempfile::tempdir_in(self.scratch_path())?;
-        debug!(
-            target = %temp.path().display(),
-            %repo,
-            ?terminal_prompt,
-            "Cloning repo"
-        );
-        git::clone_repo(repo.source(), &repo.rev, temp.path(), terminal_prompt).await?;
-        Ok(temp)
+        let clone = async |cached: Option<&Path>| {
+            let temp = tempfile::tempdir_in(self.scratch_path())?;
+            debug!(target = %temp.path().display(), %repo, ?terminal_prompt, ?cached, "Cloning repo");
+            git::clone_repo(
+                repo.source(),
+                &repo.rev,
+                temp.path(),
+                terminal_prompt,
+                cached,
+            )
+            .await?;
+            Ok::<_, git::Error>(temp)
+        };
+        if let Some(cached) = cached {
+            match clone(Some(cached)).await {
+                Ok(temp) => return Ok(temp),
+                Err(err) => debug!(?err, "Retrying clone without the cached revision"),
+            }
+        }
+        clone(None).await
     }
 
     async fn persist_cloned_repo(
@@ -330,8 +387,8 @@ impl StoreWriteGuard<'_> {
         crate::fs::rename_with_retry(temp, &target).await?;
 
         let marker = RepoMarker {
-            repo: repo.source(),
-            rev: &repo.rev,
+            repo: repo.source().to_owned(),
+            rev: repo.rev.clone(),
         };
         let content = serde_json::to_string_pretty(&marker)?;
         fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
@@ -362,13 +419,20 @@ impl StoreWriteGuard<'_> {
             pending.push(PendingClone { repo });
         }
 
+        let cached = self.cached_revisions(&pending);
         let mut auth_failed = Vec::new();
         let mut tasks = futures_util::stream::iter(pending)
             .map(async |pending| {
                 let progress =
                     reporter.map(|reporter| reporter.on_clone_start(&format!("{}", pending.repo)));
                 match self
-                    .clone_repo_to_temp(pending.repo, TerminalPrompt::Disabled)
+                    .clone_repo_to_temp(
+                        pending.repo,
+                        TerminalPrompt::Disabled,
+                        cached
+                            .get(pending.repo.source())
+                            .map(|(_, path)| path.as_path()),
+                    )
                     .await
                 {
                     Ok(temp) => Ok(FirstClonePass::Ready {
@@ -447,7 +511,7 @@ impl StoreWriteGuard<'_> {
                 repo.repo()
             );
             let temp = self
-                .clone_repo_to_temp(repo, TerminalPrompt::Enabled)
+                .clone_repo_to_temp(repo, TerminalPrompt::Enabled, None)
                 .await
                 .map_err(|error| Error::CloneRepo {
                     repo: repo.repo().to_string(),

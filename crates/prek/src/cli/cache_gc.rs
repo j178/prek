@@ -19,7 +19,7 @@ use crate::hook::{
     HOOK_MARKER, HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef,
 };
 use crate::printer::Printer;
-use crate::store::{CacheBucket, ExclusiveStore, REPO_MARKER, Store, StoreWriteGuard, ToolBucket};
+use crate::store::{CacheBucket, ExclusiveStore, RepoMarker, Store, StoreWriteGuard, ToolBucket};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
@@ -601,7 +601,7 @@ fn sweep_dir_by_name(
 
         let item = if collect_names {
             let repo_marker = (kind == RemovalKind::Repos)
-                .then(|| read_repo_marker(&path))
+                .then(|| RepoMarker::read(&path))
                 .flatten();
             let hook_marker = (kind == RemovalKind::HookEnvs)
                 .then(|| read_hook_marker(&path))
@@ -769,17 +769,6 @@ fn detail_lines_for_entry(
         }
         _ => Vec::new(),
     }
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct RepoMarker {
-    repo: String,
-    rev: String,
-}
-
-fn read_repo_marker(root: &Path) -> Option<RepoMarker> {
-    let content = fs_err::read_to_string(root.join(REPO_MARKER)).ok()?;
-    serde_json::from_str(&content).ok()
 }
 
 fn read_hook_marker(root: &Path) -> Option<InstallInfo> {
