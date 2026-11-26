@@ -759,8 +759,10 @@ async fn shallow_clone(
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
+    checkout_workers: usize,
 ) -> Result<(), Error> {
-    git_cmd()?
+    let mut fetch = git_cmd()?;
+    fetch
         .current_dir(path)
         .hidden_args(["-c", "protocol.version=2"])
         .arg("fetch")
@@ -770,11 +772,37 @@ async fn shallow_clone(
         .sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
-        .check(true)
-        .output()
-        .await?;
+        .check(true);
 
-    git_cmd()?
+    let mut checkout = git_cmd()?;
+    if checkout_workers > 1 {
+        // Read the effective settings in the new repository so conditional
+        // includes and command-scoped overrides also take precedence.
+        let mut config = git_cmd()?;
+        config
+            .current_dir(path)
+            .args([
+                "config",
+                "--get-regexp",
+                r"^checkout\.(workers|thresholdforparallelism)$",
+            ])
+            .sanitize_git_repo_env()
+            .check(false);
+        let (fetched, settings) = tokio::join!(fetch.output(), config.output());
+        fetched?;
+        if settings.is_ok_and(|out| out.status.code() == Some(1)) {
+            checkout.hidden_args([
+                "-c",
+                &format!("checkout.workers={checkout_workers}"),
+                "-c",
+                "checkout.thresholdForParallelism=512",
+            ]);
+        }
+    } else {
+        fetch.output().await?;
+    }
+
+    checkout
         .current_dir(path)
         .arg("checkout")
         .arg("FETCH_HEAD")
@@ -872,12 +900,16 @@ async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
         .any(|entry| entry.starts_with(b"160000 ")))
 }
 
-async fn clone_repo_attempt(
+/// Clone a repository into an initialized destination with the requested terminal prompt mode.
+pub(crate) async fn clone_repo(
+    url: &str,
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
+    checkout_workers: usize,
 ) -> Result<(), Error> {
-    if let Err(err) = shallow_clone(rev, path, terminal_prompt).await {
+    init_repo(url, path).await?;
+    if let Err(err) = shallow_clone(rev, path, terminal_prompt, checkout_workers).await {
         if is_auth_error(&err) {
             warn!(?err, "Failed to shallow clone due to authentication error");
             return Err(err);
@@ -888,17 +920,6 @@ async fn clone_repo_attempt(
     }
 
     Ok(())
-}
-
-/// Clone a repository into an initialized destination with the requested terminal prompt mode.
-pub(crate) async fn clone_repo(
-    url: &str,
-    rev: &str,
-    path: &Path,
-    terminal_prompt: TerminalPrompt,
-) -> Result<(), Error> {
-    init_repo(url, path).await?;
-    clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
 async fn config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {

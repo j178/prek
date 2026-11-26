@@ -307,6 +307,7 @@ impl StoreWriteGuard<'_> {
         &self,
         repo: &RemoteRepo,
         terminal_prompt: TerminalPrompt,
+        checkout_workers: usize,
     ) -> Result<tempfile::TempDir, git::Error> {
         let temp = tempfile::tempdir_in(self.scratch_path())?;
         debug!(
@@ -315,7 +316,14 @@ impl StoreWriteGuard<'_> {
             ?terminal_prompt,
             "Cloning repo"
         );
-        git::clone_repo(repo.source(), &repo.rev, temp.path(), terminal_prompt).await?;
+        git::clone_repo(
+            repo.source(),
+            &repo.rev,
+            temp.path(),
+            terminal_prompt,
+            checkout_workers,
+        )
+        .await?;
         Ok(temp)
     }
 
@@ -362,13 +370,20 @@ impl StoreWriteGuard<'_> {
             pending.push(PendingClone { repo });
         }
 
+        // Multiple cache misses already check out repositories concurrently.
+        let checkout_workers =
+            if pending.len() == 1 && !EnvVars.is_set(EnvVars::PREK_NO_CONCURRENCY) {
+                (*INTERNAL_CONCURRENCY).min(4)
+            } else {
+                1
+            };
         let mut auth_failed = Vec::new();
         let mut tasks = futures_util::stream::iter(pending)
             .map(async |pending| {
                 let progress =
                     reporter.map(|reporter| reporter.on_clone_start(&format!("{}", pending.repo)));
                 match self
-                    .clone_repo_to_temp(pending.repo, TerminalPrompt::Disabled)
+                    .clone_repo_to_temp(pending.repo, TerminalPrompt::Disabled, checkout_workers)
                     .await
                 {
                     Ok(temp) => Ok(FirstClonePass::Ready {
@@ -447,7 +462,7 @@ impl StoreWriteGuard<'_> {
                 repo.repo()
             );
             let temp = self
-                .clone_repo_to_temp(repo, TerminalPrompt::Enabled)
+                .clone_repo_to_temp(repo, TerminalPrompt::Enabled, checkout_workers)
                 .await
                 .map_err(|error| Error::CloneRepo {
                     repo: repo.repo().to_string(),
