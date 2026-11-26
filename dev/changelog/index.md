@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.12
+
+Released on 2026-11-26.
+
+### Enhancements
+
+- Explain empty final diffs after hook changes ([\#3057](<https://github.com/j178/prek/pull/3057>))
+- Replace pre-commit shims during installation ([\#3054](<https://github.com/j178/prek/pull/3054>))
+
+### Performance
+
+- Skip unnecessary content reads during file identification ([\#3049](<https://github.com/j178/prek/pull/3049>))
+
+### Bug fixes
+
+- Fix post-merge squash status environment variable ([\#3053](<https://github.com/j178/prek/pull/3053>))
+- Protect running hooks from cache cleanup ([\#3068](<https://github.com/j178/prek/pull/3068>))
+- Skip binary and BOM-marked UTF-16/32 files in text fixers ([\#3058](<https://github.com/j178/prek/pull/3058>))
+- Select Haskell package executables explicitly ([\#3067](<https://github.com/j178/prek/pull/3067>))
+- Skip unreleased `mise` versions ([\#3071](<https://github.com/j178/prek/pull/3071>))
+
+### Documentation
+
+- Add sponsor recognition to README and website ([\#3051](<https://github.com/j178/prek/pull/3051>))
+
+### Contributors
+
+- @tianhaogutum
+- @j178
+- @YvanY0
+- @flying-sheep
+
 ## 0.5.11
 
 Released on 2026-11-16.
