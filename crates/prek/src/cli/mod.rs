@@ -35,7 +35,7 @@ mod validate;
 mod yaml_to_toml;
 
 pub(crate) use cache_clean::cache_clean;
-pub(crate) use cache_gc::cache_gc;
+pub(crate) use cache_gc::{GcMode, cache_gc};
 pub(crate) use cache_size::cache_size;
 pub(crate) use completion::generate_shell_completion;
 use completion::selector_completer;

@@ -25,12 +25,12 @@ pub(crate) async fn exec(
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     let init_reporter = HookInitReporter::new(printer);
-    let locked_store = store.lock().await?;
-    locked_store.track_configs(workspace.config_files())?;
+    let write_guard = store.write_lock().await?;
+    write_guard.track_configs(workspace.config_files())?;
 
     let hooks = workspace
         .init_hooks(
-            &locked_store,
+            &write_guard,
             HookInitFilters::new(Some(&selectors), None),
             Some(&init_reporter),
         )
@@ -57,12 +57,12 @@ pub(crate) async fn exec(
     };
     hook.language.ensure_exec_supported(&hook)?;
 
-    let installed_hooks = install_hooks(vec![hook], &locked_store, printer).await?;
+    let installed_hooks = install_hooks(vec![hook], &write_guard, printer).await?;
+    drop(write_guard);
     let installed_hook = installed_hooks
         .into_iter()
         .next()
         .context("Failed to prepare the selected hook environment")?;
-    drop(locked_store);
 
     let status = installed_hook
         .language

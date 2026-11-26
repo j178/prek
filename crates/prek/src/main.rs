@@ -20,14 +20,14 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
 use crate::cli::{
-    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace,
+    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, GlobalArgs, UtilCommand, UtilNamespace,
 };
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::settings::FilesystemOptions;
-use crate::store::{Store, StoreAccess};
+use crate::store::Store;
 use crate::terminal::USE_COLOR;
 
 mod archive;
@@ -128,47 +128,14 @@ fn setup_logging(level: Level, log_file: Option<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-async fn run(cli: Cli) -> Result<ExitStatus> {
-    // Shell startup must not initialize the cache or overwrite the log from the last run.
-    if let Some(Command::Util(UtilNamespace {
-        command: UtilCommand::GenerateShellCompletion(args),
-    })) = &cli.command
-    {
-        return cli::generate_shell_completion(args.shell);
-    }
-
-    terminal::enable_ansi_colors();
-
-    ColorChoice::write_global(cli.globals.color.into());
-
-    let command = cli
-        .command
-        .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
-    let (store, use_default_log) = match &command {
-        Command::Clean
-        | Command::Cache(CacheNamespace {
-            command: CacheCommand::Clean,
-        }) => (Store::from_settings(StoreAccess::Cleanup)?, false),
-        Command::GC(args)
-        | Command::Cache(CacheNamespace {
-            command: CacheCommand::GC(args),
-        }) => {
-            let access = if args.dry_run {
-                StoreAccess::Inspect
-            } else {
-                StoreAccess::Cleanup
-            };
-            (Store::from_settings(access)?, true)
-        }
-        _ => (Store::from_settings(StoreAccess::ReadWrite)?.init()?, true),
-    };
-    let log_file = match cli.globals.log_file {
-        _ if cli.globals.no_log_file => None,
-        None if use_default_log => Some(store.log_file()),
-        path => path,
+fn initialize_command(globals: &GlobalArgs, default_log: Option<PathBuf>) -> Result<Printer> {
+    let log_file = if globals.no_log_file {
+        None
+    } else {
+        globals.log_file.clone().or(default_log)
     };
     setup_logging(
-        match cli.globals.verbose {
+        match globals.verbose {
             0 => Level::Default,
             1 => Level::Verbose,
             2 => Level::Debug,
@@ -178,19 +145,19 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         log_file,
     )?;
 
-    let printer = if cli.globals.quiet == 1 {
+    let printer = if globals.quiet == 1 {
         Printer::Quiet
-    } else if cli.globals.quiet > 1 {
+    } else if globals.quiet > 1 {
         Printer::Silent
-    } else if cli.globals.verbose > 1 {
+    } else if globals.verbose > 1 {
         Printer::Verbose
-    } else if cli.globals.no_progress {
+    } else if globals.no_progress {
         Printer::NoProgress
     } else {
         Printer::Default
     };
 
-    if cli.globals.quiet > 0 {
+    if globals.quiet > 0 {
         warnings::disable();
     } else {
         warnings::enable();
@@ -214,13 +181,60 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //      https://github.com/pre-commit/pre-commit/issues/2295
     git::init_git_work_tree()?;
 
-    if let Some(dir) = cli.globals.cd.as_ref() {
+    if let Some(dir) = globals.cd.as_ref() {
         debug!("Changing current directory to: `{}`", dir.display());
         std::env::set_current_dir(dir)?;
     }
 
     debug!("Args: {:?}", std::env::args().collect::<Vec<_>>());
 
+    Ok(printer)
+}
+
+async fn run(cli: Cli) -> Result<ExitStatus> {
+    // Shell startup must not initialize the cache or overwrite the log from the last run.
+    if let Some(Command::Util(UtilNamespace {
+        command: UtilCommand::GenerateShellCompletion(args),
+    })) = &cli.command
+    {
+        return cli::generate_shell_completion(args.shell);
+    }
+
+    terminal::enable_ansi_colors();
+
+    ColorChoice::write_global(cli.globals.color.into());
+
+    let command = cli
+        .command
+        .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
+    match &command {
+        Command::Clean
+        | Command::Cache(CacheNamespace {
+            command: CacheCommand::Clean,
+        }) => {
+            let store = Store::try_open_exclusive()?;
+            let printer = initialize_command(&cli.globals, None)?;
+            return cli::cache_clean(&store, printer);
+        }
+        Command::GC(args)
+        | Command::Cache(CacheNamespace {
+            command: CacheCommand::GC(args),
+        }) => {
+            let shared;
+            let mode = if args.dry_run {
+                shared = Store::try_open()?;
+                cli::GcMode::DryRun(shared.try_write_lock()?)
+            } else {
+                cli::GcMode::Remove(Store::try_open_exclusive()?)
+            };
+            let printer = initialize_command(&cli.globals, Some(mode.store().log_file()))?;
+            return cli::cache_gc(mode, cli.globals.verbose > 0, printer).await;
+        }
+        _ => {}
+    }
+
+    let store = Store::open()?.init()?;
+    let printer = initialize_command(&cli.globals, Some(store.log_file()))?;
     match command {
         Command::Init(args) => {
             if cli.globals.config.is_some() {
@@ -345,21 +359,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             cli::cache_size(&store, output_format, printer)
         }
         Command::Clean
+        | Command::GC(_)
         | Command::Cache(CacheNamespace {
-            command: CacheCommand::Clean,
-        }) => cli::cache_clean(&store.lock().await?, printer),
-        Command::GC(args)
-        | Command::Cache(CacheNamespace {
-            command: CacheCommand::GC(args),
-        }) => {
-            cli::cache_gc(
-                &store.lock().await?,
-                args.dry_run,
-                cli.globals.verbose > 0,
-                printer,
-            )
-            .await
-        }
+            command: CacheCommand::Clean | CacheCommand::GC(_),
+        }) => unreachable!("cache maintenance is dispatched before opening the shared store"),
         Command::ValidateConfig(args) => cli::validate_configs(args.configs, printer),
         Command::ValidateManifest(args) => cli::validate_manifest(args.manifests, printer),
         Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),

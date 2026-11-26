@@ -24,7 +24,7 @@ use crate::hook_entry::HookEntry;
 use crate::hooks::{self, BuiltinHooks, FileReadCache, HookOutput, MetaHooks};
 use crate::languages::version::LanguageRequest;
 use crate::languages::{ShellSupport, extract_metadata};
-use crate::store::{LockedStore, Store};
+use crate::store::{Store, StoreWriteGuard};
 use crate::workspace::Project;
 
 #[derive(Error, Debug)]
@@ -864,7 +864,7 @@ impl InstalledHook {
     }
 
     /// Mark the hook as installed in the environment.
-    pub(crate) async fn mark_as_installed(&self, _store: &LockedStore<'_>) -> Result<()> {
+    pub(crate) async fn mark_as_installed(&self, _store: &StoreWriteGuard<'_>) -> Result<()> {
         let Some(info) = self.install_info() else {
             return Ok(());
         };

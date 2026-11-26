@@ -114,8 +114,8 @@ fn cache_gc_verbose_shows_removed_entries() -> anyhow::Result<()> {
 
 #[test]
 fn active_hook_protects_cache_from_cleanup() {
-    // A hook can run another prek command. Cleanup must return promptly, preserve the
-    // active hook's files, and become available as soon as the outer run finishes.
+    // Both run and exec must allow nested hook runs while keeping cache cleanup
+    // from removing files that the outer command is still using.
     let context = TestEnv::new()
         .with_config(indoc::indoc! {r"
             repos:
@@ -149,12 +149,17 @@ fn active_hook_protects_cache_from_cleanup() {
         "},
         )
         .init_git();
-    context
-        .run()
-        .args(["probe", "--all-files"])
-        .env("TEST_PREK", assert_cmd::cargo::cargo_bin!("prek"))
-        .assert()
-        .success();
+    for args in [
+        &["run", "probe", "--all-files"][..],
+        &["exec", "probe", "--", "python3", "probe.py"],
+    ] {
+        context
+            .command()
+            .args(args)
+            .env("TEST_PREK", assert_cmd::cargo::cargo_bin!("prek"))
+            .assert()
+            .success();
+    }
     context.command().args(["cache", "gc"]).assert().success();
     context
         .home_dir()

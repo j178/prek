@@ -19,7 +19,7 @@ use crate::hook::{
     HOOK_MARKER, HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef,
 };
 use crate::printer::Printer;
-use crate::store::{CacheBucket, LockedStore, REPO_MARKER, Store, ToolBucket};
+use crate::store::{CacheBucket, ExclusiveStore, REPO_MARKER, Store, StoreWriteGuard, ToolBucket};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
@@ -142,12 +142,26 @@ impl AddAssign<&Removal> for RemovalSummary {
     }
 }
 
+pub(crate) enum GcMode<'a> {
+    DryRun(StoreWriteGuard<'a>),
+    Remove(ExclusiveStore),
+}
+
+impl GcMode<'_> {
+    pub(crate) fn store(&self) -> &Store {
+        match self {
+            Self::DryRun(store) => store,
+            Self::Remove(store) => store,
+        }
+    }
+}
+
 pub(crate) async fn cache_gc(
-    store: &LockedStore<'_>,
-    dry_run: bool,
+    mode: GcMode<'_>,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let store = mode.store();
     let tracked_configs = store.tracked_configs()?;
     if tracked_configs.is_empty() {
         writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
@@ -234,10 +248,14 @@ pub(crate) async fn cache_gc(
     }
 
     // Update tracking file to drop configs that no longer exist.
-    if !dry_run && kept_configs.len() != tracked_configs.len() {
+    if let GcMode::Remove(exclusive) = &mode
+        && kept_configs.len() != tracked_configs.len()
+    {
         let kept_configs = kept_configs.into_iter().map(Path::to_path_buf).collect();
-        store.update_tracked_configs(&kept_configs)?;
+        exclusive.update_tracked_configs(&kept_configs)?;
     }
+
+    let dry_run = matches!(mode, GcMode::DryRun(_));
 
     // Sweep repos/<hash>
     let removed_repos = sweep_dir_by_name(
