@@ -9,9 +9,9 @@ use crate::cli::ExitStatus;
 use crate::cli::cache_size::human_readable_bytes;
 use crate::cli::reporter::CleaningReporter;
 use crate::printer::Printer;
-use crate::store::{STORE_LOCK, StoreGuard};
+use crate::store::{LockedStore, STORE_LOCK};
 
-pub(crate) fn cache_clean(store: &StoreGuard<'_>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn cache_clean(store: &LockedStore<'_>, printer: Printer) -> Result<ExitStatus> {
     let reporter = if printer.target().is_hidden() {
         None
     } else {

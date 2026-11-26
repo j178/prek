@@ -217,7 +217,7 @@ pub(crate) async fn try_repo(
 
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
-    let store = Store::from_path(tmp_dir.path())?;
+    let store = Store::init_at(tmp_dir.path())?;
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, git::root()?)?;
 
     let predefined_hooks = match repo.as_str() {

@@ -27,7 +27,7 @@ use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::settings::FilesystemOptions;
-use crate::store::{CacheLock, Store};
+use crate::store::{Store, StoreAccess};
 use crate::terminal::USE_COLOR;
 
 mod archive;
@@ -144,25 +144,24 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     let command = cli
         .command
         .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
-    let (cache_lock, use_default_log) = match &command {
+    let (store, use_default_log) = match &command {
         Command::Clean
         | Command::Cache(CacheNamespace {
             command: CacheCommand::Clean,
-        }) => (CacheLock::TryExclusive, false),
+        }) => (Store::from_settings(StoreAccess::Cleanup)?, false),
         Command::GC(args)
         | Command::Cache(CacheNamespace {
             command: CacheCommand::GC(args),
-        }) => (
-            if args.dry_run {
-                CacheLock::TryShared
+        }) => {
+            let access = if args.dry_run {
+                StoreAccess::Inspect
             } else {
-                CacheLock::TryExclusive
-            },
-            true,
-        ),
-        _ => (CacheLock::Shared, true),
+                StoreAccess::Cleanup
+            };
+            (Store::from_settings(access)?, true)
+        }
+        _ => (Store::from_settings(StoreAccess::ReadWrite)?.init()?, true),
     };
-    let store = Store::from_settings(cache_lock)?;
     let log_file = match cli.globals.log_file {
         _ if cli.globals.no_log_file => None,
         None if use_default_log => Some(store.log_file()),

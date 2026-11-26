@@ -19,7 +19,7 @@ use crate::hook::{
     HOOK_MARKER, HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef,
 };
 use crate::printer::Printer;
-use crate::store::{CacheBucket, REPO_MARKER, Store, StoreGuard, ToolBucket};
+use crate::store::{CacheBucket, LockedStore, REPO_MARKER, Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
@@ -143,7 +143,7 @@ impl AddAssign<&Removal> for RemovalSummary {
 }
 
 pub(crate) async fn cache_gc(
-    store: &StoreGuard<'_>,
+    store: &LockedStore<'_>,
     dry_run: bool,
     verbose: bool,
     printer: Printer,
