@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.5.11"
+version = "0.5.12"
 edition = "2024"
 rust-version = "1.98"
 repository = "https://github.com/j178/prek"
@@ -12,10 +12,10 @@ license = "MIT"
 
 # tombi: format.rules.table-keys-order = "ascending"
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.5.11" }
-prek-identify = { path = "crates/prek-identify", version = "0.5.11" }
-prek-ignore = { path = "crates/prek-ignore", version = "0.5.11" }
-prek-update = { path = "crates/prek-update", version = "0.5.11" }
+prek-consts = { path = "crates/prek-consts", version = "0.5.12" }
+prek-identify = { path = "crates/prek-identify", version = "0.5.12" }
+prek-ignore = { path = "crates/prek-ignore", version = "0.5.12" }
+prek-update = { path = "crates/prek-update", version = "0.5.12" }
 
 aho-corasick = { version = "1.1.4" }
 annotate-snippets = { version = "0.12.13" }
