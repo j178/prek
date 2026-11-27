@@ -323,6 +323,15 @@ impl Deref for StoreWriteGuard<'_> {
 }
 
 impl StoreWriteGuard<'_> {
+    pub(crate) fn cached_repo(&self, repo: &RemoteRepo) -> Result<Option<PathBuf>, Error> {
+        let path = self.repo_path(repo.source(), &repo.rev);
+        if path.join(REPO_MARKER).try_exists()? {
+            Ok(Some(path))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Pick the most recently installed revision of each missing repository.
     fn cached_revisions(&self, pending: &[&RemoteRepo]) -> FxHashMap<String, CachedRevision> {
         let mut newest: FxHashMap<String, CachedRevision> = FxHashMap::default();
@@ -398,11 +407,10 @@ impl StoreWriteGuard<'_> {
         repo: &RemoteRepo,
         temp: tempfile::TempDir,
     ) -> Result<PathBuf, Error> {
-        let target = self.repo_path(repo.source(), &repo.rev);
-
-        if target.join(REPO_MARKER).try_exists()? {
-            return Ok(target);
+        if let Some(path) = self.cached_repo(repo)? {
+            return Ok(path);
         }
+        let target = self.repo_path(repo.source(), &repo.rev);
         if target.try_exists()? {
             fs_err::tokio::remove_dir_all(&target).await?;
         }
@@ -434,9 +442,8 @@ impl StoreWriteGuard<'_> {
         let mut pending = Vec::new();
 
         for repo in repos {
-            let target = self.repo_path(repo.source(), &repo.rev);
-            if target.join(REPO_MARKER).try_exists()? {
-                cloned.insert(repo.key(), target);
+            if let Some(path) = self.cached_repo(repo)? {
+                cloned.insert(repo.key(), path);
                 continue;
             }
 

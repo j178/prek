@@ -270,6 +270,58 @@ fn try_repo_reuses_environment_for_identical_edits() -> Result<()> {
     Ok(())
 }
 
+/// A repeated trial can run from its installed snapshot with the submodule offline.
+#[test]
+fn try_repo_reuses_dirty_snapshot_with_offline_submodule() -> Result<()> {
+    let context = TestEnv::new().init_git();
+    let upstream = context.home_dir().child("upstream");
+    upstream.child("payload").write_str("submodule data")?;
+    context
+        .git_at(&upstream)
+        .init()
+        .add(".")
+        .commit("Add payload");
+
+    let repo = context
+        .create_hook_repo(
+            "hook",
+            indoc::indoc! {r#"
+        - id: read-submodule
+          name: Read submodule
+          entry: git -C "{hook_repo}/sub" cat-file -e HEAD:payload
+          language: system
+          always_run: true
+          pass_filenames: false
+    "#},
+        )
+        .with_file("tracked", "one")
+        .build();
+    context
+        .git_at(&repo)
+        .command()
+        .args(["-c", "protocol.file.allow=always", "submodule", "add"])
+        .arg(upstream.path())
+        .arg("sub")
+        .assert()
+        .success();
+    context.git_at(&repo).commit("Add submodule");
+    ChildPath::new(&repo).child("tracked").write_str("two")?;
+
+    let run = || {
+        context
+            .try_repo()
+            .arg(&repo)
+            .arg("-a")
+            .env("GIT_ALLOW_PROTOCOL", "file")
+            .assert()
+            .success();
+    };
+    run();
+    fs_err::rename(&upstream, context.home_dir().child("offline"))?;
+    run();
+    Ok(())
+}
+
 /// An expression such as origin/topic is resolved by Git after fetching. A second
 /// invocation must see a moved branch even with an already populated trial cache.
 #[test]
