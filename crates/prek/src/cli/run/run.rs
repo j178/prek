@@ -108,12 +108,6 @@ pub(crate) async fn run(
         anyhow::bail!("`--show-diff-on-failure` cannot be used with `--output-format json`");
     }
 
-    // JSON mode promises no ANSI styling. Warnings and other diagnostics are written through
-    // `anstream`, so disabling color here keeps them plain even with `--color=always`.
-    if output_format == RunOutputFormat::Json {
-        anstream::ColorChoice::Never.write_global();
-    }
-
     let selection: FileSelection = file_selection.into();
     let fail_fast = flag(fail_fast, no_fail_fast);
     let hide_status = if no_hide_status {

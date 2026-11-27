@@ -1299,3 +1299,27 @@ fn json_output_format_plain_warnings() {
     assert_eq!(output.status.code(), Some(0));
     insta::assert_snapshot!(String::from_utf8_lossy(&output.stderr), @"warning: selector `--skip=missing` did not match any hooks");
 }
+
+/// Diagnostics emitted before `run` starts, such as the `try-repo` `--rev` warning for
+/// predefined repos, are also plain in JSON mode with `--color=always`.
+#[test]
+fn json_output_format_plain_try_repo_warning() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .init_git();
+
+    let output = context
+        .command()
+        .args([
+            "try-repo",
+            "builtin",
+            "trailing-whitespace",
+            "--rev=x",
+            "--all-files",
+            "--output-format=json",
+            "--color=always",
+        ])
+        .output()
+        .expect("prek should run");
+    insta::assert_snapshot!(String::from_utf8_lossy(&output.stderr), @"warning: `--rev` option is ignored for the `builtin` repo");
+}
