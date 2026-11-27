@@ -359,36 +359,15 @@ impl StoreWriteGuard<'_> {
         terminal_prompt: TerminalPrompt,
         cached: Option<&Path>,
     ) -> Result<tempfile::TempDir, git::Error> {
-        let clone_into_temp = async |cached: Option<&Path>| -> Result<_, git::Error> {
-            let temp = tempfile::tempdir_in(self.scratch_path())?;
-            debug!(
-                target = %temp.path().display(),
-                %repo,
-                ?terminal_prompt,
-                ?cached,
-                "Cloning repo"
-            );
-
-            git::clone_repo(
-                repo.source(),
-                &repo.rev,
-                temp.path(),
-                terminal_prompt,
-                cached,
-            )
-            .await?;
-            Ok(temp)
-        };
-
-        if let Some(cached) = cached {
-            match clone_into_temp(Some(cached)).await {
-                Ok(temp) => return Ok(temp),
-                Err(err) if git::is_auth_error(&err) => return Err(err),
-                Err(err) => debug!(?err, "Retrying clone without the cached revision"),
-            }
-        }
-
-        clone_into_temp(None).await
+        debug!(%repo, ?terminal_prompt, ?cached, "Cloning repo");
+        git::clone_repo(
+            repo.source(),
+            &repo.rev,
+            &self.scratch_path(),
+            terminal_prompt,
+            cached,
+        )
+        .await
     }
 
     async fn persist_cloned_repo(
