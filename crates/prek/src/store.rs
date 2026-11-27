@@ -32,6 +32,14 @@ pub(crate) struct RepoMarker {
 }
 
 impl RepoMarker {
+    pub(crate) fn write(&self, root: &Path) -> std::io::Result<()> {
+        let file = tempfile::NamedTempFile::new_in(root)?;
+        serde_json::to_writer_pretty(&file, self)?;
+        file.persist(root.join(REPO_MARKER))
+            .map_err(|err| err.error)?;
+        Ok(())
+    }
+
     pub(crate) fn read(root: &Path) -> Option<Self> {
         let content = fs_err::read(root.join(REPO_MARKER)).ok()?;
         serde_json::from_slice(&content).ok()
@@ -188,7 +196,14 @@ impl Store {
 
     /// The checkout path for this repository and revision, whether or not it exists yet.
     pub(crate) fn repo_path(&self, source: &str, rev: &str) -> PathBuf {
-        self.repos_dir().join(Self::repo_key(source, rev))
+        let key = Self::repo_key(source, rev);
+        let path = self.repos_dir().join(&key);
+        // A cache restored on older Git may contain a relative worktree it
+        // cannot open. Give that installation its own standalone checkout.
+        if path.join(".git").is_file() && matches!(crate::git_source::supported(), Ok(false)) {
+            return self.repos_dir().join(format!("{key}-standalone"));
+        }
+        path
     }
 
     pub(crate) fn repo_key(source: &str, rev: &str) -> String {
@@ -201,6 +216,10 @@ impl Store {
     /// Directory containing cached repository checkouts.
     pub(crate) fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
+    }
+
+    pub(crate) fn snapshots_dir(&self) -> PathBuf {
+        self.path.join("snapshots")
     }
 
     /// Git objects and refs retained between update checks, grouped by source.
@@ -419,12 +438,22 @@ impl StoreWriteGuard<'_> {
             repo: repo.source().to_owned(),
             rev: repo.rev.clone(),
         };
-        let file = tempfile::NamedTempFile::new_in(temp.path())?;
-        serde_json::to_writer_pretty(&file, &marker)?;
-        file.persist(temp.path().join(REPO_MARKER))
-            .map_err(|err| err.error)?;
-        crate::fs::rename_with_retry(temp, &target).await?;
-
+        let linked = crate::git_source::publish_shallow_worktree(
+            &self.snapshots_dir(),
+            temp.path(),
+            &target,
+            &self.scratch_path(),
+            &marker,
+        )
+        .await
+        .map_err(|error| Error::CloneRepo {
+            repo: repo.repo().to_owned(),
+            error,
+        })?;
+        if !linked {
+            marker.write(temp.path())?;
+            crate::fs::rename_with_retry(temp, &target).await?;
+        }
         Ok(target)
     }
 

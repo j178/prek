@@ -901,7 +901,7 @@ pub(crate) async fn update_submodules(
     Ok(())
 }
 
-async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
+pub(crate) async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
     if path.join(".gitmodules").try_exists()? {
         return Ok(true);
     }

@@ -38,6 +38,7 @@ mod concurrency;
 mod config;
 mod fs;
 mod git;
+mod git_source;
 mod hook;
 mod hook_entry;
 mod hooks;
