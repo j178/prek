@@ -766,6 +766,7 @@ async fn fetch_cached_tip(path: &Path, cached: &Path) -> Result<String, Error> {
         .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .output()
         .await?;
+
     let output = git_cmd()?
         .current_dir(path)
         .args(["rev-parse", "--verify", "FETCH_HEAD^{commit}"])
@@ -775,35 +776,52 @@ async fn fetch_cached_tip(path: &Path, cached: &Path) -> Result<String, Error> {
     Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
 }
 
+async fn fetch_shallow(
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+    cached_repo: Option<&Path>,
+) -> Result<(), Error> {
+    let mut fetch = git_cmd()?;
+    fetch
+        .current_dir(path)
+        .hidden_args(["-c", "protocol.version=2"])
+        .arg("fetch");
+
+    if let Some(cached_repo) = cached_repo {
+        let tip = fetch_cached_tip(path, cached_repo).await?;
+        if tip.eq_ignore_ascii_case(rev) {
+            // The local fetch already set FETCH_HEAD to the requested commit.
+            return Ok(());
+        }
+
+        // The imported commit has no local ref. Advertise it so the server
+        // can send just the objects needed to reach the requested revision.
+        fetch.arg(format!("--negotiation-tip={tip}"));
+    }
+
+    fetch
+        .arg("origin")
+        .arg(rev)
+        .arg("--depth=1")
+        // Avoid inflating and rewriting each object in a small pack.
+        .arg("--keep")
+        .sanitize_git_repo_env()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
+        .output()
+        .await?;
+
+    Ok(())
+}
+
 async fn shallow_clone(
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
-    cached_tip: Option<&str>,
+    cached_repo: Option<&Path>,
 ) -> Result<(), Error> {
-    if !cached_tip.is_some_and(|tip| tip.eq_ignore_ascii_case(rev)) {
-        let mut fetch = git_cmd()?;
-        fetch
-            .current_dir(path)
-            .hidden_args(["-c", "protocol.version=2"])
-            .arg("fetch");
-        if let Some(tip) = cached_tip {
-            // The imported commit has no local ref. Advertise it so the server
-            // can send just the objects needed to reach the requested revision.
-            fetch.arg(format!("--negotiation-tip={tip}"));
-        }
-        fetch
-            .arg("origin")
-            .arg(rev)
-            .arg("--depth=1")
-            // Avoid inflating and rewriting each object in a small pack.
-            .arg("--keep")
-            .sanitize_git_repo_env()
-            .env(EnvVars::LC_ALL, "C")
-            .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
-            .output()
-            .await?;
-    }
+    fetch_shallow(rev, path, terminal_prompt, cached_repo).await?;
 
     git_cmd()?
         .current_dir(path)
@@ -909,24 +927,25 @@ pub(crate) async fn clone_repo(
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
-    cached: Option<&Path>,
+    cached_repo: Option<&Path>,
 ) -> Result<(), Error> {
     init_repo(url, path).await?;
-    if let Some(cached) = cached {
-        let tip = fetch_cached_tip(path, cached).await?;
-        return shallow_clone(rev, path, terminal_prompt, Some(&tip)).await;
-    }
-    if let Err(err) = shallow_clone(rev, path, terminal_prompt, None).await {
-        if is_auth_error(&err) {
-            warn!(?err, "Failed to shallow clone due to authentication error");
-            return Err(err);
-        }
 
-        warn!(?err, "Failed to shallow clone, falling back to full clone");
-        return full_clone(rev, path, terminal_prompt).await;
+    let Err(err) = shallow_clone(rev, path, terminal_prompt, cached_repo).await else {
+        return Ok(());
+    };
+
+    // The store retries a failed cached clone in a fresh directory.
+    if cached_repo.is_some() {
+        return Err(err);
+    }
+    if is_auth_error(&err) {
+        warn!(?err, "Failed to shallow clone due to authentication error");
+        return Err(err);
     }
 
-    Ok(())
+    warn!(?err, "Failed to shallow clone, falling back to full clone");
+    full_clone(rev, path, terminal_prompt).await
 }
 
 async fn config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {

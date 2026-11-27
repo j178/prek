@@ -2,6 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use anyhow::Result;
 use etcetera::BaseStrategy;
@@ -19,8 +20,9 @@ use crate::git::{self, TerminalPrompt};
 use crate::warn_user;
 use crate::workspace::HookInitReporter;
 
-struct PendingClone<'a> {
-    repo: &'a RemoteRepo,
+struct CachedRevision {
+    path: PathBuf,
+    installed_at: SystemTime,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -312,39 +314,42 @@ impl Deref for StoreWriteGuard<'_> {
 
 impl StoreWriteGuard<'_> {
     /// Pick the most recently installed revision of each missing repository.
-    fn cached_revisions(
-        &self,
-        pending: &[PendingClone<'_>],
-    ) -> FxHashMap<String, (std::time::SystemTime, PathBuf)> {
-        let mut newest = FxHashMap::default();
-        if pending.is_empty() {
-            return newest;
-        }
-        let sources: FxHashSet<_> = pending.iter().map(|p| p.repo.source()).collect();
+    fn cached_revisions(&self, pending: &[&RemoteRepo]) -> FxHashMap<String, CachedRevision> {
+        let mut newest: FxHashMap<String, CachedRevision> = FxHashMap::default();
         let Ok(entries) = fs_err::read_dir(self.repos_dir()) else {
             return newest;
         };
+
+        let sources: FxHashSet<_> = pending.iter().map(|repo| repo.source()).collect();
         for entry in entries.flatten() {
             let path = entry.path();
             let Some(marker) = RepoMarker::read(&path) else {
                 continue;
             };
-            if !sources.contains(marker.repo.as_str())
-                || entry.file_name() != Store::repo_key(&marker.repo, &marker.rev).as_str()
-            {
+            if !sources.contains(marker.repo.as_str()) {
                 continue;
             }
-            let Ok(modified) = fs_err::metadata(path.join(REPO_MARKER)).and_then(|m| m.modified())
+
+            // A hook can modify its checkout. Only trust a marker that still
+            // identifies the cache directory where prek installed it.
+            let key = Store::repo_key(&marker.repo, &marker.rev);
+            if entry.file_name() != key.as_str() {
+                continue;
+            }
+
+            let Ok(installed_at) =
+                fs_err::metadata(path.join(REPO_MARKER)).and_then(|m| m.modified())
             else {
                 continue;
             };
             if newest
                 .get(&marker.repo)
-                .is_none_or(|(time, _)| *time < modified)
+                .is_none_or(|prev| prev.installed_at < installed_at)
             {
-                newest.insert(marker.repo, (modified, path));
+                newest.insert(marker.repo, CachedRevision { path, installed_at });
             }
         }
+
         newest
     }
 
@@ -354,9 +359,16 @@ impl StoreWriteGuard<'_> {
         terminal_prompt: TerminalPrompt,
         cached: Option<&Path>,
     ) -> Result<tempfile::TempDir, git::Error> {
-        let clone = async |cached: Option<&Path>| {
+        let clone_into_temp = async |cached: Option<&Path>| -> Result<_, git::Error> {
             let temp = tempfile::tempdir_in(self.scratch_path())?;
-            debug!(target = %temp.path().display(), %repo, ?terminal_prompt, ?cached, "Cloning repo");
+            debug!(
+                target = %temp.path().display(),
+                %repo,
+                ?terminal_prompt,
+                ?cached,
+                "Cloning repo"
+            );
+
             git::clone_repo(
                 repo.source(),
                 &repo.rev,
@@ -365,15 +377,17 @@ impl StoreWriteGuard<'_> {
                 cached,
             )
             .await?;
-            Ok::<_, git::Error>(temp)
+            Ok(temp)
         };
+
         if let Some(cached) = cached {
-            match clone(Some(cached)).await {
+            match clone_into_temp(Some(cached)).await {
                 Ok(temp) => return Ok(temp),
                 Err(err) => debug!(?err, "Retrying clone without the cached revision"),
             }
         }
-        clone(None).await
+
+        clone_into_temp(None).await
     }
 
     async fn persist_cloned_repo(
@@ -416,44 +430,43 @@ impl StoreWriteGuard<'_> {
                 continue;
             }
 
-            pending.push(PendingClone { repo });
+            pending.push(repo);
+        }
+
+        if pending.is_empty() {
+            return Ok(cloned);
         }
 
         let cached = self.cached_revisions(&pending);
         let mut auth_failed = Vec::new();
         let mut tasks = futures_util::stream::iter(pending)
-            .map(async |pending| {
-                let progress =
-                    reporter.map(|reporter| reporter.on_clone_start(&format!("{}", pending.repo)));
-                match self
-                    .clone_repo_to_temp(
-                        pending.repo,
-                        TerminalPrompt::Disabled,
-                        cached
-                            .get(pending.repo.source())
-                            .map(|(_, path)| path.as_path()),
-                    )
-                    .await
-                {
+            .map(async |repo| {
+                let progress = reporter.map(|reporter| reporter.on_clone_start(&repo.to_string()));
+                let cached_path = cached.get(repo.source()).map(|rev| rev.path.as_path());
+                let result = self
+                    .clone_repo_to_temp(repo, TerminalPrompt::Disabled, cached_path)
+                    .await;
+
+                match result {
                     Ok(temp) => Ok(FirstClonePass::Ready {
-                        repo: pending.repo,
+                        repo,
                         temp,
                         progress,
                     }),
                     Err(err) if git::is_auth_error(&err) => {
                         warn!(
-                            repo = %pending.repo.repo(),
+                            repo = %repo.repo(),
                             ?err,
                             "Clone failed with authentication error and terminal prompts disabled"
                         );
                         Ok(FirstClonePass::AuthFailed {
-                            repo: pending.repo,
+                            repo,
                             error: err,
                             progress,
                         })
                     }
                     Err(err) => Err(Error::CloneRepo {
-                        repo: pending.repo.repo().to_string(),
+                        repo: repo.repo().to_string(),
                         error: err,
                     }),
                 }

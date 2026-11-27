@@ -15,9 +15,7 @@ use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
 use crate::cli::run::InstallCache;
 use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
-use crate::hook::{
-    HOOK_MARKER, HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef,
-};
+use crate::hook::{HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, ExclusiveStore, RepoMarker, Store, StoreWriteGuard, ToolBucket};
 
@@ -600,20 +598,21 @@ fn sweep_dir_by_name(
         let entry_bytes = dir_size_bytes(&path);
 
         let item = if collect_names {
-            let repo_marker = (kind == RemovalKind::Repos)
-                .then(|| RepoMarker::read(&path))
-                .flatten();
-            let hook_marker = (kind == RemovalKind::HookEnvs)
-                .then(|| read_hook_marker(&path))
-                .flatten();
-
             let mut item = RemovalItem::new(name.to_string(), path.to_string_lossy().into_owned());
-
-            if let Some(label) = label_for_entry(kind, repo_marker.as_ref(), hook_marker.as_ref()) {
-                item.label = label;
+            match kind {
+                RemovalKind::Repos => {
+                    if let Some(repo) = RepoMarker::read(&path) {
+                        item.label = format!("{}@{}", repo.repo, repo.rev);
+                    }
+                }
+                RemovalKind::HookEnvs => {
+                    if let Some(info) = InstallInfo::read(&path) {
+                        item.label = format!("{} env", info.language.as_ref());
+                        item.lines = hook_detail_lines(&info);
+                    }
+                }
+                _ => {}
             }
-
-            item.lines = detail_lines_for_entry(kind, repo_marker.as_ref(), hook_marker.as_ref());
             Some(item)
         } else {
             None
@@ -721,59 +720,29 @@ fn sweep_stale_patch_files(root: &Path, dry_run: bool, collect_names: bool) -> R
     Ok(removal)
 }
 
-fn label_for_entry(
-    kind: RemovalKind,
-    repo_marker: Option<&RepoMarker>,
-    hook_marker: Option<&InstallInfo>,
-) -> Option<String> {
-    match kind {
-        RemovalKind::Repos => repo_marker.map(|repo| format!("{}@{}", repo.repo, repo.rev)),
-        RemovalKind::HookEnvs => hook_marker.map(|info| {
-            // Keep this short; more info goes in detail lines.
-            format!("{} env", info.language.as_ref())
-        }),
-        _ => None,
-    }
-}
-
-fn detail_lines_for_entry(
-    kind: RemovalKind,
-    _repo_marker: Option<&RepoMarker>,
-    hook_marker: Option<&InstallInfo>,
-) -> Vec<String> {
+fn hook_detail_lines(info: &InstallInfo) -> Vec<String> {
     const MAX_VALUE_CHARS: usize = 140;
 
-    match kind {
-        RemovalKind::Repos => vec![],
-        RemovalKind::HookEnvs if let Some(info) = hook_marker => {
-            let mut lines = Vec::new();
-            lines.push(format!(
-                "{}: {} ({})",
-                "language".dimmed().bold(),
-                info.language.as_ref(),
-                info.language_version
-            ));
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "{}: {} ({})",
+        "language".dimmed().bold(),
+        info.language.as_ref(),
+        info.language_version
+    ));
 
-            if let Some(repo) = info.repo() {
-                lines.push(format!(
-                    "{}: {}",
-                    "repo".dimmed().bold(),
-                    truncate_end(&repo.to_string(), MAX_VALUE_CHARS)
-                ));
-            }
-            if !info.dependencies.is_empty() {
-                let deps_str = format_dependency_list(&info.dependencies, 6, MAX_VALUE_CHARS);
-                lines.push(format!("{}: {deps_str}", "deps".dimmed().bold()));
-            }
-            lines
-        }
-        _ => Vec::new(),
+    if let Some(repo) = info.repo() {
+        lines.push(format!(
+            "{}: {}",
+            "repo".dimmed().bold(),
+            truncate_end(&repo.to_string(), MAX_VALUE_CHARS)
+        ));
     }
-}
-
-fn read_hook_marker(root: &Path) -> Option<InstallInfo> {
-    let content = fs_err::read_to_string(root.join(HOOK_MARKER)).ok()?;
-    serde_json::from_str(&content).ok()
+    if !info.dependencies.is_empty() {
+        let deps_str = format_dependency_list(&info.dependencies, 6, MAX_VALUE_CHARS);
+        lines.push(format!("{}: {deps_str}", "deps".dimmed().bold()));
+    }
+    lines
 }
 
 fn truncate_end(s: &str, max_chars: usize) -> String {

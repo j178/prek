@@ -811,7 +811,7 @@ impl Display for InstalledHook {
     }
 }
 
-pub(crate) const HOOK_MARKER: &str = ".prek-hook.json";
+const HOOK_MARKER: &str = ".prek-hook.json";
 pub(crate) const INSTALL_INFO_SCHEMA_VERSION: u8 = 1;
 
 impl InstalledHook {
@@ -957,6 +957,11 @@ impl InstallInfo {
 
     pub(crate) fn repo(&self) -> Option<RepoIdentityRef<'_>> {
         self.repo.as_ref().map(RepoIdentity::as_ref)
+    }
+
+    pub(crate) fn read(root: &Path) -> Option<Self> {
+        let content = fs_err::read(root.join(HOOK_MARKER)).ok()?;
+        serde_json::from_slice(&content).ok()
     }
 
     pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {
