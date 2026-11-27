@@ -313,6 +313,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-run--output-format"><a href="#prek-run--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format.</p>
 <p><code>json</code> writes a single JSON document to stdout after all hooks finish, without progress output or ANSI styling. It reports every selected hook and ignores <code>--hide-status</code>. Captured hook output is included as text and is not parsed.</p>
+<p><code>try-repo</code> reports only the hooks it generates a config for, so hooks excluded with <code>--skip</code> do not appear.</p>
 <p>[default: text]</p><p>Possible values:</p>
 <ul>
 <li><code>text</code></li>
@@ -910,6 +911,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-try-repo--output-format"><a href="#prek-try-repo--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format.</p>
 <p><code>json</code> writes a single JSON document to stdout after all hooks finish, without progress output or ANSI styling. It reports every selected hook and ignores <code>--hide-status</code>. Captured hook output is included as text and is not parsed.</p>
+<p><code>try-repo</code> reports only the hooks it generates a config for, so hooks excluded with <code>--skip</code> do not appear.</p>
 <p>[default: text]</p><p>Possible values:</p>
 <ul>
 <li><code>text</code></li>

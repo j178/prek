@@ -754,6 +754,9 @@ pub(crate) struct RunOptions {
     /// `json` writes a single JSON document to stdout after all hooks finish, without
     /// progress output or ANSI styling. It reports every selected hook and ignores
     /// `--hide-status`. Captured hook output is included as text and is not parsed.
+    ///
+    /// `try-repo` reports only the hooks it generates a config for, so hooks excluded
+    /// with `--skip` do not appear.
     #[arg(
         long,
         value_enum,
