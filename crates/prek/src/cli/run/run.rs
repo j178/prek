@@ -26,7 +26,7 @@ use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
     ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input,
 };
-use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
+use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, RunOutputFormat, flag};
 use crate::concurrency::HOOK_CONCURRENCY;
 use crate::config::{HideStatus, PassFilenames, Stage};
 use crate::fs::CWD;
@@ -37,6 +37,7 @@ use crate::store::Store;
 use crate::workspace::{HookInitFilters, Project, Workspace};
 use crate::{fs, git, hooks, warn_user};
 
+use super::json::JsonReport;
 use super::output::{ReportFilter, RunReport};
 use super::selector::HookSelection;
 
@@ -97,8 +98,15 @@ pub(crate) async fn run(
         dry_run,
         hide_status,
         no_hide_status,
+        output_format,
         extra: extra_args,
     } = options;
+
+    // The diff is written to stdout, which JSON mode reserves for its single document.
+    // This is checked here rather than in Clap so that an explicit `--output-format text` still works.
+    if output_format == RunOutputFormat::Json && show_diff_on_failure {
+        anyhow::bail!("`--show-diff-on-failure` cannot be used with `--output-format json`");
+    }
 
     let selection: FileSelection = file_selection.into();
     let fail_fast = flag(fail_fast, no_fail_fast);
@@ -155,7 +163,12 @@ pub(crate) async fn run(
         workspace.check_configs_staged(&status.unstaged)?;
     }
 
-    let reporter = HookInitReporter::new(printer);
+    // JSON mode must not draw progress or styled text while hooks are prepared.
+    let setup_printer = match output_format {
+        RunOutputFormat::Text | RunOutputFormat::Concise => printer,
+        RunOutputFormat::Json => Printer::Silent,
+    };
+    let reporter = HookInitReporter::new(setup_printer);
     let hooks = {
         let write_guard = store.write_lock().await?;
         write_guard.track_configs(workspace.config_files())?;
@@ -220,6 +233,9 @@ pub(crate) async fn run(
     if selected_hooks.is_empty() {
         if let Some(stage) = stage_filter {
             debug!("No hooks found for stage {stage} after filtering, exit early");
+            if output_format == RunOutputFormat::Json {
+                JsonReport::default().write(false, &[], printer)?;
+            }
         } else {
             warn_user!(
                 "all hooks selected by group filters require `commit-msg` or `prepare-commit-msg` stage and were not run; pass `--stage commit-msg` or `--stage prepare-commit-msg` to run them"
@@ -243,8 +259,13 @@ pub(crate) async fn run(
             .any(|path| path.starts_with(workspace.root()))
     {
         Some(
-            WorktreeStash::save(store, workspace.root(), status)
-                .context("Failed to clean work tree")?,
+            WorktreeStash::save(
+                store,
+                workspace.root(),
+                status,
+                output_format != RunOutputFormat::Json,
+            )
+            .context("Failed to clean work tree")?,
         )
     } else {
         None
@@ -287,7 +308,7 @@ pub(crate) async fn run(
         );
         let installed_hooks = ensure_hooks_installed(
             store,
-            printer,
+            setup_printer,
             &workspace,
             &input,
             &file_index,
@@ -302,6 +323,7 @@ pub(crate) async fn run(
             &installed_hooks,
             store,
             show_diff_on_failure,
+            output_format,
             fail_fast,
             dry_run,
             hide_status,
@@ -534,6 +556,7 @@ async fn run_hooks<'paths>(
     hooks: &[ScheduledHook],
     store: &Store,
     show_diff_on_failure: bool,
+    output_format: RunOutputFormat,
     fail_fast: Option<bool>,
     dry_run: bool,
     hide_status: Option<&[HideStatus]>,
@@ -557,7 +580,23 @@ async fn run_hooks<'paths>(
 
     let show_project_headers =
         project_to_hooks.len() > 1 || project_to_hooks.keys().any(|project| !project.is_root());
-    let report = RunReport::new(hooks, verbose, show_project_headers, printer);
+    // JSON mode renders nothing through the text report, so stdout only carries the document.
+    let mut json_report = match output_format {
+        RunOutputFormat::Text | RunOutputFormat::Concise => None,
+        RunOutputFormat::Json => Some(JsonReport::default()),
+    };
+    let report_printer = if json_report.is_some() {
+        Printer::Silent
+    } else {
+        printer
+    };
+    let report = RunReport::new(
+        hooks,
+        verbose,
+        show_project_headers,
+        output_format,
+        report_printer,
+    );
     let runner = HookRunner {
         store,
         report: &report,
@@ -607,6 +646,9 @@ async fn run_hooks<'paths>(
         for project_result in project_results {
             stop_after_level |= project_result.stop_after_level;
             summary.include(&project_result);
+            if let Some(json_report) = &mut json_report {
+                json_report.add(&project_result);
+            }
             report.write_project(project_result)?;
         }
 
@@ -615,9 +657,15 @@ async fn run_hooks<'paths>(
         }
     }
 
-    report
+    let failed = summary.failed;
+    let status = report
         .finish(summary, workspace, show_diff_on_failure)
-        .await
+        .await?;
+    if let Some(json_report) = json_report {
+        json_report.write(failed, hooks, printer)?;
+    }
+
+    Ok(status)
 }
 
 struct ProjectRun<'project> {

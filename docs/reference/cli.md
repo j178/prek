@@ -311,13 +311,23 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--no-hide-status"><a href="#prek-run--no-hide-status"><code>--no-hide-status</code></a></dt><dd><p>Show all hook reports, overriding <code>hide_status</code> in configuration</p>
 </dd><dt id="prek-run--no-progress"><a href="#prek-run--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="prek-run--output-format"><a href="#prek-run--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format.</p>
+<p><code>text</code> prints dotted status lines. <code>concise</code> prints the status before the hook name, without dot padding.</p>
+<p><code>json</code> writes a single JSON document to stdout after all hooks finish, without progress output or ANSI styling. It reports every selected hook and ignores <code>--hide-status</code>. Captured hook output is included as text and is not parsed.</p>
+<p><code>try-repo</code> reports only the hooks it generates a config for, so hooks excluded with <code>--skip</code> do not appear.</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code></li>
+<li><code>concise</code></li>
+<li><code>json</code></li>
+</ul></dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-run--require-group"><a href="#prek-run--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to every specified group.</p>
 <p>Can be specified multiple times; a hook must match every specified group. When combined with <code>--group</code>, it must also match at least one <code>--group</code>. <code>--no-group</code> excludes matching hooks regardless of argument order.</p>
 <p>For example, <code>--require-group fast --group format --group lint-only</code> selects hooks in <code>fast</code> and either <code>format</code> or <code>lint-only</code>. The special selector <code>@ungrouped</code> is also supported.</p>
-</dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
+</dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward.</p>
+<p>Not available with <code>--output-format json</code>, which reserves stdout for its document.</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
@@ -901,11 +911,21 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--no-hide-status"><a href="#prek-try-repo--no-hide-status"><code>--no-hide-status</code></a></dt><dd><p>Show all hook reports, overriding <code>hide_status</code> in configuration</p>
 </dd><dt id="prek-try-repo--no-progress"><a href="#prek-try-repo--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="prek-try-repo--output-format"><a href="#prek-try-repo--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format.</p>
+<p><code>text</code> prints dotted status lines. <code>concise</code> prints the status before the hook name, without dot padding.</p>
+<p><code>json</code> writes a single JSON document to stdout after all hooks finish, without progress output or ANSI styling. It reports every selected hook and ignores <code>--hide-status</code>. Captured hook output is included as text and is not parsed.</p>
+<p><code>try-repo</code> reports only the hooks it generates a config for, so hooks excluded with <code>--skip</code> do not appear.</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code></li>
+<li><code>concise</code></li>
+<li><code>json</code></li>
+</ul></dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-try-repo--rev"><a href="#prek-try-repo--rev"><code>--rev</code></a>, <code>--ref</code> <i>rev</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
-</dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
+</dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward.</p>
+<p>Not available with <code>--output-format json</code>, which reserves stdout for its document.</p>
 </dd><dt id="prek-try-repo--skip"><a href="#prek-try-repo--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>

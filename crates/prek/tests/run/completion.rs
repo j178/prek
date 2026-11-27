@@ -106,6 +106,7 @@ fn selectors_completion() -> Result<()> {
     --dry-run	Do not run the hooks, but print the hooks that would have been run
     --hide-status	Hide hook reports with the specified final status
     --no-hide-status	Show all hook reports, overriding `hide_status` in configuration
+    --output-format	The output format
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output

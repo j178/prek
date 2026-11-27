@@ -202,7 +202,19 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     terminal::enable_ansi_colors();
 
-    ColorChoice::write_global(cli.globals.color.into());
+    // JSON output promises no ANSI styling. The color choice must be fixed before logging and
+    // command setup write anything, so `--color=always` cannot style their diagnostics.
+    let json_output = match &cli.command {
+        None => cli.run_args.options.output_format,
+        Some(Command::Run(args)) => args.options.output_format,
+        Some(Command::TryRepo(args)) => args.run_args.output_format,
+        Some(_) => cli::RunOutputFormat::Text,
+    } == cli::RunOutputFormat::Json;
+    if json_output {
+        ColorChoice::Never.write_global();
+    } else {
+        ColorChoice::write_global(cli.globals.color.into());
+    }
 
     let command = cli
         .command

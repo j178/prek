@@ -15,6 +15,8 @@ use crate::process::Cmd;
 use crate::store::Store;
 
 struct SavedPatch {
+    /// Whether to print the routine "saved" and "restored" status lines.
+    announce: bool,
     root: PathBuf,
     tree: String,
     path: PathBuf,
@@ -42,7 +44,7 @@ fn git_command() -> Result<Cmd> {
 }
 
 impl SavedPatch {
-    fn save(root: &Path, patch_dir: &Path) -> Result<Option<Self>> {
+    fn save(root: &Path, patch_dir: &Path, announce: bool) -> Result<Option<Self>> {
         let tree = git::write_tree()?;
 
         let output = git_command()?
@@ -89,21 +91,24 @@ impl SavedPatch {
         ensure_patches_dir(patch_dir)?;
         let patch_path = patch_dir.join(&patch_name);
 
-        eprintln!(
-            "{}",
-            format!(
-                "Unstaged changes detected. Temporarily saving them to `{}`",
-                patch_path.user_display()
-            )
-            .yellow()
-            .bold()
-        );
+        if announce {
+            eprintln!(
+                "{}",
+                format!(
+                    "Unstaged changes detected. Temporarily saving them to `{}`",
+                    patch_path.user_display()
+                )
+                .yellow()
+                .bold()
+            );
+        }
         let mut patch_file = fs_err::File::create(&patch_path)?;
         // Keep the baseline discoverable even if the run's log is overwritten.
         writeln!(patch_file, "# prek pre-hook index tree: {tree}")?;
         patch_file.write_all(&output.stdout)?;
 
         Ok(Some(Self {
+            announce,
             root: root.to_path_buf(),
             tree,
             path: patch_path,
@@ -168,15 +173,17 @@ impl SavedPatch {
             RestoreOutcome::Restored
         };
 
-        eprintln!(
-            "{}",
-            format!(
-                "Restored unstaged changes from `{}`",
-                self.path.user_display()
-            )
-            .yellow()
-            .bold()
-        );
+        if self.announce {
+            eprintln!(
+                "{}",
+                format!(
+                    "Restored unstaged changes from `{}`",
+                    self.path.user_display()
+                )
+                .yellow()
+                .bold()
+            );
+        }
 
         Ok(outcome)
     }
@@ -195,6 +202,7 @@ pub(super) struct WorktreeStash {
 }
 
 struct PendingChanges {
+    announce: bool,
     intent_to_add: Vec<PathBuf>,
     // Recorded before checkout, so a failed checkout is also recoverable.
     patch: Option<SavedPatch>,
@@ -210,7 +218,7 @@ impl PendingChanges {
                 .context("Failed to clear intent-to-add changes")?;
         }
 
-        self.patch = SavedPatch::save(root, patch_dir)?;
+        self.patch = SavedPatch::save(root, patch_dir, self.announce)?;
         if self.patch.is_some() {
             debug!("Cleaning working tree");
             git::checkout_files(git::root()?, unstaged)
@@ -278,7 +286,13 @@ impl WorktreeStash {
     /// Save unstaged changes and intent-to-add markers, then prepare the worktree for hooks.
     ///
     /// Paths in `status` must be absolute; only paths under `root` are cleared.
-    pub fn save(store: &Store, root: &Path, mut status: git::WorktreeStatus) -> Result<Self> {
+    /// With `announce` unset, the routine save and restore status lines are not printed.
+    pub fn save(
+        store: &Store,
+        root: &Path,
+        mut status: git::WorktreeStatus,
+        announce: bool,
+    ) -> Result<Self> {
         status.intent_to_add.retain(|path| path.starts_with(root));
         let intent_paths = status.intent_to_add.iter().collect::<FxHashSet<_>>();
 
@@ -290,6 +304,7 @@ impl WorktreeStash {
 
         let stash = Self {
             state: Arc::new(Mutex::new(Some(PendingChanges {
+                announce,
                 intent_to_add: status.intent_to_add,
                 patch: None,
             }))),
