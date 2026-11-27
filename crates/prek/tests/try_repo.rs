@@ -1,6 +1,7 @@
 mod common;
 
 use anyhow::Result;
+use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
@@ -199,11 +200,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
     context.git().add(".");
 
-    let context = context.with_filters([
-        (r"try-repo-[^/\\]+", "[REPO]"),
-        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-        ("'", "\""),
-    ]);
+    let context = with_try_repo_filters(context);
 
     cmd_snapshot!(context, context.try_repo().arg(&repo_path), @r#"
     success: true
@@ -211,7 +208,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ----- stdout -----
     Using generated `prek.toml`:
     [[repos]]
-    repo = "[HOME]/scratch/[REPO]/shadow-repo"
+    repo = "[HOME]/test-repos/try-repo-uncommitted"
     rev = "[COMMIT_SHA]"
     hooks = [
       { id = "uncommitted-hook" },
@@ -223,6 +220,107 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     warning: Local repository has uncommitted changes. Creating a temporary copy...
     "#);
 
+    Ok(())
+}
+
+/// A dirty hook repository should reuse its environment until its contents change.
+#[test]
+fn try_repo_reuses_environment_for_identical_edits() -> Result<()> {
+    let context = TestEnv::new().init_git();
+    let repo = context
+        .create_hook_repo(
+            "hook",
+            indoc::indoc! {r#"
+        - id: probe
+          name: Probe
+          language: python
+          entry: python -c "import pathlib, sys; pathlib.Path('used-env').write_text(sys.prefix)"
+          always_run: true
+          pass_filenames: false
+    "#},
+        )
+        .with_file(
+            "setup.py",
+            "from setuptools import setup; setup(name='probe', version='1')",
+        )
+        .with_file("version.txt", "one")
+        .build();
+    let version = ChildPath::new(&repo).child("version.txt");
+    let observed = context.work_dir().child("used-env");
+    let run = |date: &str| -> Result<String> {
+        context
+            .try_repo()
+            .arg(&repo)
+            .arg("-a")
+            .env("GIT_AUTHOR_DATE", date)
+            .env("GIT_COMMITTER_DATE", date)
+            .assert()
+            .success();
+        Ok(fs_err::read_to_string(observed.path())?)
+    };
+
+    // Advancing Git's clock must not invalidate the environment for the same edit.
+    version.write_str("two")?;
+    let first = run("2020-01-01T00:00:00Z")?;
+    assert_eq!(first, run("2021-01-01T00:00:00Z")?);
+
+    // A different tracked edit needs its own installed environment.
+    version.write_str("three")?;
+    assert_ne!(first, run("2021-01-01T00:00:00Z")?);
+    Ok(())
+}
+
+/// An expression such as origin/topic is resolved by Git after fetching. A second
+/// invocation must see a moved branch even with an already populated trial cache.
+#[test]
+fn try_repo_follows_moving_remote_expression() -> Result<()> {
+    let context = TestEnv::new().init_git();
+    let repo = context
+        .create_hook_repo(
+            "moving",
+            indoc::indoc! {r"
+        - id: first
+          name: First
+          language: system
+          entry: echo
+          always_run: true
+    "},
+        )
+        .build();
+    let source = url::Url::from_directory_path(&repo)
+        .map_err(|()| anyhow::anyhow!("invalid fixture URL"))?;
+    let git = context.git_at(&repo);
+    git.branch("topic").checkout("topic");
+    context
+        .try_repo()
+        .arg(source.as_str())
+        .args(["--rev", "origin/topic", "first"])
+        .assert()
+        .success();
+
+    ChildPath::new(&repo)
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(
+            "- id: second\n  name: Second\n  language: system\n  entry: echo\n  always_run: true\n",
+        )?;
+    git.add(".").commit("Move topic");
+    let context = context.with_filter(r#"file:[^\n"]*/test-repos/moving/"#, "[SOURCE]");
+    cmd_snapshot!(context, context.try_repo().arg(source.as_str()).args(["--rev", "origin/topic", "second"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Using generated `prek.toml`:
+    [[repos]]
+    repo = "[SOURCE]"
+    rev = "origin/topic"
+    hooks = [
+      { id = "second" },
+    ]
+
+    Second...................................................................Passed
+
+    ----- stderr -----
+    "#);
     Ok(())
 }
 
