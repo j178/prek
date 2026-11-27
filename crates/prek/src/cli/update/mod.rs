@@ -490,7 +490,7 @@ pub(crate) async fn update(
                 .first()
                 .map_or(repo_source.source, |target| target.repo);
             let progress = reporter.on_update_start(display_repo);
-            let result = evaluate_repo_source(repo_source, bleeding_edge).await;
+            let result = evaluate_repo_source(repo_source, bleeding_edge, store).await;
             reporter.on_update_complete(progress);
             result
         })

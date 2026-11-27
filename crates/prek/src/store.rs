@@ -186,13 +186,11 @@ impl Store {
     }
 
     /// The checkout path for this repository and revision, whether or not it exists yet.
-    pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
-        self.repos_dir()
-            .join(Self::repo_key(repo.source(), &repo.rev))
+    pub(crate) fn repo_path(&self, source: &str, rev: &str) -> PathBuf {
+        self.repos_dir().join(Self::repo_key(source, rev))
     }
 
-    /// The checkout directory name derived from the repository source and revision.
-    fn repo_key(source: &str, rev: &str) -> String {
+    pub(crate) fn repo_key(source: &str, rev: &str) -> String {
         let mut hasher = SeaHasher::new();
         source.hash(&mut hasher);
         rev.hash(&mut hasher);
@@ -202,6 +200,11 @@ impl Store {
     /// Directory containing cached repository checkouts.
     pub(crate) fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
+    }
+
+    /// Git objects and refs retained between update checks, grouped by source.
+    pub(crate) fn updates_dir(&self) -> PathBuf {
+        self.path.join("updates")
     }
 
     /// Directory containing installed hook environments.
@@ -375,7 +378,7 @@ impl StoreWriteGuard<'_> {
         repo: &RemoteRepo,
         temp: tempfile::TempDir,
     ) -> Result<PathBuf, Error> {
-        let target = self.repo_path(repo);
+        let target = self.repo_path(repo.source(), &repo.rev);
 
         fs_err::tokio::remove_dir_all(&target).await.ok();
         crate::fs::rename_with_retry(temp, &target).await?;
@@ -404,7 +407,7 @@ impl StoreWriteGuard<'_> {
         let mut pending = Vec::new();
 
         for repo in repos {
-            let target = self.repo_path(repo);
+            let target = self.repo_path(repo.source(), &repo.rev);
             if target.join(REPO_MARKER).try_exists()? {
                 cloned.insert(repo.key(), target);
                 continue;

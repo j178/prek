@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
+use aws_lc_rs::digest::{SHA256, digest};
 use itertools::Itertools;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
@@ -14,84 +15,203 @@ use semver::Version;
 use tracing::{debug, trace};
 
 use crate::cli::update::{CommitPresence, RevisionSelection, SkippedDowngrade, TagTimestamp};
+use crate::fs::LockedFile;
 use crate::git::GitCommandExt;
+use crate::process::Cmd;
+use crate::store::{REPO_MARKER, Store};
 use crate::{config, git};
 
-/// Initializes a temporary git repo and fetches the remote HEAD plus tags.
-pub(super) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
-    git::init_repo(repo_url, repo_path).await?;
-    git::git_cmd()?
-        .arg("fetch")
-        .arg("origin")
-        .arg("HEAD")
-        .arg("--quiet")
-        .arg("--filter=blob:none")
-        .arg("--tags")
-        .current_dir(repo_path)
-        .sanitize_git_repo_env()
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await?;
+/// Each check gets a clean index and worktree. The object database and upstream
+/// refs survive until cache GC. A source lock keeps those refs stable throughout
+/// selection and manifest validation, even when two update processes overlap.
+pub(super) struct UpdateRepository<'a> {
+    worktree: PathBuf,
+    scratch: &'a Path,
+    source: &'a str,
+}
 
-    Ok(())
+impl<'a> UpdateRepository<'a> {
+    pub(super) fn new(scratch: &'a Path, source: &'a str) -> Self {
+        Self {
+            worktree: scratch.join("worktree"),
+            scratch,
+            source,
+        }
+    }
+
+    fn command(&self) -> Result<Cmd> {
+        let mut cmd = git::git_cmd()?;
+        // Manifest checkout can also fetch missing blobs. Supply the URL to
+        // every command so credentials stay out of the cached Git config.
+        cmd.hidden_args(["-c", &format!("remote.origin.url={}", self.source)])
+            .current_dir(&self.worktree)
+            .sanitize_git_repo_env()
+            .env("GIT_INDEX_FILE", self.scratch.join("index"));
+        Ok(cmd)
+    }
+
+    /// Refresh the remote refs before using any cached objects. The caller
+    /// holds the lock until it has validated all targets against these refs.
+    pub(super) async fn refresh(
+        &self,
+        store: &Store,
+        installed_revs: impl Iterator<Item = &'a str>,
+    ) -> Result<(Vec<TagTimestamp>, LockedFile)> {
+        let key = digest(&SHA256, self.source.as_bytes());
+        let root = store.updates_dir().join(hex::encode(key.as_ref()));
+        fs_err::create_dir_all(&root)?;
+        let lock = LockedFile::acquire(root.join("lock"), "repository update").await?;
+        let git_dir = root.join("git");
+        let incomplete = root.join("incomplete");
+
+        // A killed fetch can leave Git lockfiles behind. Rebuild this source on
+        // the next check if its last refresh never finished.
+        if incomplete.try_exists()? && git_dir.try_exists()? {
+            fs_err::remove_dir_all(&git_dir)?;
+        }
+        let cold = !git_dir.try_exists()?;
+        fs_err::write(&incomplete, [])?;
+
+        git::git_cmd()?
+            .hidden_args(["-c", "init.defaultObjectFormat="])
+            .args(["init", "--quiet", "--template=", "--separate-git-dir"])
+            .arg(&git_dir)
+            .arg(&self.worktree)
+            .sanitize_git_repo_env()
+            .output()
+            .await?;
+
+        let refspecs = [
+            "--quiet",
+            "--prune",
+            "--no-tags",
+            "--filter=blob:none",
+            "origin",
+            "+HEAD:refs/prek/upstream",
+            "+refs/tags/*:refs/tags/*",
+        ];
+        let fetch = self
+            .command()?
+            .args(["fetch", "--no-write-fetch-head"])
+            .args(refspecs)
+            .stderr(Stdio::null())
+            .run()
+            .await;
+
+        match fetch {
+            // Git before 2.29 cannot suppress FETCH_HEAD, which can contain
+            // the remote URL. Keep its fetch in this check's temporary repo.
+            Err(crate::process::Error::Status { error, .. })
+                if error.status.code() == Some(129) =>
+            {
+                fs_err::remove_file(self.worktree.join(".git"))?;
+                git::init_repo(self.source, &self.worktree).await?;
+                self.command()?
+                    .arg("fetch")
+                    .args(refspecs)
+                    .stderr(Stdio::null())
+                    .run()
+                    .await?;
+            }
+            result => result?,
+        }
+
+        if cold && let Err(err) = self.seed_manifest(store, installed_revs).await {
+            trace!("Could not reuse installed manifest: {err}");
+        }
+
+        let tags = list_tag_metadata(self).await?;
+        fs_err::remove_file(incomplete)?;
+        Ok((tags, lock))
+    }
+
+    /// The installed and candidate revisions often share their manifest blob.
+    /// Import just that Git object, so a shallow checkout or a dirty worktree
+    /// cannot change which refs or manifest content the update sees.
+    async fn seed_manifest(
+        &self,
+        store: &Store,
+        installed_revs: impl Iterator<Item = &'a str>,
+    ) -> Result<()> {
+        let Some(checkout) = installed_revs
+            .map(|rev| store.repo_path(self.source, rev))
+            .find(|path| path.join(REPO_MARKER).is_file())
+        else {
+            return Ok(());
+        };
+
+        let manifest = tempfile::NamedTempFile::new_in(self.scratch)?;
+        git::git_cmd()?
+            .current_dir(checkout)
+            .sanitize_git_repo_env()
+            .args(["--no-lazy-fetch", "cat-file", "blob"])
+            .arg(format!("HEAD:{PRE_COMMIT_HOOKS_YAML}"))
+            .stdout(manifest.reopen()?)
+            .stderr(Stdio::null())
+            .run()
+            .await?;
+
+        self.command()?
+            .args(["hash-object", "-w", "--no-filters", "--"])
+            .arg(manifest.path())
+            .output()
+            .await?;
+        Ok(())
+    }
 }
 
 /// Resolves any revision-like string to the underlying commit SHA.
-pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> Result<String> {
-    let output = git::git_cmd()?
+pub(super) async fn resolve_revision_to_commit(
+    repo: &UpdateRepository<'_>,
+    rev: &str,
+) -> Result<String> {
+    let output = repo
+        .command()?
         .arg("rev-parse")
         .arg(format!("{rev}^{{}}"))
         .check(true)
-        .current_dir(repo_path)
-        .sanitize_git_repo_env()
         .output()
         .await?;
 
     Ok(str::from_utf8(&output.stdout)?.trim().to_string())
 }
 
-/// Returns whether a pinned commit SHA is already present in the refs fetched for `prek update`.
-///
-/// `prek update` fetches only `origin/HEAD` and tags, using `--filter=blob:none`. That filter
-/// still downloads commits and trees reachable from those refs, but omits blobs. We intentionally
-/// use `git --no-lazy-fetch cat-file -e` here instead of `rev-parse`: in a partial clone,
-/// `rev-parse` may lazily fetch a missing commit from the promisor remote on demand. On GitHub,
-/// that can make a fork-only "impostor commit" appear to belong to the parent repository.
-///
-/// `prek update` only selects updates from tags, or from `HEAD` in `--bleeding-edge` mode. It
-/// does not normally update to arbitrary branches, so we currently fetch only those refs here.
-///
-/// So this helper answers a narrower question than "is this SHA valid anywhere on the remote?".
-/// It only checks whether the commit is already available from the refs we fetched for update
-/// selection. That means branch-only commits outside `HEAD` and tags are treated as absent for
-/// now. If that leads to false positives in practice, we can revisit this and fetch branches too.
-///
-/// On older Git versions that do not support `--no-lazy-fetch`, we skip this check entirely and
-/// return `CommitPresence::Unknown` so the caller can avoid presenting inaccurate presence details.
-pub(super) async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<CommitPresence> {
+/// Old objects can survive a retag or a force push. Only commits reachable
+/// from the current upstream HEAD or tags count as present. Disable lazy
+/// fetching so looking up an unknown SHA never requests it from the remote.
+pub(super) async fn is_commit_present(
+    repo: &UpdateRepository<'_>,
+    commit: &str,
+) -> Result<CommitPresence> {
     static GIT_SUPPORTS_NO_LAZY_FETCH: OnceLock<bool> = OnceLock::new();
 
     if matches!(GIT_SUPPORTS_NO_LAZY_FETCH.get(), Some(false)) {
         return Ok(CommitPresence::Unknown);
     }
 
-    let output = git::git_cmd()?
+    let output = repo
+        .command()?
         .arg("--no-lazy-fetch")
-        .arg("cat-file")
-        .arg("-e")
-        .arg(format!("{commit}^{{commit}}"))
+        .args([
+            "for-each-ref",
+            "--count=1",
+            "--format=%(refname)",
+            "--contains",
+        ])
+        .arg(commit)
+        .args(["refs/prek/upstream", "refs/tags"])
         .env(EnvVars::LC_ALL, "C")
         .check(false)
-        .current_dir(repo_path)
-        .sanitize_git_repo_env()
-        .stdout(Stdio::null())
         .output()
         .await?;
 
     if output.status.success() {
         let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
-        return Ok(CommitPresence::Present);
+        return Ok(if output.stdout.is_empty() {
+            CommitPresence::Absent
+        } else {
+            CommitPresence::Present
+        });
     }
 
     if no_lazy_fetch_unsupported(&output.stderr) {
@@ -120,33 +240,31 @@ pub(super) fn get_tags_pointing_at_revision<'a>(
 }
 
 /// Resolves the default branch tip to an exact tag when possible, otherwise to a commit SHA.
-pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
-    let output = git::git_cmd()?
+pub(super) async fn resolve_bleeding_edge(repo: &UpdateRepository<'_>) -> Result<Option<String>> {
+    let output = repo
+        .command()?
         .arg("describe")
-        .arg("FETCH_HEAD")
+        .arg("refs/prek/upstream")
         .arg("--tags")
         .arg("--exact-match")
         .check(false)
-        .current_dir(repo_path)
-        .sanitize_git_repo_env()
         .output()
         .await?;
     let rev = if output.status.success() {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
-        debug!("No matching tag for `FETCH_HEAD`, using rev-parse instead");
-        let output = git::git_cmd()?
+        debug!("No matching tag for the upstream HEAD, using rev-parse instead");
+        let output = repo
+            .command()?
             .arg("rev-parse")
-            .arg("FETCH_HEAD")
+            .arg("refs/prek/upstream")
             .check(true)
-            .current_dir(repo_path)
-            .sanitize_git_repo_env()
             .output()
             .await?;
         str::from_utf8(&output.stdout)?.trim().to_string()
     };
 
-    debug!("Resolved `FETCH_HEAD` to `{rev}`");
+    debug!("Resolved the upstream HEAD to `{rev}`");
     Ok(Some(rev))
 }
 
@@ -154,15 +272,14 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
 ///
 /// Within groups of tags sharing the same timestamp, semver-parseable tags
 /// are sorted highest version first; non-semver tags sort after them.
-pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> {
-    let output = git::git_cmd()?
+async fn list_tag_metadata(repo: &UpdateRepository<'_>) -> Result<Vec<TagTimestamp>> {
+    let output = repo
+        .command()?
         .arg("for-each-ref")
         .arg("--sort=-creatordate")
         .arg("--format=%(refname:lstrip=2)\t%(creatordate:unix)\t%(objectname)\t%(*objectname)")
         .arg("refs/tags")
         .check(true)
-        .current_dir(repo)
-        .sanitize_git_repo_env()
         .output()
         .await?;
 
@@ -198,7 +315,7 @@ fn compare_tag_metadata(tag_a: &TagTimestamp, tag_b: &TagTimestamp) -> Ordering 
 }
 
 async fn current_tag_metadata<'a>(
-    repo_path: &Path,
+    repo: &UpdateRepository<'_>,
     current_rev: &str,
     tag_timestamps: &'a [TagTimestamp],
 ) -> Option<&'a TagTimestamp> {
@@ -209,11 +326,7 @@ async fn current_tag_metadata<'a>(
     let current_commit = if current_rev.len() == 40 && config::looks_like_sha(current_rev) {
         Cow::Borrowed(current_rev)
     } else {
-        Cow::Owned(
-            resolve_revision_to_commit(repo_path, current_rev)
-                .await
-                .ok()?,
-        )
+        Cow::Owned(resolve_revision_to_commit(repo, current_rev).await.ok()?)
     };
 
     tag_timestamps
@@ -226,9 +339,9 @@ async fn current_tag_metadata<'a>(
 ///
 /// In normal mode this chooses the newest tag that satisfies the cooldown window.
 /// If that tag sorts older than the currently pinned tag, the current revision is kept.
-/// In bleeding-edge mode it resolves `FETCH_HEAD` instead.
+/// In bleeding-edge mode it resolves the upstream HEAD instead.
 pub(super) async fn select_update_revision(
-    repo_path: &Path,
+    repo: &UpdateRepository<'_>,
     current_rev: &str,
     bleeding_edge: bool,
     cooldown_days: u8,
@@ -236,7 +349,7 @@ pub(super) async fn select_update_revision(
     update_tag_timestamps: &[TagTimestamp],
 ) -> Result<RevisionSelection> {
     if bleeding_edge {
-        return Ok(match resolve_bleeding_edge(repo_path).await? {
+        return Ok(match resolve_bleeding_edge(repo).await? {
             Some(rev) => RevisionSelection::Update(rev),
             None => RevisionSelection::Unchanged,
         });
@@ -262,8 +375,7 @@ pub(super) async fn select_update_revision(
     );
 
     if cooldown_days > 0
-        && let Some(current_tag) =
-            current_tag_metadata(repo_path, current_rev, tag_timestamps).await
+        && let Some(current_tag) = current_tag_metadata(repo, current_rev, tag_timestamps).await
         && !current_tag.commit.eq_ignore_ascii_case(&target_tag.commit)
         && compare_tag_metadata(current_tag, target_tag).is_lt()
     {
@@ -372,36 +484,32 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
 /// Checks out the candidate manifest and verifies all configured hook ids still exist.
 pub(super) async fn checkout_and_validate_manifest(
-    repo_path: &Path,
+    repo: &UpdateRepository<'_>,
     rev: &str,
     required_hook_ids: &[&str],
 ) -> Result<()> {
     if cfg!(windows) {
-        git::git_cmd()?
+        repo.command()?
             .arg("show")
             .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
-            .current_dir(repo_path)
-            .sanitize_git_repo_env()
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
             .await?;
     }
 
-    git::git_cmd()?
+    repo.command()?
         .arg("checkout")
         .arg("--quiet")
         .arg(rev)
         .arg("--")
         .arg(PRE_COMMIT_HOOKS_YAML)
-        .current_dir(repo_path)
-        .sanitize_git_repo_env()
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .await?;
 
-    let manifest = config::read_manifest(&repo_path.join(PRE_COMMIT_HOOKS_YAML))?;
+    let manifest = config::read_manifest(&repo.worktree.join(PRE_COMMIT_HOOKS_YAML))?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()
@@ -427,8 +535,8 @@ pub(super) async fn checkout_and_validate_manifest(
 #[cfg(test)]
 mod tests {
     use super::{
-        levenshtein_distance, list_tag_metadata, no_lazy_fetch_unsupported, resolve_bleeding_edge,
-        select_best_tag, select_update_revision,
+        UpdateRepository, levenshtein_distance, list_tag_metadata, no_lazy_fetch_unsupported,
+        resolve_bleeding_edge, select_best_tag, select_update_revision,
     };
     use crate::cli::update::{RevisionSelection, SkippedDowngrade};
     use crate::git;
@@ -439,12 +547,12 @@ mod tests {
 
     async fn setup_test_repo() -> tempfile::TempDir {
         let tmp = tempfile::tempdir().unwrap();
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         git::git_cmd()
             .unwrap()
             .arg("init")
-            .current_dir(repo)
+            .arg(repo)
             .sanitize_git_repo_env()
             .output()
             .await
@@ -584,7 +692,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_tag_metadata() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "old", 5).await;
         create_lightweight_tag(repo, "v0.1.0").await;
@@ -593,7 +701,9 @@ mod tests {
         create_lightweight_tag(repo, "v0.2.0").await;
         create_annotated_tag(repo, "alias-v0.2.0", 0).await;
 
-        let timestamps = list_tag_metadata(repo).await.unwrap();
+        let timestamps = list_tag_metadata(&UpdateRepository::new(tmp.path(), "."))
+            .await
+            .unwrap();
         assert_eq!(timestamps.len(), 3);
         assert_eq!(timestamps[0].tag, "alias-v0.2.0");
         assert_eq!(timestamps[1].tag, "v0.2.0");
@@ -604,41 +714,45 @@ mod tests {
     #[tokio::test]
     async fn test_resolve_bleeding_edge_prefers_exact_tag() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_commit(repo, "tagged").await;
         create_lightweight_tag(repo, "v1.2.3").await;
 
         git::git_cmd()
             .unwrap()
-            .args(["fetch", ".", "HEAD"])
+            .args(["fetch", ".", "HEAD:refs/prek/upstream"])
             .current_dir(repo)
             .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
 
-        let rev = resolve_bleeding_edge(repo).await.unwrap();
+        let rev = resolve_bleeding_edge(&UpdateRepository::new(tmp.path(), "."))
+            .await
+            .unwrap();
         assert_eq!(rev, Some("v1.2.3".to_string()));
     }
 
     #[tokio::test]
     async fn test_resolve_bleeding_edge_falls_back_to_rev_parse() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_commit(repo, "untagged").await;
 
         git::git_cmd()
             .unwrap()
-            .args(["fetch", ".", "HEAD"])
+            .args(["fetch", ".", "HEAD:refs/prek/upstream"])
             .current_dir(repo)
             .sanitize_git_repo_env()
             .output()
             .await
             .unwrap();
 
-        let rev = resolve_bleeding_edge(repo).await.unwrap();
+        let rev = resolve_bleeding_edge(&UpdateRepository::new(tmp.path(), "."))
+            .await
+            .unwrap();
 
         let head = git::git_cmd()
             .unwrap()
@@ -657,7 +771,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_update_revision_uses_cooldown_bucket() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "current", 10).await;
         create_lightweight_tag(repo, "v1.0.0").await;
@@ -669,6 +783,7 @@ mod tests {
         create_backdated_commit(repo, "latest", 1).await;
         create_lightweight_tag(repo, "v2.0.0").await;
 
+        let repo = &UpdateRepository::new(tmp.path(), ".");
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
         let rev =
             select_update_revision(repo, "v1.0.0", false, 3, &tag_timestamps, &tag_timestamps)
@@ -681,7 +796,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_update_revision_skips_cooldown_downgrade() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "candidate", 5).await;
         create_lightweight_tag(repo, "v2.0.0-rc1").await;
@@ -689,6 +804,7 @@ mod tests {
         create_backdated_commit(repo, "current", 1).await;
         create_lightweight_tag(repo, "v2.0.0").await;
 
+        let repo = &UpdateRepository::new(tmp.path(), ".");
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
         let rev =
             select_update_revision(repo, "v2.0.0", false, 3, &tag_timestamps, &tag_timestamps)
@@ -708,7 +824,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_update_revision_returns_none_when_all_tags_too_new() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "recent-1", 2).await;
         create_lightweight_tag(repo, "v1.0.0").await;
@@ -716,6 +832,7 @@ mod tests {
         create_backdated_commit(repo, "recent-2", 1).await;
         create_lightweight_tag(repo, "v1.1.0").await;
 
+        let repo = &UpdateRepository::new(tmp.path(), ".");
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
         let rev =
             select_update_revision(repo, "v1.1.0", false, 5, &tag_timestamps, &tag_timestamps)
@@ -728,7 +845,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_update_revision_skips_older_eligible_bucket() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "oldest", 10).await;
         create_lightweight_tag(repo, "v1.0.0").await;
@@ -739,6 +856,7 @@ mod tests {
         create_backdated_commit(repo, "newest", 1).await;
         create_lightweight_tag(repo, "v1.2.0").await;
 
+        let repo = &UpdateRepository::new(tmp.path(), ".");
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
         let rev =
             select_update_revision(repo, "v1.2.0", false, 5, &tag_timestamps, &tag_timestamps)
@@ -758,12 +876,13 @@ mod tests {
     #[tokio::test]
     async fn test_select_update_revision_prefers_version_like_tags() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "eligible", 2).await;
         create_lightweight_tag(repo, "moving-tag").await;
         create_lightweight_tag(repo, "v1.0.0").await;
 
+        let repo = &UpdateRepository::new(tmp.path(), ".");
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
         let rev = select_update_revision(
             repo,
@@ -782,13 +901,14 @@ mod tests {
     #[tokio::test]
     async fn test_select_update_revision_picks_closest_version_string() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "eligible", 3).await;
         create_lightweight_tag(repo, "v1.2.0").await;
         create_lightweight_tag(repo, "foo-1.2.0").await;
         create_lightweight_tag(repo, "v2.0.0").await;
 
+        let repo = &UpdateRepository::new(tmp.path(), ".");
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
         let rev =
             select_update_revision(repo, "v1.2.3", false, 1, &tag_timestamps, &tag_timestamps)
@@ -801,7 +921,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_tag_metadata_stable_order_for_equal_timestamps() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "release", 5).await;
         create_lightweight_tag(repo, "v1.0.0").await;
@@ -809,7 +929,9 @@ mod tests {
         create_lightweight_tag(repo, "v1.0.5").await;
         create_lightweight_tag(repo, "v1.0.2").await;
 
-        let timestamps = list_tag_metadata(repo).await.unwrap();
+        let timestamps = list_tag_metadata(&UpdateRepository::new(tmp.path(), "."))
+            .await
+            .unwrap();
 
         let tags: Vec<&str> = timestamps.iter().map(|tag| tag.tag.as_str()).collect();
         assert_eq!(tags, vec!["v1.0.5", "v1.0.3", "v1.0.2", "v1.0.0"]);
@@ -818,14 +940,16 @@ mod tests {
     #[tokio::test]
     async fn test_list_tag_metadata_deterministic_order_for_equal_timestamp_non_semver() {
         let tmp = setup_test_repo().await;
-        let repo = tmp.path();
+        let repo = &tmp.path().join("worktree");
 
         create_backdated_commit(repo, "release", 5).await;
         create_lightweight_tag(repo, "beta").await;
         create_lightweight_tag(repo, "alpha").await;
         create_lightweight_tag(repo, "gamma").await;
 
-        let timestamps = list_tag_metadata(repo).await.unwrap();
+        let timestamps = list_tag_metadata(&UpdateRepository::new(tmp.path(), "."))
+            .await
+            .unwrap();
         let tags: Vec<&str> = timestamps.iter().map(|tag| tag.tag.as_str()).collect();
         assert_eq!(tags, vec!["alpha", "beta", "gamma"]);
     }
