@@ -102,6 +102,12 @@ pub(crate) async fn run(
         extra: extra_args,
     } = options;
 
+    // The diff is written to stdout, which JSON mode reserves for its single document.
+    // This is checked here rather than in Clap so that an explicit `--output-format text` still works.
+    if output_format == RunOutputFormat::Json && show_diff_on_failure {
+        anyhow::bail!("`--show-diff-on-failure` cannot be used with `--output-format json`");
+    }
+
     let selection: FileSelection = file_selection.into();
     let fail_fast = flag(fail_fast, no_fail_fast);
     let hide_status = if no_hide_status {
@@ -253,8 +259,13 @@ pub(crate) async fn run(
             .any(|path| path.starts_with(workspace.root()))
     {
         Some(
-            WorktreeStash::save(store, workspace.root(), status)
-                .context("Failed to clean work tree")?,
+            WorktreeStash::save(
+                store,
+                workspace.root(),
+                status,
+                output_format == RunOutputFormat::Text,
+            )
+            .context("Failed to clean work tree")?,
         )
     } else {
         None
@@ -641,7 +652,9 @@ async fn run_hooks<'paths>(
     }
 
     let failed = summary.failed;
-    let status = report.finish(summary, workspace, show_diff_on_failure).await?;
+    let status = report
+        .finish(summary, workspace, show_diff_on_failure)
+        .await?;
     if let Some(json_report) = json_report {
         json_report.write(failed, hooks, printer)?;
     }

@@ -1143,7 +1143,8 @@ fn json_output_format_try_repo() {
     assert_eq!(report["hooks"][0]["id"], "trailing-whitespace");
 }
 
-/// `--show-diff-on-failure` would write a diff next to the JSON document, so clap rejects the combination.
+/// `--show-diff-on-failure` would write a diff next to the JSON document, so the combination is rejected.
+/// An explicit `--output-format text` keeps accepting the flag.
 #[test]
 fn json_output_format_rejects_show_diff_on_failure() {
     let context = TestEnv::new().init_git();
@@ -1154,10 +1155,114 @@ fn json_output_format_rejects_show_diff_on_failure() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--output-format <OUTPUT_FORMAT>' cannot be used with '--show-diff-on-failure'
-
-    Usage: prek run --output-format <OUTPUT_FORMAT> [HOOK|PROJECT]...
-
-    For more information, try '--help'.
+    error: `--show-diff-on-failure` cannot be used with `--output-format json`
     ");
+
+    cmd_snapshot!(context, context.run().args(["--output-format=text", "--show-diff-on-failure"]), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
+
+    hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
+    ");
+}
+
+/// A hook disabled with `--skip` keeps the `explicit` reason when `--fail-fast` stops the run
+/// before its group is reached, while a hook that was only prevented from starting reports `fail-fast`.
+#[test]
+fn json_output_format_fail_fast_keeps_explicit_skip() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: fail
+                    name: Failing Hook
+                    language: system
+                    entry: "false"
+                    always_run: true
+                    priority: 0
+                  - id: skipped
+                    name: Skipped Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+                    priority: 1
+                  - id: later
+                    name: Later Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+                    priority: 1
+        "#})
+        .init_git();
+
+    let output = context
+        .run()
+        .args([
+            "--all-files",
+            "--fail-fast",
+            "--skip=skipped",
+            "--output-format=json",
+        ])
+        .output()
+        .expect("prek should run");
+    assert_eq!(output.status.code(), Some(1));
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be a single JSON document");
+    let reasons: Vec<_> = report["hooks"]
+        .as_array()
+        .expect("hooks array")
+        .iter()
+        .map(|hook| (hook["id"].as_str(), hook["skip_reason"].as_str()))
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            (Some("fail"), None),
+            (Some("skipped"), Some("explicit")),
+            (Some("later"), Some("fail-fast")),
+        ]
+    );
+}
+
+/// Saving and restoring unstaged changes is routine, so JSON mode must keep stderr free of the
+/// styled status lines that text mode prints.
+#[test]
+fn json_output_format_silences_stash_status() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: ok
+                    name: Ok Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+        "#})
+        .init_git();
+    context.git().add(".");
+    context.write_file("file.txt", "unstaged\n");
+
+    let output = context
+        .run()
+        .args(["--output-format=json", "--color=always"])
+        .output()
+        .expect("prek should run");
+
+    assert!(output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "stderr should be empty, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        .expect("stdout should be a single JSON document");
 }

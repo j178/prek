@@ -106,7 +106,11 @@ impl JsonHook {
             name: hook.name.clone(),
             alias: hook.alias.clone(),
             status: JsonStatus::Skipped,
-            skip_reason: Some(JsonSkipReason::FailFast),
+            // An explicitly skipped hook keeps its own reason even when fail-fast stopped the run first.
+            skip_reason: Some(match hook {
+                ScheduledHook::Run(_) => JsonSkipReason::FailFast,
+                ScheduledHook::Skip(_) => JsonSkipReason::Explicit,
+            }),
             exit_code: 0,
             duration_secs: 0.0,
             files_modified: None,
