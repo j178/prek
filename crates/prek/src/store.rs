@@ -142,6 +142,7 @@ impl Store {
     }
 
     /// Open and initialize a cache at `path`, waiting for shared access.
+    #[cfg(test)]
     pub(crate) fn init_at(path: impl AsRef<Path>) -> Result<Self, Error> {
         Self::open_at(path.as_ref(), LockedFile::acquire_shared)?.init()
     }
@@ -379,22 +380,42 @@ impl StoreWriteGuard<'_> {
         .await
     }
 
-    async fn persist_cloned_repo(
+    /// Fetch a mutable ref without assigning it a permanent cache key yet.
+    pub(crate) async fn fetch_revision(
+        &self,
+        source: &str,
+        rev: &str,
+        prompt: TerminalPrompt,
+    ) -> Result<tempfile::TempDir, git::Error> {
+        let repo = RemoteRepo::new(source.to_owned(), rev.to_owned(), Vec::new());
+        let cached = self.cached_revisions(&[&repo]);
+        let previous = cached.get(source).map(|entry| entry.path.as_path());
+        self.clone_repo_to_temp(&repo, prompt, previous).await
+    }
+
+    pub(crate) async fn persist_cloned_repo(
         &self,
         repo: &RemoteRepo,
         temp: tempfile::TempDir,
     ) -> Result<PathBuf, Error> {
         let target = self.repo_path(repo.source(), &repo.rev);
 
-        fs_err::tokio::remove_dir_all(&target).await.ok();
-        crate::fs::rename_with_retry(temp, &target).await?;
+        if target.join(REPO_MARKER).try_exists()? {
+            return Ok(target);
+        }
+        if target.try_exists()? {
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
 
         let marker = RepoMarker {
             repo: repo.source().to_owned(),
             rev: repo.rev.clone(),
         };
-        let content = serde_json::to_string_pretty(&marker)?;
-        fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
+        let file = tempfile::NamedTempFile::new_in(temp.path())?;
+        serde_json::to_writer_pretty(&file, &marker)?;
+        file.persist(temp.path().join(REPO_MARKER))
+            .map_err(|err| err.error)?;
+        crate::fs::rename_with_retry(temp, &target).await?;
 
         Ok(target)
     }

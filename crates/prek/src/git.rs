@@ -872,7 +872,7 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
     Ok(())
 }
 
-async fn update_submodules(
+pub(crate) async fn update_submodules(
     path: &Path,
     terminal_prompt: TerminalPrompt,
     shallow: bool,
