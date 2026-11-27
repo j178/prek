@@ -1266,3 +1266,36 @@ fn json_output_format_silences_stash_status() {
     serde_json::from_slice::<serde_json::Value>(&output.stdout)
         .expect("stdout should be a single JSON document");
 }
+
+/// Warnings stay plain text in JSON mode, even with `--color=always`.
+/// The unmatched `--skip` selector warns on stderr, and the document on stdout is unaffected.
+#[test]
+fn json_output_format_plain_warnings() {
+    let context = TestEnv::new()
+        .with_file("file.txt", "original\n")
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: pass
+                    name: Passing Hook
+                    language: system
+                    entry: "true"
+                    always_run: true
+                    pass_filenames: false
+        "#})
+        .init_git();
+
+    let output = context
+        .run()
+        .args([
+            "--all-files",
+            "--skip=missing",
+            "--output-format=json",
+            "--color=always",
+        ])
+        .output()
+        .expect("prek should run");
+    assert_eq!(output.status.code(), Some(0));
+    insta::assert_snapshot!(String::from_utf8_lossy(&output.stderr), @"warning: selector `--skip=missing` did not match any hooks");
+}
