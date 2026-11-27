@@ -796,6 +796,8 @@ async fn shallow_clone(
             .arg("origin")
             .arg(rev)
             .arg("--depth=1")
+            // Avoid inflating and rewriting each object in a small pack.
+            .arg("--keep")
             .sanitize_git_repo_env()
             .env(EnvVars::LC_ALL, "C")
             .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
