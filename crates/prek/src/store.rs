@@ -383,6 +383,7 @@ impl StoreWriteGuard<'_> {
         if let Some(cached) = cached {
             match clone_into_temp(Some(cached)).await {
                 Ok(temp) => return Ok(temp),
+                Err(err) if git::is_auth_error(&err) => return Err(err),
                 Err(err) => debug!(?err, "Retrying clone without the cached revision"),
             }
         }

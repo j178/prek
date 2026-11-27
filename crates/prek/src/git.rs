@@ -801,11 +801,13 @@ async fn fetch_shallow(
     }
 
     fetch
-        .arg("origin")
-        .arg(rev)
         .arg("--depth=1")
+        // Only resolve the requested rev. For a full SHA, Git can skip ls-refs entirely.
+        .arg("--no-tags")
         // Avoid inflating and rewriting each object in a small pack.
         .arg("--keep")
+        .arg("origin")
+        .arg(rev)
         .sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
