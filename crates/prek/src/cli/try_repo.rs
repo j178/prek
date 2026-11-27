@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
+use prek_consts::env_vars::EnvVars;
 use strum::IntoEnumIterator;
 use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
@@ -16,7 +17,6 @@ use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
 use crate::store::{Store, StoreWriteGuard};
 use crate::warn_user;
-use prek_consts::env_vars::EnvVars;
 
 async fn resolve_commit(repo: &Path, rev: &str) -> Result<String> {
     let output = git::git_cmd()?
@@ -43,11 +43,11 @@ async fn remote_head(source: &str) -> Result<String> {
 }
 
 async fn snapshot_local(
+    store: &StoreWriteGuard<'_>,
     repo_path: &Path,
-    scratch: &Path,
     prompt: TerminalPrompt,
-) -> Result<TempDir> {
-    let temp = tempfile::tempdir_in(scratch)?;
+) -> Result<(config::RemoteRepo, PathBuf)> {
+    let temp = tempfile::tempdir_in(store.scratch_path())?;
     let shadow = temp.path();
     git::git_cmd()?
         .sanitize_git_repo_env()
@@ -80,8 +80,7 @@ async fn snapshot_local(
             .await?;
     }
 
-    let mut add_u_cmd = git::git_cmd()?;
-    add_u_cmd
+    git::git_cmd()?
         .arg("add")
         .arg("--update") // Update tracked files
         .current_dir(repo_path)
@@ -110,6 +109,12 @@ async fn snapshot_local(
         .output()
         .await?;
 
+    let sha = resolve_commit(shadow, "HEAD").await?;
+    let pinned = config::RemoteRepo::new(repo_path.to_string_lossy().into_owned(), sha, Vec::new());
+    if let Some(path) = store.cached_repo(&pinned)? {
+        return Ok((pinned, path));
+    }
+
     // The index came from the author's working tree. Materialize it in the
     // temporary checkout before publishing that checkout to the shared store.
     git::git_cmd()?
@@ -120,7 +125,8 @@ async fn snapshot_local(
         .output()
         .await?;
     git::update_submodules(shadow, prompt, true).await?;
-    Ok(temp)
+    let path = store.persist_cloned_repo(&pinned, temp).await?;
+    Ok((pinned, path))
 }
 
 async fn prepare_repo(
@@ -137,15 +143,12 @@ async fn prepare_repo(
     };
     let (source, sha, checkout) = if path.is_dir() {
         let path = dunce::canonicalize(path)?;
-        let source = path.to_string_lossy().into_owned();
         if rev.is_none() && git::has_diff("HEAD", &path).await? {
             warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
-            let checkout = snapshot_local(&path, &store.scratch_path(), prompt).await?;
-            let sha = resolve_commit(checkout.path(), "HEAD").await?;
-            (source, sha, Some(checkout))
-        } else {
-            (source, resolve_commit(&path, name).await?, None)
+            return snapshot_local(store, &path, prompt).await;
         }
+        let source = path.to_string_lossy().into_owned();
+        (source, resolve_commit(&path, name).await?, None)
     } else if name == "HEAD" {
         (repo.to_owned(), remote_head(repo).await?, None)
     } else if matches!(name.len(), 40 | 64) && config::looks_like_sha(name) {
