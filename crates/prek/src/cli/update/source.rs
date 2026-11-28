@@ -222,7 +222,8 @@ pub(super) async fn evaluate_repo_source<'a>(
 ) -> Result<Vec<RepoUpdate<'a>>> {
     let scratch = tempfile::tempdir()?;
     let repo = UpdateRepository::new(scratch.path(), repo_source.source);
-    let (tag_timestamps, _lock) = match repo.refresh(store).await {
+    let revisions = repo_source.targets.iter().map(|target| target.current_rev);
+    let (tag_timestamps, _lock) = match repo.refresh(store, revisions).await {
         Ok(ready) => ready,
         Err(e) => {
             let error = format!("{e:#}");
