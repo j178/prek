@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 use std::fmt::Display;
+use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 use std::sync::Mutex;
@@ -65,6 +66,20 @@ pub(crate) fn path_from_bytes(bytes: &[u8]) -> Result<PathBuf, std::str::Utf8Err
 #[cfg(not(unix))]
 pub(crate) fn path_from_bytes(bytes: &[u8]) -> Result<PathBuf, std::str::Utf8Error> {
     str::from_utf8(bytes).map(PathBuf::from)
+}
+
+/// Atomically replace a file with `contents`. A symlink at `path` is replaced as well.
+pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destination must have a parent directory",
+        )
+    })?;
+    let mut file = tempfile::NamedTempFile::new_in(parent)?;
+    file.write_all(contents)?;
+    file.persist(path)?;
+    Ok(())
 }
 
 /// Rename a file or directory, retrying permission and sharing errors on Windows.
@@ -511,6 +526,23 @@ fn clean_path(path: impl AsRef<Path>) -> PathBuf {
 mod tests {
     use std::path::{Path, PathBuf};
     use std::time::Duration;
+
+    /// Replacing a symlink must leave the original file's contents intact.
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_replaces_symlink() -> std::io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let original = dir.path().join("original");
+        let link = dir.path().join("link");
+        fs_err::write(&original, b"before")?;
+        fs_err::os::unix::fs::symlink(&original, &link)?;
+
+        super::write_atomic(&link, b"after")?;
+
+        assert_eq!(fs_err::read(link)?, b"after");
+        assert_eq!(fs_err::read(original)?, b"before");
+        Ok(())
+    }
 
     #[cfg(windows)]
     #[test]

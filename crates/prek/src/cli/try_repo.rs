@@ -18,17 +18,6 @@ use crate::printer::Printer;
 use crate::store::{Store, StoreWriteGuard};
 use crate::warn_user;
 
-async fn resolve_commit(repo: &Path, rev: &str) -> Result<String> {
-    let output = git::git_cmd()?
-        .current_dir(repo)
-        .sanitize_git_repo_env()
-        .args(["rev-parse", "--verify", "--end-of-options"])
-        .arg(format!("{rev}^{{commit}}"))
-        .output()
-        .await?;
-    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
-}
-
 async fn remote_head(source: &str) -> Result<String> {
     let output = git::git_cmd()?
         .args(["ls-remote", "--exit-code", "--"])
@@ -74,8 +63,8 @@ async fn snapshot_local(
             .file_args(staged_files.iter().map(|file| &file.path))
             .current_dir(repo_path)
             .sanitize_git_repo_env()
-            .env("GIT_INDEX_FILE", &index_path)
-            .env("GIT_OBJECT_DIRECTORY", &objects_path)
+            .env(EnvVars::GIT_INDEX_FILE, &index_path)
+            .env(EnvVars::GIT_OBJECT_DIRECTORY, &objects_path)
             .output()
             .await?;
     }
@@ -85,8 +74,8 @@ async fn snapshot_local(
         .arg("--update") // Update tracked files
         .current_dir(repo_path)
         .sanitize_git_repo_env()
-        .env("GIT_INDEX_FILE", &index_path)
-        .env("GIT_OBJECT_DIRECTORY", &objects_path)
+        .env(EnvVars::GIT_INDEX_FILE, &index_path)
+        .env(EnvVars::GIT_OBJECT_DIRECTORY, &objects_path)
         .output()
         .await?;
 
@@ -100,16 +89,16 @@ async fn snapshot_local(
         .arg("--no-edit")
         .arg("--no-verify")
         .current_dir(shadow)
-        .env("GIT_AUTHOR_NAME", "prek test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "prek test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .env(EnvVars::GIT_AUTHOR_NAME, "prek test")
+        .env(EnvVars::GIT_AUTHOR_EMAIL, "test@example.com")
+        .env(EnvVars::GIT_COMMITTER_NAME, "prek test")
+        .env(EnvVars::GIT_COMMITTER_EMAIL, "test@example.com")
+        .env(EnvVars::GIT_AUTHOR_DATE, "2000-01-01T00:00:00Z")
+        .env(EnvVars::GIT_COMMITTER_DATE, "2000-01-01T00:00:00Z")
         .output()
         .await?;
 
-    let sha = resolve_commit(shadow, "HEAD").await?;
+    let sha = git::resolve_commit(shadow, "HEAD").await?;
     let pinned = config::RemoteRepo::new(repo_path.to_string_lossy().into_owned(), sha, Vec::new());
     if let Some(path) = store.cached_repo(&pinned)? {
         return Ok((pinned, path));
@@ -148,7 +137,7 @@ async fn prepare_repo(
             return snapshot_local(store, &path, prompt).await;
         }
         let source = path.to_string_lossy().into_owned();
-        (source, resolve_commit(&path, name).await?, None)
+        (source, git::resolve_commit(&path, name).await?, None)
     } else if name == "HEAD" {
         (repo.to_owned(), remote_head(repo).await?, None)
     } else if matches!(name.len(), 40 | 64) && config::looks_like_sha(name) {
@@ -158,7 +147,7 @@ async fn prepare_repo(
         // Publish the fetched checkout under its exact commit so a moving ref
         // never selects the checkout or environment from a previous invocation.
         let checkout = store.fetch_revision(repo, name, prompt).await?;
-        let sha = resolve_commit(checkout.path(), "HEAD").await?;
+        let sha = git::resolve_commit(checkout.path(), "HEAD").await?;
         (repo.to_owned(), sha, Some(checkout))
     };
 

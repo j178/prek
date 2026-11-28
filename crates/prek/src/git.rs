@@ -767,13 +767,7 @@ async fn fetch_cached_tip(path: &Path, cached: &Path) -> Result<String, Error> {
         .output()
         .await?;
 
-    let output = git_cmd()?
-        .current_dir(path)
-        .args(["rev-parse", "--verify", "FETCH_HEAD^{commit}"])
-        .sanitize_git_repo_env()
-        .output()
-        .await?;
-    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
+    resolve_commit(path, "FETCH_HEAD").await
 }
 
 async fn fetch_shallow(
@@ -1135,6 +1129,18 @@ pub(crate) async fn rev_exists(rev: &str) -> Result<bool, Error> {
         .output()
         .await?;
     Ok(output.status.success())
+}
+
+/// Resolve a revision to its full commit ID, peeling annotated tags.
+pub(crate) async fn resolve_commit(repo: &Path, rev: &str) -> Result<String, Error> {
+    let output = git_cmd()?
+        .current_dir(repo)
+        .sanitize_git_repo_env()
+        .args(["rev-parse", "--verify", "--end-of-options"])
+        .arg(format!("{rev}^{{commit}}"))
+        .output()
+        .await?;
+    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
 }
 
 /// Check if `ancestor` is an ancestor of `commit`.

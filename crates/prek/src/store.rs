@@ -410,19 +410,18 @@ impl StoreWriteGuard<'_> {
         if let Some(path) = self.cached_repo(repo)? {
             return Ok(path);
         }
-        let target = self.repo_path(repo.source(), &repo.rev);
-        if target.try_exists()? {
-            fs_err::tokio::remove_dir_all(&target).await?;
-        }
-
         let marker = RepoMarker {
             repo: repo.source().to_owned(),
             rev: repo.rev.clone(),
         };
-        let file = tempfile::NamedTempFile::new_in(temp.path())?;
-        serde_json::to_writer_pretty(&file, &marker)?;
-        file.persist(temp.path().join(REPO_MARKER))
-            .map_err(|err| err.error)?;
+        let contents = serde_json::to_vec_pretty(&marker)?;
+        // The checkout may contain a symlink at the marker path. Replace the entry itself.
+        crate::fs::write_atomic(&temp.path().join(REPO_MARKER), &contents)?;
+
+        let target = self.repo_path(repo.source(), &repo.rev);
+        if target.try_exists()? {
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
         crate::fs::rename_with_retry(temp, &target).await?;
 
         Ok(target)

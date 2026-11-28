@@ -75,8 +75,15 @@ impl EnvVars {
     pub const LC_ALL: &'static str = "LC_ALL";
 
     // Git related
+    pub const GIT_AUTHOR_DATE: &'static str = "GIT_AUTHOR_DATE";
+    pub const GIT_AUTHOR_EMAIL: &'static str = "GIT_AUTHOR_EMAIL";
+    pub const GIT_AUTHOR_NAME: &'static str = "GIT_AUTHOR_NAME";
+    pub const GIT_COMMITTER_DATE: &'static str = "GIT_COMMITTER_DATE";
+    pub const GIT_COMMITTER_EMAIL: &'static str = "GIT_COMMITTER_EMAIL";
+    pub const GIT_COMMITTER_NAME: &'static str = "GIT_COMMITTER_NAME";
     pub const GIT_DIR: &'static str = "GIT_DIR";
     pub const GIT_INDEX_FILE: &'static str = "GIT_INDEX_FILE";
+    pub const GIT_OBJECT_DIRECTORY: &'static str = "GIT_OBJECT_DIRECTORY";
     pub const GIT_WORK_TREE: &'static str = "GIT_WORK_TREE";
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
 
