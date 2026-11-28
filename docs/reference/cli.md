@@ -311,7 +311,12 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--no-hide-status"><a href="#prek-run--no-hide-status"><code>--no-hide-status</code></a></dt><dd><p>Show all hook reports, overriding <code>hide_status</code> in configuration</p>
 </dd><dt id="prek-run--no-progress"><a href="#prek-run--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="prek-run--output-format"><a href="#prek-run--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Set the format of the final hook reports</p>
+<p>[default: pre-commit]</p><p>Possible values:</p>
+<ul>
+<li><code>pre-commit</code></li>
+<li><code>concise</code></li>
+</ul></dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-run--require-group"><a href="#prek-run--require-group"><code>--require-group</code></a> <i>group</i></dt><dd><p>Run hooks belonging to every specified group.</p>

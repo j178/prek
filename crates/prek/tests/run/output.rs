@@ -7,6 +7,60 @@ use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot, snapshot};
 
+/// Default and explicit pre-commit output agree, while concise keeps the same failure details.
+#[test]
+fn concise_format_preserves_hook_output_and_exit_status() {
+    let context = TestEnv::new()
+        .with_config(indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: lint
+                    name: Lint
+                    language: system
+                    entry: python3 -c "import sys; print('check.py:17 [E1]'); sys.exit(3)"
+                    always_run: true
+        "#})
+        .init_git();
+
+    cmd_snapshot!(context, context.run().arg("--color=never"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Lint.....................................................................Failed
+    - hook id: lint
+    - exit code: 3
+
+      check.py:17 [E1]
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run().args(["--color=never", "--output-format", "pre-commit"]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Lint.....................................................................Failed
+    - hook id: lint
+    - exit code: 3
+
+      check.py:17 [E1]
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context, context.run().args(["--color=never", "--output-format", "concise"]), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failed Lint
+    - hook id: lint
+    - exit code: 3
+
+      check.py:17 [E1]
+
+    ----- stderr -----
+    ");
+}
+
 /// The next hook must see the previous group's final report, while hook log
 /// files remain deferred until execution ends.
 #[test]

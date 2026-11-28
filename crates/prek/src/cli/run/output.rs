@@ -11,7 +11,7 @@ use prek_consts::env_vars::EnvVars;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unicode_width::UnicodeWidthStr;
 
-use crate::cli::ExitStatus;
+use crate::cli::{ExitStatus, RunOutputFormat};
 use crate::config::HideStatus;
 use crate::git;
 use crate::printer::Printer;
@@ -44,9 +44,10 @@ impl RunReport {
         hooks: &[ScheduledHook],
         verbose: bool,
         show_project_headers: bool,
+        format: RunOutputFormat,
         printer: Printer,
     ) -> Self {
-        let status_printer = StatusPrinter::for_hooks(hooks, printer);
+        let status_printer = StatusPrinter::for_hooks(hooks, printer, format);
         let progress =
             HookRunReporter::new(printer, status_printer.bar_len(), show_project_headers);
         // Only a lone root project has no header. Headers include the final
@@ -469,12 +470,13 @@ impl RunStatus {
 }
 
 struct StatusPrinter {
+    format: RunOutputFormat,
     printer: Printer,
     columns: usize,
 }
 
 impl StatusPrinter {
-    fn for_hooks(hooks: &[ScheduledHook], printer: Printer) -> Self {
+    fn for_hooks(hooks: &[ScheduledHook], printer: Printer, format: RunOutputFormat) -> Self {
         let name_len = hooks
             .iter()
             .map(|hook| hook.name.width())
@@ -487,7 +489,11 @@ impl StatusPrinter {
             // Hook name...(no files to check)Skipped
             name_len + 3 + status_width,
         );
-        Self { printer, columns }
+        Self {
+            format,
+            printer,
+            columns,
+        }
     }
 
     fn bar_len(&self) -> usize {
@@ -507,11 +513,21 @@ impl StatusPrinter {
         } else {
             (prefix.dimmed().to_string(), prefix.width())
         };
-        let used_width =
-            prefix_width + hook_name.width() + suffix.width() + status_line.inner().width();
-        let dots = self.columns.saturating_sub(used_width);
-        let dots = ".".repeat(dots).green().to_string();
-        let line = format!("{prefix}{hook_name}{dots}{suffix}{status_line}");
+        let line = match self.format {
+            RunOutputFormat::PreCommit => {
+                let used_width =
+                    prefix_width + hook_name.width() + suffix.width() + status_line.inner().width();
+                let dots = "."
+                    .repeat(self.columns.saturating_sub(used_width))
+                    .green()
+                    .to_string();
+                format!("{prefix}{hook_name}{dots}{suffix}{status_line}")
+            }
+            RunOutputFormat::Concise => {
+                let separator = if suffix.is_empty() { "" } else { " " };
+                format!("{prefix}{status_line} {hook_name}{separator}{suffix}")
+            }
+        };
         if status.is_failure() {
             writeln!(self.printer.stdout_important(), "{line}")
         } else {
@@ -562,6 +578,7 @@ mod tests {
     #[test]
     fn status_printer_write_dots_saturates_instead_of_underflow() {
         let status_printer = StatusPrinter {
+            format: RunOutputFormat::PreCommit,
             printer: Printer::Silent,
             columns: 10,
         };

@@ -26,7 +26,7 @@ use crate::cli::run::{
     CollectOptions, FileSelection, FileTagCache, GroupFilters, HookFileFilter, HookRunReporter,
     ProjectFiles, RunFileIndex, RunInput, Selectors, collect_run_input,
 };
-use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, flag};
+use crate::cli::{ExitStatus, RunArgs, RunExtraArgs, RunOptions, RunOutputFormat, flag};
 use crate::concurrency::HOOK_CONCURRENCY;
 use crate::config::{HideStatus, PassFilenames, Stage};
 use crate::fs::CWD;
@@ -82,6 +82,7 @@ pub(crate) async fn run(
 ) -> Result<ExitStatus> {
     let RunArgs {
         options,
+        output_format,
         stage: hook_stage,
         groups,
         required_groups,
@@ -302,6 +303,7 @@ pub(crate) async fn run(
             &installed_hooks,
             store,
             show_diff_on_failure,
+            output_format,
             fail_fast,
             dry_run,
             hide_status,
@@ -534,6 +536,7 @@ async fn run_hooks<'paths>(
     hooks: &[ScheduledHook],
     store: &Store,
     show_diff_on_failure: bool,
+    output_format: RunOutputFormat,
     fail_fast: Option<bool>,
     dry_run: bool,
     hide_status: Option<&[HideStatus]>,
@@ -557,7 +560,7 @@ async fn run_hooks<'paths>(
 
     let show_project_headers =
         project_to_hooks.len() > 1 || project_to_hooks.keys().any(|project| !project.is_root());
-    let report = RunReport::new(hooks, verbose, show_project_headers, printer);
+    let report = RunReport::new(hooks, verbose, show_project_headers, output_format, printer);
     let runner = HookRunner {
         store,
         report: &report,
