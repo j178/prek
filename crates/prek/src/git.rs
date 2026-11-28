@@ -755,15 +755,52 @@ pub(crate) fn is_auth_error(err: &Error) -> bool {
     .any(|needle| error.contains(needle))
 }
 
-async fn shallow_clone(
+/// Import only the cached commit and its tree, leaving the two object stores independent.
+async fn fetch_cached_tip(path: &Path, cached: &Path) -> Result<String, Error> {
+    git_cmd()?
+        .current_dir(path)
+        .args(["fetch", "--depth=1", "--no-tags", "--no-recurse-submodules"])
+        .arg(cached)
+        .arg("HEAD")
+        .sanitize_git_repo_env()
+        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
+        .output()
+        .await?;
+
+    let output = git_cmd()?
+        .current_dir(path)
+        .args(["rev-parse", "--verify", "FETCH_HEAD^{commit}"])
+        .sanitize_git_repo_env()
+        .output()
+        .await?;
+    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
+}
+
+async fn fetch_shallow(
     rev: &str,
     path: &Path,
     terminal_prompt: TerminalPrompt,
+    cached_repo: Option<&Path>,
 ) -> Result<(), Error> {
-    git_cmd()?
+    let mut fetch = git_cmd()?;
+    fetch
         .current_dir(path)
         .hidden_args(["-c", "protocol.version=2"])
-        .arg("fetch")
+        .arg("fetch");
+
+    if let Some(cached_repo) = cached_repo {
+        match fetch_cached_tip(path, cached_repo).await {
+            // The local fetch already set FETCH_HEAD to the requested commit.
+            Ok(tip) if tip.eq_ignore_ascii_case(rev) => return Ok(()),
+            Ok(tip) => {
+                // The imported commit has no local ref. Advertise it during negotiation.
+                fetch.arg(format!("--negotiation-tip={tip}"));
+            }
+            Err(err) => debug!(?err, "Could not import the cached checkout"),
+        }
+    }
+
+    fetch
         .arg("--depth=1")
         // Only resolve the requested rev. For a full SHA, Git can skip ls-refs entirely.
         .arg("--no-tags")
@@ -774,9 +811,19 @@ async fn shallow_clone(
         .sanitize_git_repo_env()
         .env(EnvVars::LC_ALL, "C")
         .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
-        .check(true)
         .output()
         .await?;
+
+    Ok(())
+}
+
+async fn shallow_clone(
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+    cached_repo: Option<&Path>,
+) -> Result<(), Error> {
+    fetch_shallow(rev, path, terminal_prompt, cached_repo).await?;
 
     git_cmd()?
         .current_dir(path)
@@ -876,33 +923,36 @@ async fn should_update_submodules(path: &Path) -> Result<bool, Error> {
         .any(|entry| entry.starts_with(b"160000 ")))
 }
 
-async fn clone_repo_attempt(
-    rev: &str,
-    path: &Path,
-    terminal_prompt: TerminalPrompt,
-) -> Result<(), Error> {
-    if let Err(err) = shallow_clone(rev, path, terminal_prompt).await {
-        if is_auth_error(&err) {
-            warn!(?err, "Failed to shallow clone due to authentication error");
-            return Err(err);
-        }
-
-        warn!(?err, "Failed to shallow clone, falling back to full clone");
-        return full_clone(rev, path, terminal_prompt).await;
-    }
-
-    Ok(())
-}
-
-/// Clone a repository into an initialized destination with the requested terminal prompt mode.
+/// Clone a repository, optionally using a previous checkout of the same source.
 pub(crate) async fn clone_repo(
     url: &str,
     rev: &str,
-    path: &Path,
+    scratch: &Path,
     terminal_prompt: TerminalPrompt,
-) -> Result<(), Error> {
-    init_repo(url, path).await?;
-    clone_repo_attempt(rev, path, terminal_prompt).await
+    cached_repo: Option<&Path>,
+) -> Result<tempfile::TempDir, Error> {
+    let init = async || {
+        let temp = tempfile::tempdir_in(scratch)?;
+        init_repo(url, temp.path()).await?;
+        Ok::<_, Error>(temp)
+    };
+
+    let temp = init().await?;
+    let Err(err) = shallow_clone(rev, temp.path(), terminal_prompt, cached_repo).await else {
+        return Ok(temp);
+    };
+    if is_auth_error(&err) {
+        warn!(?err, "Failed to shallow clone due to authentication error");
+        return Err(err);
+    }
+
+    warn!(?err, "Failed to shallow clone, falling back to full clone");
+    // An imported shallow commit can cut off the ancestry needed by a rev
+    // such as origin/main~2. Fetch the full history into a fresh repository.
+    drop(temp);
+    let temp = init().await?;
+    full_clone(rev, temp.path(), terminal_prompt).await?;
+    Ok(temp)
 }
 
 async fn config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {

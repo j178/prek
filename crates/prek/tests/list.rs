@@ -929,3 +929,72 @@ fn list_with_selectors() {
     ----- stderr -----
     ");
 }
+
+/// Switching a cached tag to its exact commit should work offline, even after
+/// an installer modifies the old checkout and cache cleanup later removes it.
+#[test]
+fn list_reuses_cached_tag_for_offline_commit_pin() -> anyhow::Result<()> {
+    use assert_cmd::prelude::*;
+    use itertools::Itertools as _;
+
+    let context = TestEnv::new().init_git();
+    let upstream = context
+        .create_hook_repo(
+            "upstream",
+            indoc! {"
+                - id: example
+                  name: Example
+                  entry: echo
+                  language: system
+            "},
+        )
+        .build();
+    let commit = context.git_at(&upstream).rev_parse("HEAD")?;
+    let url = url::Url::from_directory_path(&upstream)
+        .map_err(|()| anyhow::anyhow!("invalid fixture URL"))?;
+    let configure = |rev: &str| {
+        context.write_config(indoc::formatdoc! {"
+            repos:
+              - repo: '{url}'
+                rev: '{rev}'
+                hooks: [{{ id: example }}]
+        "});
+    };
+    let only_checkout = || -> anyhow::Result<_> {
+        let entry = fs_err::read_dir(context.home_dir().join("repos"))?
+            .exactly_one()
+            .map_err(|_| anyhow::anyhow!("expected exactly one cached checkout"))?;
+        Ok(entry?.path())
+    };
+
+    // Listing the tag primes the cache with the commit we will later pin.
+    configure("v1.0.0");
+    context.list().assert().success();
+
+    // Simulate an installer changing the manifest, then take the upstream offline.
+    let previous = only_checkout()?;
+    fs_err::write(
+        previous.join(".pre-commit-hooks.yaml"),
+        "modified by an installer",
+    )?;
+    fs_err::remove_dir_all(upstream)?;
+
+    // The commit pin must still list the hook from the original, committed manifest.
+    configure(&commit);
+    cmd_snapshot!(context, context.list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:example
+
+    ----- stderr -----
+    ");
+
+    // After GC removes the tag checkout, the pinned checkout must still own
+    // every object reachable from the requested commit.
+    fs_err::remove_dir_all(previous)?;
+    let git = context.git_at(only_checkout()?);
+    assert_eq!(git.rev_parse("HEAD")?, commit);
+    git.run(["fsck", "--full", "HEAD"]);
+    Ok(())
+}
