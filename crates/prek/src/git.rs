@@ -908,6 +908,7 @@ pub(crate) async fn clone_repo(
     terminal_prompt: TerminalPrompt,
     cached_repo: Option<&Path>,
 ) -> Result<tempfile::TempDir, Error> {
+    debug!(source = url, rev, ?terminal_prompt, cached = ?cached_repo, "Cloning repo");
     let init = async || {
         let temp = tempfile::tempdir_in(scratch)?;
         init_repo(url, temp.path()).await?;

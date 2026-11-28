@@ -78,12 +78,18 @@ async fn local_patch(repo: &Path, scratch: &Path) -> Result<Option<NamedTempFile
     Ok(Some(patch))
 }
 
+struct PreparedRepo {
+    source: String,
+    commit: String,
+    path: PathBuf,
+}
+
 async fn snapshot_local(
     store: &StoreWriteGuard<'_>,
     repo_path: &Path,
     patch: NamedTempFile,
     prompt: TerminalPrompt,
-) -> Result<(config::RemoteRepo, PathBuf)> {
+) -> Result<PreparedRepo> {
     let temp = tempfile::tempdir_in(store.scratch_path())?;
     let shadow = temp.path();
     git::git_cmd()?
@@ -130,30 +136,34 @@ async fn snapshot_local(
         .output()
         .await?;
 
-    let sha = git::resolve_commit(shadow, "HEAD").await?;
-    let pinned = config::RemoteRepo::new(repo_path.to_string_lossy().into_owned(), sha, Vec::new());
-    if let Some(path) = store.cached_repo(&pinned)? {
-        return Ok((pinned, path));
-    }
-
-    // Only populate the worktree and its submodules on a cache miss.
-    git::git_cmd()?
-        .current_dir(shadow)
-        .sanitize_git_repo_env()
-        .args(["checkout", "--force", "--detach", "HEAD"])
-        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
-        .output()
-        .await?;
-    git::update_submodules(shadow, prompt, true).await?;
-    let path = store.persist_cloned_repo(&pinned, temp).await?;
-    Ok((pinned, path))
+    let source = repo_path.to_string_lossy().into_owned();
+    let commit = git::resolve_commit(shadow, "HEAD").await?;
+    let path = if let Some(path) = store.cached_repo(&source, &commit)? {
+        path
+    } else {
+        // Only populate the worktree and its submodules on a cache miss.
+        git::git_cmd()?
+            .current_dir(shadow)
+            .sanitize_git_repo_env()
+            .args(["checkout", "--force", "--detach", "HEAD"])
+            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
+            .output()
+            .await?;
+        git::update_submodules(shadow, prompt, true).await?;
+        store.persist_cloned_repo(&source, &commit, temp).await?
+    };
+    Ok(PreparedRepo {
+        source,
+        commit,
+        path,
+    })
 }
 
 async fn prepare_repo(
     store: &StoreWriteGuard<'_>,
     repo: &str,
     rev: Option<&str>,
-) -> Result<(config::RemoteRepo, PathBuf)> {
+) -> Result<PreparedRepo> {
     let path = Path::new(repo);
     let name = rev.unwrap_or("HEAD");
     let prompt = if EnvVars::is_under_ci() {
@@ -161,7 +171,7 @@ async fn prepare_repo(
     } else {
         TerminalPrompt::Enabled
     };
-    let (source, sha) = if path.is_dir() {
+    let (source, commit) = if path.is_dir() {
         let path = dunce::canonicalize(path)?;
         if rev.is_none()
             && let Some(patch) = local_patch(&path, &store.scratch_path()).await?
@@ -177,16 +187,22 @@ async fn prepare_repo(
         (repo.to_owned(), name.to_ascii_lowercase())
     } else {
         // Cache a moving ref under the commit Git actually checked out.
-        let mut pinned = config::RemoteRepo::new(repo.to_owned(), name.to_owned(), Vec::new());
-        let checkout = store.fetch_revision(&pinned, prompt).await?;
-        pinned.rev = git::resolve_commit(checkout.path(), "HEAD").await?;
-        let path = store.persist_cloned_repo(&pinned, checkout).await?;
-        return Ok((pinned, path));
+        let checkout = store.fetch_revision(repo, name, prompt).await?;
+        let commit = git::resolve_commit(checkout.path(), "HEAD").await?;
+        let path = store.persist_cloned_repo(repo, &commit, checkout).await?;
+        return Ok(PreparedRepo {
+            source: repo.to_owned(),
+            commit,
+            path,
+        });
     };
 
-    let pinned = config::RemoteRepo::new(source, sha, Vec::new());
-    let path = store.clone_repo(&pinned, None).await?;
-    Ok((pinned, path))
+    let path = store.clone_repo(&source, &commit).await?;
+    Ok(PreparedRepo {
+        source,
+        commit,
+        path,
+    })
 }
 
 fn render_repo_config_toml(repo_path: &str, rev: Option<&str>, hooks: &[String]) -> String {
@@ -257,12 +273,12 @@ pub(crate) async fn try_repo(
         }
         (render_repo_config_toml(&repo, None, &hooks), None)
     } else {
-        let (pinned, repo_clone_path) = {
+        let prepared = {
             let guard = store.write_lock().await?;
             prepare_repo(&guard, &repo, rev.as_deref()).await?
         };
         let manifest =
-            config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+            config::read_manifest(&prepared.path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
         let hooks = manifest
             .hooks
             .into_iter()
@@ -270,9 +286,9 @@ pub(crate) async fn try_repo(
             .map(|hook| hook.id)
             .collect::<Vec<_>>();
 
-        let config_str = render_repo_config_toml(pinned.source(), Some(&pinned.rev), &hooks);
-        let display_rev = rev.as_deref().unwrap_or(&pinned.rev);
-        let display_config_str = if pinned.source() != repo || display_rev != pinned.rev {
+        let config_str = render_repo_config_toml(&prepared.source, Some(&prepared.commit), &hooks);
+        let display_rev = rev.as_deref().unwrap_or(&prepared.commit);
+        let display_config_str = if prepared.source != repo || display_rev != prepared.commit {
             Some(render_repo_config_toml(&repo, Some(display_rev), &hooks))
         } else {
             None
