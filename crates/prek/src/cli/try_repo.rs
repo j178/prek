@@ -1,7 +1,9 @@
 use std::fmt::Write;
+use std::io::{Seek, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
 use prek_consts::env_vars::EnvVars;
@@ -25,15 +27,74 @@ async fn remote_head(source: &str) -> Result<String> {
         .arg("HEAD")
         .output()
         .await?;
-    let (sha, _) = str::from_utf8(&output.stdout)?
-        .split_once('\t')
+    // ls-remote also matches refs ending in /HEAD, such as refs/tags/HEAD.
+    let sha = output
+        .stdout
+        .split(|&b| b == b'\n')
+        .find_map(|line| line.strip_suffix(b"\tHEAD"))
         .context("Git did not report a remote HEAD")?;
-    Ok(sha.to_owned())
+    Ok(str::from_utf8(sha)?.to_owned())
+}
+
+/// Paths are NUL-delimited for `git update-index --stdin`, which reads them literally.
+#[derive(Default)]
+struct LocalChanges {
+    removed: Vec<u8>,
+    updated: Vec<u8>,
+}
+
+async fn local_changes(repo: &Path) -> Result<Option<LocalChanges>> {
+    let mut diff = git::git_cmd()?;
+    let output = diff
+        .current_dir(repo)
+        .sanitize_git_repo_env()
+        .args([
+            "diff",
+            "--name-status",
+            "--no-ext-diff",
+            "--no-relative",
+            "--no-renames",
+            "--ignore-submodules=dirty",
+            "-z",
+            "HEAD",
+            "--",
+        ])
+        .check(false)
+        .output()
+        .await?;
+    if !output.status.success() {
+        // A bare local repository can be tried at HEAD but has no working tree to diff.
+        let bare = git::git_cmd()?
+            .current_dir(repo)
+            .sanitize_git_repo_env()
+            .args(["rev-parse", "--is-bare-repository"])
+            .output()
+            .await?;
+        if bare.stdout.trim_ascii() == b"true" {
+            return Ok(None);
+        }
+    }
+    let diff = diff.check_output(output)?;
+    if diff.stdout.is_empty() {
+        return Ok(None);
+    }
+
+    // With rename detection disabled, each status is followed by exactly one path.
+    let mut changes = LocalChanges::default();
+    for (status, path) in diff.stdout.split_inclusive(|&b| b == 0).tuples() {
+        if status == b"D\0" {
+            changes.removed.extend_from_slice(path);
+        } else {
+            changes.updated.extend_from_slice(path);
+        }
+    }
+    Ok(Some(changes))
 }
 
 async fn snapshot_local(
     store: &StoreWriteGuard<'_>,
     repo_path: &Path,
+    changes: LocalChanges,
     prompt: TerminalPrompt,
 ) -> Result<(config::RemoteRepo, PathBuf)> {
     let temp = tempfile::tempdir_in(store.scratch_path())?;
@@ -52,32 +113,30 @@ async fn snapshot_local(
         .output()
         .await?;
 
-    let index_path = shadow.join(".git/index");
-    let objects_path = shadow.join(".git/objects");
-
-    let staged_files = git::staged_files(repo_path, false).await?;
-    if !staged_files.is_empty() {
+    // A staged deletion can leave the file on disk (git rm --cached). Remove
+    // those entries first so the snapshot also handles file-to-directory renames.
+    for (paths, flags) in [
+        (changes.removed, &["--force-remove"][..]),
+        (changes.updated, &["--add", "--replace"][..]),
+    ] {
+        if paths.is_empty() {
+            continue;
+        }
+        let mut input = tempfile::tempfile()?;
+        input.write_all(&paths)?;
+        input.rewind()?;
         git::git_cmd()?
-            .arg("add")
-            .arg("--")
-            .file_args(staged_files.iter().map(|file| &file.path))
             .current_dir(repo_path)
             .sanitize_git_repo_env()
-            .env(EnvVars::GIT_INDEX_FILE, &index_path)
-            .env(EnvVars::GIT_OBJECT_DIRECTORY, &objects_path)
+            .env(EnvVars::GIT_INDEX_FILE, shadow.join(".git/index"))
+            .env(EnvVars::GIT_OBJECT_DIRECTORY, shadow.join(".git/objects"))
+            .arg("update-index")
+            .args(flags)
+            .args(["-z", "--stdin"])
+            .stdin(input)
             .output()
             .await?;
     }
-
-    git::git_cmd()?
-        .arg("add")
-        .arg("--update") // Update tracked files
-        .current_dir(repo_path)
-        .sanitize_git_repo_env()
-        .env(EnvVars::GIT_INDEX_FILE, &index_path)
-        .env(EnvVars::GIT_OBJECT_DIRECTORY, &objects_path)
-        .output()
-        .await?;
 
     // A fixed identity and timestamp give identical working trees the same snapshot.
     git::git_cmd()?
@@ -130,32 +189,31 @@ async fn prepare_repo(
     } else {
         TerminalPrompt::Enabled
     };
-    let (source, sha, checkout) = if path.is_dir() {
+    let (source, sha) = if path.is_dir() {
         let path = dunce::canonicalize(path)?;
-        if rev.is_none() && git::has_diff("HEAD", &path).await? {
+        if rev.is_none()
+            && let Some(changes) = local_changes(&path).await?
+        {
             warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
-            return snapshot_local(store, &path, prompt).await;
+            return snapshot_local(store, &path, changes, prompt).await;
         }
         let source = path.to_string_lossy().into_owned();
-        (source, git::resolve_commit(&path, name).await?, None)
+        (source, git::resolve_commit(&path, name).await?)
     } else if name == "HEAD" {
-        (repo.to_owned(), remote_head(repo).await?, None)
+        (repo.to_owned(), remote_head(repo).await?)
     } else if matches!(name.len(), 40 | 64) && config::looks_like_sha(name) {
-        (repo.to_owned(), name.to_ascii_lowercase(), None)
+        (repo.to_owned(), name.to_ascii_lowercase())
     } else {
-        // Let Git interpret branch names, annotated tags and revision expressions.
-        // Publish the fetched checkout under its exact commit so a moving ref
-        // never selects the checkout or environment from a previous invocation.
-        let checkout = store.fetch_revision(repo, name, prompt).await?;
-        let sha = git::resolve_commit(checkout.path(), "HEAD").await?;
-        (repo.to_owned(), sha, Some(checkout))
+        // Cache a moving ref under the commit Git actually checked out.
+        let mut pinned = config::RemoteRepo::new(repo.to_owned(), name.to_owned(), Vec::new());
+        let checkout = store.fetch_revision(&pinned, prompt).await?;
+        pinned.rev = git::resolve_commit(checkout.path(), "HEAD").await?;
+        let path = store.persist_cloned_repo(&pinned, checkout).await?;
+        return Ok((pinned, path));
     };
 
     let pinned = config::RemoteRepo::new(source, sha, Vec::new());
-    let path = match checkout {
-        Some(temp) => store.persist_cloned_repo(&pinned, temp).await?,
-        None => store.clone_repo(&pinned, None).await?,
-    };
+    let path = store.clone_repo(&pinned, None).await?;
     Ok((pinned, path))
 }
 

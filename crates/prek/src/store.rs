@@ -392,14 +392,12 @@ impl StoreWriteGuard<'_> {
     /// Fetch a mutable ref without assigning it a permanent cache key yet.
     pub(crate) async fn fetch_revision(
         &self,
-        source: &str,
-        rev: &str,
+        repo: &RemoteRepo,
         prompt: TerminalPrompt,
     ) -> Result<tempfile::TempDir, git::Error> {
-        let repo = RemoteRepo::new(source.to_owned(), rev.to_owned(), Vec::new());
-        let cached = self.cached_revisions(&[&repo]);
-        let previous = cached.get(source).map(|entry| entry.path.as_path());
-        self.clone_repo_to_temp(&repo, prompt, previous).await
+        let cached = self.cached_revisions(&[repo]);
+        let previous = cached.get(repo.source()).map(|entry| entry.path.as_path());
+        self.clone_repo_to_temp(repo, prompt, previous).await
     }
 
     pub(crate) async fn persist_cloned_repo(

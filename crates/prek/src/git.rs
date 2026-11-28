@@ -488,23 +488,6 @@ pub(crate) fn checkout_files(cwd: &Path, paths: &[PathBuf]) -> Result<(), Error>
     Ok(())
 }
 
-/// Check for changes against `rev` anywhere in the repository containing `path`.
-///
-/// `path` selects the repository without limiting the check to that directory.
-pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
-    let status = git_cmd()?
-        .current_dir(path)
-        .arg("diff")
-        .hidden_args(["--no-ext-diff"])
-        .arg("--quiet")
-        .arg("--no-relative")
-        .arg(rev)
-        .check(false)
-        .status()
-        .await?;
-    Ok(status.code() == Some(1))
-}
-
 pub(crate) fn is_in_merge_conflict() -> Result<bool> {
     let git_dir = git_dir()?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)

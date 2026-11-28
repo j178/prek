@@ -5,6 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestEnv, cmd_snapshot};
 
@@ -178,6 +179,8 @@ fn try_repo_specific_rev() -> Result<()> {
     Ok(())
 }
 
+/// The snapshot includes the hook repo's edited manifest and explicitly staged files,
+/// even if Git exported the calling project's repository to the process.
 #[test]
 fn try_repo_uncommitted_changes() -> Result<()> {
     let context = TestEnv::new().with_file("test.txt", "test").init_git();
@@ -187,22 +190,29 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     // Make uncommitted changes
     ChildPath::new(&repo_path)
         .child(PRE_COMMIT_HOOKS_YAML)
-        .write_str(indoc::indoc! {r"
+        .write_str(indoc::indoc! {r#"
         - id: uncommitted-hook
           name: Uncommitted Hook
-          entry: echo uncommitted
+          entry: git hash-object "{hook_repo}/new-file.txt"
           language: system
-        "})?;
+        "#})?;
     ChildPath::new(&repo_path)
         .child("new-file.txt")
         .write_str("new")?;
-    context.git_at(&repo_path).add("new-file.txt");
+    ChildPath::new(&repo_path)
+        .child(".git/info/exclude")
+        .write_str("new-file.txt\n")?;
+    context
+        .git_at(&repo_path)
+        .run(["add", "--force", "new-file.txt"]);
 
     context.git().add(".");
 
     let context = with_try_repo_filters(context);
 
-    cmd_snapshot!(context, context.try_repo().arg(&repo_path), @r#"
+    cmd_snapshot!(context, context.try_repo().arg(&repo_path)
+        .env(EnvVars::GIT_DIR, context.work_dir().join(".git"))
+        .env(EnvVars::GIT_WORK_TREE, context.work_dir().path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
