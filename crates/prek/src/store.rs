@@ -415,8 +415,7 @@ impl StoreWriteGuard<'_> {
             rev: repo.rev.clone(),
         };
         let contents = serde_json::to_vec_pretty(&marker)?;
-        // The checkout may contain a symlink at the marker path. Replace the entry itself.
-        crate::fs::write_atomic(&temp.path().join(REPO_MARKER), &contents)?;
+        fs_err::File::create_new(temp.path().join(REPO_MARKER))?.write_all(&contents)?;
 
         let target = self.repo_path(repo.source(), &repo.rev);
         if target.try_exists()? {
