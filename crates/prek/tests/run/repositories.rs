@@ -92,7 +92,7 @@ fn hook_repo_placeholder_expands_to_local_project() {
 }
 
 #[test]
-fn hook_repo_placeholder_expands_to_remote_checkout() {
+fn hook_repo_placeholder_expands_to_remote_checkout() -> Result<()> {
     let context = TestEnv::new().init_git();
     let hook_repo = context
         .create_hook_repo(
@@ -118,7 +118,22 @@ fn hook_repo_placeholder_expands_to_remote_checkout() {
     ", hook_repo});
     context.git().add(".");
 
-    cmd_snapshot!(context, context.run(), @r#"
+    // Restore the entire cache at a new path, as CI does. With the origin
+    // offline, the hook must still be able to look up Git objects in its checkout.
+    let cache = tempfile::tempdir()?;
+    let original = cache.path().join("original");
+    let restored = cache.path().join("restored");
+    context.run().env("PREK_HOME", &original).assert().success();
+    fs_err::rename(&original, &restored)?;
+    fs_err::rename(&hook_repo, context.home_dir().join("offline-source"))?;
+    context
+        .command()
+        .args(["cache", "gc"])
+        .env("PREK_HOME", &restored)
+        .assert()
+        .success();
+
+    cmd_snapshot!(context, context.run().env("PREK_HOME", &restored), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -126,6 +141,65 @@ fn hook_repo_placeholder_expands_to_remote_checkout() {
 
     ----- stderr -----
     "#);
+    Ok(())
+}
+
+/// Each revision must use its own .gitmodules, even when two revisions
+/// give the same submodule name to unrelated repositories.
+#[test]
+fn revisions_can_change_a_submodule_remote() -> Result<()> {
+    let context = TestEnv::new().init_git();
+    let parent = context.create_hook_repo(
+        "parent",
+        indoc::indoc! {r#"
+        - id: read-submodule
+          name: read-submodule
+          language: system
+          entry: git -C "{hook_repo}/module" cat-file -e HEAD:marker
+          always_run: true
+          pass_filenames: false
+    "#},
+    );
+    parent.git().add(".pre-commit-hooks.yaml");
+
+    for (remote, tag) in [("first-child", "v1.0.0"), ("second-child", "v2.0.0")] {
+        let child = context.create_repo(remote).with_file("marker", remote);
+        child.git().add(".").commit(remote);
+        let sha = child.git().rev_parse("HEAD")?;
+        parent.path().child(".gitmodules").write_str(&format!(
+            "[submodule \"module\"]\n    path = module\n    url = ../{remote}\n"
+        ))?;
+        parent
+            .git()
+            .add(".gitmodules")
+            .run([
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("160000,{sha},module"),
+            ])
+            .commit(tag)
+            .tag(tag);
+
+        context.write_config(indoc::formatdoc! {r"
+            repos:
+              - repo: '{}'
+                rev: {tag}
+                hooks:
+                  - id: read-submodule
+        ", parent.path().display()});
+        context.git().add(".");
+
+        // The second pin exists only in the second remote. Reusing the first
+        // URL would make the checkout fail before the hook can read its marker.
+        context
+            .run()
+            .env("GIT_ALLOW_PROTOCOL", "file")
+            .assert()
+            .success();
+    }
+
+    Ok(())
 }
 
 /// Initialize a repo that does not exist.

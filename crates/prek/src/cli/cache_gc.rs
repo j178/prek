@@ -15,6 +15,7 @@ use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
 use crate::cli::run::InstallCache;
 use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
+use crate::git::GitCommandExt;
 use crate::hook::{HookEnvRequirement, HookSpec, InstallInfo, Repo as HookRepo, RepoIdentityRef};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, ExclusiveStore, RepoMarker, Store, StoreWriteGuard, ToolBucket};
@@ -176,6 +177,7 @@ pub(crate) async fn cache_gc(
     }
 
     let mut kept_configs: FxHashSet<&Path> = FxHashSet::default();
+    let mut used_sources = FxHashSet::default();
     let mut used_repo_keys: FxHashSet<String> = FxHashSet::default();
     let mut used_hook_env_dirs: FxHashSet<String> = FxHashSet::default();
     let mut used_tools: FxHashSet<ToolBucket> = FxHashSet::default();
@@ -214,7 +216,12 @@ pub(crate) async fn cache_gc(
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
         for repo in &config.repos {
             if let ConfigRepo::Remote(remote) = repo {
-                used_repo_keys.insert(Store::repo_key(remote.source(), &remote.rev));
+                let key = Store::repo_key(remote.source(), &remote.rev);
+                if store.repos_dir().join(&key).join(".git").is_file() {
+                    used_sources.insert(crate::git_source::source_key(remote.source()));
+                    used_repo_keys.insert(format!("{key}-standalone"));
+                }
+                used_repo_keys.insert(key);
             }
         }
     }
@@ -302,6 +309,28 @@ pub(crate) async fn cache_gc(
     )?;
 
     removed_cache += update_caches;
+    removed_cache += sweep_dir_by_name(
+        RemovalKind::CacheEntries,
+        &store.snapshots_dir(),
+        &used_sources,
+        dry_run,
+        verbose,
+    )?;
+    if !dry_run && !used_sources.is_empty() && crate::git_source::supported()? {
+        for source in &used_sources {
+            let dir = store.snapshots_dir().join(source);
+            if !dir.join("worktrees").is_dir() {
+                continue;
+            }
+            crate::git::git_cmd()?
+                .arg("--git-dir")
+                .arg(dir)
+                .sanitize_git_repo_env()
+                .args(["worktree", "prune", "--expire=now"])
+                .output()
+                .await?;
+        }
+    }
 
     if !dry_run {
         let _ = fs_err::remove_dir_all(store.scratch_path());
