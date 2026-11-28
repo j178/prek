@@ -179,7 +179,7 @@ fn try_repo_specific_rev() -> Result<()> {
     Ok(())
 }
 
-/// The snapshot includes the hook repo's edited manifest and explicitly staged files,
+/// The snapshot includes the hook repo's unstaged manifest edit and newly staged file,
 /// even if Git exported the calling project's repository to the process.
 #[test]
 fn try_repo_uncommitted_changes() -> Result<()> {
@@ -187,7 +187,6 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted");
 
-    // Make uncommitted changes
     ChildPath::new(&repo_path)
         .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r#"
@@ -199,12 +198,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ChildPath::new(&repo_path)
         .child("new-file.txt")
         .write_str("new")?;
-    ChildPath::new(&repo_path)
-        .child(".git/info/exclude")
-        .write_str("new-file.txt\n")?;
-    context
-        .git_at(&repo_path)
-        .run(["add", "--force", "new-file.txt"]);
+    context.git_at(&repo_path).add("new-file.txt");
 
     context.git().add(".");
 

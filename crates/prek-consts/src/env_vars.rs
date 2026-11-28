@@ -83,7 +83,6 @@ impl EnvVars {
     pub const GIT_COMMITTER_NAME: &'static str = "GIT_COMMITTER_NAME";
     pub const GIT_DIR: &'static str = "GIT_DIR";
     pub const GIT_INDEX_FILE: &'static str = "GIT_INDEX_FILE";
-    pub const GIT_OBJECT_DIRECTORY: &'static str = "GIT_OBJECT_DIRECTORY";
     pub const GIT_WORK_TREE: &'static str = "GIT_WORK_TREE";
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
 

@@ -1,14 +1,12 @@
 use std::fmt::Write;
-use std::io::{Seek, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
 use prek_consts::env_vars::EnvVars;
 use strum::IntoEnumIterator;
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::run::Selectors;
@@ -36,29 +34,27 @@ async fn remote_head(source: &str) -> Result<String> {
     Ok(str::from_utf8(sha)?.to_owned())
 }
 
-/// Paths are NUL-delimited for `git update-index --stdin`, which reads them literally.
-#[derive(Default)]
-struct LocalChanges {
-    removed: Vec<u8>,
-    updated: Vec<u8>,
-}
-
-async fn local_changes(repo: &Path) -> Result<Option<LocalChanges>> {
+/// Capture the staged and unstaged edits together, relative to the commit the clone starts at.
+async fn local_patch(repo: &Path, scratch: &Path) -> Result<Option<NamedTempFile>> {
+    let patch = NamedTempFile::new_in(scratch)?;
     let mut diff = git::git_cmd()?;
     let output = diff
         .current_dir(repo)
         .sanitize_git_repo_env()
         .args([
             "diff",
-            "--name-status",
+            "--binary",
+            "--no-color",
             "--no-ext-diff",
+            "--no-textconv",
             "--no-relative",
-            "--no-renames",
+            "--no-prefix",
+            "--submodule=short",
             "--ignore-submodules=dirty",
-            "-z",
-            "HEAD",
-            "--",
+            "--output",
         ])
+        .arg(patch.path())
+        .args(["HEAD", "--"])
         .check(false)
         .output()
         .await?;
@@ -74,27 +70,17 @@ async fn local_changes(repo: &Path) -> Result<Option<LocalChanges>> {
             return Ok(None);
         }
     }
-    let diff = diff.check_output(output)?;
-    if diff.stdout.is_empty() {
+    diff.check_output(output)?;
+    if patch.as_file().metadata()?.len() == 0 {
         return Ok(None);
     }
-
-    // With rename detection disabled, each status is followed by exactly one path.
-    let mut changes = LocalChanges::default();
-    for (status, path) in diff.stdout.split_inclusive(|&b| b == 0).tuples() {
-        if status == b"D\0" {
-            changes.removed.extend_from_slice(path);
-        } else {
-            changes.updated.extend_from_slice(path);
-        }
-    }
-    Ok(Some(changes))
+    Ok(Some(patch))
 }
 
 async fn snapshot_local(
     store: &StoreWriteGuard<'_>,
     repo_path: &Path,
-    changes: LocalChanges,
+    patch: NamedTempFile,
     prompt: TerminalPrompt,
 ) -> Result<(config::RemoteRepo, PathBuf)> {
     let temp = tempfile::tempdir_in(store.scratch_path())?;
@@ -106,6 +92,9 @@ async fn snapshot_local(
         .arg(shadow)
         .output()
         .await?;
+
+    // The patch is relative to HEAD. Seed the empty index left by --no-checkout
+    // so Git can apply it before we populate the worktree.
     git::git_cmd()?
         .current_dir(shadow)
         .sanitize_git_repo_env()
@@ -113,30 +102,13 @@ async fn snapshot_local(
         .output()
         .await?;
 
-    // A staged deletion can leave the file on disk (git rm --cached). Remove
-    // those entries first so the snapshot also handles file-to-directory renames.
-    for (paths, flags) in [
-        (changes.removed, &["--force-remove"][..]),
-        (changes.updated, &["--add", "--replace"][..]),
-    ] {
-        if paths.is_empty() {
-            continue;
-        }
-        let mut input = tempfile::tempfile()?;
-        input.write_all(&paths)?;
-        input.rewind()?;
-        git::git_cmd()?
-            .current_dir(repo_path)
-            .sanitize_git_repo_env()
-            .env(EnvVars::GIT_INDEX_FILE, shadow.join(".git/index"))
-            .env(EnvVars::GIT_OBJECT_DIRECTORY, shadow.join(".git/objects"))
-            .arg("update-index")
-            .args(flags)
-            .args(["-z", "--stdin"])
-            .stdin(input)
-            .output()
-            .await?;
-    }
+    git::git_cmd()?
+        .current_dir(shadow)
+        .sanitize_git_repo_env()
+        .args(["apply", "--cached", "--whitespace=nowarn", "-p0"])
+        .arg(patch.path())
+        .output()
+        .await?;
 
     // A fixed identity and timestamp give identical working trees the same snapshot.
     git::git_cmd()?
@@ -163,8 +135,7 @@ async fn snapshot_local(
         return Ok((pinned, path));
     }
 
-    // The index came from the author's working tree. Materialize it in the
-    // temporary checkout before publishing that checkout to the shared store.
+    // Only populate the worktree and its submodules on a cache miss.
     git::git_cmd()?
         .current_dir(shadow)
         .sanitize_git_repo_env()
@@ -192,10 +163,10 @@ async fn prepare_repo(
     let (source, sha) = if path.is_dir() {
         let path = dunce::canonicalize(path)?;
         if rev.is_none()
-            && let Some(changes) = local_changes(&path).await?
+            && let Some(patch) = local_patch(&path, &store.scratch_path()).await?
         {
             warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
-            return snapshot_local(store, &path, changes, prompt).await;
+            return snapshot_local(store, &path, patch, prompt).await;
         }
         let source = path.to_string_lossy().into_owned();
         (source, git::resolve_commit(&path, name).await?)
