@@ -18,7 +18,7 @@ use crate::cli::update::{CommitPresence, RevisionSelection, SkippedDowngrade, Ta
 use crate::fs::LockedFile;
 use crate::git::GitCommandExt;
 use crate::process::Cmd;
-use crate::store::{REPO_MARKER, Store};
+use crate::store::Store;
 use crate::{config, git};
 
 /// Each check gets a clean index and worktree. The object database and upstream
@@ -52,11 +52,7 @@ impl<'a> UpdateRepository<'a> {
 
     /// Refresh the remote refs before using any cached objects. The caller
     /// holds the lock until it has validated all targets against these refs.
-    pub(super) async fn refresh(
-        &self,
-        store: &Store,
-        installed_revs: impl Iterator<Item = &'a str>,
-    ) -> Result<(Vec<TagTimestamp>, LockedFile)> {
+    pub(super) async fn refresh(&self, store: &Store) -> Result<(Vec<TagTimestamp>, LockedFile)> {
         let key = digest(&SHA256, self.source.as_bytes());
         let root = store.updates_dir().join(hex::encode(key.as_ref()));
         fs_err::create_dir_all(&root)?;
@@ -69,7 +65,6 @@ impl<'a> UpdateRepository<'a> {
         if incomplete.try_exists()? && git_dir.try_exists()? {
             fs_err::remove_dir_all(&git_dir)?;
         }
-        let cold = !git_dir.try_exists()?;
         fs_err::write(&incomplete, [])?;
 
         git::git_cmd()?
@@ -96,47 +91,9 @@ impl<'a> UpdateRepository<'a> {
             .run()
             .await?;
 
-        if cold && let Err(err) = self.seed_manifest(store, installed_revs).await {
-            trace!("Could not reuse installed manifest: {err}");
-        }
-
         let tags = list_tag_metadata(self).await?;
         fs_err::remove_file(incomplete)?;
         Ok((tags, lock))
-    }
-
-    /// The installed and candidate revisions often share their manifest blob.
-    /// Import just that Git object, so a shallow checkout or a dirty worktree
-    /// cannot change which refs or manifest content the update sees.
-    async fn seed_manifest(
-        &self,
-        store: &Store,
-        installed_revs: impl Iterator<Item = &'a str>,
-    ) -> Result<()> {
-        let Some(checkout) = installed_revs
-            .map(|rev| store.repo_path(self.source, rev))
-            .find(|path| path.join(REPO_MARKER).is_file())
-        else {
-            return Ok(());
-        };
-
-        let manifest = tempfile::NamedTempFile::new_in(self.scratch)?;
-        git::git_cmd()?
-            .current_dir(checkout)
-            .sanitize_git_repo_env()
-            .args(["--no-lazy-fetch", "cat-file", "blob"])
-            .arg(format!("HEAD:{PRE_COMMIT_HOOKS_YAML}"))
-            .stdout(manifest.reopen()?)
-            .stderr(Stdio::null())
-            .run()
-            .await?;
-
-        self.command()?
-            .args(["hash-object", "-w", "--no-filters", "--"])
-            .arg(manifest.path())
-            .output()
-            .await?;
-        Ok(())
     }
 }
 

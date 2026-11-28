@@ -186,8 +186,9 @@ impl Store {
     }
 
     /// The checkout path for this repository and revision, whether or not it exists yet.
-    pub(crate) fn repo_path(&self, source: &str, rev: &str) -> PathBuf {
-        self.repos_dir().join(Self::repo_key(source, rev))
+    pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+        self.repos_dir()
+            .join(Self::repo_key(repo.source(), &repo.rev))
     }
 
     pub(crate) fn repo_key(source: &str, rev: &str) -> String {
@@ -378,7 +379,7 @@ impl StoreWriteGuard<'_> {
         repo: &RemoteRepo,
         temp: tempfile::TempDir,
     ) -> Result<PathBuf, Error> {
-        let target = self.repo_path(repo.source(), &repo.rev);
+        let target = self.repo_path(repo);
 
         fs_err::tokio::remove_dir_all(&target).await.ok();
         crate::fs::rename_with_retry(temp, &target).await?;
@@ -407,7 +408,7 @@ impl StoreWriteGuard<'_> {
         let mut pending = Vec::new();
 
         for repo in repos {
-            let target = self.repo_path(repo.source(), &repo.rev);
+            let target = self.repo_path(repo);
             if target.join(REPO_MARKER).try_exists()? {
                 cloned.insert(repo.key(), target);
                 continue;
