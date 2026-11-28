@@ -174,6 +174,31 @@ fn update_basic() {
 }
 
 #[test]
+fn update_rev_at_eof() {
+    let context = TestEnv::new().init_git();
+    let repo_path = create_local_git_repo(&context, "eof-repo", &["v1.0.0", "v2.0.0"]);
+    let config = format!(
+        "# keep this comment\nrepos:\n- repo: {repo_path}\n  hooks:\n  - id: test-hook # and this one\n  rev: v1.0.0"
+    );
+    context.write_config(&config);
+    context.git().add(".");
+
+    cmd_snapshot!(context, context.update().args(["--cooldown-days", "0"]), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/eof-repo
+      updating rev `v1.0.0` -> `v2.0.0`
+
+    ----- stderr -----
+    "#);
+    assert_eq!(
+        context.read(PRE_COMMIT_CONFIG_YAML),
+        config.replace("v1.0.0", "v2.0.0")
+    );
+}
+
+#[test]
 fn update_already_up_to_date() {
     let context = TestEnv::new().init_git();
 
