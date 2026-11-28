@@ -396,7 +396,7 @@ fn hook_env_requirements_from_config(
     for repo_config in &config.repos {
         match repo_config {
             ConfigRepo::Remote(repo_config) => {
-                let repo_path = store.repo_path(repo_config);
+                let repo_path = store.repo_path(repo_config.source(), &repo_config.rev);
                 if !repo_path.is_dir() {
                     continue;
                 }
