@@ -81,40 +81,20 @@ impl<'a> UpdateRepository<'a> {
             .output()
             .await?;
 
-        let refspecs = [
-            "--quiet",
-            "--prune",
-            "--no-tags",
-            "--filter=blob:none",
-            "origin",
-            "+HEAD:refs/prek/upstream",
-            "+refs/tags/*:refs/tags/*",
-        ];
-        let fetch = self
-            .command()?
-            .args(["fetch", "--no-write-fetch-head"])
-            .args(refspecs)
+        self.command()?
+            .args([
+                "fetch",
+                "--quiet",
+                "--prune",
+                "--no-tags",
+                "--filter=blob:none",
+                "origin",
+                "HEAD",
+                "+refs/tags/*:refs/tags/*",
+            ])
             .stderr(Stdio::null())
             .run()
-            .await;
-
-        match fetch {
-            // Git before 2.29 cannot suppress FETCH_HEAD, which can contain
-            // the remote URL. Keep its fetch in this check's temporary repo.
-            Err(crate::process::Error::Status { error, .. })
-                if error.status.code() == Some(129) =>
-            {
-                fs_err::remove_file(self.worktree.join(".git"))?;
-                git::init_repo(self.source, &self.worktree).await?;
-                self.command()?
-                    .arg("fetch")
-                    .args(refspecs)
-                    .stderr(Stdio::null())
-                    .run()
-                    .await?;
-            }
-            result => result?,
-        }
+            .await?;
 
         if cold && let Err(err) = self.seed_manifest(store, installed_revs).await {
             trace!("Could not reuse installed manifest: {err}");
@@ -192,14 +172,10 @@ pub(super) async fn is_commit_present(
     let output = repo
         .command()?
         .arg("--no-lazy-fetch")
-        .args([
-            "for-each-ref",
-            "--count=1",
-            "--format=%(refname)",
-            "--contains",
-        ])
-        .arg(commit)
-        .args(["refs/prek/upstream", "refs/tags"])
+        // The difference is empty exactly when HEAD or a current tag reaches the pin.
+        .args(["rev-list", "--max-count=1"])
+        .arg(format!("{commit}^{{commit}}"))
+        .args(["--not", "FETCH_HEAD", "--tags", "--"])
         .env(EnvVars::LC_ALL, "C")
         .check(false)
         .output()
@@ -208,9 +184,9 @@ pub(super) async fn is_commit_present(
     if output.status.success() {
         let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
         return Ok(if output.stdout.is_empty() {
-            CommitPresence::Absent
-        } else {
             CommitPresence::Present
+        } else {
+            CommitPresence::Absent
         });
     }
 
@@ -244,7 +220,7 @@ pub(super) async fn resolve_bleeding_edge(repo: &UpdateRepository<'_>) -> Result
     let output = repo
         .command()?
         .arg("describe")
-        .arg("refs/prek/upstream")
+        .arg("FETCH_HEAD")
         .arg("--tags")
         .arg("--exact-match")
         .check(false)
@@ -257,7 +233,7 @@ pub(super) async fn resolve_bleeding_edge(repo: &UpdateRepository<'_>) -> Result
         let output = repo
             .command()?
             .arg("rev-parse")
-            .arg("refs/prek/upstream")
+            .arg("FETCH_HEAD")
             .check(true)
             .output()
             .await?;
@@ -719,10 +695,8 @@ mod tests {
         create_commit(repo, "tagged").await;
         create_lightweight_tag(repo, "v1.2.3").await;
 
-        git::git_cmd()
-            .unwrap()
-            .args(["fetch", ".", "HEAD:refs/prek/upstream"])
-            .current_dir(repo)
+        git_cmd(repo)
+            .args(["fetch", ".", "HEAD"])
             .sanitize_git_repo_env()
             .output()
             .await
@@ -741,10 +715,8 @@ mod tests {
 
         create_commit(repo, "untagged").await;
 
-        git::git_cmd()
-            .unwrap()
-            .args(["fetch", ".", "HEAD:refs/prek/upstream"])
-            .current_dir(repo)
+        git_cmd(repo)
+            .args(["fetch", ".", "HEAD"])
             .sanitize_git_repo_env()
             .output()
             .await
