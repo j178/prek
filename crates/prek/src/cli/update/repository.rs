@@ -6,7 +6,6 @@ use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use aws_lc_rs::digest::{SHA256, digest};
 use itertools::Itertools;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
@@ -46,15 +45,14 @@ impl<'a> UpdateRepository<'a> {
         cmd.hidden_args(["-c", &format!("remote.origin.url={}", self.source)])
             .current_dir(&self.worktree)
             .sanitize_git_repo_env()
-            .env("GIT_INDEX_FILE", self.scratch.join("index"));
+            .env(EnvVars::GIT_INDEX_FILE, self.scratch.join("index"));
         Ok(cmd)
     }
 
     /// Refresh the remote refs before using any cached objects. The caller
     /// holds the lock until it has validated all targets against these refs.
     pub(super) async fn refresh(&self, store: &Store) -> Result<(Vec<TagTimestamp>, LockedFile)> {
-        let key = digest(&SHA256, self.source.as_bytes());
-        let root = store.updates_dir().join(hex::encode(key.as_ref()));
+        let root = store.update_repo_dir(self.source);
         fs_err::create_dir_all(&root)?;
         let lock = LockedFile::acquire(root.join("lock"), "repository update").await?;
         let git_dir = root.join("git");
@@ -87,8 +85,7 @@ impl<'a> UpdateRepository<'a> {
                 "HEAD",
                 "+refs/tags/*:refs/tags/*",
             ])
-            .stderr(Stdio::null())
-            .run()
+            .output()
             .await?;
 
         let tags = list_tag_metadata(self).await?;

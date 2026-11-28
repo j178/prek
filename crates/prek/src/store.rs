@@ -208,6 +208,12 @@ impl Store {
         self.path.join("updates")
     }
 
+    pub(crate) fn update_repo_dir(&self, source: &str) -> PathBuf {
+        let mut hasher = SeaHasher::new();
+        source.hash(&mut hasher);
+        self.updates_dir().join(to_hex(hasher.finish()))
+    }
+
     /// Directory containing installed hook environments.
     pub(crate) fn hooks_dir(&self) -> PathBuf {
         self.path.join("hooks")
