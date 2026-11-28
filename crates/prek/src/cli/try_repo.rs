@@ -44,6 +44,7 @@ async fn local_patch(repo: &Path, scratch: &Path) -> Result<Option<NamedTempFile
         .args([
             "diff",
             "--binary",
+            "--unified=3",
             "--no-color",
             "--no-ext-diff",
             "--no-textconv",
