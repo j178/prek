@@ -162,7 +162,8 @@ pub(crate) async fn cache_gc(
     let store = mode.store();
     let tracked_configs = store.tracked_configs()?;
     let dry_run = matches!(mode, GcMode::DryRun(_));
-    // Update checks can populate the cache before any hook config is tracked.
+    // `prek update` saves Git history in `updates/` without registering the
+    // project's config. Clean up that history even when `tracked_configs` is empty.
     let update_caches = sweep_dir_by_name(
         RemovalKind::CacheEntries,
         &store.updates_dir(),
