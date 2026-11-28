@@ -488,23 +488,6 @@ pub(crate) fn checkout_files(cwd: &Path, paths: &[PathBuf]) -> Result<(), Error>
     Ok(())
 }
 
-/// Check for changes against `rev` anywhere in the repository containing `path`.
-///
-/// `path` selects the repository without limiting the check to that directory.
-pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
-    let status = git_cmd()?
-        .current_dir(path)
-        .arg("diff")
-        .hidden_args(["--no-ext-diff"])
-        .arg("--quiet")
-        .arg("--no-relative")
-        .arg(rev)
-        .check(false)
-        .status()
-        .await?;
-    Ok(status.code() == Some(1))
-}
-
 pub(crate) fn is_in_merge_conflict() -> Result<bool> {
     let git_dir = git_dir()?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
@@ -767,13 +750,7 @@ async fn fetch_cached_tip(path: &Path, cached: &Path) -> Result<String, Error> {
         .output()
         .await?;
 
-    let output = git_cmd()?
-        .current_dir(path)
-        .args(["rev-parse", "--verify", "FETCH_HEAD^{commit}"])
-        .sanitize_git_repo_env()
-        .output()
-        .await?;
-    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
+    resolve_commit(path, "FETCH_HEAD").await
 }
 
 async fn fetch_shallow(
@@ -872,7 +849,7 @@ async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> 
     Ok(())
 }
 
-async fn update_submodules(
+pub(crate) async fn update_submodules(
     path: &Path,
     terminal_prompt: TerminalPrompt,
     shallow: bool,
@@ -931,6 +908,7 @@ pub(crate) async fn clone_repo(
     terminal_prompt: TerminalPrompt,
     cached_repo: Option<&Path>,
 ) -> Result<tempfile::TempDir, Error> {
+    debug!(source = url, rev, ?terminal_prompt, cached = ?cached_repo, "Cloning repo");
     let init = async || {
         let temp = tempfile::tempdir_in(scratch)?;
         init_repo(url, temp.path()).await?;
@@ -1135,6 +1113,18 @@ pub(crate) async fn rev_exists(rev: &str) -> Result<bool, Error> {
         .output()
         .await?;
     Ok(output.status.success())
+}
+
+/// Resolve a revision to its full commit ID, peeling annotated tags.
+pub(crate) async fn resolve_commit(repo: &Path, rev: &str) -> Result<String, Error> {
+    let output = git_cmd()?
+        .current_dir(repo)
+        .sanitize_git_repo_env()
+        .args(["rev-parse", "--verify", "--end-of-options"])
+        .arg(format!("{rev}^{{commit}}"))
+        .output()
+        .await?;
+    Ok(str::from_utf8(output.stdout.trim_ascii())?.to_owned())
 }
 
 /// Check if `ancestor` is an ancestor of `commit`.

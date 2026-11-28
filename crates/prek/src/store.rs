@@ -11,7 +11,7 @@ use prek_consts::env_vars::{EnvVars, EnvVarsRead};
 use rustc_hash::{FxHashMap, FxHashSet};
 use seahash::SeaHasher;
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::warn;
 
 use crate::concurrency::INTERNAL_CONCURRENCY;
 use crate::config::{RemoteRepo, RemoteRepoKey};
@@ -142,6 +142,7 @@ impl Store {
     }
 
     /// Open and initialize a cache at `path`, waiting for shared access.
+    #[cfg(test)]
     pub(crate) fn init_at(path: impl AsRef<Path>) -> Result<Self, Error> {
         Self::open_at(path.as_ref(), LockedFile::acquire_shared)?.init()
     }
@@ -322,14 +323,26 @@ impl Deref for StoreWriteGuard<'_> {
 }
 
 impl StoreWriteGuard<'_> {
+    pub(crate) fn cached_repo(&self, source: &str, rev: &str) -> Result<Option<PathBuf>, Error> {
+        let path = self.repo_path(source, rev);
+        if path.join(REPO_MARKER).try_exists()? {
+            Ok(Some(path))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Pick the most recently installed revision of each missing repository.
-    fn cached_revisions(&self, pending: &[&RemoteRepo]) -> FxHashMap<String, CachedRevision> {
+    fn cached_revisions<'a>(
+        &self,
+        sources: impl IntoIterator<Item = &'a str>,
+    ) -> FxHashMap<String, CachedRevision> {
         let mut newest: FxHashMap<String, CachedRevision> = FxHashMap::default();
         let Ok(entries) = fs_err::read_dir(self.repos_dir()) else {
             return newest;
         };
 
-        let sources: FxHashSet<_> = pending.iter().map(|repo| repo.source()).collect();
+        let sources: FxHashSet<_> = sources.into_iter().collect();
         for entry in entries.flatten() {
             let path = entry.path();
             let Some(marker) = RepoMarker::read(&path) else {
@@ -362,39 +375,39 @@ impl StoreWriteGuard<'_> {
         newest
     }
 
-    async fn clone_repo_to_temp(
+    /// Fetch a revision into a temporary checkout, reusing objects from the same source.
+    pub(crate) async fn fetch_revision(
         &self,
-        repo: &RemoteRepo,
-        terminal_prompt: TerminalPrompt,
-        cached: Option<&Path>,
+        source: &str,
+        rev: &str,
+        prompt: TerminalPrompt,
     ) -> Result<tempfile::TempDir, git::Error> {
-        debug!(%repo, ?terminal_prompt, ?cached, "Cloning repo");
-        git::clone_repo(
-            repo.source(),
-            &repo.rev,
-            &self.scratch_path(),
-            terminal_prompt,
-            cached,
-        )
-        .await
+        let cached = self.cached_revisions([source]);
+        let previous = cached.get(source).map(|entry| entry.path.as_path());
+        git::clone_repo(source, rev, &self.scratch_path(), prompt, previous).await
     }
 
-    async fn persist_cloned_repo(
+    pub(crate) async fn persist_cloned_repo(
         &self,
-        repo: &RemoteRepo,
+        source: &str,
+        rev: &str,
         temp: tempfile::TempDir,
     ) -> Result<PathBuf, Error> {
-        let target = self.repo_path(repo.source(), &repo.rev);
-
-        fs_err::tokio::remove_dir_all(&target).await.ok();
-        crate::fs::rename_with_retry(temp, &target).await?;
-
+        if let Some(path) = self.cached_repo(source, rev)? {
+            return Ok(path);
+        }
         let marker = RepoMarker {
-            repo: repo.source().to_owned(),
-            rev: repo.rev.clone(),
+            repo: source.to_owned(),
+            rev: rev.to_owned(),
         };
-        let content = serde_json::to_string_pretty(&marker)?;
-        fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
+        let contents = serde_json::to_vec_pretty(&marker)?;
+        fs_err::File::create_new(temp.path().join(REPO_MARKER))?.write_all(&contents)?;
+
+        let target = self.repo_path(source, rev);
+        if target.try_exists()? {
+            fs_err::tokio::remove_dir_all(&target).await?;
+        }
+        crate::fs::rename_with_retry(temp, &target).await?;
 
         Ok(target)
     }
@@ -413,9 +426,8 @@ impl StoreWriteGuard<'_> {
         let mut pending = Vec::new();
 
         for repo in repos {
-            let target = self.repo_path(repo.source(), &repo.rev);
-            if target.join(REPO_MARKER).try_exists()? {
-                cloned.insert(repo.key(), target);
+            if let Some(path) = self.cached_repo(repo.source(), &repo.rev)? {
+                cloned.insert(repo.key(), path);
                 continue;
             }
 
@@ -426,15 +438,21 @@ impl StoreWriteGuard<'_> {
             return Ok(cloned);
         }
 
-        let cached = self.cached_revisions(&pending);
+        let cached = self.cached_revisions(pending.iter().map(|repo| repo.source()));
+        let scratch = self.scratch_path();
         let mut auth_failed = Vec::new();
         let mut tasks = futures_util::stream::iter(pending)
             .map(async |repo| {
                 let progress = reporter.map(|reporter| reporter.on_clone_start(&repo.to_string()));
                 let cached_path = cached.get(repo.source()).map(|rev| rev.path.as_path());
-                let result = self
-                    .clone_repo_to_temp(repo, TerminalPrompt::Disabled, cached_path)
-                    .await;
+                let result = git::clone_repo(
+                    repo.source(),
+                    &repo.rev,
+                    &scratch,
+                    TerminalPrompt::Disabled,
+                    cached_path,
+                )
+                .await;
 
                 match result {
                     Ok(temp) => Ok(FirstClonePass::Ready {
@@ -469,7 +487,9 @@ impl StoreWriteGuard<'_> {
                     temp,
                     progress,
                 } => {
-                    let path = self.persist_cloned_repo(repo, temp).await?;
+                    let path = self
+                        .persist_cloned_repo(repo.source(), &repo.rev, temp)
+                        .await?;
                     if let (Some(reporter), Some(progress)) = (reporter, progress) {
                         reporter.on_clone_complete(progress);
                     }
@@ -488,38 +508,18 @@ impl StoreWriteGuard<'_> {
             }
         }
 
-        if EnvVars::is_under_ci() {
-            // CI cannot answer interactive credential prompts, so surface the original auth
-            // failure instead of attempting the prompt-enabled retry path.
-            if let Some((repo, error)) = auth_failed.into_iter().next() {
-                return Err(Error::CloneRepo {
-                    repo: repo.repo().to_string(),
-                    error,
-                });
-            }
-
-            return Ok(cloned);
-        }
-
-        if !auth_failed.is_empty() {
-            // Tear down the shared MultiProgress before warning/prompt output so progress redraws
-            // do not overwrite terminal messages or git credential prompts.
+        if !auth_failed.is_empty() && !EnvVars::is_under_ci() {
+            // Tear down the shared MultiProgress before prompting for credentials.
             reporter.map(HookInitReporter::on_complete);
         }
 
-        for (repo, _error) in auth_failed {
-            warn_user!(
-                "Authentication may be required to clone repository `{}`. Retrying with terminal prompts enabled.",
-                repo.repo()
-            );
+        for (repo, error) in auth_failed {
             let temp = self
-                .clone_repo_to_temp(repo, TerminalPrompt::Enabled, None)
-                .await
-                .map_err(|error| Error::CloneRepo {
-                    repo: repo.repo().to_string(),
-                    error,
-                })?;
-            let path = self.persist_cloned_repo(repo, temp).await?;
+                .retry_auth_clone(repo.source(), &repo.rev, repo.repo(), error)
+                .await?;
+            let path = self
+                .persist_cloned_repo(repo.source(), &repo.rev, temp)
+                .await?;
             cloned.insert(repo.key(), path);
         }
 
@@ -527,20 +527,48 @@ impl StoreWriteGuard<'_> {
     }
 
     /// Return the local checkout for this repository and revision, cloning it if needed.
-    pub(crate) async fn clone_repo(
+    pub(crate) async fn clone_repo(&self, source: &str, rev: &str) -> Result<PathBuf, Error> {
+        if let Some(path) = self.cached_repo(source, rev)? {
+            return Ok(path);
+        }
+
+        let temp = match self
+            .fetch_revision(source, rev, TerminalPrompt::Disabled)
+            .await
+        {
+            Ok(temp) => temp,
+            Err(error) => self.retry_auth_clone(source, rev, source, error).await?,
+        };
+        self.persist_cloned_repo(source, rev, temp).await
+    }
+
+    async fn retry_auth_clone(
         &self,
-        repo: &RemoteRepo,
-        reporter: Option<&dyn HookInitReporter>,
-    ) -> Result<PathBuf, Error> {
-        let repo_key = repo.key();
-        let cloned = self.clone_repos(std::iter::once(repo), reporter).await?;
-        cloned
-            .get(&repo_key)
-            .cloned()
-            .ok_or_else(|| Error::CloneRepo {
-                repo: repo.repo().to_string(),
-                error: git::Error::Io(std::io::Error::other("repo was not cloned")),
-            })
+        source: &str,
+        rev: &str,
+        display: &str,
+        error: git::Error,
+    ) -> Result<tempfile::TempDir, Error> {
+        let clone_error = |error| Error::CloneRepo {
+            repo: display.to_owned(),
+            error,
+        };
+        if EnvVars::is_under_ci() || !git::is_auth_error(&error) {
+            return Err(clone_error(error));
+        }
+
+        warn_user!(
+            "Authentication may be required to clone repository `{display}`. Retrying with terminal prompts enabled."
+        );
+        git::clone_repo(
+            source,
+            rev,
+            &self.scratch_path(),
+            TerminalPrompt::Enabled,
+            None,
+        )
+        .await
+        .map_err(clone_error)
     }
 
     /// Add config paths to the set that garbage collection uses to find live cache entries.

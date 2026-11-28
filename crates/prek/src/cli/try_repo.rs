@@ -1,166 +1,208 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
+use prek_consts::env_vars::EnvVars;
 use strum::IntoEnumIterator;
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, RunArgs, RunOptions};
 use crate::config::{self, Stage};
-use crate::git;
+use crate::git::{self, GitCommandExt, TerminalPrompt};
 use crate::hooks::{BuiltinHooks, MetaHooks};
 use crate::printer::Printer;
-use crate::store::Store;
+use crate::store::{Store, StoreWriteGuard};
 use crate::warn_user;
 
-async fn get_head_rev(repo: &Path) -> Result<String> {
-    let head_rev = git::git_cmd()?
-        .arg("rev-parse")
+async fn remote_head(source: &str) -> Result<String> {
+    let output = git::git_cmd()?
+        .args(["ls-remote", "--exit-code", "--"])
+        .hidden_args([source])
         .arg("HEAD")
-        .current_dir(repo)
         .output()
-        .await?
-        .stdout;
-    let head_rev = str::from_utf8(&head_rev)?.trim().to_string();
-    Ok(head_rev)
+        .await?;
+    // ls-remote also matches refs ending in /HEAD, such as refs/tags/HEAD.
+    let sha = output
+        .stdout
+        .split(|&b| b == b'\n')
+        .find_map(|line| line.strip_suffix(b"\tHEAD"))
+        .context("Git did not report a remote HEAD")?;
+    Ok(str::from_utf8(sha)?.to_owned())
 }
 
-async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
-    let shadow = tmp_dir.join("shadow-repo");
-    git::git_cmd()?
-        .arg("clone")
-        .arg(repo_path)
-        .arg(&shadow)
+/// Capture the staged and unstaged edits together, relative to the commit the clone starts at.
+async fn local_patch(repo: &Path, scratch: &Path) -> Result<Option<NamedTempFile>> {
+    let patch = NamedTempFile::new_in(scratch)?;
+    let mut diff = git::git_cmd()?;
+    let output = diff
+        .current_dir(repo)
+        .sanitize_git_repo_env()
+        .args([
+            "diff",
+            "--binary",
+            "--unified=3",
+            "--no-color",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-relative",
+            "--no-prefix",
+            "--submodule=short",
+            "--ignore-submodules=dirty",
+            "--output",
+        ])
+        .arg(patch.path())
+        .args(["HEAD", "--"])
+        .check(false)
         .output()
         .await?;
-    git::git_cmd()?
-        .arg("checkout")
-        .arg(head_rev)
-        .arg("-b")
-        .arg("_prek_tmp")
-        .current_dir(&shadow)
-        .output()
-        .await?;
-
-    let index_path = shadow.join(".git/index");
-    let objects_path = shadow.join(".git/objects");
-
-    let staged_files = git::staged_files(repo_path, false).await?;
-    if !staged_files.is_empty() {
-        git::git_cmd()?
-            .arg("add")
-            .arg("--")
-            .file_args(staged_files.iter().map(|file| &file.path))
-            .current_dir(repo_path)
-            .env("GIT_INDEX_FILE", &index_path)
-            .env("GIT_OBJECT_DIRECTORY", &objects_path)
+    if !output.status.success() {
+        // A bare local repository can be tried at HEAD but has no working tree to diff.
+        let bare = git::git_cmd()?
+            .current_dir(repo)
+            .sanitize_git_repo_env()
+            .args(["rev-parse", "--is-bare-repository"])
             .output()
             .await?;
+        if bare.stdout.trim_ascii() == b"true" {
+            return Ok(None);
+        }
     }
+    diff.check_output(output)?;
+    if patch.as_file().metadata()?.len() == 0 {
+        return Ok(None);
+    }
+    Ok(Some(patch))
+}
 
-    let mut add_u_cmd = git::git_cmd()?;
-    add_u_cmd
-        .arg("add")
-        .arg("--update") // Update tracked files
-        .current_dir(repo_path)
-        .env("GIT_INDEX_FILE", &index_path)
-        .env("GIT_OBJECT_DIRECTORY", &objects_path)
+struct PreparedRepo {
+    source: String,
+    commit: String,
+    path: PathBuf,
+}
+
+async fn snapshot_local(
+    store: &StoreWriteGuard<'_>,
+    repo_path: &Path,
+    patch: NamedTempFile,
+    prompt: TerminalPrompt,
+) -> Result<PreparedRepo> {
+    let temp = tempfile::tempdir_in(store.scratch_path())?;
+    let shadow = temp.path();
+    git::git_cmd()?
+        .sanitize_git_repo_env()
+        .args(["clone", "--no-checkout", "--"])
+        .arg(repo_path)
+        .arg(shadow)
+        .output()
+        .await?;
+
+    // The patch is relative to HEAD. Seed the empty index left by --no-checkout
+    // so Git can apply it before we populate the worktree.
+    git::git_cmd()?
+        .current_dir(shadow)
+        .sanitize_git_repo_env()
+        .args(["read-tree", "HEAD"])
         .output()
         .await?;
 
     git::git_cmd()?
+        .current_dir(shadow)
+        .sanitize_git_repo_env()
+        .args(["apply", "--cached", "--whitespace=nowarn", "-p0"])
+        .arg(patch.path())
+        .output()
+        .await?;
+
+    // A fixed identity and timestamp give identical working trees the same snapshot.
+    git::git_cmd()?
+        .sanitize_git_repo_env()
         .arg("commit")
         .arg("-m")
         .arg("Temporary commit by prek try-repo")
         .arg("--no-gpg-sign")
         .arg("--no-edit")
         .arg("--no-verify")
-        .current_dir(&shadow)
-        .env("GIT_AUTHOR_NAME", "prek test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "prek test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .current_dir(shadow)
+        .env(EnvVars::GIT_AUTHOR_NAME, "prek test")
+        .env(EnvVars::GIT_AUTHOR_EMAIL, "test@example.com")
+        .env(EnvVars::GIT_COMMITTER_NAME, "prek test")
+        .env(EnvVars::GIT_COMMITTER_EMAIL, "test@example.com")
+        .env(EnvVars::GIT_AUTHOR_DATE, "2000-01-01T00:00:00Z")
+        .env(EnvVars::GIT_COMMITTER_DATE, "2000-01-01T00:00:00Z")
         .output()
         .await?;
 
-    Ok(shadow)
-}
-
-struct PreparedRepo<'a> {
-    runtime_source: Cow<'a, str>,
-    display_source: Option<&'a str>,
-    rev: String,
-}
-
-async fn prepare_repo<'a>(
-    repo: &'a str,
-    rev: Option<&str>,
-    tmp_dir: &Path,
-) -> Result<PreparedRepo<'a>> {
-    let repo_path = Path::new(repo);
-    let is_local = repo_path.is_dir();
-    let runtime_source = if is_local {
-        Cow::Owned(
-            dunce::canonicalize(repo_path)?
-                .to_string_lossy()
-                .into_owned(),
-        )
+    let source = repo_path.to_string_lossy().into_owned();
+    let commit = git::resolve_commit(shadow, "HEAD").await?;
+    let path = if let Some(path) = store.cached_repo(&source, &commit)? {
+        path
     } else {
-        Cow::Borrowed(repo)
-    };
-    let repo_path = Path::new(runtime_source.as_ref());
-
-    // If rev is provided, use it directly.
-    if let Some(rev) = rev {
-        return Ok(PreparedRepo {
-            runtime_source,
-            display_source: is_local.then_some(repo),
-            rev: rev.to_string(),
-        });
-    }
-
-    // Get HEAD revision
-    let head_rev = if is_local {
-        get_head_rev(repo_path).await?
-    } else {
-        // For remote repositories, use ls-remote
-        let head_rev = git::git_cmd()?
-            .arg("ls-remote")
-            .arg("--exit-code")
-            .arg(runtime_source.as_ref())
-            .arg("HEAD")
+        // Only populate the worktree and its submodules on a cache miss.
+        git::git_cmd()?
+            .current_dir(shadow)
+            .sanitize_git_repo_env()
+            .args(["checkout", "--force", "--detach", "HEAD"])
+            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
             .output()
-            .await?
-            .stdout;
-        let head_rev = head_rev
-            .split(u8::is_ascii_whitespace)
-            .find(|part| !part.is_empty())
-            .context("Failed to parse HEAD revision from git ls-remote output")?;
-        str::from_utf8(head_rev)?.to_string()
+            .await?;
+        git::update_submodules(shadow, prompt, true).await?;
+        store.persist_cloned_repo(&source, &commit, temp).await?
+    };
+    Ok(PreparedRepo {
+        source,
+        commit,
+        path,
+    })
+}
+
+async fn prepare_repo(
+    store: &StoreWriteGuard<'_>,
+    repo: &str,
+    rev: Option<&str>,
+) -> Result<PreparedRepo> {
+    let path = Path::new(repo);
+    let name = rev.unwrap_or("HEAD");
+    let prompt = if EnvVars::is_under_ci() {
+        TerminalPrompt::Disabled
+    } else {
+        TerminalPrompt::Enabled
+    };
+    let (source, commit) = if path.is_dir() {
+        let path = dunce::canonicalize(path)?;
+        if rev.is_none()
+            && let Some(patch) = local_patch(&path, &store.scratch_path()).await?
+        {
+            warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
+            return snapshot_local(store, &path, patch, prompt).await;
+        }
+        let source = path.to_string_lossy().into_owned();
+        (source, git::resolve_commit(&path, name).await?)
+    } else if name == "HEAD" {
+        (repo.to_owned(), remote_head(repo).await?)
+    } else if matches!(name.len(), 40 | 64) && config::looks_like_sha(name) {
+        (repo.to_owned(), name.to_ascii_lowercase())
+    } else {
+        // Cache a moving ref under the commit Git actually checked out.
+        let checkout = store.fetch_revision(repo, name, prompt).await?;
+        let commit = git::resolve_commit(checkout.path(), "HEAD").await?;
+        let path = store.persist_cloned_repo(repo, &commit, checkout).await?;
+        return Ok(PreparedRepo {
+            source: repo.to_owned(),
+            commit,
+            path,
+        });
     };
 
-    // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
-    if is_local && git::has_diff("HEAD", repo_path).await? {
-        warn_user!("Local repository has uncommitted changes. Creating a temporary copy...");
-        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
-        let head_rev = get_head_rev(&shadow).await?;
-        Ok(PreparedRepo {
-            runtime_source: Cow::Owned(shadow.to_string_lossy().into_owned()),
-            display_source: None,
-            rev: head_rev,
-        })
-    } else {
-        Ok(PreparedRepo {
-            runtime_source,
-            display_source: is_local.then_some(repo),
-            rev: head_rev,
-        })
-    }
+    let path = store.clone_repo(&source, &commit).await?;
+    Ok(PreparedRepo {
+        source,
+        commit,
+        path,
+    })
 }
 
 fn render_repo_config_toml(repo_path: &str, rev: Option<&str>, hooks: &[String]) -> String {
@@ -217,7 +259,6 @@ pub(crate) async fn try_repo(
 
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
-    let store = Store::init_at(tmp_dir.path())?;
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, git::root()?)?;
 
     let predefined_hooks = match repo.as_str() {
@@ -232,22 +273,12 @@ pub(crate) async fn try_repo(
         }
         (render_repo_config_toml(&repo, None, &hooks), None)
     } else {
-        let prepared = prepare_repo(&repo, rev.as_deref(), tmp_dir.path())
-            .await
-            .context("Failed to determine repository and revision")?;
-
-        let repo_config = config::RemoteRepo::new(
-            prepared.runtime_source.to_string(),
-            prepared.rev.clone(),
-            vec![],
-        );
-        let repo_clone_path = store
-            .write_lock()
-            .await?
-            .clone_repo(&repo_config, None)
-            .await?;
+        let prepared = {
+            let guard = store.write_lock().await?;
+            prepare_repo(&guard, &repo, rev.as_deref()).await?
+        };
         let manifest =
-            config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+            config::read_manifest(&prepared.path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
         let hooks = manifest
             .hooks
             .into_iter()
@@ -255,13 +286,13 @@ pub(crate) async fn try_repo(
             .map(|hook| hook.id)
             .collect::<Vec<_>>();
 
-        // The scratch config needs the resolved source, while the displayed config should preserve
-        // the user's path so it remains meaningful when copied into their project.
-        let config_str =
-            render_repo_config_toml(&prepared.runtime_source, Some(&prepared.rev), &hooks);
-        let display_config_str = prepared
-            .display_source
-            .map(|source| render_repo_config_toml(source, Some(&prepared.rev), &hooks));
+        let config_str = render_repo_config_toml(&prepared.source, Some(&prepared.commit), &hooks);
+        let display_rev = rev.as_deref().unwrap_or(&prepared.commit);
+        let display_config_str = if prepared.source != repo || display_rev != prepared.commit {
+            Some(render_repo_config_toml(&repo, Some(display_rev), &hooks))
+        } else {
+            None
+        };
         (config_str, display_config_str)
     };
     let config_file = tmp_dir.path().join(PREK_TOML);
@@ -282,7 +313,7 @@ pub(crate) async fn try_repo(
     run_args.skips.clear();
 
     crate::cli::run(
-        &store,
+        store,
         Some(config_file),
         RunArgs {
             options: run_args,

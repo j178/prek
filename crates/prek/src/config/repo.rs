@@ -39,16 +39,6 @@ impl<'a> RemoteRepoKey<'a> {
 }
 
 impl RemoteRepo {
-    pub fn new(repo: String, rev: String, hooks: Vec<RemoteHook>) -> Self {
-        Self {
-            repo,
-            resolved_source: None,
-            rev,
-            hooks,
-            _unused_keys: BTreeMap::new(),
-        }
-    }
-
     /// The repository value exactly as written in the configuration.
     pub(crate) fn repo(&self) -> &str {
         &self.repo
