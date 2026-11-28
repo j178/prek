@@ -161,9 +161,18 @@ pub(crate) async fn cache_gc(
 ) -> Result<ExitStatus> {
     let store = mode.store();
     let tracked_configs = store.tracked_configs()?;
+    let dry_run = matches!(mode, GcMode::DryRun(_));
+    // `prek update` saves Git history in `updates/` without registering the
+    // project's config. Clean up that history even when `tracked_configs` is empty.
+    let update_caches = sweep_dir_by_name(
+        RemovalKind::CacheEntries,
+        &store.updates_dir(),
+        &FxHashSet::default(),
+        dry_run,
+        verbose,
+    )?;
     if tracked_configs.is_empty() {
-        writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
-        return Ok(ExitStatus::Success);
+        return report_removals(&[&update_caches], dry_run, verbose, printer);
     }
 
     let mut kept_configs: FxHashSet<&Path> = FxHashSet::default();
@@ -205,14 +214,7 @@ pub(crate) async fn cache_gc(
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
         for repo in &config.repos {
             if let ConfigRepo::Remote(remote) = repo {
-                let key = store
-                    .repo_path(remote)
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .map(str::to_string);
-                if let Some(key) = key {
-                    used_repo_keys.insert(key);
-                }
+                used_repo_keys.insert(Store::repo_key(remote.source(), &remote.rev));
             }
         }
     }
@@ -253,8 +255,6 @@ pub(crate) async fn cache_gc(
         exclusive.update_tracked_configs(&kept_configs)?;
     }
 
-    let dry_run = matches!(mode, GcMode::DryRun(_));
-
     // Sweep repos/<hash>
     let removed_repos = sweep_dir_by_name(
         RemovalKind::Repos,
@@ -293,7 +293,7 @@ pub(crate) async fn cache_gc(
     // Sweep cache/<bucket>
     let cache_root = store.cache_dir();
     let used_cache_names: FxHashSet<String> = used_cache.iter().map(ToString::to_string).collect();
-    let removed_cache = sweep_dir_by_name(
+    let mut removed_cache = sweep_dir_by_name(
         RemovalKind::CacheEntries,
         &cache_root,
         &used_cache_names,
@@ -301,20 +301,38 @@ pub(crate) async fn cache_gc(
         verbose,
     )?;
 
-    // Seep scratch/, as it is only temporary data.
+    removed_cache += update_caches;
+
     if !dry_run {
         let _ = fs_err::remove_dir_all(store.scratch_path());
     }
     // Keep recent recovery patches, but clear out stale ones that are unlikely to be useful.
     let removed_patches = sweep_stale_patch_files(&store.patches_dir(), dry_run, verbose)?;
 
-    let mut removed = RemovalSummary::default();
-    removed += &removed_repos;
-    removed += &removed_hooks;
-    removed += &removed_tools;
-    removed += &removed_cache;
-    removed += &removed_patches;
+    report_removals(
+        &[
+            &removed_repos,
+            &removed_hooks,
+            &removed_tools,
+            &removed_cache,
+            &removed_patches,
+        ],
+        dry_run,
+        verbose,
+        printer,
+    )
+}
 
+fn report_removals(
+    removals: &[&Removal],
+    dry_run: bool,
+    verbose: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let mut removed = RemovalSummary::default();
+    for &removal in removals {
+        removed += removal;
+    }
     let removed_total_bytes = removed.total_bytes();
     let (removed_bytes, removed_unit) = human_readable_bytes(removed_total_bytes);
 
@@ -330,11 +348,9 @@ pub(crate) async fn cache_gc(
         )?;
 
         if verbose {
-            print_removed_details(printer, verb, &removed_repos)?;
-            print_removed_details(printer, verb, &removed_hooks)?;
-            print_removed_details(printer, verb, &removed_tools)?;
-            print_removed_details(printer, verb, &removed_cache)?;
-            print_removed_details(printer, verb, &removed_patches)?;
+            for removal in removals {
+                print_removed_details(printer, verb, removal)?;
+            }
         }
     }
 

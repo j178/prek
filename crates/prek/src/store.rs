@@ -191,8 +191,7 @@ impl Store {
             .join(Self::repo_key(repo.source(), &repo.rev))
     }
 
-    /// The checkout directory name derived from the repository source and revision.
-    fn repo_key(source: &str, rev: &str) -> String {
+    pub(crate) fn repo_key(source: &str, rev: &str) -> String {
         let mut hasher = SeaHasher::new();
         source.hash(&mut hasher);
         rev.hash(&mut hasher);
@@ -202,6 +201,17 @@ impl Store {
     /// Directory containing cached repository checkouts.
     pub(crate) fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
+    }
+
+    /// Git objects and refs retained between update checks, grouped by source.
+    pub(crate) fn updates_dir(&self) -> PathBuf {
+        self.path.join("updates")
+    }
+
+    pub(crate) fn update_repo_dir(&self, source: &str) -> PathBuf {
+        let mut hasher = SeaHasher::new();
+        source.hash(&mut hasher);
+        self.updates_dir().join(to_hex(hasher.finish()))
     }
 
     /// Directory containing installed hook environments.

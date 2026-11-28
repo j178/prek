@@ -1,14 +1,11 @@
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tracing::{debug, trace, warn};
+use tracing::{debug, warn};
 
 use crate::cli::update::config::read_frozen_refs;
 use crate::cli::update::repository::{
-    checkout_and_validate_manifest, get_tags_pointing_at_revision, is_commit_present,
-    list_tag_metadata, resolve_revision_to_commit, select_best_tag, select_update_revision,
-    setup_and_fetch_repo,
+    UpdateRepository, checkout_and_validate_manifest, get_tags_pointing_at_revision,
+    is_commit_present, resolve_revision_to_commit, select_best_tag, select_update_revision,
 };
 use crate::cli::update::{
     CommitPresence, FrozenMismatch, FrozenMismatchAction, FrozenMismatchReason, RepoSource,
@@ -18,6 +15,7 @@ use crate::cli::update::{
 use crate::config::{Repo, looks_like_sha};
 use crate::fs::Simplified;
 use crate::settings::{CliTagFilterOptions, FilesystemOptions, TagFilterOptions, UpdateSettings};
+use crate::store::Store;
 use crate::workspace::Workspace;
 
 /// Identifies repo usages that can share one update evaluation.
@@ -147,7 +145,7 @@ pub(super) fn collect_repo_sources<'a>(
 
 /// Collects stale `# frozen:` comments for one configured `repo + rev + hook set` target.
 async fn collect_frozen_mismatches<'a>(
-    repo_path: &Path,
+    repo: &UpdateRepository<'_>,
     target: &'a RepoTarget<'a>,
     tag_timestamps: &[TagTimestamp],
 ) -> Result<Vec<FrozenMismatch<'a>>> {
@@ -164,11 +162,15 @@ async fn collect_frozen_mismatches<'a>(
         return Ok(Vec::new());
     }
 
-    let current_rev_presence = is_commit_present(repo_path, target.current_rev).await?;
     let rev_tags = get_tags_pointing_at_revision(tag_timestamps, target.current_rev);
+    let current_rev_presence = if rev_tags.is_empty() {
+        is_commit_present(repo, target.current_rev).await?
+    } else {
+        CommitPresence::Present
+    };
     let mut resolved_frozen_refs = FxHashMap::default();
     for frozen_ref in frozen_refs_to_check {
-        let resolved = resolve_revision_to_commit(repo_path, frozen_ref).await.ok();
+        let resolved = resolve_revision_to_commit(repo, frozen_ref).await.ok();
         resolved_frozen_refs.insert(frozen_ref, resolved);
     }
 
@@ -216,25 +218,12 @@ async fn collect_frozen_mismatches<'a>(
 pub(super) async fn evaluate_repo_source<'a>(
     repo_source: &'a RepoSource<'a>,
     bleeding_edge: bool,
+    store: &Store,
 ) -> Result<Vec<RepoUpdate<'a>>> {
-    let tmp_dir = tempfile::tempdir()?;
-    let repo_path = tmp_dir.path();
-
-    let result = async {
-        trace!(
-            "Cloning repository `{}` to `{}`",
-            repo_source.source,
-            repo_path.display()
-        );
-        setup_and_fetch_repo(repo_source.source, repo_path).await?;
-        let metadata = list_tag_metadata(repo_path).await?;
-
-        anyhow::Ok(metadata)
-    }
-    .await;
-
-    let tag_timestamps = match result {
-        Ok(metadata) => metadata,
+    let scratch = tempfile::tempdir()?;
+    let repo = UpdateRepository::new(scratch.path(), repo_source.source);
+    let (tag_timestamps, _lock) = match repo.refresh(store).await {
+        Ok(ready) => ready,
         Err(e) => {
             let error = format!("{e:#}");
             return Ok(repo_source
@@ -257,7 +246,7 @@ pub(super) async fn evaluate_repo_source<'a>(
             .cloned()
             .collect::<Vec<_>>();
         let result = evaluate_repo_target(
-            repo_path,
+            &repo,
             target,
             bleeding_edge,
             &tag_timestamps,
@@ -273,14 +262,13 @@ pub(super) async fn evaluate_repo_source<'a>(
 
 /// Resolves one configured repo target within an already-fetched remote repository.
 async fn evaluate_repo_target<'a>(
-    repo_path: &Path,
+    repo: &UpdateRepository<'_>,
     target: &'a RepoTarget<'a>,
     bleeding_edge: bool,
     tag_timestamps: &[TagTimestamp],
     update_tag_timestamps: &[TagTimestamp],
 ) -> Result<ResolvedRepoUpdate<'a>> {
-    let frozen_mismatches = match collect_frozen_mismatches(repo_path, target, tag_timestamps).await
-    {
+    let frozen_mismatches = match collect_frozen_mismatches(repo, target, tag_timestamps).await {
         Ok(mismatches) => mismatches,
         Err(e) => {
             warn!(
@@ -292,7 +280,7 @@ async fn evaluate_repo_target<'a>(
     };
 
     let rev = select_update_revision(
-        repo_path,
+        repo,
         target.current_rev,
         bleeding_edge,
         target.cooldown_days,
@@ -321,7 +309,7 @@ async fn evaluate_repo_target<'a>(
     };
 
     let (rev, frozen) = if target.freeze {
-        let exact = resolve_revision_to_commit(repo_path, &rev).await?;
+        let exact = resolve_revision_to_commit(repo, &rev).await?;
         if rev.eq_ignore_ascii_case(&exact) {
             (rev, None)
         } else {
@@ -332,7 +320,7 @@ async fn evaluate_repo_target<'a>(
         (rev, None)
     };
 
-    checkout_and_validate_manifest(repo_path, &rev, &target.required_hook_ids).await?;
+    checkout_and_validate_manifest(repo, &rev, &target.required_hook_ids).await?;
 
     Ok(ResolvedRepoUpdate {
         revision: Revision { rev, frozen },

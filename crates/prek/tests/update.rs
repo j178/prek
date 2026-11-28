@@ -1582,6 +1582,24 @@ fn update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()
 
     context.git().add(".");
 
+    // Prime the update cache while the pinned commit is reachable from two tags.
+    let upstream = context.git_at(&repo_path);
+    let original_tag = upstream.rev_parse("refs/tags/v1.0.0")?;
+    upstream
+        .run(["tag", "-f", "v1.0.0", &branch_commit])
+        .run(["tag", "temporary", &branch_commit]);
+    context
+        .update()
+        .args(["--freeze", "--dry-run"])
+        .assert()
+        .success();
+
+    // Move one tag back and delete the other. The next check must report that
+    // the pin is absent even though its commit is still in the local object database.
+    upstream
+        .run(["update-ref", "refs/tags/v1.0.0", &original_tag])
+        .run(["tag", "-d", "temporary"]);
+
     let context = context.with_filter(branch_commit.clone(), "[BRANCH_ONLY_COMMIT]");
     let context = context.with_filter(r"[a-f0-9]{40}", "[COMMIT_SHA]");
 
